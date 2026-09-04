@@ -57,6 +57,30 @@ check and the setup command above. Creating or repairing the environment may
 download packages and change persistent local state, so perform it only when
 that setup is authorized.
 
+## Diagnose GitHub access
+
+GitHub CLI commands that inspect or change remote state require network access
+in addition to a stored credential. When an agent needs GitHub, it must run a
+bounded read-only request such as `gh api user --jq .login` with the network
+access required by its execution environment. Requesting that access does not
+authorize a GitHub mutation.
+
+A GitHub command that ran without network access cannot establish whether a
+credential is valid. Treat a connection, name-resolution, sandbox, or other
+transport failure as an environment failure. Retry only the minimum read-only
+request with network access before drawing an authentication conclusion. An
+authentication response from GitHub shows a credential problem; a response
+that denies a repository, project, or operation while the user identity is
+valid shows an authorization or credential-scope problem. Preserve the exact
+command, access conditions, exit status, and useful output in the diagnosis.
+
+The in-app browser and GitHub CLI do not establish access for each other. Do
+not open a browser or run `gh auth login`, `gh auth refresh`, `gh auth logout`,
+or another credential-changing command as an automatic fallback. First
+establish the failure with network access, then explain the evidence and obtain
+the user's authorization before changing credentials. Never print or persist a
+token in repository files, command output, logs, or issue content.
+
 ## Configured commands
 
 The repository provides these commands:
