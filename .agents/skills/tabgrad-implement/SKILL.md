@@ -17,7 +17,7 @@ starting work`, `Handling unexpected findings and pending decisions`, `Making
 architectural decisions`, `Working on a branch`, `Implementing a change`,
 `Testing`, `Documentation`, `Verification`, and `Opening a pull request`
 sections of `CONTRIBUTING.md`. Read `docs/README.md`,
-`docs/agent-workflow.md`, and the
+`docs/agent-workflow.md`, `docs/development.md`, and the
 applicable rules in `docs/version-control.md`, together with the documentation,
 [`docs/quality.md`](../../../docs/quality.md), code, tests, build configuration,
 and earlier decisions
@@ -62,6 +62,10 @@ responsible contributor and move it to `In progress` as the work begins. Use
 `tabgrad-issue` when the user has authorized those GitHub changes. Otherwise,
 present the proposed assignment and status change and wait; do not leave an
 issue advertised as available while implementation has already started.
+
+Apply the GitHub access diagnosis in `docs/development.md` to those remote
+checks. A command without network access cannot establish invalid credentials,
+and credential-changing actions retain their separate authority boundary.
 
 When the issue is already `In progress`, confirm that the requested work
 belongs to its responsible contributor or that collaboration or handoff has
@@ -172,8 +176,10 @@ subagents for bounded read-only investigation, not for concurrent file edits.
 If writing responsibility must move to another agent, make an explicit handoff
 and stop editing before it begins. Parallel implementation belongs in
 separately owned issues and isolated targets whose relationship has already
-been established. The coordinating agent remains responsible for inspecting
-and integrating every result. Do not delegate user decisions or unauthorized
+been classified under `docs/agent-workflow.md`. Do not begin dependent work
+before its prerequisite result exists and its native GitHub dependency is
+recorded. The coordinating agent remains responsible for inspecting and
+integrating every result. Do not delegate user decisions or unauthorized
 GitHub mutations.
 
 ## Implement behavior, tests, and documentation together

@@ -12,7 +12,7 @@ turning an unconfirmed implementation idea into a requirement.
 ## Read the rules and relevant evidence
 
 Read `docs/README.md`, `docs/project-management.md`,
-`docs/agent-workflow.md`, and the `Before
+`docs/agent-workflow.md`, `docs/development.md`, and the `Before
 starting work`, `Handling unexpected findings and pending decisions`,
 `Defining an issue`, and `Making architectural decisions` sections of
 `CONTRIBUTING.md`. Read `README.md` when the request depends on Tabgrad's public
@@ -221,6 +221,12 @@ leave misleading metadata or relationships.
 Use an authenticated GitHub interface appropriate to the environment. Apply
 only the authorized content, labels, project fields, milestone, and
 relationships.
+
+Apply the GitHub access diagnosis in `docs/development.md` before classifying a
+failed request as an invalid credential or asking the user to authenticate.
+Network, authentication, authorization, and credential-scope failures have
+different remedies. Do not use a browser or change a stored credential without
+the evidence and authority required by that document.
 
 Before creating an issue, confirm that every required label and project field
 exists and that the available credentials can read and apply the required
