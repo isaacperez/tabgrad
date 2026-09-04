@@ -42,6 +42,21 @@ command provided by Python's `venv` module on another shell. Dependency setup
 downloads packages and writes only to the selected virtual environment and
 the package manager's ordinary cache.
 
+## Use the prepared environment
+
+Run repository Python commands with the interpreter in `.venv`. On POSIX
+systems, use `.venv/bin/python`; on Windows, use the corresponding interpreter
+under `.venv\Scripts`. Calling that interpreter directly does not require
+activating the environment first.
+
+Before the first Python command in a task, confirm that the interpreter exists
+and can load the required tool. If the environment is missing, uses the wrong
+Python version, or lacks a locked dependency, do not fall back to a global
+interpreter and do not install or update packages silently. Report the failed
+check and the setup command above. Creating or repairing the environment may
+download packages and change persistent local state, so perform it only when
+that setup is authorized.
+
 ## Configured commands
 
 The repository provides these commands:

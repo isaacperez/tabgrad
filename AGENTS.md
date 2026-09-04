@@ -15,6 +15,11 @@ defined in `docs/documentation.md`.
 Use `docs/README.md` to find the primary source for each project rule. Do not
 create a competing rule in a skill or another document.
 
+Before running a repository Python command, use the prepared virtual
+environment defined in `docs/development.md`. Do not fall back to a global
+interpreter when that environment is missing or incomplete. Repository setup
+and dependency installation require the authority described there.
+
 Follow `docs/agent-instruction-review.md` when `AGENTS.md`, a repository skill,
 or a project rule applied by a skill changes. Use its bounded reasoned review;
 do not create or run a catalogue of model-behavior scenarios.

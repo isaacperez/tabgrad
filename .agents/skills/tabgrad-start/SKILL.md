@@ -19,6 +19,12 @@ Read and follow `docs/agent-workflow.md`, `docs/project-management.md`,
 to locate any other primary project rules that the issue and selected activity
 require.
 
+Before running a repository Python command, read `docs/development.md` and use
+the prepared interpreter in `.venv`. Confirm that it exists and can load the
+required tool. If that check fails, do not try the global interpreter or change
+the environment. Report the documented setup and stop unless dependency setup
+was separately authorized.
+
 ## Interpret the explicit invocation
 
 Use this skill only when the user explicitly invokes
