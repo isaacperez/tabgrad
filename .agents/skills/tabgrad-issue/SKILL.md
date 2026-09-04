@@ -45,22 +45,44 @@ in a public issue. Follow the private reporting rule in `CONTRIBUTING.md`.
 ## Search before a publishable draft or creation
 
 Before preparing a complete draft intended for publication or creating a new
-issue, delegate a read-only search to one subagent. Also use a subagent before
-materially expanding an existing issue when its recorded search no longer
-covers the proposed result.
+issue, search open and closed issues and pull requests. Repeat the search
+before materially expanding an existing issue when its recorded coverage no
+longer includes the proposed result.
 
 A rough outline may be discussed before this search. Mark it as preliminary,
 do not claim that it is ready, and do not state that related work was not found.
 
-Give the subagent the proposed problem and result, the repository identity, and
-`docs/project-management.md`. Apply the read-only assignment and evidence rules
-in `docs/agent-workflow.md`. Require it to search open and closed issues and pull
-requests using the affected API or operation, symptoms, error messages, backend
-or browser area, and established alternative terms.
+Start with the least expensive method that can establish complete coverage. A
+single enumeration may satisfy the search when it includes the complete issue
+and pull-request history, lets the proposed problem and established alternative
+terms be compared with titles and bodies, and is small enough to inspect
+responsibly. Read every plausible match. Do not add redundant query variations
+or delegate the same inspection merely to repeat evidence that is already
+complete and unambiguous.
 
-The subagent must return:
+Expand the search when the initial result is incomplete, truncated, paginated
+beyond the inspected data, too broad to inspect responsibly, or leaves a
+plausible classification uncertain. Use targeted searches based on the
+affected API or operation, symptoms, error messages, backend or browser area,
+and established alternative terms. Inspect the additional results needed to
+resolve the gap and stop when the classifications are supported or a remaining
+limitation has been identified.
 
-- the searches it performed;
+Delegate a bounded read-only check to one subagent when the scale of the result
+or a material ambiguity makes independent judgment useful. Examples include
+several plausible matches or uncertainty about whether work is a duplicate,
+related work, a parent or sub-issue, or a dependency. Do not require a
+subagent for a complete and reproducible search whose classifications are
+unambiguous.
+
+Give the subagent the proposed problem and result, the repository identity,
+the unresolved candidates or coverage gap, the search evidence already
+obtained, and `docs/project-management.md`. Apply the read-only assignment and
+evidence rules in `docs/agent-workflow.md`. Ask it to inspect the unresolved
+part instead of repeating completed work. Require it to return:
+
+- the method and searches it used;
+- the work population or result set it actually covered;
 - exact duplicates;
 - related but independent work;
 - possible parent or sub-issue relationships;
@@ -71,15 +93,18 @@ The subagent must return:
 The subagent must not create or edit issues, comments, relationships, labels,
 milestones, project items, or other GitHub state.
 
-If subagent delegation is unavailable, stop before creating the issue and
-explain that the required duplicate search could not be performed. A
+If required search coverage or a materially necessary independent judgment is
+unavailable, stop before creating the issue and explain the exact gap. A
 preliminary draft may still be provided when useful, but it must identify the
-search as pending and must not be classified as `Ready`. Do not present a
-manual search as satisfying the independent-search requirement.
+search as pending and must not be classified as `Ready`. The absence of a
+subagent is not a gap when the completed search is reproducible, fully covered,
+and unambiguous.
 
-Review the subagent's results and inspect plausible matches directly. Do not
-accept its classification without checking the issue or pull request that
-supports it.
+Record the search method, its actual coverage, material classifications, and
+remaining uncertainty. When a subagent was used, inspect the evidence behind
+its material classifications. Do not accept a classification without checking
+the issue or pull request that supports it, but do not repeat the entire search
+solely to reproduce the subagent's work.
 
 Do not create an exact duplicate. Propose adding genuinely new evidence to the
 existing issue instead. When a similar issue is closed, read its closing reason
