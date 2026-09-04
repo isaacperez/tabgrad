@@ -9,6 +9,45 @@ defines the rules shared by issue investigation, research, implementation,
 verification, review, maintenance audits, and merge checks. Delegation never
 replaces the applicable skill or expands the authority given by the user.
 
+## Start an existing issue through one entry point
+
+A contributor may explicitly invoke `$tabgrad-start <issue-number>` to begin or
+resume one existing issue without naming each specialized repository skill.
+The issue remains the source of the work-specific problem, boundaries,
+relationships, risks, and completion conditions. The entry point inspects that
+record and routes the work to every applicable specialized skill; it does not
+copy or replace their procedures.
+
+The explicit invocation authorizes the coherent actions needed to start and
+perform the recorded work until its next documented decision or authority
+boundary. For an issue in `Ready`, this includes assigning it to the
+authenticated contributor responsible for the work, moving it to
+`In progress`, performing the local or read-only activity permitted by the
+owning skill, using bounded read-only subagents, and recording actual evidence
+and status in the issue. An issue already in `In progress` may be resumed only
+by its responsible contributor or through a recorded collaboration or handoff.
+
+For an issue with sub-issues, the same invocation may start the parent activity
+and its direct required sub-issues when their native GitHub relationships are
+recorded and each selected sub-issue is independently ready. The coordinator
+partitions them by scope and dependency, starts independent work in parallel
+when useful, and keeps dependent work sequential. It does not infer required
+work from a plain text mention, start optional or blocked work, or recursively
+absorb unrelated descendants.
+
+The invocation does not authorize correcting an unready issue, creating or
+expanding work, changing relationships or planning fields, publishing a branch
+or pull request, accepting research, approving architecture, submitting a
+GitHub review, merging, releasing, accessing private or paid resources,
+installing dependencies, or performing a destructive action. The applicable
+specialized skill must stop at those boundaries and obtain the authority it
+requires. All authorized issue and project mutations still pass through
+`tabgrad-issue` and must be checked against the live GitHub state.
+
+Do not invoke this entry point implicitly for an ordinary request. Contributors
+may call a specialized skill directly when they already know the required
+activity or want a narrower operation.
+
 ## Bound work before loading broad context
 
 An issue, the coordinating agent, and each subagent have separate boundaries.

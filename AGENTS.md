@@ -35,6 +35,8 @@ bounded question, path or concern, and stopping condition under
 
 Use the repository skill that corresponds to the work being performed:
 
+- Use `$tabgrad-start <issue-number>` only when the user explicitly invokes it
+  to begin or resume an existing issue through every applicable skill.
 - Use `$tabgrad-issue` to create or refine an issue.
 - Use `$tabgrad-research` for a research issue or project experiment.
 - Use `$tabgrad-architecture` in addition to `$tabgrad-research` when the
