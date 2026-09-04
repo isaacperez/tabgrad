@@ -17,9 +17,12 @@ reviewer. Determine who produced the design and code before beginning.
 
 When the current agent participated materially in the implementation, delegate
 the primary review to a read-only subagent that did not produce the change.
-Give it the exact target, base, issue, repository rules, accepted decisions,
-and verification evidence. Require it to inspect the original files and
-evidence rather than a summary prepared by the implementer.
+Give it the bounded verification and review context defined in
+`docs/agent-workflow.md`: the exact target and base, issue, complete diff,
+directly relevant repository rules and files, accepted decisions, material
+risks, and current verification evidence. Do not pass the complete conversation
+history by default. Require it to inspect the original requirements, files,
+and evidence rather than relying on a summary prepared by the implementer.
 
 The subagent must not edit files, create commits, submit a GitHub review, post
 comments, change project state, approve, or merge. The coordinating agent must
@@ -33,14 +36,25 @@ again. Additional reviewers or bounded specialist reviews are appropriate when
 the change spans distinct high-risk areas, but do not add reviewers merely to
 repeat the same inspection.
 
+The independent agent may also perform `tabgrad-verify` for the same final
+state when its assignment identifies both responsibilities and no distinct
+material concern requires a specialist. It must report the verification and
+review conclusions separately. A combined assignment saves duplicated context
+and command execution; it does not weaken either standard.
+
 ## Read the requirements and exact change
 
-Read `README.md`, `CONTRIBUTING.md`, `docs/README.md`,
-`docs/agent-workflow.md`, [`docs/quality.md`](../../../docs/quality.md), the linked issue
-and its relationships when one is required, the relevant project documentation
-and accepted decisions, and `.github/pull_request_template.md`. When reviewing
-a pull request, read its description, commits, changed files, checks, reviews,
-conversations, and known limitations.
+Read `README.md`, the sections of `CONTRIBUTING.md` that govern the proposed
+change and review, `docs/README.md`, `docs/agent-workflow.md`, the linked issue
+and its relationships when one is required, and
+`.github/pull_request_template.md`. Use `docs/README.md` to select only the
+primary project rules connected to the issue, diff, and material risks; read
+[`docs/quality.md`](../../../docs/quality.md) when implementation or test
+quality is part of the change. When reviewing a pull request, read its
+description, complete diff, current checks and verification evidence, review
+state, conversations, and known limitations. Inspect individual commits or
+history only when needed to resolve a concrete scope, authorship, or
+correctness question.
 
 When no issue exists, confirm that the entire change qualifies for the small
 spelling or formatting exception in `CONTRIBUTING.md` and use the pull request
@@ -105,6 +119,10 @@ Report one only when the proposed change depends on it, makes it worse, exposes
 a material risk, or cannot be evaluated safely without resolving it. Preserve
 other findings for separate work under the process in `CONTRIBUTING.md`.
 
+Do not investigate an unrelated finding beyond the minimum evidence needed to
+classify it. Record a concise pointer and return to the assigned change unless
+the finding blocks the result or establishes a material risk within scope.
+
 Classify findings under `docs/agent-workflow.md`. A reviewer may recommend
 follow-up work, but must not expand the change or create an issue without the
 required issue process and current authority.
@@ -150,7 +168,8 @@ failures and unavailable environments, and does not rely on stale checks or
 unexplained exclusions. Do not repeat the entire verification procedure as a
 substitute for review. Run a focused non-destructive check only when it is
 needed to investigate a review finding and the environment and authorization
-permit it.
+permit it. Record the reason for every newly run check; current successful
+mechanical evidence is reused by default.
 
 A review may report findings before verification passes. It cannot conclude
 that the change is ready while verification has failed, is incomplete, or
@@ -248,6 +267,12 @@ Report findings first, ordered by consequence. Then report:
 - optional suggestions, clearly separated from required corrections;
 - the final review result and the facts that determine it; and
 - every external action performed or still requiring authorization.
+
+Identify the verification evidence that was reused, every focused check newly
+run for review, and why any context expanded beyond the initial assignment.
+Stop when each completion condition and material changed area has been assessed
+for the assigned review concerns and every finding is supported, or when
+missing evidence makes the review incomplete.
 
 Re-review the complete final change after corrections. Resolve a finding only
 when the cited problem no longer exists and the correction has not introduced

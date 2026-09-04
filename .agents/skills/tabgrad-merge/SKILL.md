@@ -45,15 +45,25 @@ fields, or creating follow-up issues, only when the request also authorizes
 finalization or repository automation performs them as a direct consequence
 of the merge.
 
-## Require an independent readiness audit
+## Establish independent readiness evidence
 
-Before any merge action, delegate one read-only audit to a subagent. Give the
-subagent the pull request, linked issues when required, repository rules, and
-current head commit. Tell it to inspect the original evidence rather than
-relying on a summary from the main agent. Apply the assignment, independence,
-evidence, and authority rules in `docs/agent-workflow.md`.
+Before any merge action, inspect the current independent verification and
+review reports for the exact pull request head. Reuse them as the independent
+readiness evidence when, together, they cover the checks below and identify
+their original evidence. Do not delegate another general audit merely to repeat
+current coverage.
 
-The subagent must check:
+Delegate one bounded read-only readiness audit only when the existing reports
+do not cover a required merge concern, describe another head, conflict with
+the live state, or leave a newly identified material risk unresolved. Give the
+subagent only the pull request, linked issues when required, current head,
+relevant repository rules, existing reports, and the missing or uncertain
+concerns. Do not pass the complete conversation history by default. Apply the
+assignment, independence, evidence, and authority rules in
+`docs/agent-workflow.md`.
+
+The current independent evidence, including any required fresh audit, must
+establish:
 
 - whether an implementation pull request completes its primary issue, the pull
   request provides an artifact explicitly required by its research issue, or
@@ -77,18 +87,17 @@ The subagent must check:
   milestone, closing keyword, and pull request metadata agree with the result
   the pull request actually completes.
 
-Require the subagent to return a concise report containing blockers, supporting
-evidence, and unresolved uncertainty. The subagent must not edit files, push
-commits, approve the pull request, merge it, change GitHub metadata, close an
-issue, or delete a branch.
-
-If subagent delegation is unavailable, stop before merging and explain that the
-required independent audit could not be performed. Do not present a manual
-substitute as satisfying this requirement.
+When a fresh audit is required, require a concise report containing the exact
+gap it covers, blockers, supporting evidence, and unresolved uncertainty. The
+subagent must not edit files, push commits, approve the pull request, merge it,
+change GitHub metadata, close an issue, or delete a branch. Stop before merging
+if the required fresh independent audit cannot be performed; do not present a
+manual substitute as satisfying missing independent coverage.
 
 ## Apply the final merge gate
 
-Review the subagent's report, but do not accept it without checking the current
+Review the current independent readiness evidence, including any fresh audit
+report that was required, but do not accept it without checking the current
 GitHub state directly. Immediately before merging, confirm that:
 
 - the pull request is open and is not a draft;
@@ -118,6 +127,10 @@ GitHub state directly. Immediately before merging, confirm that:
 
 Do not rely only on checked boxes in the pull request description. Inspect the
 evidence to the extent needed to establish that the statements are true.
+Reuse current command evidence for the exact head. Do not rerun the full test
+suite or repeat the technical review during the merge gate unless the evidence
+is missing, stale, contradicted, or a focused rerun is needed to resolve a
+material uncertainty. Always perform the live state checks in this section.
 
 Do not treat a formal GitHub approval as a substitute for independent technical
 review. Do not approve a pull request on behalf of another reviewer or
@@ -210,6 +223,10 @@ Report:
 - the resulting issue, project, milestone, and branch state;
 - every post-merge action that was performed; and
 - any remaining failure, uncertainty, or follow-up action.
+
+State which independent readiness evidence was reused, whether a fresh bounded
+audit was required and why, and which live checks were performed immediately
+before the merge.
 
 Distinguish completed actions from recommended actions. Never report the work
 as complete while a required check, documentation update, compatibility update,
