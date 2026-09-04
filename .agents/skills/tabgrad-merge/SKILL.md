@@ -96,7 +96,8 @@ manual substitute as satisfying missing independent coverage.
 
 ## Apply the final merge gate
 
-Review the subagent's report, but do not accept it without checking the current
+Review the current independent readiness evidence, including any fresh audit
+report that was required, but do not accept it without checking the current
 GitHub state directly. Immediately before merging, confirm that:
 
 - the pull request is open and is not a draft;
