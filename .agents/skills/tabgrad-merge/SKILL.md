@@ -36,11 +36,14 @@ request is not authorization to merge it.
 Use the squash merge defined in `docs/version-control.md`. Do not use another
 merge method.
 
-Treat authorization to merge as authorization for the merge itself. Perform
-additional changes, such as manually closing an issue, changing project
-fields, creating follow-up issues, or deleting a branch, only when the request
-also authorizes finalization or repository automation performs them as a
-direct consequence of the merge.
+Under `docs/version-control.md`, authorization to merge includes retiring the
+dedicated source branch remotely and in the local clone or worktree controlled
+by this process. It does not authorize deleting a protected or shared branch,
+work outside the merged pull request, or a branch whose state is uncertain.
+Perform other changes, such as manually closing an issue, changing project
+fields, or creating follow-up issues, only when the request also authorizes
+finalization or repository automation performs them as a direct consequence
+of the merge.
 
 ## Require an independent readiness audit
 
@@ -67,6 +70,9 @@ The subagent must check:
   head commit;
 - whether unresolved conversations, conflicts, hidden limitations, or missing
   follow-up issues remain; and
+- whether the source branch is dedicated to this pull request and whether
+  another pull request, worktree, collaborator, or unmerged commit still
+  depends on it; and
 - whether the primary issue and other linked issues when required, project,
   milestone, closing keyword, and pull request metadata agree with the result
   the pull request actually completes.
@@ -101,6 +107,8 @@ GitHub state directly. Immediately before merging, confirm that:
 - the current set of maintainers with review permission has been inspected and
   any formal approval required by `docs/continuous-integration.md` applies to
   the current head commit;
+- the repository is configured to delete head branches automatically, and the
+  source branch is eligible for retirement under `docs/version-control.md`;
 - all required review comments are resolved;
 - no merge conflict remains;
 - implementation, tests, documentation, and compatibility claims agree;
@@ -150,7 +158,8 @@ After the merge, confirm:
 - that checks on the target branch pass or are still running;
 - whether the linked issue closed as intended;
 - whether the project status and milestone reflect the actual result;
-- whether the source branch still exists; and
+- whether GitHub automatically removed an eligible same-repository source
+  branch, or whether a documented exception explains why it remains; and
 - whether any required follow-up work remains recorded and linked.
 
 If a target-branch check fails, report it immediately. Do not revert the merge,
@@ -166,9 +175,29 @@ now exists on the target branch. Return control to `tabgrad-research`, which
 establishes whether the research issue satisfies all of its completion
 conditions; do not move it to `Done` merely because an experiment or
 documentation pull request merged. Use `Not planned` only for the reasons
-defined in `docs/project-management.md`. Delete the source branch only when
-repository policy or the user's request authorizes deletion and no remaining
-work depends on it.
+defined in `docs/project-management.md`.
+
+## Retire the controlled local branch
+
+After confirming the exact merge and remote branch result, retire the local
+source branch under `docs/version-control.md`. Confirm that the local branch
+still points to the reviewed pull request head, its working tree is clean, it
+is not used by another worktree, and it contains no work outside that pull
+request. Do not use ancestry alone as the safety test after a squash merge.
+
+When the source branch is checked out in the controlled primary worktree, move
+that worktree to the target branch without discarding or rewriting content.
+When the source belongs to an auxiliary worktree created only for the
+completed change, confirm that it is clean and no longer needed, then remove
+that worktree from another controlled repository location. Delete the local
+source branch only after it is no longer checked out in any worktree. The
+merge authorization covers the forced local branch deletion that a squash
+merge may require only after all of these facts are established.
+
+If GitHub fails to delete an eligible remote source branch automatically, or
+if any local safety condition is uncertain, preserve the affected branch and
+report the exact state. Do not hide a repository-setting failure with a manual
+remote deletion and do not force local cleanup without the required evidence.
 
 ## Report the outcome
 
