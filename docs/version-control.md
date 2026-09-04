@@ -133,11 +133,36 @@ Use squash merge for every pull request. The resulting commit must use a clear
 subject and retain the issue relationship. Do not use merge commits or rebase
 merges.
 
-After the merge is confirmed on the target branch, delete the source branch
-when it is dedicated to the merged pull request. Do not delete a protected
-branch, a shared branch, a branch with unmerged work, or a branch whose remote
-state is uncertain. Removing a remote or local branch is a separate mutation
-from merging and must be authorized by the request or repository automation.
+Use a source branch dedicated to one pull request. Do not merge from a shared
+branch or from a branch that another open pull request, worktree, or continuing
+piece of work still needs. Move the proposed change to a dedicated branch
+before review when the existing source branch is not disposable. This check
+must happen before merge because GitHub's automatic deletion setting applies
+after the merge has already occurred.
+
+Authorization to merge includes retiring the dedicated source branch. A branch
+that must remain after the merge must not be used as the pull request head;
+move the proposed commits to a disposable branch before review. Merge
+authorization does not permit deleting `main`, a protected or shared branch,
+a branch with work outside the merged pull request, or a branch whose state is
+uncertain.
+
+GitHub must automatically delete an eligible same-repository source branch
+after merge. Confirm the remote result rather than assuming that the setting
+applied. A source branch owned by a fork may remain outside the base
+repository's control; report that limitation instead of claiming deletion.
+
+Also retire the corresponding local branch in the clone controlled by the
+merge process. First confirm that the merge contains the reviewed pull request
+head, the local branch still identifies that head, its working tree is clean,
+no other worktree uses it, and it contains no additional work. A squash merge
+does not make the source branch an ancestor of the target branch, so ancestry
+alone is not proof that local deletion is safe. If the source is checked out
+in the controlled primary worktree, move that worktree to the target branch.
+If it belongs to an auxiliary worktree owned only by the completed change,
+remove that clean worktree from another controlled repository location. Then
+delete the local source branch. If any condition cannot be proved, preserve
+the branch and report the exact reason.
 
 Verify the target commit, issue state, project state, release implications,
 and remaining related work after merge. A merged pull request is not by itself
