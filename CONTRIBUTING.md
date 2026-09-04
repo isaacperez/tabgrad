@@ -451,11 +451,22 @@ A pull request is ready to merge when:
 - required tests and repository checks pass;
 - the implementation, tests, and documentation agree;
 - compatibility information is current;
+- the independent technical review required by
+  [`docs/agent-workflow.md`](docs/agent-workflow.md) applies to the current
+  pull request head;
+- a maintainer with review permission who is independent of the work and is
+  not the author has formally approved the current head when one exists, or
+  the author is confirmed as the only maintainer with review permission;
 - required review corrections are resolved; and
 - no known limitation is hidden or presented as supported behavior.
 
 Merge only through a pull request after review, and always use the squash
-merge method. After the merge, confirm that
+merge method. A sole maintainer cannot approve their own pull request; in that
+case, independent technical review, passing checks, and the maintainer's
+explicit merge authorization replace only the formal GitHub approval. Follow
+the maintainer-count and per-pull-request approval rules in
+[`docs/continuous-integration.md`](docs/continuous-integration.md). After the
+merge, confirm that
 each linked issue is closed or remains open as required by the relationship and
 the result actually completed. Confirm that any necessary follow-up work has
 its own issue. Remove the dedicated branch after confirming that its change is

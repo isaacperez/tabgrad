@@ -13,7 +13,8 @@ branch, verification evidence, and project state consistent.
 
 Read `README.md`, `CONTRIBUTING.md`, `docs/README.md`,
 `docs/project-management.md`,
-`docs/version-control.md`, `docs/agent-workflow.md`, and
+`docs/version-control.md`, `docs/continuous-integration.md`,
+`docs/agent-workflow.md`, and
 `.github/pull_request_template.md`. Read the
 complete linked issue and its relationships. Inspect the branch, commits,
 complete diff from the intended base, working-tree state, verification
@@ -177,8 +178,9 @@ only when the correction falls within the authority already given.
 
 Do not wait indefinitely for checks. Report whether they passed, failed, or are
 still running. A pull request can be ready for review while pull-request-only
-checks run, but it cannot be ready to merge until every required check and
-review passes for the final head.
+checks run, but it cannot be ready to merge until every required check and the
+independent technical review apply to the final head and every formal GitHub
+approval required by `docs/continuous-integration.md` is present.
 
 ## Handle later changes
 

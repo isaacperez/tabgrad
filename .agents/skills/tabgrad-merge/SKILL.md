@@ -1,6 +1,6 @@
 ---
 name: tabgrad-merge
-description: Verify and merge an approved Tabgrad pull request, then check and report its post-merge state. Use when the user asks to merge or finalize a pull request. Do not use for implementation, review, or verification alone.
+description: Verify and merge a reviewed Tabgrad pull request, then check and report its post-merge state. Use when the user asks to merge or finalize a pull request. Do not use for implementation, review, or verification alone.
 ---
 
 # Merge a Tabgrad pull request
@@ -12,7 +12,8 @@ earlier stage of the workflow.
 ## Read the repository rules
 
 Read `CONTRIBUTING.md`, `docs/README.md`, `docs/project-management.md`,
-`docs/version-control.md`, `docs/agent-workflow.md`, and
+`docs/version-control.md`, `docs/continuous-integration.md`,
+`docs/agent-workflow.md`, and
 `.github/pull_request_template.md`. Read the
 primary and other linked issues when they are required, and read the complete
 pull request, including its current diff, commits, checks, reviews,
@@ -32,9 +33,8 @@ Confirm that the current user request explicitly authorizes merging this exact
 pull request. A request to inspect, review, verify, prepare, or explain a pull
 request is not authorization to merge it.
 
-Use the default squash merge defined in `docs/version-control.md`. Use another
-permitted method only when a maintainer has explicitly approved the exception
-for a concrete reason.
+Use the squash merge defined in `docs/version-control.md`. Do not use another
+merge method.
 
 Treat authorization to merge as authorization for the merge itself. Perform
 additional changes, such as manually closing an issue, changing project
@@ -60,7 +60,11 @@ The subagent must check:
   itself will satisfy them;
 - whether required tests, documentation, compatibility information, and other
   evidence are present;
-- whether all required checks and reviews apply to the current head commit;
+- whether all required checks and the independent technical review apply to
+  the current head commit;
+- whether a formal GitHub approval is required for this author under
+  `docs/continuous-integration.md` and, when required, applies to the current
+  head commit;
 - whether unresolved conversations, conflicts, hidden limitations, or missing
   follow-up issues remain; and
 - whether the primary issue and other linked issues when required, project,
@@ -93,7 +97,10 @@ GitHub state directly. Immediately before merging, confirm that:
 - the pull request template contains evidence or an explained `Not applicable`
   entry for every required subject;
 - all required status checks pass for the current head commit;
-- all required reviews apply to the current head commit;
+- the independent technical review applies to the current head commit;
+- the current set of maintainers with review permission has been inspected and
+  any formal approval required by `docs/continuous-integration.md` applies to
+  the current head commit;
 - all required review comments are resolved;
 - no merge conflict remains;
 - implementation, tests, documentation, and compatibility claims agree;
@@ -104,16 +111,19 @@ GitHub state directly. Immediately before merging, confirm that:
 Do not rely only on checked boxes in the pull request description. Inspect the
 evidence to the extent needed to establish that the statements are true.
 
-Do not approve a pull request on behalf of another reviewer. Do not use an
-administrator bypass, dismiss a review, weaken a required check, enable
-auto-merge, or alter branch protection unless the user separately requests that
-exact action and its consequences have been explained.
+Do not treat a formal GitHub approval as a substitute for independent technical
+review. Do not approve a pull request on behalf of another reviewer or
+represent the author's account as independent. Do not use an administrator
+bypass, dismiss a review, weaken a required check, enable auto-merge, or alter
+branch protection unless the user separately requests that exact action and
+its consequences have been explained.
 
 ## Stop when the pull request is not ready
 
 Do not merge when any required evidence is missing, a required check is
-failing or incomplete, a required review is absent or stale, the head commit
-changed after verification, or a material uncertainty remains.
+failing or incomplete, the independent technical review is absent or stale,
+an applicable formal approval is absent or stale, the head commit changed
+after verification, or a material uncertainty remains.
 
 Report each blocker with its evidence and the action needed to resolve it. Do
 not implement a correction or change GitHub state unless the user explicitly
@@ -122,7 +132,7 @@ asks for that additional work.
 ## Perform the merge
 
 Recheck the pull request head commit immediately before the mutation. Merge the
-approved commit into the resolved target branch using the authorized merge
+reviewed commit into the resolved target branch using the authorized squash
 method.
 
 Do not retry a failed or ambiguous merge blindly. Read the resulting GitHub

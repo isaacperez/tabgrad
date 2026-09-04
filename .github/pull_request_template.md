@@ -117,11 +117,17 @@ particular attention.
 ## Ready to merge
 
 Complete this section after review. Checking these boxes does not replace the
-required GitHub status checks or reviews.
+required GitHub status checks, independent technical review, or applicable
+formal approval.
 
 - [ ] The pull request is no longer a draft.
 - [ ] All required status checks pass for the latest commit.
-- [ ] All required reviews are present and apply to the latest commit.
+- [ ] The required independent technical review applies to the latest commit.
+- [ ] A maintainer with review permission who is independent of the work and
+  is not the author has formally approved the latest commit when required by
+  [`docs/continuous-integration.md`](../docs/continuous-integration.md);
+  otherwise, the pull request records that the author is the only maintainer
+  with review permission.
 - [ ] Every required review comment has been resolved.
 - [ ] Merge conflicts are resolved without changing the verified behavior.
 - [ ] The issue, project, milestone, and follow-up links are current.

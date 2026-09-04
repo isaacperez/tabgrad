@@ -44,8 +44,8 @@ Use the repository skill that corresponds to the work being performed:
 - Use `$tabgrad-pull-request` to prepare, open, update, or mark a pull request
   ready for review.
 - Use `$tabgrad-review` to review a proposed change.
-- Use `$tabgrad-merge` to merge an approved pull request and check its
-  post-merge state.
+- Use `$tabgrad-merge` to merge a reviewed and verified pull request and check
+  its post-merge state.
 - Use `$tabgrad-maintenance` when auditing duplication, complexity, obsolete
   code, or other technical debt.
 

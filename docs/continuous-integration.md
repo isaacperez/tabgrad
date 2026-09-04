@@ -86,7 +86,9 @@ check, make it optional, or relax a threshold to merge one change.
 Configure a GitHub ruleset for `main` with these settings:
 
 - Require changes through a pull request.
-- Require one approving review from a reviewer independent of the writer.
+- Set the required approving-review count from the number of maintainers with
+  repository review permission: zero while there is only one such maintainer,
+  and one when there are at least two.
 - Dismiss approvals when the pull request head changes.
 - Require all review conversations to be resolved.
 - Require the `Repository checks / repository-consistency` status check.
@@ -97,16 +99,33 @@ Configure a GitHub ruleset for `main` with these settings:
 - Block force pushes and deletion of `main`.
 - Apply the rules to administrators and disallow routine bypass.
 
+The ruleset count is static, but the review requirement for an individual pull
+request also depends on its author. When a maintainer with review permission
+who is independent of the work and is not the author exists, that maintainer
+must approve the current pull request head before merge, even when the ruleset
+count is zero. When the author is the repository's only maintainer with review
+permission, GitHub cannot record a self-approval. In that case, the pull request
+may merge without a formal GitHub approval only after the independent technical
+review required by [`agent-workflow.md`](agent-workflow.md) is current, all
+other merge conditions pass, and the maintainer explicitly authorizes the
+merge. A formal approval does not replace that technical review.
+
+Reevaluate the ruleset count whenever the set of maintainers with review
+permission changes. Do not use an administrator bypass to substitute for the
+applicable count, review, checks, or merge authorization.
+
 Add a runtime, build, browser, WebGPU, compatibility, or release check to the
 ruleset only when its workflow and local command satisfy this document. A
 required specialized check may use path selection only when the ruleset always
 receives a conclusive success for unaffected changes.
 
-The ruleset must be inspected through GitHub after creation or modification.
-Record its identifier, target, enforcement state, required checks, bypass
+The ruleset must be inspected through GitHub after creation, modification, or
+a change in maintainer eligibility. Record its identifier, target, enforcement
+state, approving-review count, eligible maintainers, required checks, bypass
 actors, and verification date in the issue or pull request that configures it.
-A repository specification never proves that a remote ruleset is active;
-remote enforcement requires direct inspection of GitHub.
+A repository specification never proves that a remote ruleset is active or
+correct for the current maintainers; remote enforcement requires direct
+inspection of GitHub.
 
 ## Interpret CI results
 
