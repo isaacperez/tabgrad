@@ -12,12 +12,14 @@ whose actual coverage is unknown.
 
 ## Read the requirements and identify the target
 
-Read `README.md`, `CONTRIBUTING.md`, `docs/README.md`,
-`docs/agent-workflow.md`, [`docs/quality.md`](../../../docs/quality.md), the applicable
-issue and its relationships, relevant project documentation, and
-`.github/pull_request_template.md`. Inspect the complete proposed change,
-including source, tests, documentation, configuration, dependency records,
-generated files, and any existing verification evidence.
+Read `README.md`, the sections of `CONTRIBUTING.md` that govern the proposed
+change and verification, `docs/README.md`, `docs/agent-workflow.md`, the
+applicable issue and its relationships, and `.github/pull_request_template.md`.
+Use `docs/README.md` to select only the primary project rules connected to the
+issue, diff, and material risks; read [`docs/quality.md`](../../../docs/quality.md)
+when test or implementation quality applies. Inspect the complete proposed
+change and existing verification evidence without loading unaffected project
+areas by default.
 
 When no issue exists, confirm that the complete change qualifies for the small
 spelling or formatting exception in `CONTRIBUTING.md`. Use the authorized user
@@ -48,9 +50,16 @@ For a substantive repository change, at least one verifier must be independent
 of its writer. When the coordinating agent materially authored the change,
 delegate verification to a read-only subagent under
 `docs/agent-workflow.md`. Give it the exact target, base, issue, accepted
-decisions, changed and relevant surrounding files, and configured-check
-information. Require it to inspect the original evidence rather than a summary
-of the intended result.
+decisions, complete diff, changed and relevant surrounding files,
+configured-check information, and current command evidence. Do not pass the
+complete conversation history by default. Require it to inspect the original
+requirements, files, and evidence rather than relying on the writer's summary.
+
+The same independent agent may also perform `tabgrad-review` for the same state
+when the assignment explicitly covers both responsibilities and no distinct
+material concern requires a specialist. It must report verification and review
+as separate conclusions. Do not launch another general verifier or reviewer to
+repeat that coverage.
 
 Use additional read-only specialists when separate material concerns require
 distinct inspection. Partition their assignments by risks, paths, environments,
@@ -127,6 +136,12 @@ static analysis command registered by the repository ran against the exact
 target. Inspect narrow suppressions and exclusions to ensure that their stated
 technical reason applies; a passing command does not justify hiding a valid
 diagnostic.
+
+A current, reproducible command result may be inspected and reused. Do not
+rerun a successful command solely so that an independent agent can claim to
+have executed it. Independence applies to evaluation of the target and
+evidence, while commands should run once unless a result is missing, stale,
+ambiguous, inconsistent, or needed to investigate a concrete finding.
 
 When the repository has no defined check for a material claim, identify the
 gap. Use a direct manual check only when it can genuinely demonstrate the
@@ -257,6 +272,12 @@ Report:
 - the final verification outcome and the facts that determine it; and
 - the next required action without performing an unauthorized fix, GitHub
   mutation, review, publication, or merge.
+
+Identify which evidence was reused, which checks were run during this
+verification, and why any context or command scope expanded. Stop when every
+applicable completion condition and changed area has adequate evidence, or as
+soon as a failure, missing requirement, unavailable environment, or material
+uncertainty determines that the result is failed or incomplete.
 
 Provide the verification evidence to `tabgrad-pull-request` when the user asks
 to prepare, open, or update a pull request. Verification alone does not

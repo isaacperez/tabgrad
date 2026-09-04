@@ -97,7 +97,20 @@ destructive action.
 Before the first substantive repository edit, delegate the independent
 read-only preflight required by `docs/agent-workflow.md`. Give the investigator
 the original issue, accepted decisions, exact repository state, relevant
-files, and permission boundaries without suggesting the desired conclusion.
+files, permission boundaries, and the specific readiness questions without
+suggesting the desired conclusion. Do not pass the complete conversation
+history by default.
+
+Limit the assignment to deciding whether implementation may begin, whether the
+issue and proposed file boundary still match the repository, which unresolved
+decision or blocker exists, and which risks and checks later work must address.
+The preflight must not run the full verification suite, assess hypothetical
+implementation quality, design the solution, or inspect unrelated project
+areas. It may reuse current evidence and expand to adjacent material only for a
+reason permitted by `docs/agent-workflow.md`. Require it to stop as soon as the
+readiness conclusions are supported or a blocker or justified expansion is
+identified.
+
 Inspect its cited evidence and stop if it shows that the issue is stale,
 incomplete, duplicated, blocked, or no longer matches the repository. If the
 required investigator is unavailable, do not begin the implementation.
