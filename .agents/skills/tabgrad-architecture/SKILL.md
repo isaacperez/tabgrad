@@ -48,6 +48,53 @@ Separate the architectural decision from production implementation. Research
 may include bounded experiments, but experimental code does not become the
 chosen production design merely because it produced useful evidence.
 
+## Involve the user at material decision points
+
+Before the research issue is treated as ready for architectural investigation,
+present the exact decision question, boundaries, realistic alternatives,
+decision criteria, evidence plan, proposed experiments, and material
+assumptions in plain language. Ask the user to correct or confirm the parts
+that depend on their intended result, priorities, or acceptance of tradeoffs.
+Do not request another confirmation when those choices were already explicit
+and the issue still records them accurately.
+
+Do not ask the user to resolve a fact that can be established from the
+repository, authoritative sources, or an appropriate test. The coordinating
+agent remains responsible for gathering evidence, evaluating technical
+consequences, exposing uncertainty, and recommending an alternative. The user
+sets product priorities and decides which material tradeoffs are acceptable.
+
+Continue routine investigation without pausing after every source, observation,
+or result. Return to the user when new evidence could materially change the
+question, boundaries, viable alternatives, relative importance of the
+criteria, experiment design, recommendation, or an important consequence the
+user may need to accept. Explain what changed, the evidence, the realistic
+options, and the exact priority or decision needed. If the evidence does not
+create such a choice, continue the investigation.
+
+Before running a material experiment whose design assumes a user preference or
+would exclude a viable direction, explain the hypothesis, the assumption, and
+how the result could affect the decision. Obtain the needed user choice before
+running an experiment that depends on it. Do not introduce an extra pause for
+an experiment whose method and tradeoffs are already authorized by the issue.
+
+When the evidence supports a recommendation, present it first as provisional.
+Give the user a meaningful opportunity to challenge assumptions, add an
+alternative or representative case, question a consequence, or request
+additional material evidence. Investigate factual challenges rather than
+asking the user to prove or disprove them. Silence is not acceptance.
+
+If user feedback materially changes the recorded question, boundaries,
+alternatives, criteria, or evidence plan, stop work that depends on the old
+framing. Use `tabgrad-issue` to reconcile the authoritative research issue when
+the user authorizes that mutation before continuing the affected work.
+
+Subagents may gather or challenge evidence, but they must not choose for the
+user or treat their conclusion as approval. The coordinating agent must inspect
+and reconcile their evidence, explain material disagreements to the user, and
+ask only for the decision that remains after discoverable facts have been
+resolved.
+
 ## Compare viable architectural alternatives
 
 Include the current design when it exists and can still satisfy the required
@@ -107,8 +154,9 @@ missing or uncertainty could change the choice, return the bounded question to
 
 ## Present the decision for approval
 
-Present the question, evidence, viable alternatives, important benefits and
-costs, uncertainty, independent challenge, and recommended alternative in plain
+After resolving material challenges to the provisional recommendation, present
+the question, evidence, viable alternatives, important benefits and costs,
+uncertainty, independent challenge, and recommended alternative in plain
 language. Explain why the recommendation fits Tabgrad's documented constraints
 rather than relying on authority, popularity, or analogy.
 
