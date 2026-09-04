@@ -1,0 +1,108 @@
+name: Documentation change
+description: Correct or improve documentation as the main result.
+labels:
+  - "type: documentation"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Search open and closed issues and pull requests before submitting this proposal. Record the results under **Dependencies and related work**.
+
+        Documentation must describe behavior that Tabgrad implements and verifies. Do not present planned behavior as current behavior.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Explain what the current documentation gets wrong, omits, or makes difficult to understand.
+    validations:
+      required: true
+
+  - type: textarea
+    id: why-it-matters
+    attributes:
+      label: Why it matters
+      description: Explain the effect on users, contributors, compatibility, correct use, or another project goal.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-result
+    attributes:
+      label: Expected result
+      description: Describe what the intended reader should be able to understand or do after the documentation is changed.
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Included and excluded work
+      description: State the affected behavior and project areas, explicit exclusions, and the evidence that could justify expanding the work.
+      placeholder: |
+        Included:
+        -
+
+        Excluded:
+        -
+    validations:
+      required: true
+
+  - type: textarea
+    id: completion-conditions
+    attributes:
+      label: Completion conditions
+      description: List conditions that can be inspected or demonstrated, including any examples that must be verified.
+      placeholder: |
+        - [ ]
+        - [ ]
+    validations:
+      required: true
+
+  - type: textarea
+    id: dependencies-related-work
+    attributes:
+      label: Dependencies and related work
+      description: Link duplicates, related issues or pull requests, parents, sub-issues, and dependencies. Explain each relationship. If none were found, state that after searching.
+    validations:
+      required: true
+
+  - type: textarea
+    id: effects-risks
+    attributes:
+      label: Effects and risks
+      description: State known effects on public APIs, PyTorch compatibility, architecture, browser support, security, privacy, dependencies, and other documentation. State when an item is unknown or not applicable.
+    validations:
+      required: true
+
+  - type: textarea
+    id: intended-reader
+    attributes:
+      label: Intended reader
+      description: Identify who needs this documentation and what background the text may assume.
+    validations:
+      required: true
+
+  - type: textarea
+    id: unanswered-question
+    attributes:
+      label: Unanswered or incorrectly answered question
+      description: State the exact question that the current documentation does not answer correctly.
+    validations:
+      required: true
+
+  - type: textarea
+    id: affected-documentation
+    attributes:
+      label: Documents and public behavior involved
+      description: Identify the documents to change and the implemented public behavior they describe.
+    validations:
+      required: true
+
+  - type: textarea
+    id: authoritative-sources
+    attributes:
+      label: Sources for the correct information
+      description: Link the code, tests, project documentation, standards, or authoritative external sources that establish what the documentation should say.
+    validations:
+      required: true

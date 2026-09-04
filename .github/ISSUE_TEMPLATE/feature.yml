@@ -1,0 +1,116 @@
+name: Feature request
+description: Propose new or extended observable Tabgrad behavior.
+labels:
+  - "type: feature"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Search open and closed issues and pull requests before submitting this request. Record the results under **Dependencies and related work**.
+
+        Describe the behavior that users need. Do not turn an unresolved implementation idea into a requirement.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Explain the missing capability or limitation and the facts already known about it.
+    validations:
+      required: true
+
+  - type: textarea
+    id: why-it-matters
+    attributes:
+      label: Why it matters
+      description: Explain the effect on users, contributors, compatibility, correctness, performance, maintainability, or another project goal.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-result
+    attributes:
+      label: Expected result
+      description: Describe the observable result after the feature is complete without prescribing an undecided implementation.
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Included and excluded work
+      description: State the affected behavior and project areas, explicit exclusions, and the evidence that could justify expanding the work.
+      placeholder: |
+        Included:
+        -
+
+        Excluded:
+        -
+    validations:
+      required: true
+
+  - type: textarea
+    id: completion-conditions
+    attributes:
+      label: Completion conditions
+      description: List observable conditions that can be tested, inspected, or otherwise demonstrated.
+      placeholder: |
+        - [ ]
+        - [ ]
+    validations:
+      required: true
+
+  - type: textarea
+    id: dependencies-related-work
+    attributes:
+      label: Dependencies and related work
+      description: Link duplicates, related issues or pull requests, parents, sub-issues, and dependencies. Explain each relationship. If none were found, state that after searching.
+    validations:
+      required: true
+
+  - type: textarea
+    id: effects-risks
+    attributes:
+      label: Effects and risks
+      description: State known effects on public APIs, PyTorch compatibility, architecture, performance, memory, browsers, security, privacy, dependencies, and documentation. State when an item is unknown or not applicable.
+    validations:
+      required: true
+
+  - type: textarea
+    id: user-need
+    attributes:
+      label: User or developer need
+      description: Describe who needs this capability and the task they cannot perform adequately today.
+    validations:
+      required: true
+
+  - type: textarea
+    id: behavior-example
+    attributes:
+      label: Example of the intended behavior
+      description: Give a concrete example of what a user should be able to observe or do.
+    validations:
+      required: true
+
+  - type: textarea
+    id: public-interface
+    attributes:
+      label: Affected public interface
+      description: Identify the Python API, JavaScript API, or other public interface if known. State when it is not yet known or not applicable.
+    validations:
+      required: true
+
+  - type: textarea
+    id: pytorch-reference
+    attributes:
+      label: PyTorch compatibility reference
+      description: Link relevant PyTorch documentation or reproducible behavior when compatibility is claimed. Otherwise, state that the request makes no PyTorch compatibility claim.
+    validations:
+      required: true
+
+  - type: textarea
+    id: deferred-behavior
+    attributes:
+      label: Deliberately deferred behavior
+      description: Identify important related behavior that this issue will not deliver. State when nothing is deliberately deferred.
+    validations:
+      required: true
