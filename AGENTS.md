@@ -20,6 +20,12 @@ environment defined in `docs/development.md`. Do not fall back to a global
 interpreter when that environment is missing or incomplete. Repository setup
 and dependency installation require the authority described there.
 
+Apply the GitHub access diagnosis in `docs/development.md` before treating a
+CLI failure as an invalid credential. A command that ran without required
+network access cannot establish an authentication failure. Do not open a
+browser or change stored credentials without the evidence and authority that
+document requires.
+
 Follow `docs/agent-instruction-review.md` when `AGENTS.md`, a repository skill,
 or a project rule applied by a skill changes. Use its bounded reasoned review;
 do not create or run a catalogue of model-behavior scenarios.
@@ -28,6 +34,11 @@ Read and follow `docs/agent-workflow.md` before a coding agent begins a
 substantive repository change or delegates work to a subagent. Its independent
 preflight, single-writer, final-state verification, and evidence rules are
 required parts of the applicable skills.
+
+Classify overlap with active issues, branches, and pull requests before
+performing work concurrently. Follow `docs/agent-workflow.md` to keep
+independent work parallel and to serialize work whose result or evidence can be
+invalidated by another change.
 
 Define the inspection and work boundaries before loading broad repository
 context. Do not inspect the whole repository by default. Read the complete

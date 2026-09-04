@@ -98,6 +98,44 @@ a blocker, missing authority, or justified expansion is found. Never claim
 complete coverage beyond the paths, concerns, environments, and evidence that
 were actually inspected.
 
+## Classify concurrent work before running it in parallel
+
+Before starting or resuming work alongside another active issue, branch, or
+pull request, compare the results they claim and the parts of the repository
+that can connect those results. Start with their stated responsibilities,
+public or internal interfaces, governing invariants, expected files, tests,
+configuration, and documentation. Inspect actual diffs when they exist. A
+shared project area or file is evidence to examine, not proof of a conflict;
+changes in different files may still be incompatible through a shared
+interface or invariant.
+
+Classify the relationship before substantive parallel work:
+
+- Work is independent when either result can be completed and merged without
+  changing the other's expected result, assumptions, implementation basis, or
+  required evidence. Use separate branches or worktrees and allow it to proceed
+  in parallel.
+- Work is ordered when one result must exist, or its effects must be
+  incorporated and checked, before the other can be completed truthfully. Run
+  it sequentially. When the later issue cannot proceed until the earlier issue
+  produces that result, record a native GitHub dependency and do not start or
+  resume the dependent work until the dependency is complete.
+- Work is conflicting or uncertain when both claim incompatible results or the
+  available evidence cannot establish a safe order. Stop the affected work and
+  resolve the scope, ownership, or project decision before editing.
+
+Do not create a dependency merely because two changes touch the same file or
+because one is expected to merge first. A dependency represents a real
+condition on the later issue's result. Creating or changing that relationship
+requires the authority defined in `docs/project-management.md`; without it,
+report the proposed order and stop the dependent work before implementation.
+
+When a related change reaches `main` after another branch began, use
+`docs/version-control.md` to decide whether the active branch must incorporate
+it. Re-evaluate the issue premises and invalidate only the implementation,
+verification, or review evidence that the merged result can affect. Do not
+repeat unrelated investigation or checks merely because `main` advanced.
+
 ## When independent agents are required
 
 A repository change is substantive when `CONTRIBUTING.md` requires it to have

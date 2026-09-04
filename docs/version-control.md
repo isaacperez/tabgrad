@@ -110,6 +110,14 @@ require the latest base. Use a normal merge from the default branch unless the
 maintainer has explicitly chosen a safe history rewrite for an unpublished,
 solely owned branch.
 
+Apply the concurrent-work classification in
+[`agent-workflow.md`](agent-workflow.md) before developing related issue
+branches in parallel. A branch ordered after another change may exist and may
+use a draft pull request for coordination, but it must not enter final
+verification or be marked ready for review until the prerequisite result is on
+`main` and has been incorporated. An unrelated change to `main` does not by
+itself require an immediate branch update or repeated checks.
+
 Conflict resolution is part of the proposed change. Inspect the complete
 result, rerun every affected check, and obtain review of the new state. A clean
 Git operation is not evidence that the resolved behavior is correct.

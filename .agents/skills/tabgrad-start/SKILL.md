@@ -25,6 +25,12 @@ required tool. If that check fails, do not try the global interpreter or change
 the environment. Report the documented setup and stop unless dependency setup
 was separately authorized.
 
+Apply the GitHub access diagnosis in `docs/development.md` before interpreting
+a failed issue, project, branch, or pull-request query. Do not diagnose an
+invalid credential from a command that lacked network access, and do not use a
+browser or change credentials without the evidence and authority required
+there.
+
 ## Interpret the explicit invocation
 
 Use this skill only when the user explicitly invokes
@@ -67,6 +73,14 @@ parent and sub-issue relationships, dependencies, active branches, pull
 requests, comments that can change readiness, and accepted decisions. Inspect
 only the repository context needed to evaluate those facts.
 
+Before starting work concurrently with any active result found in that check,
+apply the classification in `docs/agent-workflow.md`. Continue in parallel only
+when the results are independent. Serialize ordered work and require a recorded
+dependency when the later issue cannot proceed truthfully until the earlier
+result exists. If that dependency or another relationship is missing, use
+`tabgrad-issue` to propose or perform the correction under current authority;
+do not start the dependent work first.
+
 Do not repeat a complete duplicate search merely because work is starting.
 Use the search already recorded during triage unless the issue has materially
 expanded, new work creates a plausible conflict, or another concrete fact makes
@@ -108,13 +122,13 @@ when its own substantive activity or at least one required sub-issue begins. If
 none of that work can begin, leave the parent unchanged and report why.
 
 Partition required sub-issues by their recorded results and dependencies.
-Run independent work in parallel when doing so saves time or improves evidence,
-and serialize work whose input depends on another result. Do not choose a fixed
-number of agents. Give every subagent the bounded question, original issue,
-paths or concerns, evidence, exclusions, permissions, and stopping condition
-required by `docs/agent-workflow.md`. Subagents remain read-only and do not
-mutate GitHub; the coordinating agent performs authorized mutations and checks
-their results.
+Run work classified as independent in parallel when doing so saves time or
+improves evidence, and serialize work whose input, result, assumptions, or
+evidence depends on another result. Do not choose a fixed number of agents.
+Give every subagent the bounded question, original issue, paths or concerns,
+evidence, exclusions, permissions, and stopping condition required by
+`docs/agent-workflow.md`. Subagents remain read-only and do not mutate GitHub;
+the coordinating agent performs authorized mutations and checks their results.
 
 Do not recursively absorb unrelated descendants or create follow-up work. A
 finding that may justify another issue is reported under the normal finding
