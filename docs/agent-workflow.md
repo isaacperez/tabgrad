@@ -127,6 +127,34 @@ coordinator's summary. Do not tell an independent agent which conclusion it is
 expected to reach. An assignment should be small enough that its coverage and
 omissions can be understood.
 
+For preflight, verification, and review, provide only the context needed to
+answer the assigned question about the exact repository state. That context
+normally consists of:
+
+- the issue, its completion conditions, relevant relationships, and accepted
+  decisions;
+- the base, target revision or working-tree identity, branch, and permission
+  boundaries;
+- the complete proposed diff and changed-file list when a change exists;
+- the directly affected files, interfaces, tests, and primary project rules;
+- current command results and other evidence, including their environment and
+  exact target; and
+- known findings, limitations, material risks, and uncovered areas.
+
+Do not pass the complete conversation history, an undirected repository dump,
+or every project document by default. When the delegation mechanism can omit
+inherited conversation context, use that mode and supply the bounded context
+explicitly. This restriction does not permit replacing original requirements
+or files with the writer's interpretation. The agent must be able to inspect
+the original issue, relevant source files, complete diff when one exists, and
+primary evidence.
+
+Expand this context only when a concrete dependency, call path, failing check,
+stale input, contradiction, security concern, or other material risk connects
+additional evidence to the assigned conclusion. Record what was added and why.
+Stop when the assigned conclusions have sufficient evidence, or when a blocker,
+missing authority, or justified expansion is identified.
+
 Every agent report must distinguish observed facts, conclusions, assumptions,
 limitations, and unanswered questions. It must cite precise paths, lines,
 commands, results, issue or pull request links, and source versions when they
@@ -138,6 +166,16 @@ The preflight tests whether the recorded work still matches reality before any
 repository file is changed. The investigator must inspect the current issue,
 dependencies, related work, accepted decisions, affected code, tests,
 documentation, configuration, and relevant history.
+
+These are possible evidence categories, not a requirement to inspect each one
+exhaustively. Start with the issue, exact base, named affected files, and the
+current work boundary. Inspect another category only when it can change whether
+implementation may begin, the boundary of the work, an unresolved decision or
+blocker, or the risks and checks that later work must address. Do not run the
+full verification suite or evaluate final implementation quality during
+preflight. Reuse current evidence when it already establishes a premise, and
+run a focused observation only when it is practical and materially informs
+readiness.
 
 The report must establish:
 
@@ -153,6 +191,11 @@ The report must establish:
   implementation; and
 - the checks and risks that the implementation and final verification must
   address.
+
+Stop after these conclusions have sufficient evidence. Report the inspected
+paths and any category deliberately not opened; do not continue into solution
+design, implementation, final verification, or an unrelated maintenance
+investigation.
 
 The coordinating agent must inspect the evidence behind material findings. If
 the issue is stale, duplicated, incomplete, incorrectly scoped, or blocked,
@@ -207,6 +250,24 @@ The independent review must examine the same final content and verification
 evidence. Verification establishes reproducible facts about the change;
 review looks for incorrect reasoning, missing cases, unintended consequences,
 and maintainability risks. Neither activity substitutes for the other.
+
+One agent that is independent of the writer may perform both verification and
+review for the same proposed state when no distinct material concern requires
+a specialist. The assignment and report must keep the two responsibilities and
+conclusions separate. Commands and primary evidence are gathered once and may
+be used by both conclusions; combining the assignment does not permit review to
+be omitted or verification to become a reviewer's unsupported judgment.
+
+Review must use current verification evidence instead of repeating successful
+mechanical checks by default. A reviewer runs a focused check only to
+investigate a concrete finding, missing evidence, stale result, or material
+uncertainty, and records that reason. A later merge check likewise reuses
+current independent verification and review evidence for the exact pull
+request head. It needs a fresh independent assignment only when merge-readiness
+coverage is absent, stale, contradicted, or insufficient for a newly identified
+material risk. The merge coordinator must still inspect the live pull request,
+head, required checks, review state, authorization, and branch safety
+immediately before the mutation.
 
 ## Invalidate stale evidence
 
