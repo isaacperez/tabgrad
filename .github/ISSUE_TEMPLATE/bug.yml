@@ -1,0 +1,145 @@
+name: Bug report
+description: Report existing Tabgrad behavior that is incorrect.
+labels:
+  - "type: bug"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Search open and closed issues and pull requests before submitting this report. Record the results under **Dependencies and related work**.
+
+        Do not include private information or sensitive security details in a public issue. Follow the private reporting instructions in `CONTRIBUTING.md`.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Explain the incorrect behavior and the facts already known about it.
+      placeholder: Describe the problem without assuming that the reader has seen an earlier discussion.
+    validations:
+      required: true
+
+  - type: textarea
+    id: why-it-matters
+    attributes:
+      label: Why it matters
+      description: Explain the effect on users, correctness, compatibility, performance, maintainability, or another project goal.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-result
+    attributes:
+      label: Expected result
+      description: Describe the observable result after the bug is fixed without prescribing an undecided implementation.
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Included and excluded work
+      description: State the affected behavior and project areas, explicit exclusions, and the evidence that could justify expanding the work.
+      placeholder: |
+        Included:
+        -
+
+        Excluded:
+        -
+    validations:
+      required: true
+
+  - type: textarea
+    id: completion-conditions
+    attributes:
+      label: Completion conditions
+      description: List observable conditions that can be tested, inspected, or otherwise demonstrated.
+      placeholder: |
+        - [ ]
+        - [ ]
+    validations:
+      required: true
+
+  - type: textarea
+    id: dependencies-related-work
+    attributes:
+      label: Dependencies and related work
+      description: Link duplicates, related issues or pull requests, parents, sub-issues, and dependencies. Explain each relationship. If none were found, state that after searching.
+    validations:
+      required: true
+
+  - type: textarea
+    id: effects-risks
+    attributes:
+      label: Effects and risks
+      description: State known effects on public APIs, PyTorch compatibility, architecture, performance, memory, browsers, security, privacy, dependencies, and documentation. State when an item is unknown or not applicable.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Smallest available reproduction
+      description: Provide the shortest reliable sequence, program, or test case that demonstrates the problem.
+      placeholder: Include all inputs, commands, and setup needed to reproduce the result.
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual-behavior
+    attributes:
+      label: Actual behavior
+      description: State exactly what Tabgrad does when the reproduction is run.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected behavior and source
+      description: State what should happen and link the documentation, compatibility reference, test, or other source that establishes that expectation.
+    validations:
+      required: true
+
+  - type: input
+    id: version-commit
+    attributes:
+      label: Tabgrad version or commit
+      description: Give the released version or exact commit where the problem was observed.
+      placeholder: Version number or commit SHA
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Give the browser and version, operating system, backend, relevant hardware, and whether Pyodide or the JavaScript API was used.
+      placeholder: |
+        Browser and version:
+        Operating system:
+        Backend:
+        Hardware:
+        API and Pyodide version, if applicable:
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Error messages and other evidence
+      description: Include relevant error messages, logs, screenshots, or measurements. You can attach files to this field. State when no additional evidence is available.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: worked-before
+    attributes:
+      label: Did this behavior work before?
+      description: Select the best supported answer and explain relevant details in the problem or evidence fields.
+      options:
+        - "Yes"
+        - "No"
+        - "Unknown"
+    validations:
+      required: true

@@ -1,0 +1,48 @@
+name: Repository checks
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: repository-checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  repository-consistency:
+    name: repository-consistency
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11.9"
+          check-latest: false
+
+      - name: Install locked development dependencies
+        run: "python -m pip install --only-binary=:all: --require-hashes -r requirements-dev.lock"
+
+      - name: Check Python formatting
+        run: python3 -m ruff format --check scripts tests
+
+      - name: Lint Python
+        run: python3 -m ruff check scripts tests
+
+      - name: Validate repository policies and structure
+        run: python3 scripts/check_repository.py
+
+      - name: Test the repository validator
+        run: python3 scripts/run_tests.py
