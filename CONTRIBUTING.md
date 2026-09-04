@@ -469,8 +469,12 @@ the maintainer-count and per-pull-request approval rules in
 merge, confirm that
 each linked issue is closed or remains open as required by the relationship and
 the result actually completed. Confirm that any necessary follow-up work has
-its own issue. Remove the dedicated branch after confirming that its change is
-merged and that it contains no other work, when branch deletion is authorized.
+its own issue. Authorization to merge also authorizes the safe retirement of
+the branch dedicated to that pull request. GitHub removes the eligible remote
+branch automatically, and the merge process removes its controlled local
+branch after confirming that no unmerged or shared work can be lost. Follow
+[`docs/version-control.md`](docs/version-control.md) for the complete safety
+conditions and exceptions.
 
 Follow [`docs/releases.md`](docs/releases.md) when a merge is intended for a
 versioned release, migration, deprecation, or correction to published behavior.

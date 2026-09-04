@@ -99,6 +99,12 @@ Configure a GitHub ruleset for `main` with these settings:
 - Block force pushes and deletion of `main`.
 - Apply the rules to administrators and disallow routine bypass.
 
+Configure the repository to allow squash merges only and to delete head
+branches automatically after their pull requests merge. The branch-lifecycle
+and safety rules in [`version-control.md`](version-control.md) determine which
+branches may be used as pull request heads: a branch that must survive a merge
+must not be used as a disposable pull request branch.
+
 The ruleset count is static, but the review requirement for an individual pull
 request also depends on its author. When a maintainer with review permission
 who is independent of the work and is not the author exists, that maintainer
@@ -122,10 +128,11 @@ receives a conclusive success for unaffected changes.
 The ruleset must be inspected through GitHub after creation, modification, or
 a change in maintainer eligibility. Record its identifier, target, enforcement
 state, approving-review count, eligible maintainers, required checks, bypass
-actors, and verification date in the issue or pull request that configures it.
-A repository specification never proves that a remote ruleset is active or
-correct for the current maintainers; remote enforcement requires direct
-inspection of GitHub.
+actors, allowed merge methods, automatic head-branch deletion setting, and
+verification date in the issue or pull request that configures it. A
+repository specification never proves that a remote ruleset or repository
+setting is active or correct for the current maintainers; remote enforcement
+requires direct inspection of GitHub.
 
 ## Interpret CI results
 
