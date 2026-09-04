@@ -42,18 +42,41 @@ command provided by Python's `venv` module on another shell. Dependency setup
 downloads packages and writes only to the selected virtual environment and
 the package manager's ordinary cache.
 
+## Use the prepared environment
+
+Run repository Python commands with the interpreter in `.venv`. On POSIX
+systems, use `.venv/bin/python`; on Windows, use the corresponding interpreter
+under `.venv\Scripts`. Calling that interpreter directly does not require
+activating the environment first.
+
+Before the first Python command in a task, confirm that the interpreter exists
+and can load the required tool. If the environment is missing, uses the wrong
+Python version, or lacks a locked dependency, do not fall back to a global
+interpreter and do not install or update packages silently. Report the failed
+check and the setup command above. Creating or repairing the environment may
+download packages and change persistent local state, so perform it only when
+that setup is authorized.
+
 ## Configured commands
 
 The repository provides these commands:
 
+The `python3` spelling below is valid locally only after `.venv` has been
+activated. A coding agent should avoid relying on shell activation and replace
+that leading executable with `.venv/bin/python` on POSIX or the corresponding
+`.venv\Scripts` interpreter on Windows. In continuous integration, the workflow
+prepares the selected Python interpreter and installs the same locked
+dependencies before it uses the documented `python3` entry points. The table
+does not authorize an unprepared global interpreter.
+
 | Purpose | Command | Requirements |
 | --- | --- | --- |
 | Install locked development dependencies | `python -m pip install --only-binary=:all: --require-hashes -r requirements-dev.lock` | An active Python 3.11 virtual environment; writes only to that environment and the package manager's ordinary cache |
-| Format maintained Python files | `python3 -m ruff format scripts tests` | Python 3.11 and the packages in `requirements-dev.lock`; rewrites files in place |
-| Check maintained Python formatting | `python3 -m ruff format --check scripts tests` | Python 3.11 and the packages in `requirements-dev.lock`; read-only |
-| Lint maintained Python files | `python3 -m ruff check scripts tests` | Python 3.11 and the packages in `requirements-dev.lock`; read-only |
-| Validate repository policies and structure | `python3 scripts/check_repository.py` | Python 3.11 and the packages in `requirements-dev.lock` |
-| Test the repository validator | `python3 scripts/run_tests.py` | Python 3.11 and the packages in `requirements-dev.lock` |
+| Format maintained Python files | `python3 -m ruff format scripts tests` | The prepared repository tooling environment; rewrites files in place |
+| Check maintained Python formatting | `python3 -m ruff format --check scripts tests` | The prepared repository tooling environment; read-only |
+| Lint maintained Python files | `python3 -m ruff check scripts tests` | The prepared repository tooling environment; read-only |
+| Validate repository policies and structure | `python3 scripts/check_repository.py` | The prepared repository tooling environment |
+| Test the repository validator | `python3 scripts/run_tests.py` | The prepared repository tooling environment |
 
 Ruff reads `ruff.toml`. The formatter and linter cover the maintained Python
 files under `scripts/` and `tests/`. The formatting command is the only command

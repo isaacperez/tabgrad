@@ -1,0 +1,7 @@
+interface:
+  display_name: "Start Tabgrad issue"
+  short_description: "Start one issue through its required workflow"
+  default_prompt: "Use $tabgrad-start with issue 11 to begin its recorded work."
+
+policy:
+  allow_implicit_invocation: false
