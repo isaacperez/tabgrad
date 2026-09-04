@@ -1,0 +1,108 @@
+name: Maintenance work
+description: Improve the repository without intentionally changing public behavior.
+labels:
+  - "type: maintenance"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Search open and closed issues and pull requests before submitting this proposal. Record the results under **Dependencies and related work**.
+
+        A preference for a different style is not enough. Describe a concrete effect on correctness, comprehension, testability, performance, security, or ongoing maintenance.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Explain the maintenance concern and the facts already known about it.
+    validations:
+      required: true
+
+  - type: textarea
+    id: why-it-matters
+    attributes:
+      label: Why it matters
+      description: Explain the effect on correctness, comprehension, testability, performance, security, dependencies, or ongoing maintenance.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-result
+    attributes:
+      label: Expected result
+      description: Describe the observable or inspectable result after the work is complete without prescribing an undecided implementation.
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Included and excluded work
+      description: State the affected behavior and project areas, explicit exclusions, and the evidence that could justify expanding the work.
+      placeholder: |
+        Included:
+        -
+
+        Excluded:
+        -
+    validations:
+      required: true
+
+  - type: textarea
+    id: completion-conditions
+    attributes:
+      label: Completion conditions
+      description: List observable conditions that can be tested, inspected, measured, or otherwise demonstrated.
+      placeholder: |
+        - [ ]
+        - [ ]
+    validations:
+      required: true
+
+  - type: textarea
+    id: dependencies-related-work
+    attributes:
+      label: Dependencies and related work
+      description: Link duplicates, related issues or pull requests, parents, sub-issues, and dependencies. Explain each relationship. If none were found, state that after searching.
+    validations:
+      required: true
+
+  - type: textarea
+    id: effects-risks
+    attributes:
+      label: Effects and risks
+      description: State known effects on public APIs, PyTorch compatibility, architecture, performance, memory, browsers, security, privacy, dependencies, and documentation. State when an item is unknown or not applicable.
+    validations:
+      required: true
+
+  - type: textarea
+    id: maintenance-evidence
+    attributes:
+      label: Evidence of the maintenance concern
+      description: Show the duplication, complexity, obsolete code, dependency problem, weak test, or other concern with specific examples or measurements.
+    validations:
+      required: true
+
+  - type: textarea
+    id: affected-parts
+    attributes:
+      label: Affected code, tooling, or documentation
+      description: Identify the files, modules, workflows, dependencies, or documents involved.
+    validations:
+      required: true
+
+  - type: textarea
+    id: preserved-behavior
+    attributes:
+      label: Behavior that must remain unchanged
+      description: State the public and internal behavior that the maintenance work must preserve, and how it can be checked.
+    validations:
+      required: true
+
+  - type: textarea
+    id: concrete-improvement
+    attributes:
+      label: Concrete improvement
+      description: State the measurable or inspectable improvement expected from this work.
+    validations:
+      required: true
