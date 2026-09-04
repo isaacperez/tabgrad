@@ -15,6 +15,11 @@ defined in `docs/documentation.md`.
 Use `docs/README.md` to find the primary source for each project rule. Do not
 create a competing rule in a skill or another document.
 
+Before running a repository Python command, use the prepared virtual
+environment defined in `docs/development.md`. Do not fall back to a global
+interpreter when that environment is missing or incomplete. Repository setup
+and dependency installation require the authority described there.
+
 Follow `docs/agent-instruction-review.md` when `AGENTS.md`, a repository skill,
 or a project rule applied by a skill changes. Use its bounded reasoned review;
 do not create or run a catalogue of model-behavior scenarios.
@@ -35,6 +40,8 @@ bounded question, path or concern, and stopping condition under
 
 Use the repository skill that corresponds to the work being performed:
 
+- Use `$tabgrad-start <issue-number>` only when the user explicitly invokes it
+  to begin or resume an existing issue through every applicable skill.
 - Use `$tabgrad-issue` to create or refine an issue.
 - Use `$tabgrad-research` for a research issue or project experiment.
 - Use `$tabgrad-architecture` in addition to `$tabgrad-research` when the

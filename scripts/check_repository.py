@@ -237,6 +237,7 @@ REQUIRED_SKILLS = {
     "tabgrad-pull-request",
     "tabgrad-research",
     "tabgrad-review",
+    "tabgrad-start",
     "tabgrad-verify",
 }
 QUALITY_POLICY_CONSUMERS = {
