@@ -53,6 +53,17 @@ If work must use another base, record the reason in the issue and pull request.
 Do not build new work on an unrelated feature branch merely because it is
 already checked out.
 
+## Use `main` as the integration branch
+
+Tabgrad uses `main` as its default integration branch and does not maintain a
+separate permanent `develop` branch. Issue branches normally start from the
+current remote `main` and target `main` through a pull request. A different
+base or target must be justified in the issue and pull request.
+
+Merging into `main` updates the repository's integrated development state; it
+does not create a Tabgrad release. A release is a separate, explicitly
+authorized operation governed by [`releases.md`](releases.md).
+
 ## Protect existing working trees
 
 Inspect the branch and complete working-tree status before changing files.
@@ -118,10 +129,9 @@ relationship is defined in `CONTRIBUTING.md` and
 
 ## Merge and retire the branch
 
-The default merge method is a squash merge. The resulting commit must use a
-clear subject and retain the issue relationship. Use another merge method only
-when preserving the individual commits has concrete value and a maintainer
-explicitly approves that exception.
+Use squash merge for every pull request. The resulting commit must use a clear
+subject and retain the issue relationship. Do not use merge commits or rebase
+merges.
 
 After the merge is confirmed on the target branch, delete the source branch
 when it is dedicated to the merged pull request. Do not delete a protected

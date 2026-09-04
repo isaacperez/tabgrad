@@ -454,9 +454,8 @@ A pull request is ready to merge when:
 - required review corrections are resolved; and
 - no known limitation is hidden or presented as supported behavior.
 
-Merge only through a pull request after review. Use the squash merge method
-unless a maintainer explicitly approves another method for a concrete reason.
-After the merge, confirm that
+Merge only through a pull request after review, and always use the squash
+merge method. After the merge, confirm that
 each linked issue is closed or remains open as required by the relationship and
 the result actually completed. Confirm that any necessary follow-up work has
 its own issue. Remove the dedicated branch after confirming that its change is
