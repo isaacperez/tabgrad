@@ -265,6 +265,30 @@ class RepositoryCheckTests(unittest.TestCase):
                 all("project-progress wording" in item.message for item in failures)
             )
 
+    def test_every_architecture_document_is_registered_as_timeless(self):
+        source_root = SCRIPT.parents[1]
+        architecture_root = source_root / "docs" / "architecture"
+        repository_documents = {
+            path.relative_to(source_root).as_posix()
+            for path in architecture_root.glob("*.md")
+        }
+        self.assertEqual(CHECKS.ARCHITECTURE_DOCUMENTS, repository_documents)
+
+        for relative_path in sorted(repository_documents):
+            with (
+                self.subTest(path=relative_path),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                root = Path(directory)
+                path = root / relative_path
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(
+                    "The runtime is not yet implemented.\n", encoding="utf-8"
+                )
+                failures = CHECKS.check_timeless_documentation(root)
+                self.assertEqual(len(failures), 1)
+                self.assertEqual(failures[0].path, Path(relative_path))
+
     def test_durable_documentation_allows_operational_check_state(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
