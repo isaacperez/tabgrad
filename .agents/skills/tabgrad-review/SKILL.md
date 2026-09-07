@@ -84,10 +84,14 @@ does not authorize editing the change, running destructive commands, changing
 Git history or GitHub state, submitting comments or a formal review, approving
 the pull request, requesting changes on GitHub, or merging it.
 
-When the user also authorizes corrections, report the findings first and send
-the work back through `tabgrad-implement`. The corrected state must pass
-`tabgrad-verify` and receive a new independent review. Do not quietly combine
-authorship and approval because one task includes both activities.
+When the user also authorizes corrections, report the findings first and route
+each correction to the skill that owns its artifact. Repository content returns
+to the sole writer through `tabgrad-implement`; issue content or state uses
+`tabgrad-issue`; pull request content or state uses `tabgrad-pull-request`; and
+missing evidence returns to its owning check. Preserve every separate authority
+boundary. The complete corrected result must pass the affected verification
+and receive a new independent review. Do not quietly combine authorship and
+approval because one task includes both activities.
 
 Publishing a review, inline comment, approval, or request for changes requires
 authority for that exact external action. Do not impersonate another reviewer
@@ -157,10 +161,43 @@ missing behavior, and that important boundaries and failure cases are not
 hidden by mocks, fixtures, broad tolerances, snapshots, or implementation-only
 assertions.
 
+When a change adds or corrects executable behavior distributed as part of
+Tabgrad, inspect the recorded TDD evidence for every smallest useful behavior
+that required a production change. Confirm that each focused test preceded its
+corresponding implementation, that its red result was caused by the intended
+missing or incorrect behavior, and that the final test still expresses that
+contract clearly. One cycle may cover several layers when it genuinely observes
+them; one narrow red result cannot justify unrelated behavior implemented
+before its test. A behavior-preserving production refactor instead requires
+passing characterization or contract coverage before it changes.
+
+Do not require a red step for documentation, project policies, issue metadata,
+agent instructions, templates, configuration, repository and test tooling, or
+research artifacts that cannot alter distributed executable behavior. Apply
+their content-specific evidence without treating them as Tabgrad production
+code. Classify by effect when a generator, manifest, export map, build source,
+or configuration determines distributed executable behavior; the resulting
+behavior needs TDD evidence even though incidental tooling mechanics do not.
+Do not infer a valid red step from the mere presence of a final passing test.
+
 Look for weakened, deleted, skipped, nondeterministic, or undiscovered tests.
 Check whether changed behavior invalidates existing tests elsewhere. A large
 number of passing tests does not compensate for a missing test of the changed
 result.
+
+Treat deterministic memory and resource-lifecycle guarantees as observable
+behavior, including applicable release, cancellation, retention, cache-bound,
+and explicit resource-failure cases. Review quantitative performance, memory,
+growth, and artifact-size claims through the separate comparable evidence in
+`docs/performance.md`; do not accept one kind of evidence as the other.
+
+When an observable contract, boundary, failure mode, interaction, or material
+risk introduced or affected by the change lacks meaningful test protection,
+report the gap as a required correction. Identify the missing scenario or
+invariant, its consequence, why the current tests cannot detect it, and the
+smallest evidence the corrected change must provide. Do not demand a fixed
+number of tests, an unexplained coverage target, or assertions coupled only to
+the chosen implementation.
 
 Read the `tabgrad-verify` report and its primary evidence. Confirm that it
 targets the reviewed state, covers every applicable requirement, records
@@ -236,6 +273,28 @@ When no actionable finding remains, state that clearly and describe any
 residual risk, missing environment, or part that could not be inspected. The
 absence of findings is not proof that unverified behavior works.
 
+For a substantive pull request, review a stable snapshot: repository and pull
+request identity; SHA-256 digests of the exact, otherwise complete title and
+description text; source repository and branch; exact head; target repository
+and branch; and comparison base revision. Confirm the digest method and
+rederive the complete identity before concluding. The inspectable report must
+record those values together with the reviewer role, assignment and coverage,
+outcome, required findings, limitations, and primary evidence. A bare anonymous
+`PASS` is not sufficient.
+
+After the description is frozen, return the reviewer-authored final report to
+the coordinator. Under current authority, the coordinator preserves it as a
+comment in that same pull request while naming the reviewer and not claiming
+the independent work as its own; submitting it as a formal review requires
+separate authority. The report then locates itself without changing the
+reviewed snapshot. Do not ask the coordinator to edit the description merely
+to link or copy the report; a deliberate later change to a snapshot field needs
+a new identity and affected review. If the target branch advanced without being
+retargeted, apply the overlap rules in `docs/agent-workflow.md` and record the
+resulting comparison state. Protect sensitive findings through the private
+reporting route and put only a safe conclusion and protected evidence location
+in the public report.
+
 ## Decide and report the review result
 
 The review passes only when no required correction remains, verification
@@ -250,6 +309,11 @@ corrected before the change can continue. The review is incomplete when the
 target, a required issue, relevant files, independent reviewer, verification
 evidence, or other information needed for a responsible judgment is
 unavailable.
+
+End the report with exactly one review outcome: `PASS`, `CHANGES REQUIRED`, or
+`INCOMPLETE`. A `PASS` is permitted only under the passing conditions above;
+the other outcomes block publication as review-ready or merge until the
+author-review loop produces a newly verified and reviewed state.
 
 When required changes and missing evidence coexist, report that changes are
 required and list the incomplete areas separately. Do not imply that resolving

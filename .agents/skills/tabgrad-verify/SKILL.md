@@ -20,6 +20,8 @@ issue, diff, and material risks; read [`docs/quality.md`](../../../docs/quality.
 when test or implementation quality applies. Inspect the complete proposed
 change and existing verification evidence without loading unaffected project
 areas by default.
+Read `docs/implementation-workflow.md` when the target changes or refactors
+distributed production behavior.
 
 When no issue exists, confirm that the complete change qualifies for the small
 spelling or formatting exception in `CONTRIBUTING.md`. Use the authorized user
@@ -168,6 +170,31 @@ the strongest available evidence, such as a documented reproduction, a test
 whose assertion targets the changed outcome, or an independently established
 reference result. Do not require mutation testing or a fabricated failure when
 it would not provide useful evidence.
+
+When a change adds or corrects executable behavior distributed as part of
+Tabgrad, inspect every useful red-green cycle recorded under `docs/quality.md`.
+Confirm that each focused test preceded the corresponding production change,
+was discovered, and failed for the intended reason; then confirm that the same
+behavior passes in the exact final state. One cycle may cover several layers
+only when the test genuinely observes them. A wrong command or unrelated
+failure does not satisfy a red step. For a behavior-preserving production
+refactor, verify the passing characterization or contract evidence that
+preceded it.
+
+Do not require TDD evidence for documentation, project policies, issue metadata,
+agent instructions, templates, configuration, repository and test tooling, or
+research artifacts that cannot alter distributed executable behavior. Verify
+those changes with the checks applicable to their content. Classify by effect:
+when a generator, manifest, export map, build source, or configuration changes
+distributed executable behavior, require red-green evidence for that resulting
+behavior even if the auxiliary mechanism needs no artificial failing test.
+Missing required TDD evidence for a distributed production-behavior change
+makes verification incomplete even when the final suite passes.
+
+Verify deterministic memory and resource-lifecycle contracts as executable
+behavior when they apply. Keep that evidence separate from comparable
+performance and resource measurements; final passing functional tests do not
+establish a quantitative peak, growth rate, latency, or size claim.
 
 Confirm that tests are deterministic under their documented conditions and
 that expected skips are justified. Treat zero discovered tests, unexpected

@@ -15,11 +15,13 @@ link to its primary source, but they must not create a competing version.
 | Project identity and public purpose | [`README.md`](../README.md) |
 | Central execution architecture and ownership boundaries | [`architecture/README.md`](architecture/README.md) |
 | Contribution workflow | [`CONTRIBUTING.md`](../CONTRIBUTING.md) |
+| Integrated implementation workflow and reading guide | [`implementation-workflow.md`](implementation-workflow.md) |
 | Issues, labels, project fields, and milestones | [`project-management.md`](project-management.md) |
 | Agent delegation and independent checks | [`agent-workflow.md`](agent-workflow.md) |
 | Unexpected findings, blockers, and pending decisions | [`CONTRIBUTING.md`](../CONTRIBUTING.md#handling-unexpected-findings-and-pending-decisions) |
 | Branches, worktrees, commits, and merge history | [`version-control.md`](version-control.md) |
 | Code style, design quality, abstractions, and root-cause corrections | [`quality.md`](quality.md) |
+| Test-driven development for distributed production behavior | [`quality.md`](quality.md#develop-production-behavior-test-first) |
 | Tests and repository quality checks | [`quality.md`](quality.md#select-checks-from-the-affected-risks) |
 | Refactoring, duplication, and technical debt | [`quality.md`](quality.md#review-code-quality-without-speculative-redesign) |
 | Security and private vulnerability reporting | [`SECURITY.md`](../SECURITY.md) |

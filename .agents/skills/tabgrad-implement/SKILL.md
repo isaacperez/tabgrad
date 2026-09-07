@@ -22,6 +22,8 @@ applicable rules in `docs/version-control.md`, together with the documentation,
 [`docs/quality.md`](../../../docs/quality.md), code, tests, build configuration,
 and earlier decisions
 relevant to the affected behavior.
+Read `docs/implementation-workflow.md` when the change implements or refactors
+behavior.
 
 Treat the issue's expected result, boundaries, and completion conditions as the
 definition of the requested work. Treat the repository and its configured
@@ -207,12 +209,35 @@ Preserve the project constraints recorded in `README.md` and
 change. Do not assume that every implementation affects every public API,
 runtime, backend, environment, or compatibility guarantee.
 
-Add or update tests for every behavior change. A test must fail for the
-incorrect or missing behavior and pass for the implemented result. Add a
-regression test for a bug fix. Cover important successful behavior, failure
-behavior, boundaries, and interactions that the change can affect. Do not
-weaken, delete, skip, or rewrite a valid test merely to accommodate the new
-implementation.
+Apply the test-first cycle in `docs/quality.md` to executable behavior
+distributed as part of Tabgrad. For each smallest useful observable behavior,
+write the focused test before the corresponding implementation, run it, and
+confirm that it fails for the intended missing or incorrect behavior. Record
+each useful cycle, its behavior, command, relevant failure, reason that failure
+is valid, and corresponding green result. One cycle may cover several layers
+only when the test genuinely observes them. A failed invocation, unavailable
+environment, syntax error, or unrelated failure is not the red state. Do not
+require or publish a failing commit merely to preserve this evidence.
+
+Implement the minimum complete behavior that makes the focused test pass, then
+refactor while it remains green. Examine important successful behavior,
+failure behavior, boundaries, interactions, and regressions. If another case
+fails and requires a production change, begin another red-green cycle before
+making that change. A behavior-preserving production refactor starts from
+passing characterization or contract tests. Documentation, project policies,
+agent instructions, templates, configuration, repository and test tooling,
+and research artifacts that cannot alter distributed executable behavior do
+not use TDD; apply their relevant checks without manufacturing a failure. When
+a generator, manifest, export map, build source, or configuration determines
+distributed executable behavior, apply TDD to the resulting observable
+behavior, not to incidental tooling mechanics. Do not weaken, delete, skip, or
+rewrite a valid test merely to accommodate the new implementation.
+
+Treat deterministic memory and resource-lifecycle contracts as executable
+behavior. Cover release, cancellation, retention, cache bounds, and explicit
+resource failures when the change can affect them. Use the separate comparable
+measurements in `docs/performance.md` for quantitative latency, throughput,
+peak-memory, growth, and distributed-size consequences.
 
 Update documentation in the same change whenever public interfaces,
 compatibility, architecture, setup, examples, development procedures, or
@@ -301,6 +326,10 @@ Report:
 - the issue and branch used;
 - the independent preflight, its evidence, and the sole writer for the target;
 - the observable behavior implemented;
+- every useful red-green cycle for new or corrected distributed production
+  behavior, the before-and-after passing evidence for a behavior-preserving
+  production refactor, or the fact that the change contained no distributed
+  production behavior;
 - the files, tests, documentation, compatibility information, and
   dependencies changed;
 - the checks run so far and their exact results;
