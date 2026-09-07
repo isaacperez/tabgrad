@@ -25,6 +25,24 @@ Describe the observable behavior implemented by this pull request. Explain any
 deliberate difference from the linked issue or an accepted design.
 -->
 
+## Test-driven development
+
+Use the route that applies. For new or corrected distributed production
+behavior, add one row for every useful red-green cycle and record the behavior,
+focused test command, expected red result before its implementation, and
+corresponding green result. One row may cover several layers only when the test
+genuinely observes them. For a behavior-preserving production refactor, record
+the passing characterization or contract baseline and the final passing
+result. For a change without distributed production behavior, write `Not
+applicable — no distributed production behavior changed`; report its
+content-specific checks under **Verification** and **Required evidence**. See
+`docs/quality.md#develop-production-behavior-test-first`. A failing commit is
+not required.
+
+| Observable behavior or route | Before implementation | Final result |
+| --- | --- | --- |
+| <!-- One behavior, behavior-preserving refactor, or no distributed production behavior. Add rows for further cycles. --> | <!-- Valid red evidence, passing baseline, or not applicable --> | <!-- Focused passing result, final refactor result, or content-specific checks below --> |
+
 ## Verification
 
 List every command and manual check run against the final commit. Do not claim
@@ -34,6 +52,27 @@ version of the change.
 | Command or manual check | Result |
 | --- | --- |
 | <!-- Command or check --> | <!-- Passed, failed, or could not run. Include relevant details. --> |
+
+## Independent verification and review
+
+For a substantive coding-agent change, make this description otherwise
+complete and record its exact source/head and target/comparison base below
+before final review, then freeze the title and description. The final reviewer
+computes SHA-256 digests of the exact title and description text and records
+them and the digest method in the final report, not in the text they identify.
+Verification and skeptical review may be performed by the same independent
+agent, but their conclusions remain separate. The reviewer-authored inspectable
+report is published afterward as a comment in this pull request and identifies
+the repository and pull request, title and description digests, source/head,
+and target/comparison base. Do not edit a snapshot field merely to add that
+report or its link; the same-pull-request report locates itself without changing
+the reviewed snapshot. Replace stale evidence after every real correction.
+When the agent sequence does not apply, state the governing exception or other
+reason.
+
+| Source branch and exact head | Target branch and comparison base | Independent verifier and outcome | Final reviewer and report location | Required findings before final review |
+| --- | --- | --- | --- | --- |
+| <!-- Repository, branch, and head commit --> | <!-- Repository, branch, and comparison base revision --> | <!-- Identity and PASS, FAIL, or INCOMPLETE --> | <!-- Identity; same-PR comment to follow after freeze --> | <!-- None, or each unresolved required correction --> |
 
 ## Required evidence
 
@@ -74,6 +113,11 @@ particular attention.
 
 ## Ready for review
 
+For a substantive coding-agent change, the final same-pull-request report—not a
+self-certified checkbox—establishes that independent verification and review
+pass for the frozen pull-request snapshot. If the agent sequence does
+not apply, explain why under **Independent verification and review**.
+
 - [ ] Exactly one primary issue was ready for implementation or explicitly
   requires this research artifact or lasting documentation, or this pull
   request is a small correction that `CONTRIBUTING.md` permits without an
@@ -89,7 +133,13 @@ particular attention.
 - [ ] Responsibilities and variations use the smallest justified structure;
   no independently responsible helper is nested inside another function, and
   every local callback or closure satisfies `docs/quality.md`.
-- [ ] Every behavior change has a test that would fail without the change.
+- [ ] Every distributed production-behavior change has a test that would fail
+  without the change.
+- [ ] Every useful cycle for new or corrected distributed production behavior
+  has valid red and green evidence;
+  a behavior-preserving production refactor has passing baseline and final
+  evidence; or this pull request contains no distributed production-behavior
+  change and says so above.
 - [ ] If this pull request fixes a bug, it corrects the owning invariant rather
   than hiding the symptom and includes a regression test for the affected
   class of behavior.

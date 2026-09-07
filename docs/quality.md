@@ -213,6 +213,77 @@ or synchronization. Prefer the clearest design until measurement identifies a
 material cost. When evidence supports a more complex implementation, preserve
 the simpler behavior in correctness tests and document the measured tradeoff.
 
+## Develop production behavior test-first
+
+After the expected behavior and every material design decision are settled, a
+change that adds or corrects executable behavior distributed as part of
+Tabgrad follows a red-green-refactor cycle:
+
+1. Select the smallest useful observable part of the issue's result.
+2. Write the smallest focused test that expresses that behavior.
+3. Run the test against the state before the corresponding production change.
+4. Confirm that it fails because the behavior is missing or incorrect.
+5. Implement the minimum complete behavior that makes the focused test pass.
+6. Refactor only while the focused test remains green.
+7. Examine the relevant boundary, failure, interaction, and regression cases.
+   When another case fails and requires a production change, begin another
+   red-green cycle for that observable behavior before making the change.
+8. Run the applicable wider suite after the useful cycles are green.
+
+The red result is evidence only when the test runner discovers the intended
+test and its assertion, type check, compilation, or other relevant observation
+fails for the expected reason. A wrong command, unavailable environment,
+syntax error, empty test selection, unrelated setup failure, or failure already
+caused by another defect is not a valid red result. Correct the test or resolve
+the environmental problem before implementing the behavior.
+
+Record each useful cycle: the behavior it covers, command, relevant failure,
+why the failure demonstrates the missing or incorrect behavior, and the
+corresponding passing result. One cycle may exercise several layers when its
+observations genuinely require those layers. A layer, file, or test count is
+not itself a cycle boundary, and one narrow red result must not be used as
+evidence for other behavior that was implemented before its test. A failing
+commit does not need to be published; commits should remain coherent. The
+final tests must still demonstrate the behavior from their assertions and
+setup rather than depend on historical output for their meaning.
+
+Repeat the cycle at the smallest useful behavioral boundary. Do not write an
+entire milestone's speculative suite before implementation, and do not
+implement only the example that first failed when the issue defines a broader
+invariant.
+
+For this policy, production behavior means executable behavior that users
+receive through the distributed Tabgrad library, including its runtime,
+frontends, backends, generated runtime code, and packages. Classify the effect,
+not merely the suffix or directory of the edited source. Documentation,
+project policies, issue metadata, agent instructions, pull request templates,
+configuration, repository and test tooling, and research artifacts that cannot
+alter distributed executable behavior use their applicable review and
+verification checks without manufacturing a red result. When a generator,
+operation manifest, export map, build source, or configuration determines
+distributed executable behavior, drive the affected observable behavior
+through the test-first cycle even though the auxiliary mechanism itself does
+not need an artificial unit-test failure.
+
+Related code work uses the evidence appropriate to its purpose:
+
+- A behavior-preserving production refactor begins from passing
+  characterization or contract tests that protect the behavior being
+  preserved.
+- Exploratory code in an approved research experiment follows the experiment's
+  method; production code that follows the decision uses this test-first cycle.
+
+State which scope applies and why. Deterministic resource-lifecycle behavior,
+such as release after completion or cancellation, cache-capacity enforcement,
+reference retention, and explicit quota failures, is executable behavior and
+uses the test-first cycle. Functional tests do not establish quantitative
+latency, throughput, peak-memory, growth-rate, or bundle-size claims: changes
+with a material hot-path or resource effect also require the separate
+comparable measurements in [`performance.md`](performance.md).
+
+The connected planning and implementation cycle is explained in
+[`implementation-workflow.md`](implementation-workflow.md).
+
 ## Select checks from the affected risks
 
 Begin with the files and observable behavior changed. Map every issue
@@ -233,6 +304,7 @@ The following categories apply when the change can affect them:
 | Build or developer tooling | A clean setup or build path and checks for the configuration or command that changed. |
 | Dependency or third-party code | Installation and build evidence, license and origin review, security assessment, and artifact-size effects when material. |
 | Generated file | Reproduction from its declared source and a clean diff after regeneration. |
+| Deterministic resource lifecycle | Contract or regression tests for release, retention, capacity, cancellation, and failure behavior that the change can affect. |
 | Performance-sensitive behavior | Comparable measurements following [`performance.md`](performance.md). |
 | Release or migration behavior | Package, installation, upgrade, rollback, and release-note checks that apply to the affected artifact. |
 

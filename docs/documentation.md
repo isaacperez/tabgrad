@@ -108,6 +108,35 @@ When no documentation changes, explain why no reader-facing statement can
 become inaccurate. Do not use a generic statement that documentation is
 unaffected without inspecting the relevant sources.
 
+### Make implementation details concrete when they become true
+
+As code establishes a concrete design, document the facts another contributor
+or user must preserve or rely on. Put each fact at the level that owns it:
+
+- public signatures, behavior, errors, and examples belong in API
+  documentation;
+- verified PyTorch behavior and environmental coverage belong in the
+  compatibility record;
+- lasting ownership, lifecycle, data-flow, and cross-component invariants
+  belong in architecture documentation;
+- setup, commands, and required tool versions belong in development
+  documentation; and
+- local mechanisms and non-obvious implementation invariants belong beside
+  the relevant type, function, module, or focused internal document.
+
+Do not document a source file or class as an architectural component merely
+because it exists. A concrete internal detail belongs in durable documentation
+when readers outside its local implementation need it to preserve a contract,
+understand a material lifetime or cost, or use a supported extension point.
+Ordinary private mechanics should remain near the code.
+
+Progress, missing behavior, sequencing, experiments, and tentative
+implementation choices remain in issues, project items, and pull requests.
+Do not create empty document sections for anticipated modules. The integrated
+workflow for making documentation more concrete as implementation proceeds is
+explained in
+[`implementation-workflow.md`](implementation-workflow.md#make-documentation-concrete-with-the-implementation).
+
 ## Review documentation
 
 Check facts against source, tests, configured behavior, accepted decisions, and

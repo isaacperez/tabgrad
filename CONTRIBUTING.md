@@ -191,6 +191,21 @@ major framework as an incidental part of another change. Such a choice needs
 an explicit architectural decision because it affects how the whole project is
 built, distributed, and maintained.
 
+## Planning implementation increments
+
+Plan implementation progressively around bounded integrated outcomes. A
+milestone describes a capability or release result, while labels identify
+permanent areas such as WebGPU, automatic differentiation, or documentation.
+Create detailed issues only within the active planning horizon, when their
+result and evidence are understood. Do not turn the architecture or the desired
+PyTorch surface into a speculative issue for every component or operation.
+
+The authoritative milestone and issue rules are in
+[`docs/project-management.md`](docs/project-management.md#plan-the-active-horizon).
+The complete connection between architecture, planning, test-driven
+implementation, performance, compatibility, and documentation is explained in
+[`docs/implementation-workflow.md`](docs/implementation-workflow.md).
+
 ## Working on a branch
 
 Follow [`docs/version-control.md`](docs/version-control.md) for branches,
@@ -257,13 +272,38 @@ lockfiles, updates, vendored code, and removal.
 
 ## Testing
 
-Follow [`docs/quality.md`](docs/quality.md) for selecting checks, writing
-meaningful tests, comparing references, interpreting failures, and reviewing
-refactoring or duplication.
+Follow [`docs/quality.md`](docs/quality.md) for test-driven development,
+selecting checks, writing meaningful tests, comparing references, interpreting
+failures, and reviewing refactoring or duplication.
 
-Every behavior change must have tests that would fail without the change. A bug
-fix should include a regression test. Test both successful behavior and
-important failure cases.
+For a change that adds or corrects executable behavior distributed as part of
+Tabgrad, write and run the focused test before the corresponding implementation.
+Confirm that the test fails for the missing or incorrect behavior, then make it
+pass with the minimum complete change and refactor while it remains green.
+Repeat the cycle for the next useful observable behavior. A boundary or failure
+case that requires another production change begins another cycle before that
+change. Preserve concise red and green evidence for each useful cycle; a
+failing commit does not need to be published.
+
+Do not apply TDD to documentation, project policies, issues, agent
+instructions, templates, configuration, repository and test tooling, or
+research artifacts that cannot alter distributed executable behavior. Verify
+those changes with the checks appropriate to their content. When a generator,
+manifest, export map, build source, or configuration determines distributed
+executable behavior, apply TDD to that resulting behavior rather than
+manufacturing a test of the auxiliary mechanism. A behavior-preserving
+production refactor starts from passing characterization or contract tests,
+and research code follows its approved experimental method.
+
+Every distributed production-behavior change must have tests that would fail
+without the change. A bug fix should include a regression test. Test both
+successful behavior and important failure cases.
+
+Deterministic memory and resource-lifecycle contracts, such as release after
+completion or cancellation, cache bounds, reference retention, and explicit
+quota failures, are production behavior and require tests. Quantitative speed,
+peak-memory, growth, and bundle-size claims additionally require the comparable
+measurements in `docs/performance.md`.
 
 The required tests depend on the affected behavior. Relevant checks may
 include:
@@ -357,10 +397,14 @@ review`.
 A pull request is ready for review only when the implementation is complete
 for the result it claims, `tabgrad-verify` passes against its current head, the
 description contains the required evidence, and no unresolved decision or
-known required correction prevents review. Checks that run only on the pull
-request may still be in progress after publication; they remain required
-before merge. Marking a pull request ready moves its implementation issue to
-`In review`.
+known required correction prevents review. For a substantive coding-agent
+change, independent verification and skeptical review must also pass for the
+same state and leave an inspectable report. The documented single spelling or
+formatting correction exception does not require that agent sequence. Checks
+that run only on the pull request may still be in progress after publication;
+they remain required before merge. Follow `docs/agent-workflow.md` for the
+stable pull-request snapshot and non-circular final-report procedure. Marking a
+pull request ready moves its implementation issue to `In review`.
 
 If the pull request head changes materially after verification, its earlier
 verification and review are stale. Run verification against the new head,
@@ -394,16 +438,29 @@ reason rather than an unexplained `Not applicable`.
 Preparing text or inspecting a pull request does not authorize a coding agent
 to change GitHub. A request to open a draft authorizes the ordinary push of the
 exact issue branch when needed and creation of that draft. A request to open a
-pull request for review or mark one ready also authorizes the corresponding
-`In review` project transition. These requests do not authorize force-pushing,
-changing repository settings, choosing or notifying individual reviewers,
-approving, closing, or merging. Those actions require their own authority.
+pull request for review or mark one ready also authorizes the bounded transient
+draft, one relayed reviewer-authored evidence comment, ready transition, and
+corresponding `In review` project transition required by
+`docs/agent-workflow.md`. It does not authorize a formal review or approval.
+These requests do not authorize force-pushing, changing repository settings,
+choosing or notifying individual reviewers, closing, or merging. Those actions
+require their own authority.
 
 A request to publish a new verified head to an existing review-ready pull
 request authorizes its ordinary push and the minimum description update needed
-to make its verification evidence current. It does not authorize unrelated
-changes to the pull request. If the user excludes the evidence update, do not
-publish a head that would leave the pull request misleading.
+to make its verification evidence current, together with one relayed
+reviewer-authored final-report comment after the remote snapshot matches. It
+does not authorize unrelated changes to the pull request. If the user excludes
+the evidence update, do not publish a head that would leave the pull request
+misleading.
+
+A request to change the title or description of a substantive review-ready
+pull request likewise authorizes the bounded metadata update, remote snapshot
+confirmation, and one relayed reviewer-authored final-report comment when the
+prepared snapshot passes every prepublication condition. Otherwise stop before
+editing until returning the pull request to draft is authorized. Editing a
+pull request that is already draft does not require that report until it is
+requested to become ready.
 
 If a GitHub operation fails or returns an ambiguous result, inspect the remote
 state before retrying. Do not create a duplicate pull request or repeat a
