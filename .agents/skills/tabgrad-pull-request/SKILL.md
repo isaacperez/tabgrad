@@ -104,12 +104,13 @@ detect changed behavior, documentation and compatibility effects, known
 limitations, and required follow-up issues. Explain every applicable omission
 or `Not applicable` entry.
 
-For a behavior change, include the focused test command, the relevant red
-failure observed before production implementation, why that failure represented
-the missing or incorrect behavior, and the corresponding green and final-suite
-results. For a documented TDD exception, identify the exception and its
-alternative evidence. Do not require a failing commit or expose irrelevant
-logs merely to demonstrate the sequence.
+When production code adds or corrects executable behavior, include the focused
+test command, the relevant red failure observed before implementation, why that
+failure represented the missing or incorrect behavior, and the corresponding
+green and final-suite results. When no production code changed, state that TDD
+does not apply and report the content-specific checks elsewhere in the
+template. Do not require a failing commit or expose irrelevant logs merely to
+demonstrate the sequence.
 
 Identify the independent preflight, verification, specialist, and review
 evidence required by `docs/agent-workflow.md`. Confirm that each report refers

@@ -213,10 +213,11 @@ or synchronization. Prefer the clearest design until measurement identifies a
 material cost. When evidence supports a more complex implementation, preserve
 the simpler behavior in correctness tests and document the measured tradeoff.
 
-## Develop behavior test-first
+## Develop production behavior test-first
 
 After the expected behavior and every material design decision are settled, a
-behavior change follows a red-green-refactor cycle:
+change to production code that adds or corrects executable behavior follows a
+red-green-refactor cycle:
 
 1. Write the smallest test that expresses one observable part of the issue's
    result.
@@ -245,20 +246,24 @@ entire milestone's speculative suite before implementation, and do not
 implement only the example that first failed when the issue defines a broader
 invariant.
 
-Do not manufacture a red test when it would provide no information:
+TDD applies to executable production code, not to every repository change.
+Documentation, project policies, issue metadata, agent instructions, pull
+request templates, configuration-only changes, and research records use their
+applicable review and verification checks without manufacturing a red result.
+When one of those changes also alters executable code, apply TDD only to that
+code behavior.
+
+Related code work uses the evidence appropriate to its purpose:
 
 - A behavior-preserving refactor begins from passing characterization or
   contract tests that protect the behavior being preserved.
-- A documentation-only change uses documentation checks and authoritative
-  source inspection, plus execution when an example contains runnable
+- Test or repository-check tooling that adds or corrects executable behavior
+  follows the same test-first cycle when a focused failure can express that
   behavior.
-- A research experiment follows its accepted method; production behavior that
-  follows the decision uses this test-first cycle.
-- A change to test or repository-check infrastructure first demonstrates the
-  missing check when doing so is practical and informative.
+- Exploratory code in an approved research experiment follows the experiment's
+  method; production code that follows the decision uses this test-first cycle.
 
-An exception changes the appropriate evidence, not the expected rigor. State
-which case applies and why. Functional TDD does not establish performance or
+State which scope applies and why. Functional TDD does not establish performance or
 memory behavior: changes with a material hot-path effect also require the
 separate comparable measurements in [`performance.md`](performance.md).
 

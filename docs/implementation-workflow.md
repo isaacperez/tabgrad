@@ -142,11 +142,12 @@ This keeps the compatibility record factual and the issue tracker actionable.
 Neither has to pretend that the final operation grouping is knowable before
 the shared implementation exists.
 
-## Drive behavior with tests
+## Drive production code with tests
 
 After the expected behavior and material design decisions are settled, every
-behavior change follows the test-driven development cycle defined in
-[`quality.md`](quality.md#develop-behavior-test-first):
+production-code change that adds or corrects executable behavior follows the
+test-driven development cycle defined in
+[`quality.md`](quality.md#develop-production-behavior-test-first):
 
 ```mermaid
 flowchart LR
@@ -177,22 +178,30 @@ The cycle repeats at the smallest useful behavioral step. It does not mean
 writing an entire milestone's test suite before any implementation, nor does
 it justify implementing only the example that first failed.
 
-## Apply the right evidence to exceptional work
+## Keep non-code work outside TDD
 
-Not every useful change begins with a failing behavior test:
+TDD is a method for developing code. It does not apply to documentation,
+project policies, issues, agent instructions, pull request templates,
+configuration-only changes, or research records. Those changes use the review,
+validation, and reproducibility checks appropriate to their content; they do
+not invent a failing test.
+
+When one repository change contains both documentation and executable code,
+only the code behavior uses the red-green-refactor cycle. The documentation is
+checked against the resulting code, tests, and authoritative sources.
+
+Related code work begins from the evidence appropriate to its purpose:
 
 - A behavior-preserving refactor starts from passing characterization or
   contract tests that protect the behavior being preserved.
-- A documentation-only change uses authoritative-source inspection, link
-  checks, and executable examples where applicable.
-- A research experiment follows its approved method and distinguishes the
-  experiment from production behavior.
-- A change to test or repository-check infrastructure first demonstrates the
-  missing check when that demonstration is practical and informative.
+- Test or repository-check tooling that adds or corrects executable behavior
+  follows the test-first cycle when a focused failure can express that
+  behavior.
+- Exploratory code in an approved research experiment follows the experiment's
+  method; production code resulting from the decision returns to TDD.
 
-These cases do not permit an ordinary behavior change to bypass TDD. The pull
-request explains which case applies and supplies the evidence appropriate to
-that result.
+The pull request states whether production code changed. When it did, it records
+the TDD evidence; otherwise it reports the applicable non-code checks.
 
 ## Test the contracts at the layers that claim them
 

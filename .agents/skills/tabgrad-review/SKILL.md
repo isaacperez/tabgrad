@@ -157,14 +157,17 @@ missing behavior, and that important boundaries and failure cases are not
 hidden by mocks, fixtures, broad tolerances, snapshots, or implementation-only
 assertions.
 
-For a behavior change, inspect the recorded TDD evidence and confirm that the
-test preceded the corresponding production implementation, that its red result
-was caused by the intended missing or incorrect behavior, and that the final
-test still expresses that contract clearly. For an applicable documented
-exception, confirm that its characterization, documentation, experimental, or
-test-infrastructure evidence is appropriate rather than an attempt to bypass
-test-first development. Do not infer a valid red step from the mere presence of
-a final passing test.
+When production code adds or corrects executable behavior, inspect the recorded
+TDD evidence and confirm that the test preceded the corresponding
+implementation, that its red result was caused by the intended missing or
+incorrect behavior, and that the final test still expresses that contract
+clearly. A behavior-preserving code refactor instead requires passing
+characterization or contract coverage before it changes.
+
+Do not require a red step for documentation, project policies, issue metadata,
+agent instructions, templates, configuration-only changes, or research
+records. Apply their content-specific evidence without treating them as code.
+Do not infer a valid red step from the mere presence of a final passing test.
 
 Look for weakened, deleted, skipped, nondeterministic, or undiscovered tests.
 Check whether changed behavior invalidates existing tests elsewhere. A large

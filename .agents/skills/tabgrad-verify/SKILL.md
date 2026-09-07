@@ -21,7 +21,7 @@ when test or implementation quality applies. Inspect the complete proposed
 change and existing verification evidence without loading unaffected project
 areas by default.
 Read `docs/implementation-workflow.md` when the target changes or refactors
-behavior.
+production code.
 
 When no issue exists, confirm that the complete change qualifies for the small
 spelling or formatting exception in `CONTRIBUTING.md`. Use the authorized user
@@ -171,15 +171,19 @@ whose assertion targets the changed outcome, or an independently established
 reference result. Do not require mutation testing or a fabricated failure when
 it would not provide useful evidence.
 
-For a behavior change, inspect the recorded red and green evidence required by
-`docs/quality.md`. Confirm that the focused test was run before the corresponding
-production implementation, was discovered, and failed for the intended reason;
-then confirm that the same behavior passes in the exact final state. A wrong
-command or unrelated failure does not satisfy the red step. When the change is
-a behavior-preserving refactor, documentation-only change, research experiment,
-or test-infrastructure change, verify the documented alternative evidence
-instead of requiring an artificial failure. Missing required development-cycle
-evidence makes verification incomplete even when the final suite passes.
+When production code adds or corrects executable behavior, inspect the recorded
+red and green evidence required by `docs/quality.md`. Confirm that the focused
+test was run before the corresponding implementation, was discovered, and
+failed for the intended reason; then confirm that the same behavior passes in
+the exact final state. A wrong command or unrelated failure does not satisfy
+the red step. For a behavior-preserving code refactor, verify the passing
+characterization or contract evidence that preceded it.
+
+Do not require TDD evidence for documentation, project policies, issue metadata,
+agent instructions, templates, configuration-only changes, or research
+records. Verify those changes with the checks applicable to their content.
+Missing required TDD evidence for a production-code behavior change makes
+verification incomplete even when the final suite passes.
 
 Confirm that tests are deterministic under their documented conditions and
 that expected skips are justified. Treat zero discovered tests, unexpected

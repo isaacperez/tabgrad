@@ -209,22 +209,24 @@ Preserve the project constraints recorded in `README.md` and
 change. Do not assume that every implementation affects every public API,
 runtime, backend, environment, or compatibility guarantee.
 
-Apply the test-first cycle in `docs/quality.md` to every behavior change. Write
-the smallest focused test before the corresponding production implementation,
-run it, and confirm that it fails for the intended missing or incorrect
-behavior. Record the command, relevant failure, reason that failure is valid,
-and corresponding green result. A failed invocation, unavailable environment,
-syntax error, or unrelated failure is not the red state. Do not require or
-publish a failing commit merely to preserve this evidence.
+Apply the test-first cycle in `docs/quality.md` to production code that adds or
+corrects executable behavior. Write the smallest focused test before the
+corresponding implementation, run it, and confirm that it fails for the
+intended missing or incorrect behavior. Record the command, relevant failure,
+reason that failure is valid, and corresponding green result. A failed
+invocation, unavailable environment, syntax error, or unrelated failure is not
+the red state. Do not require or publish a failing commit merely to preserve
+this evidence.
 
 Implement the minimum complete behavior that makes the focused test pass, then
 refactor while it remains green. Add a regression test for a bug fix and cover
 important successful behavior, failure behavior, boundaries, and interactions
-that the change can affect. Use the alternative evidence defined by
-`docs/quality.md` for a behavior-preserving refactor, documentation-only change,
-research experiment, or test-infrastructure change rather than manufacturing a
-meaningless failure. Do not weaken, delete, skip, or rewrite a valid test merely
-to accommodate the new implementation.
+that the change can affect. A behavior-preserving code refactor starts from
+passing characterization or contract tests. Documentation, project policies,
+agent instructions, templates, configuration-only changes, and research
+records do not use TDD; apply their relevant checks without manufacturing a
+failure. Do not weaken, delete, skip, or rewrite a valid test merely to
+accommodate the new implementation.
 
 Update documentation in the same change whenever public interfaces,
 compatibility, architecture, setup, examples, development procedures, or
@@ -313,8 +315,8 @@ Report:
 - the issue and branch used;
 - the independent preflight, its evidence, and the sole writer for the target;
 - the observable behavior implemented;
-- the test-driven development evidence or the applicable documented
-  alternative;
+- the test-driven development evidence when production code changed, or the
+  fact that the change contained no production code;
 - the files, tests, documentation, compatibility information, and
   dependencies changed;
 - the checks run so far and their exact results;

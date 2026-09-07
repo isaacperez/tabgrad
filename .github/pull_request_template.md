@@ -27,16 +27,18 @@ deliberate difference from the linked issue or an accepted design.
 
 ## Test-driven development
 
-For each behavior change, record the focused test command, the relevant failure
-observed before production implementation, why that was the expected red
-result, and the corresponding green result. For a behavior-preserving refactor,
-documentation-only change, research experiment, or test-infrastructure change,
-identify the applicable alternative evidence from
-`docs/quality.md#develop-behavior-test-first`. A failing commit is not required.
+Complete this section only when production code adds or corrects executable
+behavior. Record the focused test command, the relevant failure observed before
+implementation, why that was the expected red result, and the corresponding
+green result. For a change without production code, write `Not applicable — no
+production code changed`; report its content-specific checks under
+**Verification** and **Required evidence**. See
+`docs/quality.md#develop-production-behavior-test-first`. A failing commit is
+not required.
 
-| Behavior or applicable exception | Red or alternative evidence | Green result |
+| Production-code behavior | Red evidence | Green result |
 | --- | --- | --- |
-| <!-- Behavior or exception --> | <!-- Command, relevant failure, and reason; or alternative evidence --> | <!-- Focused passing result --> |
+| <!-- Behavior, or state that no production code changed --> | <!-- Command, relevant failure, and reason --> | <!-- Focused passing result --> |
 
 ## Verification
 
@@ -102,10 +104,11 @@ particular attention.
 - [ ] Responsibilities and variations use the smallest justified structure;
   no independently responsible helper is nested inside another function, and
   every local callback or closure satisfies `docs/quality.md`.
-- [ ] Every behavior change has a test that would fail without the change.
-- [ ] Every behavior change has valid red and green evidence from the
-  test-first cycle, or the documented alternative evidence applies and is
-  reported above.
+- [ ] Every production-code behavior change has a test that would fail without
+  the change.
+- [ ] Every production-code behavior change has valid red and green evidence
+  from the test-first cycle, or this pull request contains no production-code
+  behavior change and says so above.
 - [ ] If this pull request fixes a bug, it corrects the owning invariant rather
   than hiding the symptom and includes a regression test for the affected
   class of behavior.

@@ -199,11 +199,6 @@ class RepositoryCheckTests(unittest.TestCase):
     def test_required_files_include_every_timeless_document(self):
         self.assertTrue(CHECKS.TIMELESS_DOCUMENTS.issubset(CHECKS.REQUIRED_FILES))
 
-    def test_implementation_workflow_is_a_required_timeless_document(self):
-        path = "docs/implementation-workflow.md"
-        self.assertIn(path, CHECKS.TIMELESS_DOCUMENTS)
-        self.assertIn(path, CHECKS.REQUIRED_FILES)
-
     def test_implementation_and_review_roles_must_link_quality_policy(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

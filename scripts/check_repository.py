@@ -157,7 +157,7 @@ REQUIRED_PULL_REQUEST_HEADINGS = {
     "Ready to merge",
 }
 REQUIRED_PULL_REQUEST_TEXT = {
-    "docs/quality.md#develop-behavior-test-first",
+    "docs/quality.md#develop-production-behavior-test-first",
     "docs/quality.md",
     "explicit authorization",
 }

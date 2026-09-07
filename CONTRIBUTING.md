@@ -276,17 +276,21 @@ Follow [`docs/quality.md`](docs/quality.md) for test-driven development,
 selecting checks, writing meaningful tests, comparing references, interpreting
 failures, and reviewing refactoring or duplication.
 
-For a behavior change, write and run the focused test before the corresponding
-production implementation. Confirm that the test fails for the missing or
-incorrect behavior, then make it pass with the minimum complete change and
-refactor while it remains green. Preserve concise red and green evidence; a
-failing commit does not need to be published. Apply the documented alternative
-evidence for behavior-preserving refactors, documentation-only changes,
-research experiments, and changes to test infrastructure.
+For a production-code change that adds or corrects executable behavior, write
+and run the focused test before the corresponding implementation. Confirm that
+the test fails for the missing or incorrect behavior, then make it pass with
+the minimum complete change and refactor while it remains green. Preserve
+concise red and green evidence; a failing commit does not need to be published.
 
-Every behavior change must have tests that would fail without the change. A bug
-fix should include a regression test. Test both successful behavior and
-important failure cases.
+Do not apply TDD to documentation, project policies, issues, agent
+instructions, templates, configuration-only changes, or research records.
+Verify those changes with the checks appropriate to their content. A
+behavior-preserving code refactor starts from passing characterization or
+contract tests, and research code follows its approved experimental method.
+
+Every production-code behavior change must have tests that would fail without
+the change. A bug fix should include a regression test. Test both successful
+behavior and important failure cases.
 
 The required tests depend on the affected behavior. Relevant checks may
 include:
