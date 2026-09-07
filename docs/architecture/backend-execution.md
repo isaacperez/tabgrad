@@ -69,8 +69,8 @@ flowchart TD
     Target -->|WebAssembly selected| WAPrep[WebAssembly preparation]
     WGPrep --> WGReady[PreparedExecutable<br/>pipelines and encoding plan]
     WAPrep --> WAReady[PreparedExecutable<br/>exports, instances, memory plan]
-    Request --> WGReady
-    Request --> WAReady
+    Request -->|bind only if WebGPU was selected| WGReady
+    Request -->|bind only if WebAssembly was selected| WAReady
     WGReady --> GPU[Fresh command encoding<br/>and GPU submission]
     WAReady --> CPU[Leased or serialized instance<br/>and CPU invocation]
 ```

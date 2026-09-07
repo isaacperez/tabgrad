@@ -211,9 +211,10 @@ dependencies, effects, provenance, and derivative facts.
 ## P
 
 **PreparedExecutable**
-: Opaque backend-private reusable preparation for one executable program,
-capability fingerprint, software-version set, and backend generation. It is not
-an invocation in progress.
+: Opaque backend-private reusable preparation for one compute-domain executable
+  program, capability fingerprint, software-version set, and backend generation.
+  A transfer-domain program is coordinated across endpoints instead of becoming
+  one `PreparedExecutable`. Prepared state is not an invocation in progress.
 
 **ProgramCallRecord**
 : A tagged `OperationRecord` specialization representing one fresh semantic

@@ -98,9 +98,11 @@ both backends. It owns:
 - canonical operation definitions and semantic validation;
 - logical tensor, storage, alias, mutation, random-number, and derivative state;
 - selection of a finite set of work when a value or effect is demanded;
-- construction of an immutable backend-ready program;
+- construction of an immutable program for one compute target or one explicit
+  transfer route;
 - request, completion, error, and semantic-reclamation lifecycles; and
-- explicit coordination with the selected backend.
+- coordination with the selected compute backend or with both endpoints of an
+  explicit transfer.
 
 The word *runtime* names this responsibility, not one enormous
 `RuntimeEngine` class. One `RuntimeSession` is the stateful owner for a frontend
@@ -122,11 +124,14 @@ session lifecycles.
 
 ## Backends: perform the numerical work
 
-The backend execution contract lets the runtime ask an explicitly selected
-target about capabilities, prepare a finite program, bind current inputs and
-outputs, submit work, observe completion, and manage opaque physical references.
-The contract preserves common semantics but does not force the two backends to
-use the same internal strategy.
+For numerical computation, the backend execution contract lets the runtime ask
+an explicitly selected target about capabilities, prepare a finite
+compute-domain program, bind current inputs and outputs, submit work, observe
+completion, and manage opaque physical references. The same contract exposes
+opaque source and destination endpoint operations for an explicit transfer; the
+runtime, rather than either backend, coordinates the complete route and its
+staging lifetime. The contract preserves common semantics but does not force the
+two backends to use the same internal strategy.
 
 Each backend owns:
 
