@@ -454,6 +454,14 @@ does not authorize unrelated changes to the pull request. If the user excludes
 the evidence update, do not publish a head that would leave the pull request
 misleading.
 
+A request to change the title or description of a substantive review-ready
+pull request likewise authorizes the bounded metadata update, remote snapshot
+confirmation, and one relayed reviewer-authored final-report comment when the
+prepared snapshot passes every prepublication condition. Otherwise stop before
+editing until returning the pull request to draft is authorized. Editing a
+pull request that is already draft does not require that report until it is
+requested to become ready.
+
 If a GitHub operation fails or returns an ambiguous result, inspect the remote
 state before retrying. Do not create a duplicate pull request or repeat a
 notification because the first result was unclear.

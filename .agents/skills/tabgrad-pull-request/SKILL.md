@@ -44,7 +44,12 @@ Distinguish these requests:
   `In review` after the gate passes.
 - Updating an existing pull request authorizes only the title, body, links, or
   draft state identified by the request. It does not authorize new repository
-  changes.
+  changes. For a draft, no final report is required until it is marked ready.
+  For a substantive non-draft pull request, when the identified update changes
+  its review snapshot and every prepublication condition passes, the same
+  request authorizes remote snapshot confirmation and one relayed final-report
+  comment as outputs of that bounded metadata transition. If those conditions
+  cannot pass, stop before editing until returning it to draft is authorized.
 - Publishing a new local head to an existing pull request authorizes an
   ordinary push only when the request identifies that branch or pull request
   and the commits to publish. When every ready condition that can be established
@@ -70,8 +75,8 @@ whether the user wants a draft; do not silently publish a draft instead.
 None of these requests authorizes force-pushing, rebasing, rewriting commits,
 changing repository settings or protections, selecting or notifying individual
 reviewers, submitting a formal review, approving, closing, or merging. The one
-reviewer-authored evidence comment in the bounded ready-publication sequence is
-not a formal review or approval. Obtain specific authority before any additional
+reviewer-authored evidence comment in the bounded publication sequences is not
+a formal review or approval. Obtain specific authority before any additional
 external or destructive action.
 
 ## Reuse the correct pull request
@@ -256,6 +261,14 @@ repository commit. Recheck the corrected metadata and claims and repeat review
 of the affected pull-request snapshot. Reuse mechanical checks for the
 unchanged head unless the correction reveals that their coverage, result, or
 applicability was stated incorrectly.
+
+An update to a draft may stop after verifying its requested metadata and must
+not claim readiness. For an update to a substantive non-draft pull request,
+prepare and independently review the complete new snapshot before editing,
+then perform the authorized metadata update, remote confirmation, and one
+final-report comment as a bounded transition. If the snapshot cannot pass
+before publication, leave the remote content unchanged unless the user instead
+authorizes returning the pull request to draft.
 
 Publishing the final independent report as a comment, or as a formal review
 under separate authority, after the snapshot is frozen does not change or
