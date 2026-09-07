@@ -84,18 +84,33 @@ flowchart LR
     E -->|New or corrected production behavior| T[Test-driven development]
     E -->|Behavior-preserving production refactor| R[Green characterization or contract tests]
     E -->|Research| X[Approved research method]
-    E -->|No production code| N[Content-specific checks]
+    E -->|No distributed production behavior| N[Content-specific checks]
     T --> F[Verification, review, and merge]
     R --> F
     N --> F
     F --> G[Observed repository and compatibility state]
     G --> H[Re-evaluate the milestone]
-    X --> Y[Research acceptance and recorded decision]
-    Y --> H
+    X --> Q{Repository artifact retained?}
+    Q -->|No| Y[Independent challenge and research acceptance]
+    Q -->|Yes| Z[Content-specific artifact checks]
+    Z --> V[Independent verification, review, and merge]
+    V --> Y
+    Y --> W{Lasting architecture decision?}
+    W -->|No| H
+    W -->|Yes| U[Explicit approval and durable architecture record]
+    U --> H
     H -->|More required work| C
     H -->|Outcome complete| I[Close the milestone]
     I --> J[Define the next bounded outcome]
 ```
+
+A disposable experiment leaves its reproducible method, observations, and
+limitations in the research record without manufacturing a repository change.
+An experiment, tool, or explanatory document retained in the repository is a
+separate proposed artifact: it receives content-specific checks, independent
+verification and review, and merge before it becomes durable. Neither route
+turns a research conclusion into an architectural decision without the
+separate approval and documentation required for lasting architecture.
 
 Possible later work is not expanded into placeholder issues merely to make the
 project look complete. A new issue is created when its expected result,
@@ -150,11 +165,11 @@ This keeps the compatibility record factual and the issue tracker actionable.
 Neither has to pretend that the final operation grouping is knowable before
 the shared implementation exists.
 
-## Drive production code with tests
+## Drive distributed production behavior with tests
 
 After the expected behavior and material design decisions are settled, every
-production-code change that adds or corrects executable behavior follows the
-test-driven development cycle defined in
+change that adds or corrects executable behavior distributed as part of
+Tabgrad follows the test-driven development cycle defined in
 [`quality.md`](quality.md#develop-production-behavior-test-first):
 
 ```mermaid
@@ -165,8 +180,9 @@ flowchart LR
     C -->|Expected failure: red| D[Implement the minimum behavior]
     D --> E[Run the focused test: green]
     E --> F[Refactor while green]
-    F --> G[Add relevant boundaries and failure cases]
-    G --> H[Run final verification]
+    F --> G[Examine the next boundary, failure, or interaction]
+    G -->|Requires another production change| B
+    G -->|Covered without another production change| H[Run final verification]
     H -->|Correction changes behavior| B
 ```
 
@@ -182,17 +198,26 @@ green evidence. The final test must still be understandable from its
 assertions; historical output cannot rescue a test that does not inspect the
 promised behavior.
 
-The cycle repeats at the smallest useful behavioral step. It does not mean
-writing an entire milestone's test suite before any implementation, nor does
-it justify implementing only the example that first failed.
+The cycle repeats at the smallest useful behavioral step. A single cycle may
+cross frontend, runtime, automatic differentiation, and backend boundaries
+when its test genuinely observes that integrated behavior. It cannot justify
+another behavior that was implemented before a test exposed it. If a boundary
+or failure test added later requires another production change, that behavior
+starts its own red-green cycle. This does not mean writing an entire
+milestone's speculative suite before any implementation, nor does it justify
+implementing only the example that first failed.
 
 ## Keep non-code work outside TDD
 
-For this project, production code is the code distributed as the Tabgrad
-library: its runtime, frontends, backends, and packages. TDD applies to new or
-corrected behavior in that code. It does not apply to documentation, project
-policies, issues, agent instructions, pull request templates, configuration,
-repository and test tooling, or research artifacts. Those changes use the
+For this project, TDD applies to new or corrected executable behavior that
+users receive through the distributed Tabgrad library. That behavior normally
+comes from its runtime, frontends, backends, generated runtime code, and
+packages. The decision follows the resulting behavior rather than the edited
+file type: a generator, operation manifest, export map, build source, or
+configuration that determines distributed executable behavior must drive that
+behavior through TDD. Documentation, policies, issue metadata, agent
+instructions, templates, configuration, repository and test tooling, and
+research artifacts that cannot alter distributed executable behavior use the
 review, validation, and reproducibility checks appropriate to their content;
 they do not invent a failing test.
 
@@ -210,11 +235,12 @@ Related code work begins from the evidence appropriate to its purpose:
 
 The pull request records the route that actually applied:
 
-- new or corrected production behavior records its red and green evidence;
+- new or corrected distributed production behavior records each useful
+  red-green cycle and the observable behavior it covers;
 - a behavior-preserving production refactor records the passing
   characterization or contract baseline and the final passing result; or
-- a change without production code states that TDD is not applicable and
-  reports its content-specific checks.
+- a change without distributed production behavior states that TDD is not
+  applicable and reports its content-specific checks.
 
 ## Test the contracts at the layers that claim them
 
@@ -240,10 +266,14 @@ before it is reported as supported.
 
 ## Measure performance and memory separately
 
-Functional TDD establishes correctness, not speed or bounded resource use. A
-hot-path change also follows [`performance.md`](performance.md): define the
-relevant metric and acceptable consequence, measure a comparable base, make
-the change, and compare the exact final state under equivalent conditions.
+Functional TDD establishes deterministic behavior, including applicable
+resource-lifecycle contracts such as release after completion or cancellation,
+bounded cache capacity, reference retention, and explicit quota failures. It
+does not establish quantitative speed, peak-memory, growth-rate, or bundle-size
+claims. A hot-path or resource-sensitive change also follows
+[`performance.md`](performance.md): define the relevant metric and acceptable
+consequence, measure a comparable base, make the change, and compare the exact
+final state under equivalent conditions.
 
 The measurement should expose the costs that the architecture makes material,
 including allocations, retained state, transfers, materializations,

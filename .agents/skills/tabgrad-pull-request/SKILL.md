@@ -104,19 +104,31 @@ detect changed behavior, documentation and compatibility effects, known
 limitations, and required follow-up issues. Explain every applicable omission
 or `Not applicable` entry.
 
-When production code adds or corrects executable behavior, include the focused
-test command, the relevant red failure observed before implementation, why that
-failure represented the missing or incorrect behavior, and the corresponding
-green and final-suite results. For a behavior-preserving production refactor,
-record the passing characterization or contract baseline and the final passing
-result. When no production code changed, state that TDD does not apply and
-report the content-specific checks elsewhere in the template. Do not require a
-failing commit or expose irrelevant logs merely to demonstrate the sequence.
+When a change adds or corrects executable behavior distributed as part of
+Tabgrad, record every useful red-green cycle. For each smallest useful behavior,
+include the focused test command, relevant red failure observed before its
+implementation, why that failure represented the missing or incorrect
+behavior, and the corresponding green result. Add as many table rows as the
+change needs; one row may cover several layers only when its test genuinely
+observes them. For a behavior-preserving production refactor, record the
+passing characterization or contract baseline and the final passing result.
+When no distributed production behavior changed, state that TDD does not apply
+and report the content-specific checks elsewhere in the template. Classify the
+resulting behavior rather than the edited file type when generators, manifests,
+export maps, build sources, or configuration determine distributed executable
+behavior. Do not require a failing commit or expose irrelevant logs merely to
+demonstrate the sequence.
 
 Identify the independent preflight, verification, specialist, and review
 evidence required by `docs/agent-workflow.md`. Confirm that each report refers
 to the pull request's current head and that any later change was followed by
-the necessary repeated checks.
+the necessary repeated checks. Embed a sufficient concise report or identify a
+durable issue comment, pull request comment, review, or registered artifact so
+that a later coordinator can inspect the agent or reviewer role, exact target,
+assignment and coverage, outcome, required findings, limitations, and primary
+evidence. Prefer a direct link; otherwise give enough identity and target
+information to locate a record in the same pull request unambiguously. A bare
+anonymous pass statement is not sufficient.
 
 Do not copy stale evidence from an earlier commit. Do not check a statement
 because the intended work should eventually make it true. Keep credentials,
@@ -151,6 +163,10 @@ Open or mark a pull request ready for review only when:
   claimed result;
 - the implementation satisfies every completion condition it claims;
 - `tabgrad-verify` passed against the current head commit;
+- for a substantive coding-agent change, independent verification and
+  skeptical review passed for that same state and their report is inspectable;
+  the documented single spelling or formatting correction exception does not
+  require this agent sequence;
 - tests, documentation, compatibility records, and other required artifacts
   agree with the proposed behavior;
 - the pull request template is complete and every readiness statement checked
@@ -198,6 +214,12 @@ When implementation or review corrections change the head commit, treat prior
 verification and review as stale wherever the change can affect them. Use
 `tabgrad-implement` for the correction, run `tabgrad-verify` against the new
 state, update the pull request evidence, and obtain review of that same state.
+
+When only pull request content changes, use this skill rather than creating a
+repository commit. Recheck the corrected claims and repeat review of the pull
+request description. Reuse mechanical checks for the unchanged head unless the
+correction reveals that their coverage, result, or applicability was stated
+incorrectly.
 
 When the new head already passes the ready-for-review gate, it may remain
 non-draft and its issue may remain `In review`; update its evidence when

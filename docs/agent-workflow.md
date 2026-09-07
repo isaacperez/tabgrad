@@ -237,6 +237,18 @@ limitations, and unanswered questions. It must cite precise paths, lines,
 commands, results, issue or pull request links, and source versions when they
 support a material statement.
 
+For a substantive proposed repository change, preserve the independent
+verification and review report where a later pull-request or merge coordinator
+can inspect it. The pull request may embed a concise report or identify a
+durable issue comment, pull request comment, review, or registered artifact;
+prefer a direct link, and otherwise give enough identity and target information
+to locate the record unambiguously in the same pull request. The record must
+identify the agent or reviewer role, exact target, assignment and coverage,
+outcome, required findings, limitations, and primary evidence references. A
+bare statement that an unnamed independent agent passed is not inspectable
+evidence. Keep sensitive security or private information in the protected
+channel required by `CONTRIBUTING.md`, not in a public report.
+
 ## Perform a preflight before implementation
 
 The preflight tests whether the recorded work still matches reality before any
@@ -357,9 +369,15 @@ flowchart TD
     B --> C[Independent skeptical review]
     C --> D{Outcome for that exact state}
     D -->|Pass| E[Publication or merge boundary]
-    D -->|Changes required| F[Classify every finding]
-    F -->|Caused by this change and in scope| G[Writer corrects through tabgrad-implement]
-    G --> H[Invalidate affected evidence]
+    D -->|Changes required| F[Classify every finding and its owning artifact]
+    F -->|Repository content| G[Sole writer corrects through tabgrad-implement]
+    F -->|Issue content or state| L[Use tabgrad-issue under current authority]
+    F -->|Pull request content or state| M[Use tabgrad-pull-request under current authority]
+    F -->|Missing or stale evidence| N[Obtain or repeat the owning check]
+    G --> H[Identify the complete target and affected evidence]
+    L --> H
+    M --> H
+    N --> H
     H --> B
     F -->|Material decision| I[Ask the user before dependent work]
     F -->|Blocking prerequisite| J[Record the blocker and stop]
@@ -367,13 +385,25 @@ flowchart TD
     K --> B
 ```
 
-The coordinating agent does not stop merely to report an ordinary correction
-that the active issue already authorizes. It returns that finding to the sole
-writer, obtains a newly identified target, and repeats every affected
-verification and the complete independent review. There is no fixed iteration
-count: the loop ends only when verification and review pass for the same state
-or a documented blocker, unavailable requirement, authority boundary, or
-material decision requires human input.
+The coordinating agent does not stop merely to report an ordinary repository
+correction that the active issue already authorizes. It returns repository
+content to the sole writer through `tabgrad-implement`. A correction to issue
+content, relationships, or project state belongs to `tabgrad-issue`; a
+correction to pull request content or state belongs to `tabgrad-pull-request`;
+and missing evidence returns to the check that owns it. Those external
+mutations proceed only under their current authority. Do not create a source
+edit or commit merely to correct an issue, pull request description, or check
+record.
+
+After a correction, identify the complete affected target and repeat every
+verification whose inputs or conclusions changed and the complete independent
+review of the new result. A pull-request-body-only correction normally
+invalidates review of that description and its claims, but not mechanical
+checks of an unchanged commit unless the corrected claim exposes missing or
+incorrect evidence. There is no fixed iteration count: the loop ends only when
+verification and review pass for the same state or a documented blocker,
+unavailable requirement, authority boundary, or material decision requires
+human input.
 
 The reviewer remains read-only throughout the loop. It may explain the
 smallest required outcome but must not implement or materially design the

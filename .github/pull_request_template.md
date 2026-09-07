@@ -27,19 +27,21 @@ deliberate difference from the linked issue or an accepted design.
 
 ## Test-driven development
 
-Use the route that applies. For new or corrected production behavior, record
-the focused test command, its expected red result before implementation, and
-the corresponding green result. For a behavior-preserving production refactor,
-record the passing characterization or contract baseline and the final passing
-result. For a change without production code, write `Not applicable — no
-production code changed`; report its content-specific checks under
-**Verification** and **Required evidence**. See
+Use the route that applies. For new or corrected distributed production
+behavior, add one row for every useful red-green cycle and record the behavior,
+focused test command, expected red result before its implementation, and
+corresponding green result. One row may cover several layers only when the test
+genuinely observes them. For a behavior-preserving production refactor, record
+the passing characterization or contract baseline and the final passing
+result. For a change without distributed production behavior, write `Not
+applicable — no distributed production behavior changed`; report its
+content-specific checks under **Verification** and **Required evidence**. See
 `docs/quality.md#develop-production-behavior-test-first`. A failing commit is
 not required.
 
-| Production-code change | Before implementation | Final result |
+| Observable behavior or route | Before implementation | Final result |
 | --- | --- | --- |
-| <!-- New/corrected behavior, behavior-preserving refactor, or no production code --> | <!-- Valid red evidence, passing baseline, or not applicable --> | <!-- Focused passing result, final refactor result, or content-specific checks below --> |
+| <!-- One behavior, behavior-preserving refactor, or no distributed production behavior. Add rows for further cycles. --> | <!-- Valid red evidence, passing baseline, or not applicable --> | <!-- Focused passing result, final refactor result, or content-specific checks below --> |
 
 ## Verification
 
@@ -57,11 +59,15 @@ For a substantive change, identify the exact head examined independently.
 Verification and skeptical review may be performed by the same agent when it
 did not author the change, but their conclusions remain separate. Replace
 stale evidence after every correction; do not record only the resolution of an
-earlier finding.
+earlier finding. Embed a concise inspectable report or identify its durable
+issue comment, pull request comment, review, or registered artifact. Prefer a
+direct link; otherwise make the record unambiguous within this pull request.
+When the agent sequence does not apply, state the governing exception or other
+reason.
 
-| Exact head | Independent verifier and outcome | Independent reviewer and outcome | Required findings |
-| --- | --- | --- | --- |
-| <!-- Commit or reproducible content identity --> | <!-- Identity and PASS, FAIL, or INCOMPLETE --> | <!-- Identity and PASS, CHANGES REQUIRED, or INCOMPLETE --> | <!-- None, or each unresolved required correction --> |
+| Exact head | Independent verifier and outcome | Independent reviewer and outcome | Inspectable report | Required findings |
+| --- | --- | --- | --- | --- |
+| <!-- Commit or reproducible content identity --> | <!-- Identity and PASS, FAIL, or INCOMPLETE --> | <!-- Identity and PASS, CHANGES REQUIRED, or INCOMPLETE --> | <!-- Durable location or concise scope, limitations, and primary evidence --> | <!-- None, or each unresolved required correction --> |
 
 ## Required evidence
 
@@ -117,12 +123,13 @@ particular attention.
 - [ ] Responsibilities and variations use the smallest justified structure;
   no independently responsible helper is nested inside another function, and
   every local callback or closure satisfies `docs/quality.md`.
-- [ ] Every production-code behavior change has a test that would fail without
-  the change.
-- [ ] New or corrected production behavior has valid red and green evidence;
+- [ ] Every distributed production-behavior change has a test that would fail
+  without the change.
+- [ ] Every useful cycle for new or corrected distributed production behavior
+  has valid red and green evidence;
   a behavior-preserving production refactor has passing baseline and final
-  evidence; or this pull request contains no production-code change and says
-  so above.
+  evidence; or this pull request contains no distributed production-behavior
+  change and says so above.
 - [ ] If this pull request fixes a bug, it corrects the owning invariant rather
   than hiding the symptom and includes a regression test for the affected
   class of behavior.
@@ -130,8 +137,10 @@ particular attention.
   failure behavior are both tested.
 - [ ] All applicable repository checks were run against the final commit and
   are reported above.
-- [ ] Independent verification and skeptical review both pass for the exact
-  final state, and no required correction remains.
+- [ ] When `docs/agent-workflow.md` requires the coding-agent sequence,
+  independent verification and skeptical review both pass for the exact final
+  state, their report is inspectable, and no required correction remains;
+  otherwise, the reason that sequence does not apply is recorded above.
 - [ ] Code, tests, documentation, and compatibility claims describe the same
   behavior.
 - [ ] When relevant, unsupported behavior and backend selection are explicit.

@@ -176,10 +176,19 @@ stale premise, material risk, or other reason allowed by
 
 For a repository implementation, continue through the author-review loop in
 `docs/agent-workflow.md`: hand the identified local result to independent
-verification and skeptical review, classify every finding, and return an
-ordinary in-scope correction caused by the change to the sole writer through
-`tabgrad-implement`. After any edit, identify the new complete state and repeat
-the affected verification and complete independent review.
+verification and skeptical review, then classify every finding and its owning
+artifact. Return repository content to the sole writer through
+`tabgrad-implement`; route issue content or state through `tabgrad-issue`, pull
+request content or state through `tabgrad-pull-request`, and missing evidence
+to its owning check. Do not create a source edit or commit merely to correct an
+issue, pull request description, or check record. Preserve the separate
+authority required by every external mutation.
+
+After a correction, identify the complete affected state, invalidate only the
+evidence whose inputs or conclusions changed, and repeat the affected
+verification and complete independent review. A correction confined to a pull
+request description does not by itself invalidate mechanical checks for an
+unchanged commit, but the description and its claims must be reviewed again.
 
 Do not stop after the first failed verification or `CHANGES REQUIRED` report
 merely to ask whether an already authorized correction should be made. Continue

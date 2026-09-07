@@ -84,10 +84,14 @@ does not authorize editing the change, running destructive commands, changing
 Git history or GitHub state, submitting comments or a formal review, approving
 the pull request, requesting changes on GitHub, or merging it.
 
-When the user also authorizes corrections, report the findings first and send
-the work back through `tabgrad-implement`. The corrected state must pass
-`tabgrad-verify` and receive a new independent review. Do not quietly combine
-authorship and approval because one task includes both activities.
+When the user also authorizes corrections, report the findings first and route
+each correction to the skill that owns its artifact. Repository content returns
+to the sole writer through `tabgrad-implement`; issue content or state uses
+`tabgrad-issue`; pull request content or state uses `tabgrad-pull-request`; and
+missing evidence returns to its owning check. Preserve every separate authority
+boundary. The complete corrected result must pass the affected verification
+and receive a new independent review. Do not quietly combine authorship and
+approval because one task includes both activities.
 
 Publishing a review, inline comment, approval, or request for changes requires
 authority for that exact external action. Do not impersonate another reviewer
@@ -157,23 +161,35 @@ missing behavior, and that important boundaries and failure cases are not
 hidden by mocks, fixtures, broad tolerances, snapshots, or implementation-only
 assertions.
 
-When production code adds or corrects executable behavior, inspect the recorded
-TDD evidence and confirm that the test preceded the corresponding
-implementation, that its red result was caused by the intended missing or
-incorrect behavior, and that the final test still expresses that contract
-clearly. A behavior-preserving production refactor instead requires passing
-characterization or contract coverage before it changes.
+When a change adds or corrects executable behavior distributed as part of
+Tabgrad, inspect the recorded TDD evidence for every smallest useful behavior
+that required a production change. Confirm that each focused test preceded its
+corresponding implementation, that its red result was caused by the intended
+missing or incorrect behavior, and that the final test still expresses that
+contract clearly. One cycle may cover several layers when it genuinely observes
+them; one narrow red result cannot justify unrelated behavior implemented
+before its test. A behavior-preserving production refactor instead requires
+passing characterization or contract coverage before it changes.
 
 Do not require a red step for documentation, project policies, issue metadata,
 agent instructions, templates, configuration, repository and test tooling, or
-research artifacts. Apply their content-specific evidence without treating
-them as Tabgrad production code. Do not infer a valid red step from the mere
-presence of a final passing test.
+research artifacts that cannot alter distributed executable behavior. Apply
+their content-specific evidence without treating them as Tabgrad production
+code. Classify by effect when a generator, manifest, export map, build source,
+or configuration determines distributed executable behavior; the resulting
+behavior needs TDD evidence even though incidental tooling mechanics do not.
+Do not infer a valid red step from the mere presence of a final passing test.
 
 Look for weakened, deleted, skipped, nondeterministic, or undiscovered tests.
 Check whether changed behavior invalidates existing tests elsewhere. A large
 number of passing tests does not compensate for a missing test of the changed
 result.
+
+Treat deterministic memory and resource-lifecycle guarantees as observable
+behavior, including applicable release, cancellation, retention, cache-bound,
+and explicit resource-failure cases. Review quantitative performance, memory,
+growth, and artifact-size claims through the separate comparable evidence in
+`docs/performance.md`; do not accept one kind of evidence as the other.
 
 When an observable contract, boundary, failure mode, interaction, or material
 risk introduced or affected by the change lacks meaningful test protection,
@@ -256,6 +272,16 @@ action.
 When no actionable finding remains, state that clearly and describe any
 residual risk, missing environment, or part that could not be inspected. The
 absence of findings is not proof that unverified behavior works.
+
+For a substantive pull request, ensure that the independent verification and
+review report is inspectable by a later coordinator through an embedded concise
+report or an unambiguously identified durable record. It must identify the
+reviewer role, exact target, assignment and coverage, outcome, required
+findings, limitations, and primary evidence. Prefer a direct link; a pull
+request review or comment may instead be identified by its author, target, and
+location in that same pull request. A bare anonymous `PASS` is not sufficient.
+Protect sensitive findings through the private reporting route instead of
+publishing them.
 
 ## Decide and report the review result
 

@@ -276,22 +276,34 @@ Follow [`docs/quality.md`](docs/quality.md) for test-driven development,
 selecting checks, writing meaningful tests, comparing references, interpreting
 failures, and reviewing refactoring or duplication.
 
-For a production-code change that adds or corrects executable behavior, write
-and run the focused test before the corresponding implementation. Confirm that
-the test fails for the missing or incorrect behavior, then make it pass with
-the minimum complete change and refactor while it remains green. Preserve
-concise red and green evidence; a failing commit does not need to be published.
+For a change that adds or corrects executable behavior distributed as part of
+Tabgrad, write and run the focused test before the corresponding implementation.
+Confirm that the test fails for the missing or incorrect behavior, then make it
+pass with the minimum complete change and refactor while it remains green.
+Repeat the cycle for the next useful observable behavior. A boundary or failure
+case that requires another production change begins another cycle before that
+change. Preserve concise red and green evidence for each useful cycle; a
+failing commit does not need to be published.
 
 Do not apply TDD to documentation, project policies, issues, agent
 instructions, templates, configuration, repository and test tooling, or
-research artifacts. Verify those changes with the checks appropriate to their
-content. A behavior-preserving production refactor starts from passing
-characterization or contract tests, and research code follows its approved
-experimental method.
+research artifacts that cannot alter distributed executable behavior. Verify
+those changes with the checks appropriate to their content. When a generator,
+manifest, export map, build source, or configuration determines distributed
+executable behavior, apply TDD to that resulting behavior rather than
+manufacturing a test of the auxiliary mechanism. A behavior-preserving
+production refactor starts from passing characterization or contract tests,
+and research code follows its approved experimental method.
 
-Every production-code behavior change must have tests that would fail without
-the change. A bug fix should include a regression test. Test both successful
-behavior and important failure cases.
+Every distributed production-behavior change must have tests that would fail
+without the change. A bug fix should include a regression test. Test both
+successful behavior and important failure cases.
+
+Deterministic memory and resource-lifecycle contracts, such as release after
+completion or cancellation, cache bounds, reference retention, and explicit
+quota failures, are production behavior and require tests. Quantitative speed,
+peak-memory, growth, and bundle-size claims additionally require the comparable
+measurements in `docs/performance.md`.
 
 The required tests depend on the affected behavior. Relevant checks may
 include:
@@ -385,10 +397,13 @@ review`.
 A pull request is ready for review only when the implementation is complete
 for the result it claims, `tabgrad-verify` passes against its current head, the
 description contains the required evidence, and no unresolved decision or
-known required correction prevents review. Checks that run only on the pull
-request may still be in progress after publication; they remain required
-before merge. Marking a pull request ready moves its implementation issue to
-`In review`.
+known required correction prevents review. For a substantive coding-agent
+change, independent verification and skeptical review must also pass for the
+same state and leave an inspectable report. The documented single spelling or
+formatting correction exception does not require that agent sequence. Checks
+that run only on the pull request may still be in progress after publication;
+they remain required before merge. Marking a pull request ready moves its
+implementation issue to `In review`.
 
 If the pull request head changes materially after verification, its earlier
 verification and review are stale. Run verification against the new head,
