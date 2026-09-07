@@ -38,6 +38,12 @@ Capability negotiation never authorizes silent movement to the other backend.
 
 ## Shared work, private preparation
 
+Each run also supplies a fresh per-invocation package containing current
+bindings, dynamic values, the backend-generation token, and cancellation state.
+This package is called `ExecutionRequest`; its ownership and completion
+lifecycle are explained in
+[Requests, completion, and failure](execution-lifecycle.md).
+
 ```mermaid
 flowchart TD
     Program[Immutable ExecutableProgram]

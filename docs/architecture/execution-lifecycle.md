@@ -27,11 +27,15 @@ opaque binding.
 stateDiagram-v2
     [*] --> Admitted
     Admitted --> Preparing
+    Admitted --> PreSubmitCancelled: consumer cancels before work begins
     Preparing --> Submitted
+    Preparing --> Failed: preparation or compilation fails
+    Preparing --> PreSubmitCancelled: cancellation succeeds before submission
     Submitted --> ResultPublished: logical result is available
     Submitted --> Failed: execution failure
     ResultPublished --> Drained: final physical use completes
     Failed --> Drained: backend work settles and resources release
+    PreSubmitCancelled --> [*]: settle obligations and release uncommitted resources
     Drained --> [*]
 ```
 

@@ -240,6 +240,7 @@ numerical backend, including compiled scalar and vectorized kernels.
 **WebGPU**
 : The browser graphics-processor interface used by Tabgrad's accelerator
 backend.
+
 **WebGPU Shading Language (WGSL)**
 : The language used for WebGPU kernels.
 

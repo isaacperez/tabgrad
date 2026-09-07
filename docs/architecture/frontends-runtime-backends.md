@@ -127,7 +127,8 @@ Each backend owns:
 - physical layout and storage allocation;
 - memory pools and reusable physical leases;
 - kernel selection, generation, and specialization;
-- backend-specific lowering and scheduling;
+- translation from the common program into backend-specific work and its
+  physical schedule;
 - compilation, command encoding, barriers, and dispatch;
 - prepared-work and kernel caches;
 - asynchronous completion, readback, and native failure capture; and
