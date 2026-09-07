@@ -157,6 +157,15 @@ missing behavior, and that important boundaries and failure cases are not
 hidden by mocks, fixtures, broad tolerances, snapshots, or implementation-only
 assertions.
 
+For a behavior change, inspect the recorded TDD evidence and confirm that the
+test preceded the corresponding production implementation, that its red result
+was caused by the intended missing or incorrect behavior, and that the final
+test still expresses that contract clearly. For an applicable documented
+exception, confirm that its characterization, documentation, experimental, or
+test-infrastructure evidence is appropriate rather than an attempt to bypass
+test-first development. Do not infer a valid red step from the mere presence of
+a final passing test.
+
 Look for weakened, deleted, skipped, nondeterministic, or undiscovered tests.
 Check whether changed behavior invalidates existing tests elsewhere. A large
 number of passing tests does not compensate for a missing test of the changed

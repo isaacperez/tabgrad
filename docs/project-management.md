@@ -608,6 +608,37 @@ Close a milestone when its stated result and conditions are complete. Move
 newly discovered optional work to later issues rather than silently expanding
 the milestone.
 
+### Plan the active horizon
+
+Implementation planning is progressive. For one implementation stream,
+detailed issues cover the active milestone and the immediate dependency
+frontier that contributors need to decide or start next. Independent research
+or maintenance may proceed in parallel only when the overlap classification in
+[`agent-workflow.md`](agent-workflow.md) establishes that its result and
+evidence remain independent.
+
+Do not create placeholder issues for every operation, component, or possible
+optimization implied by the architecture. Create an implementation issue when
+its independently verifiable result, boundary, dependencies, and completion
+evidence are understood. Create a bounded research issue instead when a
+material unknown prevents those facts from being defined.
+
+Use the compatibility record to describe operation and environment support
+that evidence has established. It is not an implementation backlog. Several
+operations may share one issue when they have one coherent semantic and
+implementation boundary; an operation with independent risks or behavior may
+require separate work.
+
+Re-evaluate the active milestone after each completed issue or newly established
+fact that can change its remaining boundary. Create the next detailed planning
+wave from the repository's resulting state. Do not keep speculative issues
+merely because an earlier plan anticipated them, and do not expand the
+milestone silently when optional work is discovered.
+
+The complete relationship between architecture, milestones, issues, tests,
+performance evidence, compatibility, and documentation is explained in
+[`implementation-workflow.md`](implementation-workflow.md).
+
 ## Parent issues, sub-issues, and dependencies
 
 Use a parent issue when one result requires several independently completable

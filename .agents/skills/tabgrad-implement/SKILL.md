@@ -22,6 +22,8 @@ applicable rules in `docs/version-control.md`, together with the documentation,
 [`docs/quality.md`](../../../docs/quality.md), code, tests, build configuration,
 and earlier decisions
 relevant to the affected behavior.
+Read `docs/implementation-workflow.md` when the change implements or refactors
+behavior.
 
 Treat the issue's expected result, boundaries, and completion conditions as the
 definition of the requested work. Treat the repository and its configured
@@ -207,12 +209,22 @@ Preserve the project constraints recorded in `README.md` and
 change. Do not assume that every implementation affects every public API,
 runtime, backend, environment, or compatibility guarantee.
 
-Add or update tests for every behavior change. A test must fail for the
-incorrect or missing behavior and pass for the implemented result. Add a
-regression test for a bug fix. Cover important successful behavior, failure
-behavior, boundaries, and interactions that the change can affect. Do not
-weaken, delete, skip, or rewrite a valid test merely to accommodate the new
-implementation.
+Apply the test-first cycle in `docs/quality.md` to every behavior change. Write
+the smallest focused test before the corresponding production implementation,
+run it, and confirm that it fails for the intended missing or incorrect
+behavior. Record the command, relevant failure, reason that failure is valid,
+and corresponding green result. A failed invocation, unavailable environment,
+syntax error, or unrelated failure is not the red state. Do not require or
+publish a failing commit merely to preserve this evidence.
+
+Implement the minimum complete behavior that makes the focused test pass, then
+refactor while it remains green. Add a regression test for a bug fix and cover
+important successful behavior, failure behavior, boundaries, and interactions
+that the change can affect. Use the alternative evidence defined by
+`docs/quality.md` for a behavior-preserving refactor, documentation-only change,
+research experiment, or test-infrastructure change rather than manufacturing a
+meaningless failure. Do not weaken, delete, skip, or rewrite a valid test merely
+to accommodate the new implementation.
 
 Update documentation in the same change whenever public interfaces,
 compatibility, architecture, setup, examples, development procedures, or
@@ -301,6 +313,8 @@ Report:
 - the issue and branch used;
 - the independent preflight, its evidence, and the sole writer for the target;
 - the observable behavior implemented;
+- the test-driven development evidence or the applicable documented
+  alternative;
 - the files, tests, documentation, compatibility information, and
   dependencies changed;
 - the checks run so far and their exact results;

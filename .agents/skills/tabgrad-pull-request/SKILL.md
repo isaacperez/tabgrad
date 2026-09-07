@@ -13,6 +13,7 @@ branch, verification evidence, and project state consistent.
 
 Read `README.md`, `CONTRIBUTING.md`, `docs/README.md`,
 `docs/project-management.md`,
+`docs/implementation-workflow.md`,
 `docs/version-control.md`, `docs/continuous-integration.md`,
 `docs/agent-workflow.md`, and
 `.github/pull_request_template.md`. Read the
@@ -102,6 +103,13 @@ and manual checks run against the current head, their outcomes, the tests that
 detect changed behavior, documentation and compatibility effects, known
 limitations, and required follow-up issues. Explain every applicable omission
 or `Not applicable` entry.
+
+For a behavior change, include the focused test command, the relevant red
+failure observed before production implementation, why that failure represented
+the missing or incorrect behavior, and the corresponding green and final-suite
+results. For a documented TDD exception, identify the exception and its
+alternative evidence. Do not require a failing commit or expose irrelevant
+logs merely to demonstrate the sequence.
 
 Identify the independent preflight, verification, specialist, and review
 evidence required by `docs/agent-workflow.md`. Confirm that each report refers

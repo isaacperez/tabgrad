@@ -90,6 +90,7 @@ TIMELESS_DOCUMENTS = {
     "docs/development.md",
     "docs/documentation.md",
     "docs/generated-files.md",
+    "docs/implementation-workflow.md",
     "docs/performance.md",
     "docs/project-management.md",
     "docs/quality.md",
@@ -149,12 +150,14 @@ REQUIRED_GITIGNORE_RULES = {
 }
 REQUIRED_PULL_REQUEST_HEADINGS = {
     "Linked issue",
+    "Test-driven development",
     "Verification",
     "Required evidence",
     "Ready for review",
     "Ready to merge",
 }
 REQUIRED_PULL_REQUEST_TEXT = {
+    "docs/quality.md#develop-behavior-test-first",
     "docs/quality.md",
     "explicit authorization",
 }

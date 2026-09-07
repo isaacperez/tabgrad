@@ -191,6 +191,21 @@ major framework as an incidental part of another change. Such a choice needs
 an explicit architectural decision because it affects how the whole project is
 built, distributed, and maintained.
 
+## Planning implementation increments
+
+Plan implementation progressively around bounded integrated outcomes. A
+milestone describes a capability or release result, while labels identify
+permanent areas such as WebGPU, automatic differentiation, or documentation.
+Create detailed issues only within the active planning horizon, when their
+result and evidence are understood. Do not turn the architecture or the desired
+PyTorch surface into a speculative issue for every component or operation.
+
+The authoritative milestone and issue rules are in
+[`docs/project-management.md`](docs/project-management.md#plan-the-active-horizon).
+The complete connection between architecture, planning, test-driven
+implementation, performance, compatibility, and documentation is explained in
+[`docs/implementation-workflow.md`](docs/implementation-workflow.md).
+
 ## Working on a branch
 
 Follow [`docs/version-control.md`](docs/version-control.md) for branches,
@@ -257,9 +272,17 @@ lockfiles, updates, vendored code, and removal.
 
 ## Testing
 
-Follow [`docs/quality.md`](docs/quality.md) for selecting checks, writing
-meaningful tests, comparing references, interpreting failures, and reviewing
-refactoring or duplication.
+Follow [`docs/quality.md`](docs/quality.md) for test-driven development,
+selecting checks, writing meaningful tests, comparing references, interpreting
+failures, and reviewing refactoring or duplication.
+
+For a behavior change, write and run the focused test before the corresponding
+production implementation. Confirm that the test fails for the missing or
+incorrect behavior, then make it pass with the minimum complete change and
+refactor while it remains green. Preserve concise red and green evidence; a
+failing commit does not need to be published. Apply the documented alternative
+evidence for behavior-preserving refactors, documentation-only changes,
+research experiments, and changes to test infrastructure.
 
 Every behavior change must have tests that would fail without the change. A bug
 fix should include a regression test. Test both successful behavior and
