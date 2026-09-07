@@ -172,6 +172,22 @@ point. Expand inspection only when evidence establishes a dependency, conflict,
 stale premise, material risk, or other reason allowed by
 `docs/agent-workflow.md`.
 
+## Complete the implementation correction loop
+
+For a repository implementation, continue through the author-review loop in
+`docs/agent-workflow.md`: hand the identified local result to independent
+verification and skeptical review, classify every finding, and return an
+ordinary in-scope correction caused by the change to the sole writer through
+`tabgrad-implement`. After any edit, identify the new complete state and repeat
+the affected verification and complete independent review.
+
+Do not stop after the first failed verification or `CHANGES REQUIRED` report
+merely to ask whether an already authorized correction should be made. Continue
+until verification and review both pass for the same state, or stop at a
+documented blocker, unavailable requirement, authority boundary, or material
+decision that belongs to the user. The reviewer remains read-only and must not
+implement or materially design a correction it will later judge.
+
 ## Stop at the next authority or decision boundary
 
 Continue routine authorized work without asking the user to repeat the start

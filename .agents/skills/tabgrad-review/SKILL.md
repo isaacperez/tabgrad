@@ -175,6 +175,14 @@ Check whether changed behavior invalidates existing tests elsewhere. A large
 number of passing tests does not compensate for a missing test of the changed
 result.
 
+When an observable contract, boundary, failure mode, interaction, or material
+risk introduced or affected by the change lacks meaningful test protection,
+report the gap as a required correction. Identify the missing scenario or
+invariant, its consequence, why the current tests cannot detect it, and the
+smallest evidence the corrected change must provide. Do not demand a fixed
+number of tests, an unexplained coverage target, or assertions coupled only to
+the chosen implementation.
+
 Read the `tabgrad-verify` report and its primary evidence. Confirm that it
 targets the reviewed state, covers every applicable requirement, records
 failures and unavailable environments, and does not rely on stale checks or
@@ -263,6 +271,11 @@ corrected before the change can continue. The review is incomplete when the
 target, a required issue, relevant files, independent reviewer, verification
 evidence, or other information needed for a responsible judgment is
 unavailable.
+
+End the report with exactly one review outcome: `PASS`, `CHANGES REQUIRED`, or
+`INCOMPLETE`. A `PASS` is permitted only under the passing conditions above;
+the other outcomes block publication as review-ready or merge until the
+author-review loop produces a newly verified and reviewed state.
 
 When required changes and missing evidence coexist, report that changes are
 required and list the incomplete areas separately. Do not imply that resolving

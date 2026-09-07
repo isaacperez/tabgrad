@@ -51,6 +51,18 @@ version of the change.
 | --- | --- |
 | <!-- Command or check --> | <!-- Passed, failed, or could not run. Include relevant details. --> |
 
+## Independent verification and review
+
+For a substantive change, identify the exact head examined independently.
+Verification and skeptical review may be performed by the same agent when it
+did not author the change, but their conclusions remain separate. Replace
+stale evidence after every correction; do not record only the resolution of an
+earlier finding.
+
+| Exact head | Independent verifier and outcome | Independent reviewer and outcome | Required findings |
+| --- | --- | --- | --- |
+| <!-- Commit or reproducible content identity --> | <!-- Identity and PASS, FAIL, or INCOMPLETE --> | <!-- Identity and PASS, CHANGES REQUIRED, or INCOMPLETE --> | <!-- None, or each unresolved required correction --> |
+
 ## Required evidence
 
 Complete every row. Provide evidence when the subject applies. Otherwise,
@@ -118,6 +130,8 @@ particular attention.
   failure behavior are both tested.
 - [ ] All applicable repository checks were run against the final commit and
   are reported above.
+- [ ] Independent verification and skeptical review both pass for the exact
+  final state, and no required correction remains.
 - [ ] Code, tests, documentation, and compatibility claims describe the same
   behavior.
 - [ ] When relevant, unsupported behavior and backend selection are explicit.

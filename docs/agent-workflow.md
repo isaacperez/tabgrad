@@ -346,6 +346,43 @@ material risk. The merge coordinator must still inspect the live pull request,
 head, required checks, review state, authorization, and branch safety
 immediately before the mutation.
 
+## Repeat the author-review loop until the current state passes
+
+For an implementation result, independent verification and skeptical review
+form a correction loop rather than a one-time handoff:
+
+```mermaid
+flowchart TD
+    A[Writer identifies the complete target] --> B[Independent verification]
+    B --> C[Independent skeptical review]
+    C --> D{Outcome for that exact state}
+    D -->|Pass| E[Publication or merge boundary]
+    D -->|Changes required| F[Classify every finding]
+    F -->|Caused by this change and in scope| G[Writer corrects through tabgrad-implement]
+    G --> H[Invalidate affected evidence]
+    H --> B
+    F -->|Material decision| I[Ask the user before dependent work]
+    F -->|Blocking prerequisite| J[Record the blocker and stop]
+    D -->|Incomplete| K[Obtain missing evidence or stop if unavailable]
+    K --> B
+```
+
+The coordinating agent does not stop merely to report an ordinary correction
+that the active issue already authorizes. It returns that finding to the sole
+writer, obtains a newly identified target, and repeats every affected
+verification and the complete independent review. There is no fixed iteration
+count: the loop ends only when verification and review pass for the same state
+or a documented blocker, unavailable requirement, authority boundary, or
+material decision requires human input.
+
+The reviewer remains read-only throughout the loop. It may explain the
+smallest required outcome but must not implement or materially design the
+correction it will later judge. The same independent reviewer may inspect a
+corrected state, but it must review the complete new result, revisit affected
+findings, and look for regressions rather than checking only whether the writer
+responded. Optional suggestions and unrelated pre-existing improvements do not
+block the current result.
+
 ## Invalidate stale evidence
 
 Any edit after a check may invalidate its result. Record the new target and
