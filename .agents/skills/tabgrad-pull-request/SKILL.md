@@ -47,11 +47,14 @@ Distinguish these requests:
   changes.
 - Publishing a new local head to an existing pull request authorizes an
   ordinary push only when the request identifies that branch or pull request
-  and the commits to publish. When the new head passes the ready-for-review
-  gate and the pull request remains non-draft, the same request authorizes the
-  minimum title or description update needed to make its evidence current and
-  one relayed final-report comment after the remote snapshot matches. It does
-  not authorize unrelated title, body, metadata, or reviewer changes.
+  and the commits to publish. When every ready condition that can be established
+  before publication passes and the prepared snapshot has independent review,
+  the same request authorizes one bounded transition: the ordinary push, the
+  minimum title or description update needed to make its evidence current,
+  remote snapshot confirmation, and one relayed final-report comment. The
+  comment is an output of that transition, not a prerequisite for its own
+  authority. The request does not authorize unrelated title, body, metadata,
+  or reviewer changes.
 - Returning a review-ready pull request to draft and its issue to `In progress`
   requires current authority for both state changes. Earlier authority to mark
   the pull request ready does not carry forward to later work.
@@ -260,14 +263,19 @@ invalidate the snapshot it identifies. If the report requires a correction,
 update the owned artifact, create a new snapshot, and repeat the affected checks
 and complete review before a later final report.
 
-When the new head already passes the ready-for-review gate, it may remain
-non-draft and its issue may remain `In review`; update its evidence when
-authorized and obtain a new review. Before publishing a local head that does
-not pass that gate, obtain authority to return the pull request to draft and
-move its linked implementation issue to `In progress`. When authorized, change
-both states through this skill and `tabgrad-issue`, then publish the new head.
-When that authority is absent, leave the remote pull request unchanged and
-report that the local work has not been published.
+When every ready condition available before publication passes and the exact
+prepared snapshot has independent review, an existing pull request may remain
+non-draft and its issue may remain `In review` during the bounded update. After
+publication, rederive the remote snapshot and publish the final-report comment;
+only then does that report satisfy the remaining gate condition. If another
+condition is missing before publication, obtain authority to return the pull
+request to draft and move its linked implementation issue to `In progress`
+before publishing. When that authority is absent, leave the remote pull request
+unchanged and report that the local work has not been published.
+
+If the bounded update fails after publication, report the inconsistent remote
+state and request current authority to return the pull request to draft and its
+issue to `In progress`; do not claim that the ready gate still passes.
 
 If a material new head was already published by someone else and does not pass
 the ready-for-review gate, report the inconsistent state and request current

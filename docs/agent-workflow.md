@@ -281,6 +281,15 @@ issue out of `In review`, and report the incomplete operation. This authority
 does not include a formal GitHub review, approval, reviewer notification, or
 another unrelated mutation.
 
+For an existing review-ready pull request, an authorized verified-head update
+may remain non-draft when every condition available before publication passes
+and the exact prepared snapshot has independent review. The push, minimum
+metadata update, remote snapshot confirmation, and one relayed final-report
+comment form one bounded transition; the comment is its final output, not a
+precondition for its own authority. If that transition fails after publication,
+report the inconsistent state and obtain current authority before returning the
+pull request and issue to earlier workflow states.
+
 An already durable issue comment, pull request report, or registered artifact
 may supply earlier evidence, but it does not replace final review of the frozen
 pull request snapshot. Keep sensitive security or private information in the
