@@ -44,6 +44,14 @@ layer exposes the supported API and connects Python calls to the Tabgrad tensor
 runtime. The Tabgrad runtime performs tensor operations and automatic
 differentiation on its CPU or WebGPU backend.
 
+The Python and JavaScript frontends share one TypeScript semantic runtime.
+Operations are validated when called, while pure numerical payloads may remain
+deferred until a finite demanded region must execute. That region becomes one
+common executable program which the explicitly selected WebGPU or WebAssembly
+backend prepares and runs. Forward computation, automatic differentiation, and
+optimizer work use this same path; Tabgrad does not silently move unsupported
+work to another backend.
+
 Pyodide provides the Python interpreter and the connection between Python and
 JavaScript. It does not provide PyTorch or call Tabgrad automatically. Tabgrad
 must provide and maintain that integration.
@@ -51,6 +59,9 @@ must provide and maintain that integration.
 The tensor runtime can also be used directly from JavaScript without Pyodide.
 Pyodide is required for the Python experience in the browser, but it is not the
 tensor runtime itself.
+
+The responsibilities, data flow, lifetimes, and reasons for this design are
+explained in the [architecture guide](docs/architecture/README.md).
 
 ## Compatibility
 

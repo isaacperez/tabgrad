@@ -77,7 +77,23 @@ TEXT_NAMES = {
     ".gitignore",
     "LICENSE",
 }
-TIMELESS_DOCUMENTS = {
+ARCHITECTURE_DOCUMENTS = {
+    "docs/architecture/README.md",
+    "docs/architecture/autograd-and-training.md",
+    "docs/architecture/backend-execution.md",
+    "docs/architecture/bounded-lazy-execution.md",
+    "docs/architecture/central-decision.md",
+    "docs/architecture/execution-lifecycle.md",
+    "docs/architecture/frontends-runtime-backends.md",
+    "docs/architecture/glossary.md",
+    "docs/architecture/internal-representations.md",
+    "docs/architecture/memory-and-performance.md",
+    "docs/architecture/model-integration.md",
+    "docs/architecture/operation-admission.md",
+    "docs/architecture/reusable-programs.md",
+    "docs/architecture/semantic-state.md",
+}
+TIMELESS_DOCUMENTS = ARCHITECTURE_DOCUMENTS | {
     "AGENTS.md",
     "CONTRIBUTING.md",
     "README.md",

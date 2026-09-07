@@ -13,6 +13,7 @@ link to its primary source, but they must not create a competing version.
 | Subject | Primary source |
 | --- | --- |
 | Project identity and public purpose | [`README.md`](../README.md) |
+| Central execution architecture and ownership boundaries | [`architecture/README.md`](architecture/README.md) |
 | Contribution workflow | [`CONTRIBUTING.md`](../CONTRIBUTING.md) |
 | Integrated implementation workflow and reading guide | [`implementation-workflow.md`](implementation-workflow.md) |
 | Issues, labels, project fields, and milestones | [`project-management.md`](project-management.md) |
