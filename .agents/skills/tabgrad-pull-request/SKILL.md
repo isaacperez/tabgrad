@@ -107,10 +107,11 @@ or `Not applicable` entry.
 When production code adds or corrects executable behavior, include the focused
 test command, the relevant red failure observed before implementation, why that
 failure represented the missing or incorrect behavior, and the corresponding
-green and final-suite results. When no production code changed, state that TDD
-does not apply and report the content-specific checks elsewhere in the
-template. Do not require a failing commit or expose irrelevant logs merely to
-demonstrate the sequence.
+green and final-suite results. For a behavior-preserving production refactor,
+record the passing characterization or contract baseline and the final passing
+result. When no production code changed, state that TDD does not apply and
+report the content-specific checks elsewhere in the template. Do not require a
+failing commit or expose irrelevant logs merely to demonstrate the sequence.
 
 Identify the independent preflight, verification, specialist, and review
 evidence required by `docs/agent-workflow.md`. Confirm that each report refers

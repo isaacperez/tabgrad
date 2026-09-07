@@ -161,13 +161,14 @@ When production code adds or corrects executable behavior, inspect the recorded
 TDD evidence and confirm that the test preceded the corresponding
 implementation, that its red result was caused by the intended missing or
 incorrect behavior, and that the final test still expresses that contract
-clearly. A behavior-preserving code refactor instead requires passing
+clearly. A behavior-preserving production refactor instead requires passing
 characterization or contract coverage before it changes.
 
 Do not require a red step for documentation, project policies, issue metadata,
-agent instructions, templates, configuration-only changes, or research
-records. Apply their content-specific evidence without treating them as code.
-Do not infer a valid red step from the mere presence of a final passing test.
+agent instructions, templates, configuration, repository and test tooling, or
+research artifacts. Apply their content-specific evidence without treating
+them as Tabgrad production code. Do not infer a valid red step from the mere
+presence of a final passing test.
 
 Look for weakened, deleted, skipped, nondeterministic, or undiscovered tests.
 Check whether changed behavior invalidates existing tests elsewhere. A large

@@ -79,9 +79,16 @@ The planning cycle is:
 flowchart LR
     A[Durable architecture and product constraints] --> B[Bounded milestone outcome]
     B --> C[Immediate planning horizon]
-    C --> D[Ready implementation or research issues]
-    D --> E[Test-driven implementation]
-    E --> F[Verification, review, and merge]
+    C --> D[Ready issues]
+    D --> E{Applicable work method}
+    E -->|New or corrected production behavior| T[Test-driven development]
+    E -->|Behavior-preserving production refactor| R[Green characterization or contract tests]
+    E -->|Research| X[Approved research method]
+    E -->|No production code| N[Content-specific checks]
+    T --> F[Verification, review, and merge]
+    R --> F
+    X --> F
+    N --> F
     F --> G[Observed repository and compatibility state]
     G --> H[Re-evaluate the milestone]
     H -->|More required work| C
@@ -180,11 +187,13 @@ it justify implementing only the example that first failed.
 
 ## Keep non-code work outside TDD
 
-TDD is a method for developing code. It does not apply to documentation,
-project policies, issues, agent instructions, pull request templates,
-configuration-only changes, or research records. Those changes use the review,
-validation, and reproducibility checks appropriate to their content; they do
-not invent a failing test.
+For this project, production code is the code distributed as the Tabgrad
+library: its runtime, frontends, backends, and packages. TDD applies to new or
+corrected behavior in that code. It does not apply to documentation, project
+policies, issues, agent instructions, pull request templates, configuration,
+repository and test tooling, or research artifacts. Those changes use the
+review, validation, and reproducibility checks appropriate to their content;
+they do not invent a failing test.
 
 When one repository change contains both documentation and executable code,
 only the code behavior uses the red-green-refactor cycle. The documentation is
@@ -192,16 +201,19 @@ checked against the resulting code, tests, and authoritative sources.
 
 Related code work begins from the evidence appropriate to its purpose:
 
-- A behavior-preserving refactor starts from passing characterization or
-  contract tests that protect the behavior being preserved.
-- Test or repository-check tooling that adds or corrects executable behavior
-  follows the test-first cycle when a focused failure can express that
-  behavior.
+- A behavior-preserving production refactor starts from passing
+  characterization or contract tests that protect the behavior being
+  preserved.
 - Exploratory code in an approved research experiment follows the experiment's
   method; production code resulting from the decision returns to TDD.
 
-The pull request states whether production code changed. When it did, it records
-the TDD evidence; otherwise it reports the applicable non-code checks.
+The pull request records the route that actually applied:
+
+- new or corrected production behavior records its red and green evidence;
+- a behavior-preserving production refactor records the passing
+  characterization or contract baseline and the final passing result; or
+- a change without production code states that TDD is not applicable and
+  reports its content-specific checks.
 
 ## Test the contracts at the layers that claim them
 

@@ -27,18 +27,19 @@ deliberate difference from the linked issue or an accepted design.
 
 ## Test-driven development
 
-Complete this section only when production code adds or corrects executable
-behavior. Record the focused test command, the relevant failure observed before
-implementation, why that was the expected red result, and the corresponding
-green result. For a change without production code, write `Not applicable — no
+Use the route that applies. For new or corrected production behavior, record
+the focused test command, its expected red result before implementation, and
+the corresponding green result. For a behavior-preserving production refactor,
+record the passing characterization or contract baseline and the final passing
+result. For a change without production code, write `Not applicable — no
 production code changed`; report its content-specific checks under
 **Verification** and **Required evidence**. See
 `docs/quality.md#develop-production-behavior-test-first`. A failing commit is
 not required.
 
-| Production-code behavior | Red evidence | Green result |
+| Production-code change | Before implementation | Final result |
 | --- | --- | --- |
-| <!-- Behavior, or state that no production code changed --> | <!-- Command, relevant failure, and reason --> | <!-- Focused passing result --> |
+| <!-- New/corrected behavior, behavior-preserving refactor, or no production code --> | <!-- Valid red evidence, passing baseline, or not applicable --> | <!-- Focused passing result, final refactor result, or content-specific checks below --> |
 
 ## Verification
 
@@ -106,9 +107,10 @@ particular attention.
   every local callback or closure satisfies `docs/quality.md`.
 - [ ] Every production-code behavior change has a test that would fail without
   the change.
-- [ ] Every production-code behavior change has valid red and green evidence
-  from the test-first cycle, or this pull request contains no production-code
-  behavior change and says so above.
+- [ ] New or corrected production behavior has valid red and green evidence;
+  a behavior-preserving production refactor has passing baseline and final
+  evidence; or this pull request contains no production-code change and says
+  so above.
 - [ ] If this pull request fixes a bug, it corrects the owning invariant rather
   than hiding the symptom and includes a regression test for the affected
   class of behavior.

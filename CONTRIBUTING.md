@@ -283,10 +283,11 @@ the minimum complete change and refactor while it remains green. Preserve
 concise red and green evidence; a failing commit does not need to be published.
 
 Do not apply TDD to documentation, project policies, issues, agent
-instructions, templates, configuration-only changes, or research records.
-Verify those changes with the checks appropriate to their content. A
-behavior-preserving code refactor starts from passing characterization or
-contract tests, and research code follows its approved experimental method.
+instructions, templates, configuration, repository and test tooling, or
+research artifacts. Verify those changes with the checks appropriate to their
+content. A behavior-preserving production refactor starts from passing
+characterization or contract tests, and research code follows its approved
+experimental method.
 
 Every production-code behavior change must have tests that would fail without
 the change. A bug fix should include a regression test. Test both successful

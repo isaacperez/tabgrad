@@ -221,12 +221,12 @@ this evidence.
 Implement the minimum complete behavior that makes the focused test pass, then
 refactor while it remains green. Add a regression test for a bug fix and cover
 important successful behavior, failure behavior, boundaries, and interactions
-that the change can affect. A behavior-preserving code refactor starts from
-passing characterization or contract tests. Documentation, project policies,
-agent instructions, templates, configuration-only changes, and research
-records do not use TDD; apply their relevant checks without manufacturing a
-failure. Do not weaken, delete, skip, or rewrite a valid test merely to
-accommodate the new implementation.
+that the change can affect. A behavior-preserving production refactor starts
+from passing characterization or contract tests. Documentation, project
+policies, agent instructions, templates, configuration, repository and test
+tooling, and research artifacts do not use TDD; apply their relevant checks
+without manufacturing a failure. Do not weaken, delete, skip, or rewrite a
+valid test merely to accommodate the new implementation.
 
 Update documentation in the same change whenever public interfaces,
 compatibility, architecture, setup, examples, development procedures, or
@@ -315,8 +315,9 @@ Report:
 - the issue and branch used;
 - the independent preflight, its evidence, and the sole writer for the target;
 - the observable behavior implemented;
-- the test-driven development evidence when production code changed, or the
-  fact that the change contained no production code;
+- the red and green evidence for new or corrected production behavior, the
+  before-and-after passing evidence for a behavior-preserving production
+  refactor, or the fact that the change contained no production code;
 - the files, tests, documentation, compatibility information, and
   dependencies changed;
 - the checks run so far and their exact results;

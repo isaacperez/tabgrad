@@ -176,12 +176,13 @@ red and green evidence required by `docs/quality.md`. Confirm that the focused
 test was run before the corresponding implementation, was discovered, and
 failed for the intended reason; then confirm that the same behavior passes in
 the exact final state. A wrong command or unrelated failure does not satisfy
-the red step. For a behavior-preserving code refactor, verify the passing
-characterization or contract evidence that preceded it.
+the red step. For a behavior-preserving production refactor, verify the
+passing characterization or contract evidence that preceded it.
 
 Do not require TDD evidence for documentation, project policies, issue metadata,
-agent instructions, templates, configuration-only changes, or research
-records. Verify those changes with the checks applicable to their content.
+agent instructions, templates, configuration, repository and test tooling, or
+research artifacts. Verify those changes with the checks applicable to their
+content.
 Missing required TDD evidence for a production-code behavior change makes
 verification incomplete even when the final suite passes.
 

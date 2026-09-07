@@ -246,20 +246,20 @@ entire milestone's speculative suite before implementation, and do not
 implement only the example that first failed when the issue defines a broader
 invariant.
 
-TDD applies to executable production code, not to every repository change.
-Documentation, project policies, issue metadata, agent instructions, pull
-request templates, configuration-only changes, and research records use their
-applicable review and verification checks without manufacturing a red result.
-When one of those changes also alters executable code, apply TDD only to that
-code behavior.
+For this policy, production code means the code distributed as the Tabgrad
+library: its runtime, frontends, backends, and packages. TDD does not apply to
+every repository change. Documentation, project policies, issue metadata,
+agent instructions, pull request templates, configuration, repository and
+test tooling, and research artifacts use their applicable review and
+verification checks without manufacturing a red result. When one change also
+alters Tabgrad production behavior, apply TDD only to that production-code
+part.
 
 Related code work uses the evidence appropriate to its purpose:
 
-- A behavior-preserving refactor begins from passing characterization or
-  contract tests that protect the behavior being preserved.
-- Test or repository-check tooling that adds or corrects executable behavior
-  follows the same test-first cycle when a focused failure can express that
-  behavior.
+- A behavior-preserving production refactor begins from passing
+  characterization or contract tests that protect the behavior being
+  preserved.
 - Exploratory code in an approved research experiment follows the experiment's
   method; production code that follows the decision uses this test-first cycle.
 
