@@ -7,10 +7,13 @@ completion state. This chapter defines that per-invocation boundary.
 
 ## A fresh invocation
 
-`ExecutionRequest` contains only per-run information passed to a backend:
-current program-slot bindings to opaque physical references, dynamic values,
-backend-generation tokens, and cancellation state. It does not own reusable
-program structure or permanent model state.
+`ExecutionRequest` contains only per-run information: current program-slot
+bindings to opaque physical references, dynamic values, backend-generation
+tokens, and cancellation state. For ordinary computation this is the input view
+passed to the selected backend. An explicit transfer uses a coordinator-owned
+composite request with two endpoint generations and a staging lease, as
+described later in this chapter. Neither form owns reusable program structure or
+permanent model state.
 
 `RuntimeSession` owns the fresh semantic state associated with that request:
 
@@ -29,6 +32,12 @@ read-only asynchronous result/drain view returned to the runtime or caller. An
 implementation can back both with one compact invocation-state allocation while
 preserving the contractual distinction between what is submitted and what can
 be observed.
+
+The diagram below shows this public aggregate lifecycle. For compute work,
+preparation means preparing and binding the selected backend. For a transfer,
+the same aggregate states cover coordinator validation, staging, and the
+endpoint operations described later; no single backend prepares the complete
+route.
 
 ```mermaid
 stateDiagram-v2
@@ -85,7 +94,8 @@ Known metadata and support errors occur during operation admission. Preparation,
 compilation, execution, and device failures are asynchronous. They retain:
 
 - the causal operation and stable source provenance;
-- the executable program and selected backend;
+- the executable program, declared execution domain, and relevant backend
+  endpoints;
 - the phase that failed; and
 - the native cause.
 
@@ -100,9 +110,10 @@ The canonical observation is asynchronous and owns one promise per logical
 observation. JavaScript exposes that asynchronous surface directly. Python
 always has an awaitable surface.
 
-A synchronous-looking Python `item()` is allowed only when `can_run_sync()` can
-prove that the complete entry stack is suspendible through JavaScript Promise
+A synchronous-looking Python `item()` is allowed only when the runtime can prove
+that the complete entry stack is suspendible through JavaScript Promise
 Integration (JSPI), such as a Pyodide `runPythonAsync` or `callPromising` path.
+This is an architectural capability check, not a selected public method name.
 If numerical work is still pending under a non-suspendible `runPython` entry,
 the call fails before starting work. A scalar that is already available in host
 memory may return synchronously.
@@ -129,19 +140,68 @@ producer.
 
 ## Explicit transfer
 
-A backend transfer has a source endpoint and a destination endpoint in one
-executable program. The destination can begin when source staging becomes
-readable, while the source ticket and staging lease stay owned until source
-drain. The transfer is observable in diagnostics and cannot be confused with
+A backend transfer is a transfer-domain `ExecutableProgram` with a declared
+source, destination, byte and layout contract, and completion dependencies. The
+runtime coordinator owns one composite request containing both captured
+generation tokens, the staging lease, and the state of the two opaque endpoint
+operations. The program is not prepared or executed as though either compute
+backend owned the other.
+
+```mermaid
+sequenceDiagram
+    participant Runtime as Runtime coordinator
+    participant Source as Source backend
+    participant Staging as Staging lease
+    participant Destination as Destination backend
+
+    Runtime->>Runtime: validate both generation tokens
+    Runtime->>Source: submit read or copy-out endpoint
+    Source->>Staging: produce staged bytes
+    Source-->>Runtime: source succeeds; staging is readable
+    Runtime->>Destination: submit write or copy-in endpoint
+    Staging->>Destination: provide staged bytes
+    Destination-->>Runtime: destination result may publish
+    par drain notifications may arrive in either order
+        Source-->>Runtime: source drained
+    and
+        Destination-->>Runtime: destination drained
+    end
+    Runtime->>Runtime: aggregate drained; release staging
+```
+
+The aggregate `ExecutionTicket.result` succeeds only when the destination
+materialization can be published. It otherwise settles with the causal failure
+or cancellation. Its `drained` signal settles only after every endpoint that
+actually started has drained and staging is no longer in use. Source drain alone
+does not authorize staging reuse when the destination may still read it.
+
+Cancellation and partial failure preserve that ownership:
+
+- cancellation before source submission releases staging immediately;
+- cancellation after source submission waits for source drain and suppresses
+  the destination phase if that phase has not started;
+- cancellation after destination submission waits for destination drain and
+  follows the same result-publication and externally visible mutation rules as
+  compute work;
+- source failure leaves the destination unpublished and unmodified;
+- destination failure after a possible partial write invalidates destination
+  storage but does not invalidate a still-valid source; and
+- loss or replacement of either captured generation makes the composite result
+  fail or become stale, prevents publication into a newer generation, and
+  retains staging until every started endpoint drains or its generation owner
+  performs terminal cleanup.
+
+The transfer remains visible in diagnostics and cannot be confused with
 fallback.
 
 ## Device loss and stale callbacks
 
-Device loss creates a new backend generation. Callbacks, materializations, and
-prepared entries from the old generation cannot update a new owner. A request
-can be re-prepared and re-materialized only from a reproducible semantic source
-or valid recoverable copy. Otherwise it fails deterministically and identifies
-the lost backend state.
+Device loss retires the affected backend generation. Recreating the backend
+context creates a new generation; callbacks, materializations, and prepared
+entries from the retired generation cannot update that new owner. A request can
+be re-prepared and re-materialized only from a reproducible semantic source or
+valid recoverable copy. Otherwise it fails deterministically and identifies the
+lost backend state.
 
 ## Closing a runtime session
 

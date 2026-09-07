@@ -71,9 +71,12 @@ count-and-byte budgets.
 
 ## One operation and many operations use the same path
 
-A one-operation demand forms a one-operation executable program. A larger
-compatible chain can be decomposed, fused, or scheduled as a group. There is no
-separate immediate engine for the small case.
+A one-operation demand forms a one-operation executable program. In a larger
+compatible chain, the runtime can translate an operation into equivalent
+supported work, combine several calculations so they need fewer physical
+kernels, or preserve enough dependencies for the backend to choose their
+execution order. Later chapters name these mechanisms decomposition, fusion,
+and scheduling. There is no separate immediate engine for the small case.
 
 This matters for correctness and maintenance. Views, mutations, errors,
 automatic differentiation, and backend selection need one set of rules, not an
@@ -86,11 +89,15 @@ Pure work has no observable consequence when its output is never used, so it
 can remain pending and later be discarded. An admitted effect cannot disappear
 merely because the public tensor that led to it was dropped.
 
-Pending effects can coalesce within the outermost host entry. At the end of that
-entry, one documented microtask flush gives mandatory effects a progress point.
-Pure work does not receive a timer-based flush. This distinction avoids running
-dead computations while ensuring that ordered mutations and updates do not wait
-forever for an unrelated observation.
+A **host entry** is one call from the Python or JavaScript frontend into the
+runtime. The outermost host entry begins before any nested runtime calls and
+ends when control is about to return to the JavaScript event loop. Pending
+effects can coalesce inside that boundary. At its end, the runtime schedules one
+microtask—JavaScript work that runs after the current call stack and before the
+next event—to give mandatory effects a progress point. Pure work does not
+receive a timer-based flush. This distinction avoids running dead computations
+while ensuring that ordered mutations and updates do not wait forever for an
+unrelated observation.
 
 Random-number position is reserved during admission. Removing an unused random
 result can therefore skip its numerical kernel without changing the semantic

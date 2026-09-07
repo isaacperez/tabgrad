@@ -27,9 +27,12 @@ you need a short reminder.
   Tabgrad has WebGPU and WebAssembly numerical backends.
 
 **Backend capability snapshot**
-: An immutable set of truthful features and limits for one backend generation.
-  Admission, program formation, preparation, and cache validation consume the
-  same snapshot instead of maintaining separate support tables.
+: One immutable description for a backend generation containing truthful
+  capability facts and a separate generation token. Admission, program
+  formation, preparation, and cache validation consume the same snapshot
+  instead of maintaining separate support tables. A program retains only the
+  semantic capability facts needed by its target profile, not the generation
+  token.
 
 **Backend generation**
 : A token identifying one valid lifetime of a backend context or device. Old
@@ -39,16 +42,30 @@ callbacks, materializations, and prepared work cannot mutate a newer generation.
 : A conceptual point where responsibility changes. It does not by itself imply
   a thread, process, network, message, or copy.
 
+**Boundary-binding recipe**
+: A structural description of how one invocation's live inputs, outputs, and
+  other per-call values fill the external slots of a reusable executable
+  program.
+
 ## C
 
 **Capability**
 : A truthful backend fact, such as a supported data type, buffer limit,
   workgroup limit, vector instruction feature, or thread availability.
 
+**Capability fingerprint**
+: A stable identity for the semantic capability facts relevant to program
+  preparation. It excludes the separate backend-generation token, which is
+  also required for prepared and invocation identity.
+
 **CompiledCallable**
 : An optional frontend adapter that uses complete guards to select direct reuse
   of an existing executable program and otherwise invokes the whole ordinary
   callable.
+
+**Compute domain**
+: An executable program domain naming one selected numerical backend family and
+  the target-profile assumptions under which its computations are legal.
 
 **Contract**
 : The requests, results, and rules exchanged across a responsibility boundary.
@@ -81,18 +98,22 @@ callbacks, materializations, and prepared work cannot mutate a newer generation.
 
 **ExecutableProgram**
 : An immutable, structurally hashable, finite value in Tabgrad's common program
-  schema. It names one execution domain and the target-profile assumptions for
-  selected work, dependencies, virtual storage, guards, capabilities, liveness,
-  and provenance while excluding physical backend choices.
+  schema. Its discriminator names either one compute domain or one explicit
+  source-to-destination transfer domain. It describes selected work,
+  dependencies, virtual storage, guards, capabilities, liveness, and provenance
+  while excluding physical backend choices.
 
 **ExecutionRequest**
 : Per-invocation backend bindings, dynamic values, generation tokens, and
-  cancellation state. It does not contain permanent program or model state.
+  cancellation state. A transfer request also aggregates its two endpoint
+  states and staging lifecycle. It does not contain permanent program or model
+  state.
 
 **ExecutionTicket**
 : The read-only per-invocation completion view that separates logical result
-  publication from final physical drain. It can share one underlying state
-  allocation with the request lifecycle.
+  publication from final physical drain. For a transfer, these signals aggregate
+  every endpoint that actually started. The ticket can share one underlying
+  state allocation with the request lifecycle.
 
 ## F
 
@@ -121,6 +142,11 @@ callbacks, materializations, and prepared work cannot mutate a newer generation.
 **Handle**
 : A small stable identifier through which a public tensor refers to runtime-owned
   semantic state. It is not the tensor payload or a backend address.
+
+**Host entry**
+: The outermost call from a Python or JavaScript frontend into the runtime before
+  control returns to the JavaScript event loop. Nested runtime calls remain
+  inside the same host entry.
 
 ## I
 
@@ -218,13 +244,24 @@ lifecycle for one frontend execution environment.
 
 **Semantic pin**
 : A runtime-owned obligation to keep one logical materialization usable until
-its semantic owner releases it.
+  its semantic owner releases it.
+
+**Staging lease**
+: Temporary physical storage used to move bytes across an explicit boundary. A
+  transfer coordinator owns its lifetime, while the supplying backend owns its
+  allocation; it cannot be released until every endpoint that started has
+  drained and no longer uses it.
 
 **StorageState**
 : Shared logical storage and alias identity, current mutation version, and
-ordered writer/effect state.
+  ordered writer/effect state.
 
 ## T
+
+**Target profile**
+: The backend-family and semantic capability assumptions recorded in an
+  executable program. It excludes a particular physical generation, compiler,
+  kernel, buffer, or address.
 
 **TensorState**
 : Stable public tensor and differentiable-leaf identity, current logical value,
@@ -233,6 +270,12 @@ public lifetime, and gradient attachment points.
 **TensorValue**
 : One immutable logical version with shape, data type, device, layout or view,
 producer, dependencies, and observed storage version.
+
+**Transfer domain**
+: An executable program domain declaring one source backend, one destination
+  backend, their byte and layout contract, and completion dependencies. The
+  runtime coordinates its endpoint operations; it is not a third numerical
+  backend or hidden fallback.
 
 **Transport adapter**
 : A small mechanism that carries the runtime client contract through direct

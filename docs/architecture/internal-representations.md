@@ -4,24 +4,35 @@ An **intermediate representation** is structured data that describes a
 computation so another part of a system can inspect and transform it. The common
 abbreviation is **IR**. Tabgrad needs two internal descriptions because the
 meaning accumulated while user code runs has a different lifetime and purpose
-from the finite work a backend must execute now.
+from the finite work that must execute now.
 
-There is also a third, backend-private preparation level. It is not another
-common IR because it contains physical choices that are intentionally different
-for WebGPU and WebAssembly.
+There is also a third, backend-private preparation level for computation. It is
+not another common IR because it contains physical choices that are
+intentionally different for WebGPU and WebAssembly. An explicit transfer uses
+the same common program schema, but the runtime coordinates its source and
+destination endpoints instead of asking one compute backend to prepare the
+whole route.
 
 ## The three descriptions
 
 ```mermaid
 flowchart TD
     Semantic[Incremental semantic graph<br/>what the executed user program means]
-    Program[ExecutableProgram<br/>common schema, selected target]
+    Program[ExecutableProgram<br/>common schema, declared execution domain]
+    Domain{Execution domain}
     WebGPU[WebGPU PreparedExecutable<br/>pipelines and encoding plan]
     WebAssembly[WebAssembly PreparedExecutable<br/>exports, instances, and memory plan]
+    Coordinator[Runtime transfer coordinator]
+    Source[Source endpoint<br/>read or copy out]
+    Staging[Explicit staging lease]
+    Destination[Destination endpoint<br/>write or copy in]
 
     Semantic -->|select a demanded/effect closure<br/>and form a common program| Program
-    Program -->|prepare for capabilities<br/>and backend generation| WebGPU
-    Program -->|prepare for capabilities<br/>and backend generation| WebAssembly
+    Program --> Domain
+    Domain -->|WebGPU computation| WebGPU
+    Domain -->|WebAssembly computation| WebAssembly
+    Domain -->|explicit source-to-destination transfer| Coordinator
+    Coordinator --> Source --> Staging --> Destination
 ```
 
 The questions are different:
@@ -29,10 +40,12 @@ The questions are different:
 1. The incremental semantic graph asks, “What tensor operations did the host
    program actually perform, and what do their values and effects mean?”
 2. `ExecutableProgram` asks, “What finite work in the common executable
-   vocabulary is required for these roots on this selected backend and its
-   declared capabilities?”
-3. `PreparedExecutable` asks, “How will this backend execute that program on
-   this backend or device generation?”
+   vocabulary is required for these roots, and is its execution domain one
+   compute backend or one explicit transfer route?”
+3. For a compute-domain program, `PreparedExecutable` asks, “How will this
+   backend execute that program in its current generation?” A transfer-domain
+   program instead asks the runtime coordinator to sequence two opaque endpoint
+   operations and own their shared lifetime.
 
 Combining these levels would either leak public semantics and historical state
 into kernels or leak physical buffers and pipelines into a supposedly reusable
@@ -82,13 +95,23 @@ dispatch geometry.
 
 `ExecutableProgram` is an immutable, structurally hashable description of one
 finite unit of executable work. There is one program schema, not separate
-“common” and “target-profiled” program types. Each executable value names its
-execution domain and records the target-profile assumptions needed to keep the
-work legal. Its computation vocabulary remains common to both numerical
-backends and contains no physical kernel or resource. It contains:
+“common,” “target-profiled,” and “transfer” program types. Each executable value
+has an execution-domain discriminator:
+
+- a **compute domain** names one numerical backend family and the capability
+  profile needed to keep its lowered computation legal; or
+- a **transfer domain** names the source and destination backend families, the
+  byte and layout contract, and the completion dependencies of one explicit
+  route.
+
+A compute-domain program contains backend-neutral computation but no physical
+kernel or resource. A transfer-domain program contains one explicit transfer
+record instead of pretending that either endpoint owns the complete route. The
+common schema contains:
 
 - program values and virtual storage slots;
-- versioned backend-neutral `LoweredComputation` records;
+- versioned backend-neutral `LoweredComputation` records for compute, or the
+  source, destination, byte, layout, and completion contract for transfer;
 - symbolic shape and layout facts;
 - compact access and alias facts;
 - authoritative data and effect dependencies;
@@ -123,27 +146,35 @@ hit can therefore report the current call without retaining or impersonating an
 older semantic occurrence.
 
 Target profiling does not make the physical schedule common. It records only
-the backend-family and capability facts needed to keep the shared executable
-vocabulary legal and truthful. Two targets can therefore produce different
-values of the same `ExecutableProgram` schema without creating two semantic
-engines.
+the backend-family and semantic capability facts needed to keep the shared
+executable vocabulary legal and truthful. It never captures the identity of a
+particular backend generation. Two compute targets—or two endpoint profiles for
+a transfer—can therefore produce different values of the same
+`ExecutableProgram` schema without creating separate semantic engines.
 
 ## Level three: backend-private preparation
 
-Preparing a program chooses physical details for one backend and capability
-fingerprint. The opaque result is `PreparedExecutable`. WebGPU preparation can
-own pipelines, bind-group strategy, and a command-encoding plan. WebAssembly
-preparation can own modules, compiled exports, instance strategy, and a linear-
-memory plan.
+Preparing a compute-domain program chooses physical details for one backend,
+capability fingerprint, and generation. The opaque result is
+`PreparedExecutable`. WebGPU preparation can own pipelines, bind-group strategy,
+and a command-encoding plan. WebAssembly preparation can own modules, compiled
+exports, instance strategy, and a linear-memory plan.
 
 `PreparedExecutable` is reusable while its full key remains valid, but it is not
 portable between backends or device generations and it is not an invocation in
 progress. A fresh execution request supplies current bindings and produces a
 fresh completion lifecycle.
 
+A transfer-domain program is not passed to one backend's preparation entry
+point. Runtime invocation coordination validates both endpoint generations,
+asks each backend only for its opaque read/copy-out or write/copy-in operation,
+and owns the composite request and staging lifetime. This discriminated path is
+not another program schema or a third numerical backend.
+
 ## Legal transformations versus profitable physical choices
 
-The runtime and backend have complementary responsibilities:
+For compute-domain work, the runtime and selected backend have complementary
+responsibilities:
 
 | Decision | Owner |
 | --- | --- |
@@ -173,12 +204,12 @@ materialized and drained, later work may instead bind its backend-resident
 output without reading it back to the host.
 
 Semantic incorporation must not mean copying every child computation on every
-hot invocation. On the first structural combination, a flat-composition cache
-may form and normalize the complete program. Its key uses the already computed
-fingerprints of reusable children, their boundary remaps, the structural
-description of new ordinary segments, and the target profile. A hit reuses the
-flat program and creates only fresh invocation bindings, identities, guards,
-history, and lifecycle state.
+hot invocation. When a mixed structure is retained for repeated use, its first
+structural combination forms and normalizes a bounded flat-composition cache
+entry. The key uses the already computed fingerprints of reusable children,
+their boundary remaps, the structural description of new ordinary segments, and
+the target profile. A hit reuses the flat program and creates only fresh
+invocation bindings, identities, guards, history, and lifecycle state.
 
 This is a cache over ordinary `ExecutableProgram` values, not a new composite
 IR or stateful planner. On a miss, flattening is proportional to the complete
@@ -201,10 +232,13 @@ cost above and does not traverse unchanged child computations.
 Structural program caches and backend prepared caches have independent count-
 and-byte budgets, but their keys deliberately cover different lifetimes. A
 structural-program key includes program-format and semantic-lowering versions,
-structural child fingerprints, target-profile assumptions, specialization, and
-every semantic fact that can change the formed program. It excludes physical
-backend generation, compiler and kernel state. A prepared-executable key adds
-the selected backend, compiler and kernel versions, capability fingerprint,
-specialization, and backend/device generation. Device recreation can therefore
-invalidate physical preparation without needlessly invalidating reusable common
-program structure. A hit never reuses occurrence-specific semantic identities.
+structural child fingerprints, execution-domain and target-profile assumptions,
+specialization, and every semantic fact that can change the formed program. A
+transfer program's structural key therefore covers its source and destination
+profiles and transfer contract. Structural keys exclude physical backend
+generations, compiler state, and kernel state. For compute, a
+prepared-executable key adds the selected backend, compiler and kernel versions,
+capability fingerprint, specialization, and backend/device generation. Device
+recreation can therefore invalidate physical preparation without needlessly
+invalidating reusable common program structure. A hit never reuses
+occurrence-specific semantic identities.

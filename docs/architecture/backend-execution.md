@@ -1,10 +1,12 @@
 # Backend execution
 
 Tabgrad has one semantic runtime and exactly two numerical backend families.
-Both accept the same kind of finite `ExecutableProgram`, but they remain free to
-choose different physical layouts, kernels, schedules, and memory strategies.
-This is how the architecture shares meaning without forcing a graphics
-processor and a central processor into an artificial common implementation.
+Both accept compute-domain values from the same finite `ExecutableProgram`
+schema, but they remain free to choose different physical layouts, kernels,
+schedules, and memory strategies. The runtime coordinates transfer-domain
+values across their two explicit endpoints. This is how the architecture shares
+meaning without forcing a graphics processor and a central processor into an
+artificial common implementation.
 
 ## The backend execution contract
 
@@ -12,11 +14,11 @@ The **backend execution contract** is the agreement through which the runtime
 can:
 
 - obtain a truthful capability description;
-- prepare an immutable executable program;
+- prepare an immutable compute-domain executable program;
 - bind opaque current inputs, outputs, and saved materializations;
 - submit one execution request;
 - receive logical result and physical-drain signals;
-- request explicit observation or transfer staging; and
+- request explicit observation or a transfer endpoint operation; and
 - close or replace a backend context without confusing generations.
 
 The contract does not expose `GPUBuffer` objects, WebAssembly pointers, allocator
@@ -28,17 +30,20 @@ semantic runtime.
 A backend exposes one immutable `BackendCapabilitySnapshot` for a particular
 backend generation. It includes only facts the backend can report reliably:
 supported data types and features, buffer and binding limits, workgroup limits,
-WebAssembly vector support, thread availability, and generation identity. A
-backend must not invent a precise remaining-memory value when the platform does
-not expose one.
+WebAssembly vector support, thread availability, and a separate generation
+token. A backend must not invent a precise remaining-memory value when the
+platform does not expose one.
 
 Admission, program formation, and preparation consume that same snapshot rather
 than maintaining separate support tables. Admission rejects capability failures
 already knowable from the requested operation and target. Program formation
-records the requirements and profile assumptions of the complete finite work.
+copies only the semantic capability facts needed by the complete finite work
+into its target profile; it never captures the snapshot's generation token.
 Preparation verifies those requirements against the still-current snapshot and
-generation before choosing physical work. Repetition at later stages is a
-stale-generation safety check, not a second definition of support.
+generation before choosing physical work. The **capability fingerprint**
+identifies the relevant semantic facts, while the generation token remains a
+separate part of prepared and invocation identity. Repetition at later stages is
+a stale-generation safety check, not a second definition of support.
 
 A model or operation that exceeds the snapshot can be segmented only by an
 equivalent supported program for the same explicit target. Otherwise it fails
@@ -57,9 +62,11 @@ lifecycle are explained in
 flowchart TD
     Program[Immutable ExecutableProgram]
     Request[Fresh ExecutionRequest]
+    Target{Declared compute domain}
 
-    Program --> WGPrep[WebGPU preparation]
-    Program --> WAPrep[WebAssembly preparation]
+    Program --> Target
+    Target -->|WebGPU selected| WGPrep[WebGPU preparation]
+    Target -->|WebAssembly selected| WAPrep[WebAssembly preparation]
     WGPrep --> WGReady[PreparedExecutable<br/>pipelines and encoding plan]
     WAPrep --> WAReady[PreparedExecutable<br/>exports, instances, memory plan]
     Request --> WGReady
@@ -68,11 +75,13 @@ flowchart TD
     WAReady --> CPU[Leased or serialized instance<br/>and CPU invocation]
 ```
 
-The preparation key includes the program fingerprint; backend, compiler, and
-kernel versions; the complete capability and specialization fingerprints; and
-backend/device generation. Semantic-lowering versions are already represented
-by the program fingerprint rather than checked through a second support table.
-A cache hit is valid only when all relevant facts still match.
+The two branches in the diagram are alternatives, not simultaneous dispatch or
+fallback. The preparation key includes the program fingerprint; backend,
+compiler, and kernel versions; the complete capability and specialization
+fingerprints; and backend/device generation. Semantic-lowering versions are
+already represented by the program fingerprint rather than checked through a
+second support table. A cache hit is valid only when all relevant facts still
+match.
 
 WebGPU command buffers are single-use, so a prepared executable provides a plan
 from which each invocation encodes fresh commands. Mutable WebAssembly instances
@@ -129,10 +138,31 @@ is no longer associated with live tensor meaning.
 
 ## Transfers are programs, not fallback
 
-Moving a tensor between WebGPU and WebAssembly is an explicit two-endpoint
-executable program. Source staging and destination import can overlap when the
-platform permits it, but the source request and staging lease remain alive until
-the source side has drained.
+Moving a tensor between WebGPU and WebAssembly uses an explicit transfer-domain
+`ExecutableProgram`. It declares the source, destination, byte and layout
+contract, and completion dependencies. It is not sent to either compute
+backend's preparation entry point. The runtime coordinator validates both
+captured generations and asks the backends only for their opaque endpoint
+operations: source read/copy-out and destination write/copy-in.
+
+```mermaid
+flowchart LR
+    Program[Transfer-domain ExecutableProgram] --> Coordinator[Runtime transfer coordinator]
+    Coordinator --> Source[Source endpoint]
+    Source -->|success and readable staging| Destination[Destination endpoint]
+    Source --> Staging[Staging lease]
+    Staging --> Destination
+    Source -. endpoint ticket .-> Aggregate[Aggregate result and drain]
+    Destination -. endpoint ticket .-> Aggregate
+    Coordinator --> Aggregate
+```
+
+The coordinator owns one composite request, both generation tokens, the staging
+lifecycle, and the aggregate result/drain view. Staging remains live until every
+endpoint that actually started has drained and can no longer access it, even if
+the source drains first. Cancellation, partial failure, and generation loss use
+the complete rules in
+[Requests, completion, and failure](execution-lifecycle.md#explicit-transfer).
 
 Mixed-device operations follow their declared semantic rules. An unsupported
 operation or type reports the selected target and reason. It does not quietly
@@ -140,9 +170,9 @@ execute elsewhere and then return as if no transfer occurred.
 
 ## Backend generations and loss
 
-A backend context has an explicit generation. Reinitialization or WebGPU device
-loss creates a new generation. Old callbacks and prepared entries carry their
-old token and cannot mutate current owners.
+A backend context has an explicit generation. Device loss retires that
+generation; reinitializing the context creates a new one. Old callbacks and
+prepared entries carry their retired token and cannot mutate current owners.
 
 All old-generation materializations and prepared executables become invalid.
 Re-preparation is possible from the common program. Re-materialization is

@@ -5,9 +5,10 @@ JavaScript into efficient browser computation. It is written for programmers
 who understand ordinary software abstractions but have not designed a deep
 learning runtime.
 
-Start here. The documents are ordered so that a new term appears only after the
-problem it solves has been introduced. The [glossary](glossary.md) is a lookup
-aid, not a prerequisite.
+Start here. The documents introduce the main problems before explaining their
+detailed mechanisms. When a later concept must be mentioned early, the text
+gives a plain-language preview and points to the chapter that develops it. The
+[glossary](glossary.md) is a lookup aid, not a prerequisite.
 
 ## Why a tensor library needs an architecture
 
@@ -33,8 +34,8 @@ defining the meaning of matrix multiplication separately for every language and
 machine.
 
 The architecture assigns each of those decisions to one owner. This is what
-keeps a broad PyTorch-like interface, lazy optimization, training, and two very
-different browser execution targets consistent with one another.
+keeps a broad PyTorch-like interface, deferred numerical execution, training,
+and two very different browser execution targets consistent with one another.
 
 ## The three responsibilities
 
@@ -75,7 +76,9 @@ layout for a device without changing PyTorch-visible behavior.
 Tabgrad uses PyTorch-like public semantics over one TypeScript-owned,
 effect-aware, incrementally lazy runtime.
 
-- Calls are admitted and all knowable semantic errors are checked immediately.
+- Each public call is checked and recorded immediately. The
+  [operation-admission chapter](operation-admission.md) names and explains this
+  synchronous semantic step.
 - Pure numerical work is deferred until a result or ordered effect makes it
   necessary.
 - Each finite piece of demanded work follows the same common program path,

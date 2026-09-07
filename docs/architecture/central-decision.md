@@ -42,11 +42,14 @@ Tabgrad adopts these connected constraints:
    mandatory effects select finite closures under
    [bounded lazy execution](bounded-lazy-execution.md).
 5. Every selected closure, including a one-operation closure, becomes one
-   immutable `ExecutableProgram` using the common schema and an explicit target
-   profile.
+   immutable `ExecutableProgram` using the common schema. Its discriminated
+   execution domain is either one compute-backend target profile or one explicit
+   source-to-destination transfer route.
 6. Common passes own semantic legality and logical dependencies. Each backend
    privately owns profitable physical lowering, scheduling, preparation,
-   kernels, memory, dispatch, and completion.
+   kernels, memory, dispatch, and completion for its compute domain. The runtime
+   coordinates both opaque endpoint operations and their shared staging
+   lifecycle for a transfer domain.
 7. WebGPU with WebGPU Shading Language and the WebAssembly CPU implementation
    are the only numerical backends. Selection and transfer are explicit, with
    no silent fallback.
@@ -86,10 +89,10 @@ remaining concepts are data, indexes, passes, or views owned by those roots.
 | `DerivativeHistory` | Live derivative records and use counts with an independent semantic lifetime |
 | `MaterializationTable` | Session-owned index from logical versions to opaque backend references |
 | Admission, demand selection, differentiation, and program formation | Ordinary passes over records unless later evidence requires state of their own |
-| `ExecutableProgram` | Immutable common-schema data for one finite target and its declared capabilities |
-| `PreparedExecutable` | Opaque backend-owned cached preparation |
-| `BackendCapabilitySnapshot` | Immutable per-generation data consumed by every support check |
-| `ExecutionRequest` and `ExecutionTicket` | One invocation's mutable state and a read-only completion view; they need not be independent allocations |
+| `ExecutableProgram` | Immutable common-schema data for one finite compute target or explicit transfer route |
+| `PreparedExecutable` | Opaque backend-owned cached preparation for compute-domain work |
+| `BackendCapabilitySnapshot` | Immutable semantic capabilities plus a separate token for one backend generation |
+| `ExecutionRequest` and `ExecutionTicket` | One invocation's mutable state and a read-only completion view, including aggregate endpoint state for transfers; they need not be independent allocations |
 | Transport and `CompiledCallable` adapters | Thin boundary mechanisms over the same runtime path |
 
 This shape preserves the semantic distinctions that correctness requires
@@ -153,8 +156,11 @@ The decision integrates:
   identified by SHA-256
   `2060a8a83655e5fb937366a8705e1437d9bbe6ac03a7139cb6d855002bde4457`;
 - the [independent final challenge](https://github.com/isaacperez/tabgrad/issues/11#issuecomment-5565227563);
+- the [explicit approval record](https://github.com/isaacperez/tabgrad/issues/11#issuecomment-5565539190);
   and
-- the [explicit approval record](https://github.com/isaacperez/tabgrad/issues/11#issuecomment-5565539190).
+- the [approved structural refinement](https://github.com/isaacperez/tabgrad/issues/11#issuecomment-5566038792)
+  covering flat composition, program calls, capability identity, cache keys,
+  and invocation views.
 
 Experiments used bounded real WebAssembly and WebGPU work and separated
 correctness, lifecycle, memory, host-policy cost, preparation, dispatch, and
@@ -167,8 +173,9 @@ The reusable-training experiment established that mixed semantic selections can
 be flattened correctly, but it did not prove the asymptotic cost of repeated
 large mixed compositions. The accepted refinement therefore requires a bounded
 flat-composition cache whose hot lookup uses existing child fingerprints and
-boundary structure. Production implementation must still measure that path; the
-documentation does not turn the structural requirement into a speed claim.
+boundary structure. An implementation may claim that hot path is efficient only
+when representative measurements support the claim; the structural requirement
+alone is not performance evidence.
 
 | Gate | Evidence record |
 | --- | --- |

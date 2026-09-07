@@ -58,21 +58,28 @@ identity. These equivalent expressions are introduced as *decompositions* in
 [Operation admission](operation-admission.md). For example, the definition
 states what a matrix multiplication means for every caller.
 
-An `OperationRecord` represents one admitted occurrence with concrete inputs,
-outputs, normalized attributes, source information, dependencies, ordered
-effects, and derivative facts. Every call to matrix multiplication gets a fresh
-record even though all calls share one definition.
+An `OperationRecord` represents one concrete call after the runtime has checked
+and recorded it. This synchronous process is called **operation admission** and
+is explained in the [next chapter](operation-admission.md). The record contains
+the call's inputs, outputs, normalized attributes, source information,
+dependencies, ordered effects, and derivative facts. Every call to matrix
+multiplication gets a fresh record even though all calls share one definition.
 
-A `ProgramCallRecord` is the specialized operation record used when one
-occurrence invokes an already reusable executable program. It preserves the
-same semantic position as an ordinary operation occurrence; it is not an opaque
-shortcut around effects or automatic differentiation.
+Repeated model work creates a related problem. The runtime may reuse an
+immutable description of computation instead of rebuilding identical work, but
+each invocation must still occupy a fresh semantic position with its own values,
+effects, errors, and derivative history. A `ProgramCallRecord` is the specialized
+operation record for that occurrence. It is not an opaque shortcut around
+ordinary semantics or automatic differentiation. The complete reuse mechanism
+is introduced in [Reusable programs and compiled callables](reusable-programs.md).
 
 This specialization does not require a separate record store or graph. A
-compact implementation can represent it as a tagged `OperationRecord` whose
-payload refers to immutable reusable-program structure and a boundary-binding
-recipe. It follows the same indexing, reachability, error, and reclamation rules
-as every other operation occurrence.
+compact implementation can represent it as a tagged `OperationRecord`. Its
+payload identifies the immutable reusable program and includes a
+**boundary-binding recipe**: a structural description of how live inputs,
+outputs, and other per-call values fill the reusable program's external slots.
+It follows the same indexing, reachability, error, and reclamation rules as
+every other operation occurrence.
 
 ```mermaid
 flowchart TB
@@ -87,8 +94,10 @@ flowchart TB
 
 When gradients are tracked, the runtime needs a lifetime that can outlive an
 ordinary forward record. `DerivativeHistory` owns dynamic derivative edges and
-recipes, saved logical values and their expected storage versions,
-random-number reservations, callback ordering, and explicit use counts.
+recipes, saved logical values and their expected storage versions, callback
+ordering, and explicit use counts. It also retains any random-number reservation
+bound to the forward call: the position or interval reserved in semantic order
+so recomputation cannot silently use different randomness.
 
 These facts are not three copies of the derivative rule. The
 `OperationDefinition` supplies the reusable rule, an admitted occurrence binds
@@ -99,8 +108,10 @@ This ownership is deliberate. A saved activation can have no public tensor
 handle and still remain alive because backward computation needs it. Conversely,
 dropped public tensors do not force the runtime to retain an entire historical
 graph. When a reusable program participates in differentiation, its
-`ProgramCallRecord` can attach a recipe for a fresh vector-Jacobian-product
-program to fresh history for that invocation.
+`ProgramCallRecord` can attach a recipe for fresh backward computation to the
+history for that invocation. This backward form is a vector-Jacobian product,
+introduced with the other derivative directions in
+[Automatic differentiation and training](autograd-and-training.md#vector-jacobian-and-jacobian-vector-products).
 
 Derivative history owns the obligation to keep a logical saved value usable. It
 does not own a graphics-processor buffer, WebAssembly pointer, or allocator
