@@ -87,10 +87,11 @@ flowchart LR
     E -->|No production code| N[Content-specific checks]
     T --> F[Verification, review, and merge]
     R --> F
-    X --> F
     N --> F
     F --> G[Observed repository and compatibility state]
     G --> H[Re-evaluate the milestone]
+    X --> Y[Research acceptance and recorded decision]
+    Y --> H
     H -->|More required work| C
     H -->|Outcome complete| I[Close the milestone]
     I --> J[Define the next bounded outcome]
