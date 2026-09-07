@@ -132,14 +132,14 @@ flowchart LR
     Value[TensorValue<br/>logical storage version] --> Table[MaterializationTable<br/>opaque association and readiness]
     Table --> Ref[Opaque backend reference]
     Ref --> Pool[Backend-owned allocation<br/>and physical lease]
-    History[History or request] -->|semantic pin and<br/>release obligation| Table
+    History[Derivative history or<br/>runtime invocation state] -->|semantic pin and<br/>release obligation| Table
     Ticket[Physical work] -->|must drain before reuse| Pool
 ```
 
 The ownership line is exact:
 
-- runtime history or an invocation owns a semantic pin and the obligation to
-  release it;
+- derivative history or runtime invocation state owns a semantic pin and the
+  obligation to release it;
 - the `MaterializationTable` owns the opaque association between logical state
   and a backend reference; and
 - the backend owns allocation, pooling, the physical lease, and byte reuse.

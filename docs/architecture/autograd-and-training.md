@@ -132,6 +132,14 @@ differentiable language. A compiled variant that has not implemented an
 equivalent retained or higher-order recipe must miss or reject before partially
 admitting its VJP.
 
+Derivative traversal and callback bookkeeping must permit reentrant backward. A
+backward callback may start another backward computation without corrupting or
+globally locking the outer traversal. Each invocation retains its own traversal,
+error, and lifetime state while shared saved values continue to obey their
+ordinary pin and storage-version rules. This is an architectural constraint, not
+a claim that every release supports every retained or higher-order derivative
+mode.
+
 Unsupported derivative modes fail explicitly. They do not silently detach
 gradients, reuse stale history, or switch to a second implementation.
 

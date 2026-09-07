@@ -130,7 +130,7 @@ sequenceDiagram
     Backend-->>Runtime: result promise settles
     Runtime-->>Python: publish value or causal error
     Backend-->>Runtime: drained promise settles
-    Runtime->>Runtime: release request-owned resources
+    Runtime->>Runtime: release invocation-state semantic pins
 ```
 
 Reentrant Python-to-JavaScript-to-Python callbacks propagate and restore runtime
@@ -211,5 +211,6 @@ to the documented close contract, releases semantic pins, and releases backend-
 context references after physical drain. The session then becomes closed.
 
 Closing is a lifecycle boundary, not a second execution mode. It cannot report
-success while submitted effects, undelivered errors, or request-owned physical
-resources remain unaccounted for.
+success while submitted effects, undelivered errors, or backend-owned physical
+resources retained for an invocation remain undrained or otherwise unaccounted
+for.
