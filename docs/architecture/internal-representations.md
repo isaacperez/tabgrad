@@ -15,7 +15,7 @@ for WebGPU and WebAssembly.
 ```mermaid
 flowchart TD
     Semantic[Incremental semantic graph<br/>what the executed user program means]
-    Program[ExecutableProgram<br/>what finite target-ready work must run]
+    Program[ExecutableProgram<br/>common schema, selected target]
     WebGPU[WebGPU PreparedExecutable<br/>pipelines and encoding plan]
     WebAssembly[WebAssembly PreparedExecutable<br/>exports, instances, and memory plan]
 
@@ -28,8 +28,9 @@ The questions are different:
 
 1. The incremental semantic graph asks, “What tensor operations did the host
    program actually perform, and what do their values and effects mean?”
-2. `ExecutableProgram` asks, “What finite, backend-neutral work is required for
-   these roots on this target profile?”
+2. `ExecutableProgram` asks, “What finite work in the common executable
+   vocabulary is required for these roots on this selected backend and its
+   declared capabilities?”
 3. `PreparedExecutable` asks, “How will this backend execute that program on
    this backend or device generation?”
 
@@ -80,7 +81,11 @@ dispatch geometry.
 ## Level two: `ExecutableProgram`
 
 `ExecutableProgram` is an immutable, structurally hashable description of one
-finite unit of executable work. It contains:
+finite unit of executable work. There is one program schema, not separate
+“common” and “target-profiled” program types. Each executable value names its
+execution domain and records the target-profile assumptions needed to keep the
+work legal. Its computation vocabulary remains common to both numerical
+backends and contains no physical kernel or resource. It contains:
 
 - program values and virtual storage slots;
 - versioned backend-neutral `LoweredComputation` records;
@@ -111,9 +116,17 @@ tensor and storage state. Training can replace their current `TensorValue`
 without changing stable parameter identity or invalidating a program solely
 because bytes changed.
 
-A program can be **target-profiled** when capabilities or legal lowering differ
-between targets. This does not make its physical schedule common. It records
-only the target facts needed to keep the common program legal and truthful.
+Diagnostic provenance inside the program is likewise structural: it identifies
+stable operation names and source slots. Fresh occurrence identifiers and the
+mapping from this invocation to those slots belong to invocation state. A cache
+hit can therefore report the current call without retaining or impersonating an
+older semantic occurrence.
+
+Target profiling does not make the physical schedule common. It records only
+the backend-family and capability facts needed to keep the shared executable
+vocabulary legal and truthful. Two targets can therefore produce different
+values of the same `ExecutableProgram` schema without creating two semantic
+engines.
 
 ## Level three: backend-private preparation
 
@@ -150,25 +163,48 @@ private.
 ## Mixed ordinary and reusable work
 
 A selected region can contain ordinary `OperationRecord` objects and
-`ProgramCallRecord` objects. Program formation expands a reusable call's common
-program into the selected result, remapping values, virtual storage,
-dependencies, guards, capabilities, and mutation transitions.
+tagged `ProgramCallRecord` objects. Program formation semantically incorporates
+a reusable call's program into the selected result, remapping boundary values,
+virtual storage, dependencies, guards, capabilities, and mutation transitions.
 
 The output is one native `ExecutableProgram`, not an opaque nested-program
 instruction that a backend must interpret. If the reusable call already
 materialized and drained, later work may instead bind its backend-resident
 output without reading it back to the host.
 
+Semantic incorporation must not mean copying every child computation on every
+hot invocation. On the first structural combination, a flat-composition cache
+may form and normalize the complete program. Its key uses the already computed
+fingerprints of reusable children, their boundary remaps, the structural
+description of new ordinary segments, and the target profile. A hit reuses the
+flat program and creates only fresh invocation bindings, identities, guards,
+history, and lifecycle state.
+
+This is a cache over ordinary `ExecutableProgram` values, not a new composite
+IR or stateful planner. On a miss, flattening is proportional to the complete
+formed program. On a hit, lookup and attachment are proportional to the number
+of child calls, boundary values, guards, and new ordinary records rather than
+to every computation inside an unchanged reusable child. Sending opaque nested
+calls to each backend or always materializing their boundaries would merely
+move complexity or discard fusion opportunities.
+
 ## Complexity and bounded caches
 
 For `S` selected semantic operations, `E` selected dependency or effect edges,
-and `A` compact rank, access, and symbolic facts, traversal and program formation
-must be proportional to `S + E + A`, apart from explicitly justified bounded
-allocation factors. The default path performs no global sort, pairwise alias
-scan, per-element access-set construction, or scan of unrelated graph history.
+and `A` compact rank, access, and symbolic facts, traversal and first-time
+program formation must be proportional to `S + E + A`, apart from explicitly
+justified bounded allocation factors. The default path performs no global sort,
+pairwise alias scan, per-element access-set construction, or scan of unrelated
+graph history. A repeated flat-composition hit obeys the boundary-proportional
+cost above and does not traverse unchanged child computations.
 
 Structural program caches and backend prepared caches have independent count-
-and-byte budgets. Cache keys include every version, capability, specialization,
-compiler, kernel, backend, and generation fact that can affect validity. A hit
-may reuse structure or preparation; it never reuses occurrence-specific
-semantic identities.
+and-byte budgets, but their keys deliberately cover different lifetimes. A
+structural-program key includes program-format and semantic-lowering versions,
+structural child fingerprints, target-profile assumptions, specialization, and
+every semantic fact that can change the formed program. It excludes physical
+backend generation, compiler and kernel state. A prepared-executable key adds
+the selected backend, compiler and kernel versions, capability fingerprint,
+specialization, and backend/device generation. Device recreation can therefore
+invalidate physical preparation without needlessly invalidating reusable common
+program structure. A hit never reuses occurrence-specific semantic identities.

@@ -24,7 +24,12 @@ you need a short reminder.
 
 **Backend**
 : The owner of physical preparation and numerical execution for one target.
-Tabgrad has WebGPU and WebAssembly numerical backends.
+  Tabgrad has WebGPU and WebAssembly numerical backends.
+
+**Backend capability snapshot**
+: An immutable set of truthful features and limits for one backend generation.
+  Admission, program formation, preparation, and cache validation consume the
+  same snapshot instead of maintaining separate support tables.
 
 **Backend generation**
 : A token identifying one valid lifetime of a backend context or device. Old
@@ -75,19 +80,26 @@ callbacks, materializations, and prepared work cannot mutate a newer generation.
   gradient accumulation, or optimizer update.
 
 **ExecutableProgram**
-: An immutable, structurally hashable, finite, backend-neutral or target-profiled
-  description of selected work, dependencies, virtual storage, guards,
-  capabilities, liveness, and provenance.
+: An immutable, structurally hashable, finite value in Tabgrad's common program
+  schema. It names one execution domain and the target-profile assumptions for
+  selected work, dependencies, virtual storage, guards, capabilities, liveness,
+  and provenance while excluding physical backend choices.
 
 **ExecutionRequest**
 : Per-invocation backend bindings, dynamic values, generation tokens, and
   cancellation state. It does not contain permanent program or model state.
 
 **ExecutionTicket**
-: The per-invocation lifecycle that separates logical result publication from
-  final physical drain.
+: The read-only per-invocation completion view that separates logical result
+  publication from final physical drain. It can share one underlying state
+  allocation with the request lifecycle.
 
 ## F
+
+**Flat-composition cache**
+: A bounded structural cache that forms one flat executable program from
+  reusable child-program fingerprints, boundary remaps, new exterior work, and
+  a target profile. A hit does not copy every unchanged child computation.
 
 **Frontend**
 : The Python or JavaScript/TypeScript public surface that adopts a language's
@@ -126,13 +138,13 @@ different internal descriptions.
 
 **Jacobian-vector product (JVP)**
 : A derivative computation that propagates a chosen input direction forward
-without forming the complete Jacobian matrix.
+  without forming the complete Jacobian matrix.
 
 ## K
 
 **Kernel**
 : A reusable, optimized numerical routine for work such as matrix multiplication,
-normalization, attention, or an elementwise region.
+  normalization, attention, or an elementwise region.
 
 ## L
 
@@ -178,8 +190,9 @@ capability fingerprint, software-version set, and backend generation. It is not
 an invocation in progress.
 
 **ProgramCallRecord**
-: An operation-record specialization representing one fresh semantic invocation
-of a reusable executable program.
+: A tagged `OperationRecord` specialization representing one fresh semantic
+  invocation of a reusable executable program. It does not require a separate
+  graph or record store.
 
 ## R
 
@@ -200,8 +213,8 @@ lifecycle for one frontend execution environment.
 
 **Schedule**
 : An order and grouping of work constrained by data, effects, and release rules.
-The common program owns authoritative dependencies; the backend owns the
-physical schedule.
+  The common program owns authoritative dependencies; the backend owns the
+  physical schedule.
 
 **Semantic pin**
 : A runtime-owned obligation to keep one logical materialization usable until
@@ -229,7 +242,7 @@ calls, Pyodide, or a worker without owning tensor semantics.
 
 **Vector-Jacobian product (VJP)**
 : A derivative computation that propagates an incoming output gradient backward
-toward inputs without forming the complete Jacobian matrix.
+  toward inputs without forming the complete Jacobian matrix.
 
 ## W
 

@@ -80,6 +80,12 @@ such as shape, data type, and device. The handle identifies state owned by the
 runtime. It is not a copy of the tensor's numerical payload and it is not a
 WebGPU buffer or WebAssembly address.
 
+Frontend metadata is a convenience snapshot, not a second source of truth. It
+is derived from the handle's current runtime state and must be refreshed or
+version-checked when an allowed operation can change public metadata. This
+prevents Python and JavaScript wrappers from disagreeing with the runtime after
+a view or in-place metadata mutation.
+
 The payload enters or leaves this ownership boundary only for explicit import,
 export, transfer, or observation. Chained operations pass handles, so model
 weights and intermediate activations can remain resident in backend memory.

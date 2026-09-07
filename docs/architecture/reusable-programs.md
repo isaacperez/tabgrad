@@ -46,6 +46,10 @@ output, derivative-history, random-number, error, and ticket identities. A
 missing current materialization fails before submission instead of using a
 stale physical reference.
 
+The semantic occurrence is represented by the tagged `ProgramCallRecord`
+specialization of `OperationRecord`. It uses the ordinary semantic tables and
+lifetimes; it is not a separate graph node hierarchy or execution manager.
+
 ## The guarded callable adapter
 
 `CompiledCallable` is an optional frontend adapter over direct invocation. A
@@ -86,12 +90,20 @@ VJP recipe. A variant can instead declare itself inference-only; a call that
 requires gradients or training must then miss or reject before partial
 execution.
 
-Mixed selected work is not passed to a backend as opaque nested calls. Program
-formation expands ordinary operations and reusable program calls into one
-common `ExecutableProgram`, with remapped values, virtual storage, dependencies,
-effects, guards, capabilities, and mutation transitions. An already
-materialized and drained program boundary can remain as a backend-resident input
-without host readback.
+Mixed selected work is not passed to a backend as opaque nested calls. On the
+first structural combination, program formation flattens ordinary operations
+and reusable program calls into one common-schema `ExecutableProgram`, with
+remapped values, virtual storage, dependencies, effects, guards, capabilities,
+and mutation transitions. A bounded flat-composition cache keys that result by
+existing child-program fingerprints, boundary remaps, new exterior structure,
+and target profile. A repeated hit reuses the flat program without walking or
+copying every internal child computation.
+
+This cache is an ordinary executable-program cache, not a new composite IR.
+Every invocation still creates fresh bindings and semantic/lifecycle state. An
+already materialized and drained program boundary can instead remain as a
+backend-resident input without host readback when preserving that boundary is
+the selected legal plan.
 
 An explicitly compiled whole training step is legal only as another fully
 guarded variant of this same mechanism. It does not create a special optimizer
@@ -105,8 +117,9 @@ unbounded shapes, token positions, source traces, failure objects, programs, or
 prepared executables.
 
 A reusable hit path is proportional to live inputs, outputs, guards, saved
-slots, captured-state resolutions, and program invocations. It must not rebuild
-all internal forward and backward operation records under a different name.
+slots, captured-state resolutions, program-call boundaries, and new ordinary
+records. It must not rebuild internal forward and backward operations or copy
+every computation in an unchanged child program under a different name.
 
 ## Reuse is a capability, profitability is policy
 

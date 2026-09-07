@@ -52,9 +52,11 @@ operation.
 
 An `OperationDefinition` is the canonical schema for an operation. It owns
 argument normalization, metadata and data-type rules, device rules, alias and
-mutation effects, derivative recipes, legal decompositions, capability
-requirements, and stable diagnostic identity. For example, it defines what a
-matrix multiplication means for every caller.
+mutation effects, derivative recipes, equivalent ways to express the operation
+using supported operations, capability requirements, and stable diagnostic
+identity. These equivalent expressions are introduced as *decompositions* in
+[Operation admission](operation-admission.md). For example, the definition
+states what a matrix multiplication means for every caller.
 
 An `OperationRecord` represents one admitted occurrence with concrete inputs,
 outputs, normalized attributes, source information, dependencies, ordered
@@ -65,6 +67,12 @@ A `ProgramCallRecord` is the specialized operation record used when one
 occurrence invokes an already reusable executable program. It preserves the
 same semantic position as an ordinary operation occurrence; it is not an opaque
 shortcut around effects or automatic differentiation.
+
+This specialization does not require a separate record store or graph. A
+compact implementation can represent it as a tagged `OperationRecord` whose
+payload refers to immutable reusable-program structure and a boundary-binding
+recipe. It follows the same indexing, reachability, error, and reclamation rules
+as every other operation occurrence.
 
 ```mermaid
 flowchart TB
@@ -81,6 +89,11 @@ When gradients are tracked, the runtime needs a lifetime that can outlive an
 ordinary forward record. `DerivativeHistory` owns dynamic derivative edges and
 recipes, saved logical values and their expected storage versions,
 random-number reservations, callback ordering, and explicit use counts.
+
+These facts are not three copies of the derivative rule. The
+`OperationDefinition` supplies the reusable rule, an admitted occurrence binds
+that rule to concrete inputs and outputs, and `DerivativeHistory` retains only
+the bound facts whose derivative lifetime is still live.
 
 This ownership is deliberate. A saved activation can have no public tensor
 handle and still remain alive because backward computation needs it. Conversely,
@@ -99,6 +112,9 @@ A logical value is **materialized** when its numerical payload exists in an
 execution backend. The `MaterializationTable` maps a logical storage version and
 a backend/device generation to an opaque backend allocation reference, together
 with readiness and last-writer facts.
+
+The word *table* is literal: it can be an ordinary index owned by
+`RuntimeSession`. It is not a second allocator or execution service.
 
 ```mermaid
 flowchart LR
@@ -139,11 +155,11 @@ base[1] = 99
 ```
 
 The runtime must preserve the value that `pending` is semantically entitled to
-read. Depending on legal lowering and lifetime facts, execution may order work,
-retain a version, or copy only when necessary. It may not let deferred execution
-accidentally read the later `99`. If backward saved an expected version that was
-invalidated by mutation, it reports the mutation instead of silently using
-changed bytes.
+read. Depending on the operation rules and lifetime facts, execution may order
+work, retain a version, or copy only when necessary. It may not let deferred
+execution accidentally read the later `99`. If backward saved an expected
+version that was invalidated by mutation, it reports the mutation instead of
+silently using changed bytes.
 
 An optimizer update can replace the current `TensorValue` of a parameter.
 `TensorState` and the differentiable leaf identity remain stable, so gradients
@@ -172,6 +188,6 @@ optimization, not a separate architectural layer.
 | `TensorValue` | One immutable logical value version and its metadata | Mutable public identity and backend addresses |
 | `StorageState` | Shared alias identity, mutation version, and writer order | WebGPU buffers and WebAssembly pointers |
 | `OperationRecord` | One admitted occurrence, its dependencies, effects, and provenance | Backend preparation |
-| `ProgramCallRecord` | One semantic invocation of a reusable program | Reused occurrence state from another call |
+| `ProgramCallRecord` | Tagged `OperationRecord` variant for one semantic invocation of a reusable program | Another graph, store, or reused occurrence state |
 | `DerivativeHistory` | Dynamic derivative recipes and saved logical lifetimes | Physical allocation and leases |
 | `MaterializationTable` | Logical-to-opaque-physical association and readiness | Allocation policy and byte ownership |

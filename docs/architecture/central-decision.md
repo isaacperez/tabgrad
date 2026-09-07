@@ -42,7 +42,8 @@ Tabgrad adopts these connected constraints:
    mandatory effects select finite closures under
    [bounded lazy execution](bounded-lazy-execution.md).
 5. Every selected closure, including a one-operation closure, becomes one
-   immutable common or target-profiled `ExecutableProgram`.
+   immutable `ExecutableProgram` using the common schema and an explicit target
+   profile.
 6. Common passes own semantic legality and logical dependencies. Each backend
    privately owns profitable physical lowering, scheduling, preparation,
    kernels, memory, dispatch, and completion.
@@ -57,11 +58,42 @@ Tabgrad adopts these connected constraints:
    semantic state.
 10. Semantic records, requests, histories, variants, programs, prepared work,
     diagnostics, and backend memory have explicit owners and bounded lifetimes.
+11. Repeated mixed compositions use child-program fingerprints and boundary
+    remaps to reuse a flat program. A hot hit does not reconstruct every
+    computation inside an unchanged reusable child.
 
 The guiding implementation rule is to introduce a named stateful component only
 when it owns an independent identity, invariant, or lifecycle. Validation,
 differentiation, demand selection, lowering, and common planning remain passes
 over shared records unless evidence establishes a separate stateful owner.
+`ProgramCallRecord` is a tagged `OperationRecord`; `ExecutionTicket` can be a
+read-only view over the same allocation as invocation state; and
+`MaterializationTable` can be an ordinary session-owned index. These names
+preserve contracts without requiring a class or manager for every concept.
+
+### Minimum implementation shape
+
+The architecture names several concepts because their identities or lifetimes
+must not be confused. A compact implementation has one `RuntimeSession` as the
+common semantic aggregate and backend contexts as the physical owners. The
+remaining concepts are data, indexes, passes, or views owned by those roots.
+
+| Architectural concept | Minimum implementation role |
+| --- | --- |
+| `OperationDefinition` | Immutable operation schema shared by sessions |
+| `TensorState`, `TensorValue`, `StorageState`, and `OperationRecord` | Compact records in session-owned tables |
+| `ProgramCallRecord` | Tagged `OperationRecord` specialization, not a separate graph or store |
+| `DerivativeHistory` | Live derivative records and use counts with an independent semantic lifetime |
+| `MaterializationTable` | Session-owned index from logical versions to opaque backend references |
+| Admission, demand selection, differentiation, and program formation | Ordinary passes over records unless later evidence requires state of their own |
+| `ExecutableProgram` | Immutable common-schema data for one finite target and its declared capabilities |
+| `PreparedExecutable` | Opaque backend-owned cached preparation |
+| `BackendCapabilitySnapshot` | Immutable per-generation data consumed by every support check |
+| `ExecutionRequest` and `ExecutionTicket` | One invocation's mutable state and a read-only completion view; they need not be independent allocations |
+| Transport and `CompiledCallable` adapters | Thin boundary mechanisms over the same runtime path |
+
+This shape preserves the semantic distinctions that correctness requires
+without constructing competing engines, planners, or managers.
 
 ## Alternatives considered
 
@@ -131,6 +163,13 @@ failed or superseded attempts, and environment limitations remain in their
 individual issues and linked artifacts rather than in normative architecture
 prose.
 
+The reusable-training experiment established that mixed semantic selections can
+be flattened correctly, but it did not prove the asymptotic cost of repeated
+large mixed compositions. The accepted refinement therefore requires a bounded
+flat-composition cache whose hot lookup uses existing child fingerprints and
+boundary structure. Production implementation must still measure that path; the
+documentation does not turn the structural requirement into a speed claim.
+
 | Gate | Evidence record |
 | --- | --- |
 | Asynchronous Python observation | [#19](https://github.com/isaacperez/tabgrad/issues/19) |
@@ -173,7 +212,8 @@ Architecture feasibility is not release support or a universal performance
 claim. The evidence did not establish every browser, model, parameter count,
 data type, higher-order or retained derivative mode, attention derivative,
 mixed-precision mode, long-context concurrency pattern, device-loss scenario,
-or cancellation race.
+or cancellation race. It also did not benchmark a production flat-composition
+cache over large mixed forward-and-backward regions.
 
 Those evidence limits constrain compatibility and optimization claims. An
 unqualified mode must reject explicitly or use the complete ordinary semantic

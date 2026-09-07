@@ -25,16 +25,25 @@ semantic runtime.
 
 ## Capabilities make support explicit
 
-A backend capability description includes facts it can report reliably:
+A backend exposes one immutable `BackendCapabilitySnapshot` for a particular
+backend generation. It includes only facts the backend can report reliably:
 supported data types and features, buffer and binding limits, workgroup limits,
 WebAssembly vector support, thread availability, and generation identity. A
 backend must not invent a precise remaining-memory value when the platform does
 not expose one.
 
-Capabilities participate in validation, legal program formation, preparation,
-and cache keys. A model or operation that exceeds them can be segmented only by
-a legal lowering for the same explicit target. Otherwise it fails clearly.
-Capability negotiation never authorizes silent movement to the other backend.
+Admission, program formation, and preparation consume that same snapshot rather
+than maintaining separate support tables. Admission rejects capability failures
+already knowable from the requested operation and target. Program formation
+records the requirements and profile assumptions of the complete finite work.
+Preparation verifies those requirements against the still-current snapshot and
+generation before choosing physical work. Repetition at later stages is a
+stale-generation safety check, not a second definition of support.
+
+A model or operation that exceeds the snapshot can be segmented only by an
+equivalent supported program for the same explicit target. Otherwise it fails
+clearly. Capability negotiation never authorizes silent movement to the other
+backend.
 
 ## Shared work, private preparation
 
@@ -59,10 +68,11 @@ flowchart TD
     WAReady --> CPU[Leased or serialized instance<br/>and CPU invocation]
 ```
 
-The preparation key includes program structure; operation, lowering, backend,
-compiler, and kernel versions; capability and specialization fingerprints; and
-backend/device generation. A cache hit is valid only when all relevant facts
-still match.
+The preparation key includes the program fingerprint; backend, compiler, and
+kernel versions; the complete capability and specialization fingerprints; and
+backend/device generation. Semantic-lowering versions are already represented
+by the program fingerprint rather than checked through a second support table.
+A cache hit is valid only when all relevant facts still match.
 
 WebGPU command buffers are single-use, so a prepared executable provides a plan
 from which each invocation encodes fresh commands. Mutable WebAssembly instances

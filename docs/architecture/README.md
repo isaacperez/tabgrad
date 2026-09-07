@@ -84,8 +84,9 @@ effect-aware, incrementally lazy runtime.
   optimizer updates use the same runtime and backend path.
 - WebGPU and WebAssembly share semantics but own their physical preparation,
   scheduling, memory, and kernels independently.
-- A backend is selected explicitly. Unsupported work is rejected or legally
-  lowered for that same target; it is never moved secretly to the other backend.
+- A backend is selected explicitly. Unsupported work is rejected or translated
+  into an equivalent supported program for that same target; it is never moved
+  secretly to the other backend.
 - Reusable compiled calls are an optional, guarded optimization over the same
   mechanism, not a second execution engine.
 - Logical records, prepared work, caches, and physical allocations have bounded

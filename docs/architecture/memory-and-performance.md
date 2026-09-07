@@ -53,6 +53,9 @@ The architecture requires:
 - admission proportional to `arity` plus compact rank and access facts;
 - demand selection, program formation, and backward traversal proportional to
   `S + E + A`, apart from justified bounded allocation factors; and
+- repeated composition of unchanged reusable programs proportional to their
+  call boundaries, remaps, guards, and new exterior work rather than to every
+  computation inside those programs; and
 - no scan of unrelated graph history, pairwise alias comparison, global sort,
   or per-element access set on the default path.
 
@@ -89,6 +92,12 @@ one does not justify evicting live state from another. This includes:
 - pending and in-flight requests;
 - staging allocations; and
 - WebAssembly and WebGPU memory pools.
+
+Independent limits do not require unrelated cache implementations. A runtime
+can reuse one bounded-store accounting and eviction mechanism while giving each
+owner its own quota, pin rules, progress condition, and error. The shared
+mechanism removes bookkeeping duplication; the separate policies prevent one
+cache from stealing memory that another live responsibility still needs.
 
 Every budget defines what can be pinned, what can be evicted, what event can
 make progress, and what deterministic error occurs when neither reclamation nor

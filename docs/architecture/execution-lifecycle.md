@@ -8,11 +8,11 @@ completion state. This chapter defines that per-invocation boundary.
 ## A fresh invocation
 
 `ExecutionRequest` contains only per-run information passed to a backend:
-current semantic bindings, dynamic values, backend-generation tokens, and
-cancellation state. It does not own reusable program structure or permanent
-model state.
+current program-slot bindings to opaque physical references, dynamic values,
+backend-generation tokens, and cancellation state. It does not own reusable
+program structure or permanent model state.
 
-The surrounding fresh invocation state owns:
+`RuntimeSession` owns the fresh semantic state associated with that request:
 
 - occurrence, output, and derivative-history identities;
 - mutation-version and random-number commitments;
@@ -22,6 +22,13 @@ The surrounding fresh invocation state owns:
 
 The backend continues to own the physical allocation or lease behind every
 opaque binding.
+
+This is one invocation lifecycle, not two cooperating state machines.
+`ExecutionRequest` is the backend-facing input view. `ExecutionTicket` is the
+read-only asynchronous result/drain view returned to the runtime or caller. An
+implementation can back both with one compact invocation-state allocation while
+preserving the contractual distinction between what is submitted and what can
+be observed.
 
 ```mermaid
 stateDiagram-v2
