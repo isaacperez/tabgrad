@@ -56,21 +56,23 @@ version of the change.
 ## Independent verification and review
 
 For a substantive coding-agent change, make this description otherwise
-complete and record its exact head below before the final review, then freeze
-it. The final reviewer computes a SHA-256 digest of this exact description text
-and records the digest and method in the final report, not in the text it
-identifies. Verification and skeptical review may be performed by the same
-independent agent, but their conclusions remain separate. The reviewer-authored
-inspectable report is published afterward as a review or comment in this pull
-request and identifies the exact head and description digest. Do not edit this
-description merely to add that report or its link; the same-pull-request report
-locates itself without changing the reviewed snapshot. Replace stale evidence
-after every real correction. When the agent sequence does not apply, state the
-governing exception or other reason.
+complete and record its exact source/head and target/comparison base below
+before final review, then freeze the title and description. The final reviewer
+computes SHA-256 digests of the exact title and description text and records
+them and the digest method in the final report, not in the text they identify.
+Verification and skeptical review may be performed by the same independent
+agent, but their conclusions remain separate. The reviewer-authored inspectable
+report is published afterward as a comment in this pull request and identifies
+the repository and pull request, title and description digests, source/head,
+and target/comparison base. Do not edit a snapshot field merely to add that
+report or its link; the same-pull-request report locates itself without changing
+the reviewed snapshot. Replace stale evidence after every real correction.
+When the agent sequence does not apply, state the governing exception or other
+reason.
 
-| Exact head | Independent verifier and outcome | Final reviewer and report location | Required findings before final review |
-| --- | --- | --- | --- |
-| <!-- Commit identity --> | <!-- Identity and PASS, FAIL, or INCOMPLETE --> | <!-- Identity; same-PR review or comment to follow after freeze --> | <!-- None, or each unresolved required correction --> |
+| Source branch and exact head | Target branch and comparison base | Independent verifier and outcome | Final reviewer and report location | Required findings before final review |
+| --- | --- | --- | --- | --- |
+| <!-- Repository, branch, and head commit --> | <!-- Repository, branch, and comparison base revision --> | <!-- Identity and PASS, FAIL, or INCOMPLETE --> | <!-- Identity; same-PR comment to follow after freeze --> | <!-- None, or each unresolved required correction --> |
 
 ## Required evidence
 
@@ -113,7 +115,7 @@ particular attention.
 
 For a substantive coding-agent change, the final same-pull-request report—not a
 self-certified checkbox—establishes that independent verification and review
-pass for the frozen head-and-description snapshot. If the agent sequence does
+pass for the frozen pull-request snapshot. If the agent sequence does
 not apply, explain why under **Independent verification and review**.
 
 - [ ] Exactly one primary issue was ready for implementation or explicitly

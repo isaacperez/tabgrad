@@ -187,8 +187,10 @@ authority required by every external mutation.
 After a correction, identify the complete affected state, invalidate only the
 evidence whose inputs or conclusions changed, and repeat the affected
 verification and complete independent review. A correction confined to a pull
-request description does not by itself invalidate mechanical checks for an
-unchanged commit, but the description and its claims must be reviewed again.
+request title or description does not by itself invalidate mechanical checks
+for an unchanged commit, but that metadata and its claims must be reviewed
+again. Publishing the final reviewer-authored report comment does not mutate
+the pull-request snapshot it identifies.
 
 Do not stop after the first failed verification or `CHANGES REQUIRED` report
 merely to ask whether an already authorized correction should be made. Continue

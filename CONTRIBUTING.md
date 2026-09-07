@@ -438,16 +438,21 @@ reason rather than an unexplained `Not applicable`.
 Preparing text or inspecting a pull request does not authorize a coding agent
 to change GitHub. A request to open a draft authorizes the ordinary push of the
 exact issue branch when needed and creation of that draft. A request to open a
-pull request for review or mark one ready also authorizes the corresponding
-`In review` project transition. These requests do not authorize force-pushing,
-changing repository settings, choosing or notifying individual reviewers,
-approving, closing, or merging. Those actions require their own authority.
+pull request for review or mark one ready also authorizes the bounded transient
+draft, one relayed reviewer-authored evidence comment, ready transition, and
+corresponding `In review` project transition required by
+`docs/agent-workflow.md`. It does not authorize a formal review or approval.
+These requests do not authorize force-pushing, changing repository settings,
+choosing or notifying individual reviewers, closing, or merging. Those actions
+require their own authority.
 
 A request to publish a new verified head to an existing review-ready pull
 request authorizes its ordinary push and the minimum description update needed
-to make its verification evidence current. It does not authorize unrelated
-changes to the pull request. If the user excludes the evidence update, do not
-publish a head that would leave the pull request misleading.
+to make its verification evidence current, together with one relayed
+reviewer-authored final-report comment after the remote snapshot matches. It
+does not authorize unrelated changes to the pull request. If the user excludes
+the evidence update, do not publish a head that would leave the pull request
+misleading.
 
 If a GitHub operation fails or returns an ambiguous result, inspect the remote
 state before retrying. Do not create a duplicate pull request or repeat a

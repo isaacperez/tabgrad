@@ -98,9 +98,9 @@ flowchart LR
     Y --> W{Lasting architecture decision?}
     W -->|Yes| U[Explicit architectural approval]
     U --> P[Prepare the required durable decision record]
-    W -->|No| D{Durable documentation required by the accepted conclusion?}
-    D -->|Yes| P
-    D -->|No| H
+    W -->|No| RD{Durable documentation required by the accepted conclusion?}
+    RD -->|Yes| P
+    RD -->|No| H
     P --> N
     H -->|More required work| C
     H -->|Outcome complete| I[Close the milestone]

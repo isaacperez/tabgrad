@@ -273,22 +273,27 @@ When no actionable finding remains, state that clearly and describe any
 residual risk, missing environment, or part that could not be inspected. The
 absence of findings is not proof that unverified behavior works.
 
-For a substantive pull request, review a stable snapshot: the exact head and a
-SHA-256 digest of the exact, otherwise complete pull request description.
-Confirm the recorded digest method and rederive the identity before concluding.
-The inspectable report must identify both values together with the reviewer
-role, assignment and coverage, outcome, required findings, limitations, and
-primary evidence. A bare anonymous `PASS` is not sufficient.
+For a substantive pull request, review a stable snapshot: repository and pull
+request identity; SHA-256 digests of the exact, otherwise complete title and
+description text; source repository and branch; exact head; target repository
+and branch; and comparison base revision. Confirm the digest method and
+rederive the complete identity before concluding. The inspectable report must
+record those values together with the reviewer role, assignment and coverage,
+outcome, required findings, limitations, and primary evidence. A bare anonymous
+`PASS` is not sufficient.
 
 After the description is frozen, return the reviewer-authored final report to
 the coordinator. Under current authority, the coordinator preserves it as a
-review or comment in that same pull request while naming the reviewer and not
-claiming the independent work as its own. The report then locates itself
-without changing the reviewed snapshot. Do not ask the coordinator to edit the
-description merely to link or copy the report; a later head or description edit
-needs a new identity and affected review. Protect sensitive findings through
-the private reporting route and put only a safe conclusion and protected
-evidence location in the public report.
+comment in that same pull request while naming the reviewer and not claiming
+the independent work as its own; submitting it as a formal review requires
+separate authority. The report then locates itself without changing the
+reviewed snapshot. Do not ask the coordinator to edit the description merely
+to link or copy the report; a deliberate later change to a snapshot field needs
+a new identity and affected review. If the target branch advanced without being
+retargeted, apply the overlap rules in `docs/agent-workflow.md` and record the
+resulting comparison state. Protect sensitive findings through the private
+reporting route and put only a safe conclusion and protected evidence location
+in the public report.
 
 ## Decide and report the review result
 

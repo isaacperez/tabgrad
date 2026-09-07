@@ -244,25 +244,42 @@ target, assignment and coverage, outcome, required findings, limitations, and
 primary evidence references. A bare statement that an unnamed independent
 agent passed is not inspectable evidence.
 
-A pull request has two independently mutable inputs: its head commit and its
-description. Before final review, make the description otherwise complete and
-freeze it. The final reviewer identifies the review snapshot with the exact
-head plus a SHA-256 digest of the exact description text and records how that
-digest was obtained. The digest belongs in the report, not in the description
-that it identifies. Under current authority, publish the reviewer-authored
-final report afterward as a review or comment in the same pull request and
-include both snapshot identities. A coordinator may relay it only while naming
-the reviewer and preserving the report rather than presenting it as the
-coordinator's own review. That report locates itself in the pull request and
-does not mutate the reviewed head or description, so do not edit the
-description merely to add a link or copy the final result back into it. Without
-authority to publish the report, the ready-for-review gate remains unmet.
+A pull-request review snapshot identifies the repository and pull request;
+exact title and description text; source repository, branch, and head commit;
+and target repository, branch, and comparison base revision. Before final
+review, make the title and description otherwise complete and freeze them. The
+final reviewer records the immutable identities and SHA-256 digests of the
+exact title and description text, together with the digest method. The digests
+belong in the report, not in the title or description they identify.
 
-The reviewer may inspect an exact prepared description before it is published.
-After publication, the coordinator must recompute the remote head and
-description digest and publish the report only when both match the reviewed
-snapshot. This permits a later correction to an already review-ready pull
-request without pretending that an unexamined remote description passed.
+Under current authority, publish the reviewer-authored final report afterward
+as a comment in the same pull request, or as a formal review only when that
+separate action is authorized. A coordinator may relay it only while naming the
+reviewer and preserving the report rather than presenting it as the
+coordinator's own review. That report locates itself in the pull request and
+does not mutate the reviewed snapshot, so do not edit the description merely
+to add a link or copy the final result back into it. Without authority to
+publish the report, the ready-for-review gate remains unmet.
+
+The reviewer may inspect an exact prepared title and description before they
+are published. After publication, the coordinator must rederive every remote
+snapshot field and publish the report only when they all match. A deliberate
+change to the title, description, source, head, or target creates a new
+snapshot. When the target branch merely advances, apply the overlap rules in
+this document to decide which evidence is invalidated and record the new
+comparison state; do not silently treat a conflicting or relevant base change
+as the reviewed state.
+
+For a new substantive coding-agent pull request, the user request to publish it
+ready for review authorizes the bounded transition needed to make that outcome
+possible: create it as a draft, verify the remote snapshot, publish one relayed
+final-report comment after independent review of that exact snapshot, and mark
+it ready only if the gate then passes. This draft is a transient safety state,
+not a silent substitution for the requested result. If publication, comparison,
+review, reporting, or the gate fails, leave the pull request draft, keep the
+issue out of `In review`, and report the incomplete operation. This authority
+does not include a formal GitHub review, approval, reviewer notification, or
+another unrelated mutation.
 
 An already durable issue comment, pull request report, or registered artifact
 may supply earlier evidence, but it does not replace final review of the frozen
@@ -418,12 +435,12 @@ record.
 
 After a correction, identify the complete affected target and repeat every
 verification whose inputs or conclusions changed and the complete independent
-review of the new result. A pull-request-body-only correction normally
-invalidates review of that description and its claims, but not mechanical
+review of the new result. A pull-request-title-or-description-only correction
+normally invalidates review of that metadata and its claims, but not mechanical
 checks of an unchanged commit unless the corrected claim exposes missing or
-incorrect evidence. Publishing the final report as a review or comment after
-the description was frozen does not invalidate that review; a later edit to
-the head or description does. There is no fixed iteration count: the loop ends
+incorrect evidence. Publishing the final report as a comment after the snapshot
+was frozen does not invalidate that review; a later change to a snapshot field
+does. There is no fixed iteration count: the loop ends
 only when verification and review pass for the same state or a documented
 blocker, unavailable requirement, authority boundary, or material decision
 requires human input.
