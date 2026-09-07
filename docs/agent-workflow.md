@@ -237,6 +237,69 @@ limitations, and unanswered questions. It must cite precise paths, lines,
 commands, results, issue or pull request links, and source versions when they
 support a material statement.
 
+For a substantive proposed repository change, preserve the independent
+verification and review report where a later pull-request or merge coordinator
+can inspect it. The record must identify the agent or reviewer role, exact
+target, assignment and coverage, outcome, required findings, limitations, and
+primary evidence references. A bare statement that an unnamed independent
+agent passed is not inspectable evidence.
+
+A pull-request review snapshot identifies the repository and pull request;
+exact title and description text; source repository, branch, and head commit;
+and target repository, branch, and comparison base revision. Before final
+review, make the title and description otherwise complete and freeze them. The
+final reviewer records the immutable identities and SHA-256 digests of the
+exact title and description text, together with the digest method. The digests
+belong in the report, not in the title or description they identify.
+
+Under current authority, publish the reviewer-authored final report afterward
+as a comment in the same pull request, or as a formal review only when that
+separate action is authorized. A coordinator may relay it only while naming the
+reviewer and preserving the report rather than presenting it as the
+coordinator's own review. That report locates itself in the pull request and
+does not mutate the reviewed snapshot, so do not edit the description merely
+to add a link or copy the final result back into it. Without authority to
+publish the report, the ready-for-review gate remains unmet.
+
+The reviewer may inspect an exact prepared title and description before they
+are published. After publication, the coordinator must rederive every remote
+snapshot field and publish the report only when they all match. A deliberate
+change to the title, description, source, head, or target creates a new
+snapshot. When the target branch merely advances, apply the overlap rules in
+this document to decide which evidence is invalidated and record the new
+comparison state; do not silently treat a conflicting or relevant base change
+as the reviewed state.
+
+For a new substantive coding-agent pull request, the user request to publish it
+ready for review authorizes the bounded transition needed to make that outcome
+possible: create it as a draft, verify the remote snapshot, publish one relayed
+final-report comment after independent review of that exact snapshot, and mark
+it ready only if the gate then passes. This draft is a transient safety state,
+not a silent substitution for the requested result. If publication, comparison,
+review, reporting, or the gate fails, leave the pull request draft, keep the
+issue out of `In review`, and report the incomplete operation. This authority
+does not include a formal GitHub review, approval, reviewer notification, or
+another unrelated mutation.
+
+For an existing review-ready pull request, an authorized verified-head, title,
+or description update may remain non-draft when every condition available
+before publication passes and the exact prepared snapshot has independent
+review. The requested push when one exists, minimum metadata update, remote
+snapshot confirmation, and one relayed final-report comment form one bounded
+transition; the comment is its final output, not a precondition for its own
+authority. If the snapshot cannot pass before publication, stop before changing
+the remote pull request unless returning it to draft is authorized. If the
+transition fails after publication, report the inconsistent state and obtain
+current authority before returning the pull request and issue to earlier
+workflow states. An update to a pull request that is already draft does not
+need a final report until it is requested to become ready.
+
+An already durable issue comment, pull request report, or registered artifact
+may supply earlier evidence, but it does not replace final review of the frozen
+pull request snapshot. Keep sensitive security or private information in the
+protected channel required by `CONTRIBUTING.md`; a public final report should
+state only the safe conclusion and the protected evidence location.
+
 ## Perform a preflight before implementation
 
 The preflight tests whether the recorded work still matches reality before any
@@ -345,6 +408,63 @@ coverage is absent, stale, contradicted, or insufficient for a newly identified
 material risk. The merge coordinator must still inspect the live pull request,
 head, required checks, review state, authorization, and branch safety
 immediately before the mutation.
+
+## Repeat the author-review loop until the current state passes
+
+For an implementation result, independent verification and skeptical review
+form a correction loop rather than a one-time handoff:
+
+```mermaid
+flowchart TD
+    A[Writer identifies the complete target] --> B[Independent verification]
+    B --> C[Independent skeptical review]
+    C --> D{Outcome for that exact state}
+    D -->|Pass| E[Publication or merge boundary]
+    D -->|Changes required| F[Classify every finding and its owning artifact]
+    F -->|Repository content| G[Sole writer corrects through tabgrad-implement]
+    F -->|Issue content or state| L[Use tabgrad-issue under current authority]
+    F -->|Pull request content or state| M[Use tabgrad-pull-request under current authority]
+    F -->|Missing or stale evidence| N[Obtain or repeat the owning check]
+    G --> H[Identify the complete target and affected evidence]
+    L --> H
+    M --> H
+    N --> H
+    H --> B
+    F -->|Material decision| I[Ask the user before dependent work]
+    F -->|Blocking prerequisite| J[Record the blocker and stop]
+    D -->|Incomplete| K[Obtain missing evidence or stop if unavailable]
+    K --> B
+```
+
+The coordinating agent does not stop merely to report an ordinary repository
+correction that the active issue already authorizes. It returns repository
+content to the sole writer through `tabgrad-implement`. A correction to issue
+content, relationships, or project state belongs to `tabgrad-issue`; a
+correction to pull request content or state belongs to `tabgrad-pull-request`;
+and missing evidence returns to the check that owns it. Those external
+mutations proceed only under their current authority. Do not create a source
+edit or commit merely to correct an issue, pull request description, or check
+record.
+
+After a correction, identify the complete affected target and repeat every
+verification whose inputs or conclusions changed and the complete independent
+review of the new result. A pull-request-title-or-description-only correction
+normally invalidates review of that metadata and its claims, but not mechanical
+checks of an unchanged commit unless the corrected claim exposes missing or
+incorrect evidence. Publishing the final report as a comment after the snapshot
+was frozen does not invalidate that review; a later change to a snapshot field
+does. There is no fixed iteration count: the loop ends
+only when verification and review pass for the same state or a documented
+blocker, unavailable requirement, authority boundary, or material decision
+requires human input.
+
+The reviewer remains read-only throughout the loop. It may explain the
+smallest required outcome but must not implement or materially design the
+correction it will later judge. The same independent reviewer may inspect a
+corrected state, but it must review the complete new result, revisit affected
+findings, and look for regressions rather than checking only whether the writer
+responded. Optional suggestions and unrelated pre-existing improvements do not
+block the current result.
 
 ## Invalidate stale evidence
 

@@ -17,6 +17,8 @@ starting work`, `Handling unexpected findings and pending decisions`,
 `Defining an issue`, and `Making architectural decisions` sections of
 `CONTRIBUTING.md`. Read `README.md` when the request depends on Tabgrad's public
 purpose, identity, execution model, or compatibility promises.
+Read `docs/implementation-workflow.md` when the request organizes an
+implementation milestone, planning horizon, or operation-coverage work.
 
 Inspect the relevant repository documentation, code, tests, existing issues,
 and pull requests before filling gaps from memory. Use authoritative external
@@ -169,6 +171,13 @@ that was ready or active cannot continue because of a documented impediment.
 
 Assign a milestone only when the issue is necessary to complete that
 milestone's stated result. Topical similarity is not sufficient.
+
+When organizing implementation, apply the active planning horizon in
+`docs/project-management.md`. Do not turn the architecture, a permanent project
+area, or the intended compatibility surface into speculative issues. Create
+only the implementation and research issues whose result and boundary are
+supported by current evidence, and re-evaluate the next planning wave from the
+repository state produced by completed work.
 
 Before marking an issue `Ready`, check every readiness condition in
 `docs/project-management.md`. Keep it in `Triage` or `Needs information` when a
