@@ -55,19 +55,22 @@ version of the change.
 
 ## Independent verification and review
 
-For a substantive change, identify the exact head examined independently.
-Verification and skeptical review may be performed by the same agent when it
-did not author the change, but their conclusions remain separate. Replace
-stale evidence after every correction; do not record only the resolution of an
-earlier finding. Embed a concise inspectable report or identify its durable
-issue comment, pull request comment, review, or registered artifact. Prefer a
-direct link; otherwise make the record unambiguous within this pull request.
-When the agent sequence does not apply, state the governing exception or other
-reason.
+For a substantive coding-agent change, make this description otherwise
+complete and record its exact head below before the final review, then freeze
+it. The final reviewer computes a SHA-256 digest of this exact description text
+and records the digest and method in the final report, not in the text it
+identifies. Verification and skeptical review may be performed by the same
+independent agent, but their conclusions remain separate. The reviewer-authored
+inspectable report is published afterward as a review or comment in this pull
+request and identifies the exact head and description digest. Do not edit this
+description merely to add that report or its link; the same-pull-request report
+locates itself without changing the reviewed snapshot. Replace stale evidence
+after every real correction. When the agent sequence does not apply, state the
+governing exception or other reason.
 
-| Exact head | Independent verifier and outcome | Independent reviewer and outcome | Inspectable report | Required findings |
-| --- | --- | --- | --- | --- |
-| <!-- Commit or reproducible content identity --> | <!-- Identity and PASS, FAIL, or INCOMPLETE --> | <!-- Identity and PASS, CHANGES REQUIRED, or INCOMPLETE --> | <!-- Durable location or concise scope, limitations, and primary evidence --> | <!-- None, or each unresolved required correction --> |
+| Exact head | Independent verifier and outcome | Final reviewer and report location | Required findings before final review |
+| --- | --- | --- | --- |
+| <!-- Commit identity --> | <!-- Identity and PASS, FAIL, or INCOMPLETE --> | <!-- Identity; same-PR review or comment to follow after freeze --> | <!-- None, or each unresolved required correction --> |
 
 ## Required evidence
 
@@ -108,6 +111,11 @@ particular attention.
 
 ## Ready for review
 
+For a substantive coding-agent change, the final same-pull-request report—not a
+self-certified checkbox—establishes that independent verification and review
+pass for the frozen head-and-description snapshot. If the agent sequence does
+not apply, explain why under **Independent verification and review**.
+
 - [ ] Exactly one primary issue was ready for implementation or explicitly
   requires this research artifact or lasting documentation, or this pull
   request is a small correction that `CONTRIBUTING.md` permits without an
@@ -137,10 +145,6 @@ particular attention.
   failure behavior are both tested.
 - [ ] All applicable repository checks were run against the final commit and
   are reported above.
-- [ ] When `docs/agent-workflow.md` requires the coding-agent sequence,
-  independent verification and skeptical review both pass for the exact final
-  state, their report is inspectable, and no required correction remains;
-  otherwise, the reason that sequence does not apply is recorded above.
 - [ ] Code, tests, documentation, and compatibility claims describe the same
   behavior.
 - [ ] When relevant, unsupported behavior and backend selection are explicit.

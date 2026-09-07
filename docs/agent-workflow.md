@@ -239,15 +239,36 @@ support a material statement.
 
 For a substantive proposed repository change, preserve the independent
 verification and review report where a later pull-request or merge coordinator
-can inspect it. The pull request may embed a concise report or identify a
-durable issue comment, pull request comment, review, or registered artifact;
-prefer a direct link, and otherwise give enough identity and target information
-to locate the record unambiguously in the same pull request. The record must
-identify the agent or reviewer role, exact target, assignment and coverage,
-outcome, required findings, limitations, and primary evidence references. A
-bare statement that an unnamed independent agent passed is not inspectable
-evidence. Keep sensitive security or private information in the protected
-channel required by `CONTRIBUTING.md`, not in a public report.
+can inspect it. The record must identify the agent or reviewer role, exact
+target, assignment and coverage, outcome, required findings, limitations, and
+primary evidence references. A bare statement that an unnamed independent
+agent passed is not inspectable evidence.
+
+A pull request has two independently mutable inputs: its head commit and its
+description. Before final review, make the description otherwise complete and
+freeze it. The final reviewer identifies the review snapshot with the exact
+head plus a SHA-256 digest of the exact description text and records how that
+digest was obtained. The digest belongs in the report, not in the description
+that it identifies. Under current authority, publish the reviewer-authored
+final report afterward as a review or comment in the same pull request and
+include both snapshot identities. A coordinator may relay it only while naming
+the reviewer and preserving the report rather than presenting it as the
+coordinator's own review. That report locates itself in the pull request and
+does not mutate the reviewed head or description, so do not edit the
+description merely to add a link or copy the final result back into it. Without
+authority to publish the report, the ready-for-review gate remains unmet.
+
+The reviewer may inspect an exact prepared description before it is published.
+After publication, the coordinator must recompute the remote head and
+description digest and publish the report only when both match the reviewed
+snapshot. This permits a later correction to an already review-ready pull
+request without pretending that an unexamined remote description passed.
+
+An already durable issue comment, pull request report, or registered artifact
+may supply earlier evidence, but it does not replace final review of the frozen
+pull request snapshot. Keep sensitive security or private information in the
+protected channel required by `CONTRIBUTING.md`; a public final report should
+state only the safe conclusion and the protected evidence location.
 
 ## Perform a preflight before implementation
 
@@ -400,10 +421,12 @@ verification whose inputs or conclusions changed and the complete independent
 review of the new result. A pull-request-body-only correction normally
 invalidates review of that description and its claims, but not mechanical
 checks of an unchanged commit unless the corrected claim exposes missing or
-incorrect evidence. There is no fixed iteration count: the loop ends only when
-verification and review pass for the same state or a documented blocker,
-unavailable requirement, authority boundary, or material decision requires
-human input.
+incorrect evidence. Publishing the final report as a review or comment after
+the description was frozen does not invalidate that review; a later edit to
+the head or description does. There is no fixed iteration count: the loop ends
+only when verification and review pass for the same state or a documented
+blocker, unavailable requirement, authority boundary, or material decision
+requires human input.
 
 The reviewer remains read-only throughout the loop. It may explain the
 smallest required outcome but must not implement or materially design the

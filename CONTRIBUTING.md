@@ -402,8 +402,9 @@ change, independent verification and skeptical review must also pass for the
 same state and leave an inspectable report. The documented single spelling or
 formatting correction exception does not require that agent sequence. Checks
 that run only on the pull request may still be in progress after publication;
-they remain required before merge. Marking a pull request ready moves its
-implementation issue to `In review`.
+they remain required before merge. Follow `docs/agent-workflow.md` for the
+stable pull-request snapshot and non-circular final-report procedure. Marking a
+pull request ready moves its implementation issue to `In review`.
 
 If the pull request head changes materially after verification, its earlier
 verification and review are stale. Run verification against the new head,

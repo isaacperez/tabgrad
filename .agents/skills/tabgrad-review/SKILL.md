@@ -273,15 +273,22 @@ When no actionable finding remains, state that clearly and describe any
 residual risk, missing environment, or part that could not be inspected. The
 absence of findings is not proof that unverified behavior works.
 
-For a substantive pull request, ensure that the independent verification and
-review report is inspectable by a later coordinator through an embedded concise
-report or an unambiguously identified durable record. It must identify the
-reviewer role, exact target, assignment and coverage, outcome, required
-findings, limitations, and primary evidence. Prefer a direct link; a pull
-request review or comment may instead be identified by its author, target, and
-location in that same pull request. A bare anonymous `PASS` is not sufficient.
-Protect sensitive findings through the private reporting route instead of
-publishing them.
+For a substantive pull request, review a stable snapshot: the exact head and a
+SHA-256 digest of the exact, otherwise complete pull request description.
+Confirm the recorded digest method and rederive the identity before concluding.
+The inspectable report must identify both values together with the reviewer
+role, assignment and coverage, outcome, required findings, limitations, and
+primary evidence. A bare anonymous `PASS` is not sufficient.
+
+After the description is frozen, return the reviewer-authored final report to
+the coordinator. Under current authority, the coordinator preserves it as a
+review or comment in that same pull request while naming the reviewer and not
+claiming the independent work as its own. The report then locates itself
+without changing the reviewed snapshot. Do not ask the coordinator to edit the
+description merely to link or copy the report; a later head or description edit
+needs a new identity and affected review. Protect sensitive findings through
+the private reporting route and put only a safe conclusion and protected
+evidence location in the public report.
 
 ## Decide and report the review result
 

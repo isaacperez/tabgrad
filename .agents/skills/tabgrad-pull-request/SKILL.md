@@ -122,13 +122,27 @@ demonstrate the sequence.
 Identify the independent preflight, verification, specialist, and review
 evidence required by `docs/agent-workflow.md`. Confirm that each report refers
 to the pull request's current head and that any later change was followed by
-the necessary repeated checks. Embed a sufficient concise report or identify a
-durable issue comment, pull request comment, review, or registered artifact so
-that a later coordinator can inspect the agent or reviewer role, exact target,
-assignment and coverage, outcome, required findings, limitations, and primary
-evidence. Prefer a direct link; otherwise give enough identity and target
-information to locate a record in the same pull request unambiguously. A bare
-anonymous pass statement is not sufficient.
+the necessary repeated checks. Preserve enough durable evidence for a later
+coordinator to inspect the agent or reviewer role, exact target, assignment and
+coverage, outcome, required findings, limitations, and primary evidence. A
+bare anonymous pass statement is not sufficient.
+
+Before final review, make the pull request description otherwise complete and
+freeze it. The final reviewer computes the review snapshot from the exact head
+plus a SHA-256 digest of that exact description text and records the digest
+method in the final review or comment published afterward in the same pull
+request. Do not put that digest in the description it identifies. The report
+locates itself and does not change the reviewed snapshot. Do not edit the
+description afterward merely to add the report link, outcome, or contents; any
+head or description change creates a new snapshot and requires the
+affected checks and review again. Publishing the report requires authority for
+that external action.
+
+The final reviewer may inspect the exact prepared description before it is
+published. After publication, rederive the remote head and description digest;
+publish the reviewer-authored report only when both match its reviewed
+snapshot, and identify the reviewer rather than presenting a relayed report as
+the coordinator's own independent work.
 
 Do not copy stale evidence from an earlier commit. Do not check a statement
 because the intended work should eventually make it true. Keep credentials,
@@ -164,9 +178,10 @@ Open or mark a pull request ready for review only when:
 - the implementation satisfies every completion condition it claims;
 - `tabgrad-verify` passed against the current head commit;
 - for a substantive coding-agent change, independent verification and
-  skeptical review passed for that same state and their report is inspectable;
-  the documented single spelling or formatting correction exception does not
-  require this agent sequence;
+  skeptical review passed for the frozen head-and-description snapshot and
+  their final same-pull-request report is inspectable; the documented single
+  spelling or formatting correction exception does not require this agent
+  sequence;
 - tests, documentation, compatibility records, and other required artifacts
   agree with the proposed behavior;
 - the pull request template is complete and every readiness statement checked
@@ -220,6 +235,12 @@ repository commit. Recheck the corrected claims and repeat review of the pull
 request description. Reuse mechanical checks for the unchanged head unless the
 correction reveals that their coverage, result, or applicability was stated
 incorrectly.
+
+Publishing the final independent report as a review or comment after the
+description is frozen is not a description change and does not invalidate the
+snapshot it identifies. If the report requires a correction, update the owned
+artifact, create a new snapshot, and repeat the affected checks and complete
+review before a later final report.
 
 When the new head already passes the ready-for-review gate, it may remain
 non-draft and its issue may remain `In review`; update its evidence when

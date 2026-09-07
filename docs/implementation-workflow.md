@@ -90,15 +90,18 @@ flowchart LR
     N --> F
     F --> G[Observed repository and compatibility state]
     G --> H[Re-evaluate the milestone]
-    X --> Q{Repository artifact retained?}
-    Q -->|No| Y[Independent challenge and research acceptance]
+    X --> Q{Retained experimental artifact required?}
+    Q -->|No| Y[Research acceptance and challenge when required]
     Q -->|Yes| Z[Content-specific artifact checks]
     Z --> V[Independent verification, review, and merge]
     V --> Y
     Y --> W{Lasting architecture decision?}
-    W -->|No| H
-    W -->|Yes| U[Explicit approval and durable architecture record]
-    U --> H
+    W -->|Yes| U[Explicit architectural approval]
+    U --> P[Prepare the required durable decision record]
+    W -->|No| D{Durable documentation required by the accepted conclusion?}
+    D -->|Yes| P
+    D -->|No| H
+    P --> N
     H -->|More required work| C
     H -->|Outcome complete| I[Close the milestone]
     I --> J[Define the next bounded outcome]
@@ -106,11 +109,19 @@ flowchart LR
 
 A disposable experiment leaves its reproducible method, observations, and
 limitations in the research record without manufacturing a repository change.
-An experiment, tool, or explanatory document retained in the repository is a
-separate proposed artifact: it receives content-specific checks, independent
-verification and review, and merge before it becomes durable. Neither route
-turns a research conclusion into an architectural decision without the
-separate approval and documentation required for lasting architecture.
+An experimental fixture, tool, result, or other artifact that the approved
+research method requires the repository to retain receives content-specific
+checks, independent verification and review, and merge before the research is
+accepted. Research acceptance includes independent challenge when
+`tabgrad-research` or `tabgrad-architecture` requires it; a narrow investigation
+does not acquire a mandatory delegation step merely by following this diagram.
+
+Documentation derived from an accepted conclusion is a later proposed
+repository change. It re-enters the normal content-specific check,
+verification, review, and merge path; it is not confused with experimental
+evidence that had to exist before acceptance. A conclusion that establishes
+lasting architecture additionally needs explicit user approval, followed by
+the required durable architecture record through that same repository path.
 
 Possible later work is not expanded into placeholder issues merely to make the
 project look complete. A new issue is created when its expected result,
