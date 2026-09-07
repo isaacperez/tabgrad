@@ -152,6 +152,7 @@ REQUIRED_PULL_REQUEST_HEADINGS = {
     "Linked issue",
     "Test-driven development",
     "Verification",
+    "Independent verification and review",
     "Required evidence",
     "Ready for review",
     "Ready to merge",
