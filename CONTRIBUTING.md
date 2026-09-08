@@ -341,12 +341,24 @@ architecture, setup, examples, or contributor instructions.
 Use the appropriate kind of documentation:
 
 - `README.md` explains the project's purpose and high-level behavior.
-- API documentation explains how supported public interfaces are used.
+- Architecture documentation explains lasting system boundaries, constraints,
+  and accepted decisions.
+- Concept documentation explains meanings and distinctions shared across the
+  implementation.
+- Component documentation explains concrete internal owners and the contracts
+  they preserve.
+- Flow documentation follows control, data, errors, and resource lifetimes
+  across several owners.
+- Reference documentation records exact public or maintained internal
+  contracts for lookup.
 - Compatibility documentation defines and records bounded, evidence-backed
   support claims for named releases.
-- Architecture documentation records design that future contributors need to
-  understand.
 - Examples demonstrate behavior that the project actually supports and tests.
+
+Choose the primary location from the reader's dominant question and update any
+affected perspective index without duplicating the source. The complete
+placement rules are in
+[`docs/documentation.md`](docs/documentation.md#navigate-technical-documentation-by-reader-question).
 
 Normative documentation describes Tabgrad's complete product contract and
 permanent project rules. It must not narrate implementation progress or promise

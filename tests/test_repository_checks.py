@@ -355,6 +355,15 @@ class RepositoryCheckTests(unittest.TestCase):
         }
         self.assertTrue(expected.issubset(CHECKS.REQUIRED_FILES))
 
+    def test_documentation_perspective_indexes_are_timeless(self):
+        expected = {
+            "docs/components/README.md",
+            "docs/concepts/README.md",
+            "docs/flows/README.md",
+            "docs/reference/README.md",
+        }
+        self.assertTrue(expected.issubset(CHECKS.TIMELESS_DOCUMENTS))
+
     def test_exact_foundation_rules_cannot_be_commented_out(self):
         source_root = SCRIPT.parents[1]
         requirements = {

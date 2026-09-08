@@ -5,6 +5,24 @@ An issue records why a particular piece of work is needed. A pull request
 records a proposed change and its evidence. The documents listed here describe
 the product contract and rules that all work must follow.
 
+## Choose a technical perspective
+
+The same library can be understood through different questions. Choose the
+perspective that matches the question you are trying to answer:
+
+| Reader question | Start here |
+| --- | --- |
+| Why does the system have these boundaries and constraints? | [Architecture](architecture/README.md) |
+| What does a shared abstraction mean? | [Concepts](concepts/README.md) |
+| Which internal owner is responsible, and what contract does it preserve? | [Components](components/README.md) |
+| How does work pass through several owners from request to completion? | [Flows](flows/README.md) |
+| What exact API, support claim, binary interface, command, or term applies? | [Reference](reference/README.md) |
+
+These perspectives are navigation aids over one body of knowledge, not
+competing sources of truth. The [documentation policy](documentation.md#navigate-technical-documentation-by-reader-question)
+defines how a fact receives one primary home and how the other perspectives
+refer to it.
+
 ## Sources of truth
 
 Each subject has one primary source. Other documents may summarize a rule and
@@ -30,6 +48,7 @@ link to its primary source, but they must not create a competing version.
 | PyTorch compatibility and public API support | [`compatibility.md`](compatibility.md) |
 | Direct JavaScript API | [`javascript-api.md`](javascript-api.md) |
 | Documentation structure and writing rules | [`documentation.md`](documentation.md) |
+| Technical documentation perspectives and placement | [`documentation.md`](documentation.md#navigate-technical-documentation-by-reader-question) |
 | Development environment and commands | [`development.md`](development.md) |
 | Generated files and their source files | [`generated-files.md`](generated-files.md) |
 | Performance and resource measurements | [`performance.md`](performance.md) |

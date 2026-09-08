@@ -84,7 +84,7 @@ unexplained `Not applicable`.
 | --- | --- |
 | Code quality and design | <!-- Explain the governing invariant, chosen abstraction or reason no abstraction is needed, root-cause reasoning for a bug, and any material performance tradeoff. --> |
 | Tests | <!-- Identify added or changed tests and the behavior they detect. --> |
-| Documentation | <!-- Link changed documentation, or explain why no documentation can become inaccurate. --> |
+| Documentation | <!-- Identify and link every affected durable source. When technical documentation applies, classify its architecture, concept, component, flow, or reference perspective and link each changed primary source or index. Otherwise, explain from the changed contracts why no documentation can become inaccurate. --> |
 | PyTorch compatibility | <!-- Identify the reference behavior and comparison, or explain why compatibility is unaffected. --> |
 | CPU | <!-- Give the result of CPU checks, or explain why CPU behavior is unaffected. --> |
 | WebGPU | <!-- Give the result of WebGPU and WGSL checks, or explain why WebGPU behavior is unaffected. --> |
@@ -149,6 +149,9 @@ not apply, explain why under **Independent verification and review**.
   are reported above.
 - [ ] Code, tests, documentation, and compatibility claims describe the same
   behavior.
+- [ ] Every affected durable documentation source was updated; applicable
+  technical effects were classified by reader perspective, or the reason no
+  durable documentation changed is recorded above.
 - [ ] When relevant, unsupported behavior and backend selection are explicit.
   No silent fallback has been introduced.
 - [ ] Every material performance claim or hot-path risk has comparable
