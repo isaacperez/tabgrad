@@ -35,6 +35,14 @@ The public module exports `createRuntimeSession`, `RuntimeSession`, `Tensor`,
 and `TabgradError`. A session owns one WebAssembly CPU context and its linear
 memory. A tensor handle belongs to exactly one session.
 
+Those exported classes expose only the methods described in this reference.
+Backend dispatch, semantic-state access, and test instrumentation are kept in
+module-private closures or non-public test entry points; an `@internal` type
+annotation alone is not treated as JavaScript runtime encapsulation.
+`Tensor` is exported so applications can use the class identity, but only a
+runtime session can construct a valid tensor handle; calling `new Tensor()` from
+JavaScript fails with `INVALID_TENSOR`.
+
 ```javascript
 import { createRuntimeSession } from "./tabgrad/index.js";
 
@@ -88,6 +96,13 @@ until CPU preparation binds it to WebAssembly allocations. This distinction
 keeps the program immutable and backend-facing without turning it into a second
 numerical storage system.
 
+An executable program belongs to the observation request that formed it. A
+resident materialization stores only its physical allocation, not the complete
+program that happened to produce or reuse it. Observing an already resident
+tensor forms a fresh one-value request program for readback. Consequently, a
+small live tensor cannot retain an arbitrarily large completed downstream graph
+or inherit that graph's diagnostic identity.
+
 `tensor.close()` releases the public handle and is idempotent. A pending result
 keeps the exact input values it needs alive even if their handles close first.
 `session.close()` rejects new work, drains observations already accepted by the
@@ -124,10 +139,13 @@ An asynchronous backend error records the `webassembly-cpu` backend and its
 specific failure phase in `details`. It also retains, as internal diagnostic
 context, the demanded immutable executable program, its declared domain, the
 causal operation and stable source provenance, and the applicable backend
-endpoint. That program is not added to the public tensor API. When the browser
-or WebAssembly engine supplies a native error, `cause` preserves it. Repeated
-observations of one cached preparation failure receive distinct error objects
-and therefore cannot acquire another invocation's program or provenance.
+endpoint. When execution reaches a kernel, the context also identifies the
+causal output slot in that program, so a failure in an earlier computation of a
+chain is not misattributed to the demanded root. That program is not added to
+the public tensor API. When the browser or WebAssembly engine supplies a native
+error, `cause` preserves it. Repeated observations of one cached preparation
+failure receive distinct error objects and therefore cannot acquire another
+invocation's program or provenance.
 
 | Code | Meaning |
 | --- | --- |

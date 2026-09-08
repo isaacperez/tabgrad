@@ -271,9 +271,12 @@ validation; compilation; instantiation; or ABI validation. Execution and
 readback have distinct phase labels. Before an asynchronous error crosses the
 observation boundary, the runtime associates it with the exact immutable
 program for that invocation, its execution domain, the causal operation and
-stable source provenance, and the CPU endpoint. The association is internal
-diagnostic state rather than a public `ExecutableProgram` export, and a native
-browser or WebAssembly error remains available as the error cause.
+stable source provenance, and the CPU endpoint. A kernel status or trap carries
+the computation's output slot, which identifies the exact failing occurrence
+even when several operations share the same name and source. The association is
+internal, request-scoped diagnostic state rather than a public
+`ExecutableProgram` export, and a native browser or WebAssembly error remains
+available as the error cause.
 
 The scalar and SIMD modules are compiled from the same Rust source with
 opposite fixed `simd128` target-feature settings. The SIMD kernel performs
@@ -342,6 +345,14 @@ generation identity, cancellation state, and leases through the ordinary
 `ExecutionRequest`. Tensor data and reusable workspaces remain resident in the
 context's linear memory across compatible calls, which avoids repeated
 JavaScript-to-WebAssembly payload copies.
+
+Residency does not extend the lifetime of an invocation's executable program.
+A resident materialization records its allocation and backend generation, while
+the request owns the program used for execution or readback. Existing resident
+inputs are not rewritten with a downstream request's diagnostic context. This
+keeps program-metadata retention proportional to active requests, explicit
+prepared-program caches, and retained failures rather than to unrelated live
+tensors.
 
 The baseline path can serialize access to a mutable instance or lease an
 independent instance and memory to a request. In either case, one invocation

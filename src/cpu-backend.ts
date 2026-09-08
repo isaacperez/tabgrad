@@ -372,6 +372,7 @@ export class WebAssemblyCpuBackend {
             {
               backend: "webassembly-cpu",
               phase: "execution",
+              programValueSlot: computation.output,
               slot: computation.output,
             },
           );
@@ -394,6 +395,7 @@ export class WebAssemblyCpuBackend {
               backend: "webassembly-cpu",
               phase: "execution",
               operation: "add-f32",
+              programValueSlot: computation.output,
             },
             error,
           );
@@ -406,6 +408,7 @@ export class WebAssemblyCpuBackend {
               backend: "webassembly-cpu",
               phase: "execution",
               operation: "add-f32",
+              programValueSlot: computation.output,
               status,
             },
           );

@@ -13,6 +13,7 @@ import {
 import {
   createTestRuntimeSession,
   getTestExecutionFailureContext,
+  getTestResidentProgramReferenceCount,
 } from "../../dist/testing.js";
 import { ExecutableProgram } from "../../dist/executable-program.js";
 
@@ -762,6 +763,7 @@ test("a preparation failure retains operation, program, backend, phase, and caus
   assert.equal(caught.details.backend, "webassembly-cpu");
   assert.equal(caught.details.phase, "manifest-fetch");
   assert.equal(context.operation, "add");
+  assert.equal(context.programValueSlot, observedProgram.result);
   assert.deepEqual(context.provenance, { operation: "add", source: "Tensor.add" });
   assert.equal(context.program, observedProgram);
   assert.equal(context.executionDomain, "webassembly-cpu");
@@ -801,6 +803,7 @@ test("a kernel trap retains operation, program, backend, phase, and native cause
   assert.equal(caught.details.backend, "webassembly-cpu");
   assert.equal(caught.details.phase, "execution");
   assert.equal(context.operation, "add");
+  assert.equal(context.programValueSlot, observedProgram.result);
   assert.deepEqual(context.provenance, { operation: "add", source: "Tensor.add" });
   assert.equal(context.program, observedProgram);
   assert.equal(context.executionDomain, "webassembly-cpu");
@@ -808,6 +811,128 @@ test("a kernel trap retains operation, program, backend, phase, and native cause
   assert.equal(context.phase, "execution");
   assert.ok(caught.cause instanceof WebAssembly.RuntimeError);
   await session.close();
+});
+
+test("a kernel trap in a chain identifies the exact failing computation", async () => {
+  const manifestUrl = installFixture("causal-chain-kernel-trap", {
+    kernelBehavior: "trap",
+  });
+  let observedProgram;
+  const session = createTestRuntimeSession({
+    manifestUrl,
+    forceVariant: "scalar",
+    onProgramFormed(program) {
+      observedProgram = program;
+    },
+  });
+  try {
+    const first = session.tensor([1]).add(session.tensor([2]));
+    const result = first.add(session.tensor([3]));
+    let caught;
+    try {
+      await result.toArray();
+    } catch (error) {
+      caught = error;
+    }
+
+    assert.ok(caught instanceof TabgradError);
+    assert.equal(caught.code, "BACKEND_TRAP");
+    const context = getTestExecutionFailureContext(caught);
+    assert.ok(context);
+    assert.equal(observedProgram.computations.length, 2);
+    assert.equal(
+      context.programValueSlot,
+      observedProgram.computations[0].output,
+    );
+    assert.notEqual(context.programValueSlot, observedProgram.result);
+    assert.deepEqual(
+      context.provenance,
+      observedProgram.computations[0].provenance,
+    );
+  } finally {
+    await session.close();
+  }
+});
+
+test("a retained input does not keep or inherit a completed downstream program", async () => {
+  const observedPrograms = [];
+  const readbackCause = new Error("injected readback failure");
+  let failReadback = false;
+  const session = createTestRuntimeSession({
+    manifestUrl: new URL("manifest.json", distributionUrl),
+    forceVariant: "scalar",
+    onProgramFormed(program) {
+      observedPrograms.push(program);
+    },
+    beforeReadback() {
+      if (failReadback) {
+        throw readbackCause;
+      }
+    },
+  });
+  const retained = session.tensor([1]);
+  const disposable = [];
+  let result = retained;
+  for (let index = 0; index < 8; index += 1) {
+    const increment = session.tensor([1]);
+    const next = result.add(increment);
+    disposable.push(increment, next);
+    result = next;
+  }
+
+  try {
+    assert.deepEqual(Array.from(await result.toArray()), [9]);
+    for (const tensor of disposable) {
+      tensor.close();
+    }
+    observedPrograms.length = 0;
+
+    assert.equal(session.diagnostics().liveOperationRecords, 0);
+    assert.equal(session.diagnostics().liveMaterializationRecords, 1);
+    assert.equal(getTestResidentProgramReferenceCount(session), 0);
+
+    failReadback = true;
+    let caught;
+    try {
+      await retained.toArray();
+    } catch (error) {
+      caught = error;
+    }
+
+    assert.ok(caught instanceof TabgradError);
+    assert.equal(caught.code, "BACKEND_STATUS_ERROR");
+    const context = getTestExecutionFailureContext(caught);
+    assert.ok(context);
+    assert.equal(observedPrograms.length, 1);
+    assert.equal(context.program, observedPrograms[0]);
+    assert.equal(context.programValueSlot, 0);
+    assert.deepEqual(context.program.values, [
+      {
+        slot: 0,
+        dtype: "float32",
+        device: "cpu",
+        layout: "contiguous",
+        shape: [1],
+        source: "binding",
+        provenance: { operation: "tensor", source: "RuntimeSession.tensor" },
+      },
+    ]);
+    assert.deepEqual(context.program.computations, []);
+    assert.equal(context.program.result, 0);
+    assert.deepEqual(context.provenance, {
+      operation: "tensor",
+      source: "RuntimeSession.tensor",
+    });
+    assert.equal(context.phase, "readback");
+    assert.equal(caught.cause, readbackCause);
+    assert.equal(getTestResidentProgramReferenceCount(session), 0);
+  } finally {
+    retained.close();
+    for (const tensor of disposable) {
+      tensor.close();
+    }
+    await session.close();
+  }
 });
 
 test("a cached preparation failure keeps invocation contexts distinct", async () => {

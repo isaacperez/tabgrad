@@ -193,13 +193,24 @@ function retainProgramFailureContext(
       { backend: "webassembly-cpu", phase: fallbackPhase },
       error,
     );
-  const result = program.values.find((value) => value.slot === program.result);
-  const provenance = result?.provenance ?? Object.freeze({
+  const recordedProgramValueSlot = error instanceof TabgradError
+    ? error.details.programValueSlot
+    : undefined;
+  const programValueSlot = typeof recordedProgramValueSlot === "number"
+    && Number.isSafeInteger(recordedProgramValueSlot)
+    && program.values.some((value) => value.slot === recordedProgramValueSlot)
+    ? recordedProgramValueSlot
+    : program.result;
+  const causalValue = program.values.find(
+    (candidate) => candidate.slot === programValueSlot,
+  );
+  const provenance = causalValue?.provenance ?? Object.freeze({
     operation: "tensor",
     source: "RuntimeSession.tensor",
   });
   return retainExecutionFailureContext(tabgradError, {
     operation: provenance.operation,
+    programValueSlot,
     provenance,
     program,
     executionDomain: program.domain,
@@ -266,7 +277,6 @@ type Materialization =
   | {
     readonly kind: "resident";
     readonly allocation: ResidentAllocation;
-    readonly program: ExecutableProgram;
   };
 
 class MaterializationTable {
@@ -283,9 +293,8 @@ class MaterializationTable {
   setResident(
     value: TensorValue,
     allocation: ResidentAllocation,
-    program: ExecutableProgram,
   ): void {
-    this.#entries.set(value, { kind: "resident", allocation, program });
+    this.#entries.set(value, { kind: "resident", allocation });
   }
 
   delete(value: TensorValue): Materialization | undefined {
@@ -327,21 +336,70 @@ interface FormedProgram {
   readonly newlyComputed: readonly TensorValue[];
 }
 
+interface RuntimeSessionTestConfiguration {
+  readonly forceVariant: WasmVariant;
+  readonly onProgramFormed?: (program: ExecutableProgram) => void;
+  readonly beforeReadback?: () => void;
+}
+
+const RUNTIME_SESSION_TEST_CONFIGURATION = Symbol("RuntimeSessionTestConfiguration");
+
+interface InternalRuntimeSessionOptions extends RuntimeSessionOptions {
+  readonly [RUNTIME_SESSION_TEST_CONFIGURATION]?: RuntimeSessionTestConfiguration;
+}
+
+interface RuntimeSessionAccess {
+  readonly add: (left: TensorState, rightHandle: unknown) => Tensor;
+  readonly observe: (state: TensorState) => Promise<Float32Array>;
+  readonly assertOpen: () => void;
+  readonly releaseHandle: (state: TensorState) => void;
+  readonly countResidentProgramReferences: () => number;
+}
+
+const RUNTIME_SESSION_ACCESS = new WeakMap<RuntimeSession, RuntimeSessionAccess>();
+
+function runtimeSessionAccess(session: RuntimeSession): RuntimeSessionAccess {
+  const access = RUNTIME_SESSION_ACCESS.get(session);
+  if (access === undefined) {
+    throw new TabgradError(
+      "INVALID_TENSOR",
+      "The tensor is not attached to a valid runtime session.",
+    );
+  }
+  return access;
+}
+
+let constructTensorHandle: ((state: TensorState) => Tensor) | undefined;
+let inspectTensorState: ((handle: unknown) => TensorState | null) | undefined;
+const TENSOR_CONSTRUCTION_TOKEN = Symbol("TensorConstructionToken");
+
+function createTensorHandle(state: TensorState): Tensor {
+  if (constructTensorHandle === undefined) {
+    throw new Error("Tensor construction is not initialized.");
+  }
+  return constructTensorHandle(state);
+}
+
+function tensorStateFromHandle(handle: unknown): TensorState | null {
+  return inspectTensorState?.(handle) ?? null;
+}
+
 export class Tensor {
   readonly #state: TensorState;
 
-  private constructor(state: TensorState) {
+  private constructor(state: TensorState, token: symbol) {
+    if (token !== TENSOR_CONSTRUCTION_TOKEN) {
+      throw new TabgradError(
+        "INVALID_TENSOR",
+        "Tensor handles can only be created by a runtime session.",
+      );
+    }
     this.#state = state;
   }
 
-  /** @internal */
-  static fromState(state: TensorState): Tensor {
-    return new Tensor(state);
-  }
-
-  /** @internal */
-  static stateFromHandle(handle: unknown): TensorState | null {
-    return handle instanceof Tensor ? handle.#state : null;
+  static {
+    constructTensorHandle = (state) => new Tensor(state, TENSOR_CONSTRUCTION_TOKEN);
+    inspectTensorState = (handle) => handle instanceof Tensor ? handle.#state : null;
   }
 
   get shape(): readonly [number] {
@@ -360,18 +418,18 @@ export class Tensor {
   }
 
   add(right: Tensor): Tensor {
-    return this.#state.session.add(this.#state, right);
+    return runtimeSessionAccess(this.#state.session).add(this.#state, right);
   }
 
   toArray(): Promise<Float32Array> {
     this.#assertOpen();
-    return this.#state.session.observe(this.#state);
+    return runtimeSessionAccess(this.#state.session).observe(this.#state);
   }
 
   close(): void {
     if (!this.#state.closed) {
       this.#state.closed = true;
-      this.#state.session.releaseHandle(this.#state);
+      runtimeSessionAccess(this.#state.session).releaseHandle(this.#state);
     }
   }
 
@@ -379,7 +437,7 @@ export class Tensor {
     if (this.#state.closed) {
       throw new TabgradError("CLOSED_TENSOR", "The tensor handle is closed.");
     }
-    this.#state.session.assertOpen();
+    runtimeSessionAccess(this.#state.session).assertOpen();
   }
 }
 
@@ -394,7 +452,7 @@ class AddOperationDefinition implements OperationDefinition {
     left: TensorState,
     rightHandle: unknown,
   ): AdmittedOperation {
-    const right = Tensor.stateFromHandle(rightHandle);
+    const right = tensorStateFromHandle(rightHandle);
     if (right === null) {
       throw new TabgradError(
         "INVALID_TENSOR",
@@ -498,31 +556,36 @@ export class RuntimeSession {
   #operationRecords = 0;
   #requestLeases = 0;
   #onProgramFormed: ((program: ExecutableProgram) => void) | undefined;
+  #beforeReadback: (() => void) | undefined;
 
   constructor(options: RuntimeSessionOptions = {}) {
+    const testConfiguration = (options as InternalRuntimeSessionOptions)[
+      RUNTIME_SESSION_TEST_CONFIGURATION
+    ];
     const manifestUrl = options.manifestUrl === undefined
       ? new URL("./manifest.json", import.meta.url)
       : new URL(options.manifestUrl, import.meta.url);
-    this.#backend = new WebAssemblyCpuBackend(manifestUrl);
-  }
-
-  /** @internal */
-  static createForTesting(
-    options: RuntimeSessionOptions,
-    forceVariant: WasmVariant,
-    onProgramFormed?: (program: ExecutableProgram) => void,
-  ): RuntimeSession {
-    const session = new RuntimeSession(options);
-    const manifestUrl = options.manifestUrl === undefined
-      ? new URL("./manifest.json", import.meta.url)
-      : new URL(options.manifestUrl, import.meta.url);
-    session.#backend = new WebAssemblyCpuBackend(manifestUrl, forceVariant);
-    session.#onProgramFormed = onProgramFormed;
-    return session;
+    this.#backend = new WebAssemblyCpuBackend(
+      manifestUrl,
+      testConfiguration?.forceVariant,
+    );
+    this.#onProgramFormed = testConfiguration?.onProgramFormed;
+    this.#beforeReadback = testConfiguration?.beforeReadback;
+    RUNTIME_SESSION_ACCESS.set(this, Object.freeze({
+      add: (left: TensorState, rightHandle: unknown) => (
+        this.#add(left, rightHandle)
+      ),
+      observe: (state: TensorState) => this.#observe(state),
+      assertOpen: () => this.#assertOpen(),
+      releaseHandle: (state: TensorState) => this.#releaseHandle(state),
+      countResidentProgramReferences: () => (
+        this.#materializations.countResidentProgramReferences()
+      ),
+    }));
   }
 
   tensor(data: Iterable<number> | ArrayLike<number>, options: TensorOptions = {}): Tensor {
-    this.assertOpen();
+    this.#assertOpen();
     if (options.dtype !== undefined && options.dtype !== "float32") {
       throw new TabgradError(
         "UNSUPPORTED_DTYPE",
@@ -562,9 +625,8 @@ export class RuntimeSession {
     return this.#createHandle(value);
   }
 
-  /** @internal */
-  add(left: TensorState, rightHandle: unknown): Tensor {
-    this.assertOpen();
+  #add(left: TensorState, rightHandle: unknown): Tensor {
+    this.#assertOpen();
     const admitted = ADD_OPERATION.admit(this, left, rightHandle);
     for (const input of admitted.record.inputs) {
       this.#retainValue(input);
@@ -574,14 +636,14 @@ export class RuntimeSession {
     return this.#createHandle(result);
   }
 
-  /** @internal */
-  observe(state: TensorState): Promise<Float32Array> {
-    this.assertOpen();
+  #observe(state: TensorState): Promise<Float32Array> {
+    this.#assertOpen();
     this.#retainValue(state.value);
     return this.#enqueue(async () => {
       try {
         const materialization = await this.#materialize(state.value);
         try {
+          this.#beforeReadback?.();
           return this.#backend.read(
             materialization.allocation,
             state.value.shape[0],
@@ -610,11 +672,6 @@ export class RuntimeSession {
     });
   }
 
-  /** @internal */
-  countResidentProgramReferencesForTesting(): number {
-    return this.#materializations.countResidentProgramReferences();
-  }
-
   close(): Promise<void> {
     if (this.#closePromise !== null) {
       return this.#closePromise;
@@ -623,7 +680,7 @@ export class RuntimeSession {
     for (const state of [...this.#states]) {
       if (!state.closed) {
         state.closed = true;
-        this.releaseHandle(state);
+        this.#releaseHandle(state);
       }
     }
     this.#closePromise = this.#finishClose();
@@ -641,15 +698,13 @@ export class RuntimeSession {
     await this.#backend.close();
   }
 
-  /** @internal */
-  assertOpen(): void {
+  #assertOpen(): void {
     if (this.#closed) {
       throw new TabgradError("CLOSED_SESSION", "The runtime session is closed.");
     }
   }
 
-  /** @internal */
-  releaseHandle(state: TensorState): void {
+  #releaseHandle(state: TensorState): void {
     this.#states.delete(state);
     this.#releaseValue(state.value);
   }
@@ -657,7 +712,7 @@ export class RuntimeSession {
   #createHandle(value: TensorValue): Tensor {
     const state = new TensorState(this, value);
     this.#states.add(state);
-    return Tensor.fromState(state);
+    return createTensorHandle(state);
   }
 
   #registerValue(value: TensorValue): void {
@@ -707,11 +762,11 @@ export class RuntimeSession {
     readonly allocation: ResidentAllocation;
     readonly program: ExecutableProgram;
   }> {
+    const formed = this.#formProgram(value);
     const existing = this.#materializations.get(value);
     if (existing?.kind === "resident") {
-      return { allocation: existing.allocation, program: existing.program };
+      return { allocation: existing.allocation, program: formed.program };
     }
-    const formed = this.#formProgram(value);
     try {
       const allocations = await this.#backend.execute(formed.program, formed.bindings);
       for (const [slot, allocation] of allocations) {
@@ -723,11 +778,22 @@ export class RuntimeSession {
             { backend: "webassembly-cpu", phase: "execution", slot },
           );
         }
-        this.#materializations.setResident(
-          boundValue,
-          allocation,
-          formed.program,
-        );
+        const existingMaterialization = this.#materializations.get(boundValue);
+        if (existingMaterialization?.kind === "resident") {
+          if (existingMaterialization.allocation !== allocation) {
+            throw new TabgradError(
+              "BACKEND_STATUS_ERROR",
+              "The backend replaced a live resident allocation.",
+              {
+                backend: "webassembly-cpu",
+                phase: "execution",
+                slot,
+              },
+            );
+          }
+          continue;
+        }
+        this.#materializations.setResident(boundValue, allocation);
       }
       for (const computedValue of formed.newlyComputed) {
         this.#releaseDependencies(computedValue);
@@ -827,10 +893,22 @@ export function createRuntimeSession(options: RuntimeSessionOptions = {}): Runti
 export function createRuntimeSessionForTesting(
   options: RuntimeSessionOptions & { readonly forceVariant: WasmVariant },
   onProgramFormed?: (program: ExecutableProgram) => void,
+  beforeReadback?: () => void,
 ): RuntimeSession {
-  return RuntimeSession.createForTesting(
-    options,
-    options.forceVariant,
-    onProgramFormed,
-  );
+  const testConfiguration: RuntimeSessionTestConfiguration = {
+    forceVariant: options.forceVariant,
+    ...(onProgramFormed === undefined ? {} : { onProgramFormed }),
+    ...(beforeReadback === undefined ? {} : { beforeReadback }),
+  };
+  return new RuntimeSession({
+    ...options,
+    [RUNTIME_SESSION_TEST_CONFIGURATION]: testConfiguration,
+  } as InternalRuntimeSessionOptions);
+}
+
+/** @internal */
+export function countResidentProgramReferencesForTesting(
+  session: RuntimeSession,
+): number {
+  return runtimeSessionAccess(session).countResidentProgramReferences();
 }

@@ -21,6 +21,7 @@ export type TabgradErrorCode =
 /** @internal */
 export interface InternalExecutionFailureContext {
   readonly operation: string;
+  readonly programValueSlot: number;
   readonly provenance: Readonly<{
     readonly operation: string;
     readonly source: string;

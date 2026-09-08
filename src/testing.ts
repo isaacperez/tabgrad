@@ -2,6 +2,7 @@ import type { WasmVariant } from "./cpu-backend.js";
 import { inspectExecutionFailureContext } from "./errors.js";
 import { ExecutableProgram } from "./executable-program.js";
 import {
+  countResidentProgramReferencesForTesting,
   type RuntimeSession,
   type RuntimeSessionOptions,
   createRuntimeSessionForTesting,
@@ -10,10 +11,12 @@ import {
 export interface TestRuntimeSessionOptions extends RuntimeSessionOptions {
   readonly forceVariant: WasmVariant;
   readonly onProgramFormed?: (program: ExecutableProgram) => void;
+  readonly beforeReadback?: () => void;
 }
 
 export interface TestExecutionFailureContext {
   readonly operation: string;
+  readonly programValueSlot: number;
   readonly provenance: Readonly<{ readonly operation: string; readonly source: string }>;
   readonly program: ExecutableProgram;
   readonly executionDomain: string;
@@ -24,7 +27,11 @@ export interface TestExecutionFailureContext {
 export function createTestRuntimeSession(
   options: TestRuntimeSessionOptions,
 ): RuntimeSession {
-  return createRuntimeSessionForTesting(options, options.onProgramFormed);
+  return createRuntimeSessionForTesting(
+    options,
+    options.onProgramFormed,
+    options.beforeReadback,
+  );
 }
 
 export function getTestExecutionFailureContext(
@@ -40,5 +47,5 @@ export function getTestExecutionFailureContext(
 export function getTestResidentProgramReferenceCount(
   session: RuntimeSession,
 ): number {
-  return session.countResidentProgramReferencesForTesting();
+  return countResidentProgramReferencesForTesting(session);
 }
