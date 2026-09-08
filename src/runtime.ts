@@ -302,6 +302,19 @@ class MaterializationTable {
     return this.#entries.size;
   }
 
+  countResidentProgramReferences(): number {
+    let count = 0;
+    for (const materialization of this.#entries.values()) {
+      if (
+        materialization.kind === "resident"
+        && Object.hasOwn(materialization, "program")
+      ) {
+        count += 1;
+      }
+    }
+    return count;
+  }
+
   clear(): void {
     this.#entries.clear();
   }
@@ -595,6 +608,11 @@ export class RuntimeSession {
       liveMaterializationRecords: this.#materializations.size,
       liveRequestLeases: this.#requestLeases,
     });
+  }
+
+  /** @internal */
+  countResidentProgramReferencesForTesting(): number {
+    return this.#materializations.countResidentProgramReferences();
   }
 
   close(): Promise<void> {

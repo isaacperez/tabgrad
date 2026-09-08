@@ -36,3 +36,9 @@ export function getTestExecutionFailureContext(
   }
   return context as TestExecutionFailureContext;
 }
+
+export function getTestResidentProgramReferenceCount(
+  session: RuntimeSession,
+): number {
+  return session.countResidentProgramReferencesForTesting();
+}
