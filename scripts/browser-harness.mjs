@@ -190,6 +190,15 @@ async function withTimeout(promise, milliseconds, description) {
   }
 }
 
+export async function removeBrowserProfile(profile, removeDirectory = rm) {
+  await removeDirectory(profile, {
+    force: true,
+    maxRetries: 5,
+    recursive: true,
+    retryDelay: 100,
+  });
+}
+
 export async function runBrowserPage({
   server,
   browser,
@@ -259,6 +268,6 @@ export async function runBrowserPage({
         ]);
       }
     }
-    await rm(profile, { force: true, recursive: true });
+    await removeBrowserProfile(profile);
   }
 }
