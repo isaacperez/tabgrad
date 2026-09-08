@@ -128,7 +128,7 @@ try {
         executable,
         page: "measure.html",
         parameters: { variant },
-        timeoutMilliseconds: 60_000,
+        applicationTimeoutMilliseconds: 60_000,
       });
       assert.equal(publicPath.ok, true, JSON.stringify(publicPath.error));
       const rawRounds = [];
@@ -139,7 +139,7 @@ try {
           executable,
           page: "raw-kernel-measure.html",
           parameters: { variant, round },
-          timeoutMilliseconds: 60_000,
+          applicationTimeoutMilliseconds: 60_000,
         });
         assert.equal(rawRound.ok, true, JSON.stringify(rawRound.error));
         const { ok: _ok, ...measurements } = rawRound;

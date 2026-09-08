@@ -19,8 +19,9 @@ absent from [`dependencies.md`](dependencies.md).
 ## Repository consistency workflow
 
 `.github/workflows/repository-checks.yml` runs on pull requests, pushes to
-`main`, and manual dispatch. It has read-only repository permission and two
-independent jobs.
+`main`, and manual dispatch. It has read-only repository permission and three
+job definitions. The browser matrix expands its definition into independent
+Chrome and Firefox jobs.
 
 The `repository-consistency` job runs:
 
@@ -35,19 +36,29 @@ installs the npm lockfile without lifecycle scripts, and runs:
 
 1. `npm run check` for strict TypeScript compilation and Rustfmt plus Clippy on
    both fixed WebAssembly feature variants.
-2. `npm test` to build the distribution, run Node.js integration and raw-ABI
-   tests, and execute scalar and SIMD additions in the installed Chrome and
-   Firefox browsers one at a time.
+2. `npm run test:node` to build the distribution and run the Node.js
+   integration and raw-ABI tests.
+
+The `browser` matrix creates one job with `TABGRAD_BROWSER=Chrome` and another
+with `TABGRAD_BROWSER=Firefox`. Each isolated job prepares the same locked
+Node.js, npm, and Rust environment and runs
+`npm run test:browser:from-source`. The command builds its own distribution and
+executes scalar and SIMD additions only in the selected installed browser.
+`fail-fast` is disabled, so one browser failure does not suppress evidence from
+the other browser. This deliberately duplicates a small build and setup cost in
+exchange for independent logs, results, and reruns without cross-job artifacts
+or additional actions.
 
 The Python job installs only the exact artifacts accepted by
 `requirements-dev.lock`. The runtime job installs the exact npm resolution,
 selected Rust toolchain, and direct tools recorded in
 [`dependencies.md`](dependencies.md). The repository validator rejects a
-workflow until its path has been registered as reviewed. It checks every workflow for read-only
-repository permission, job-level permission overrides, `pull_request_target`,
-and actions that are unregistered or are not pinned to a full commit. It also
-rejects an undocumented shell command in any workflow and a registered command
-that appears more than once across workflows. The test runner fails when
+workflow until its path has been registered as reviewed. It checks every
+workflow for read-only repository permission, job-level permission overrides,
+`pull_request_target`, and actions that are unregistered or are not pinned to a
+full commit. It also rejects undocumented shell commands. Validation commands
+may appear only once; exact, idempotent environment-setup commands may repeat
+where isolated jobs require the same toolchain. The test runner fails when
 discovery finds zero tests. An empty suite is not a successful check.
 
 The repository-consistency workflow must match its complete reviewed
@@ -57,12 +68,14 @@ step order, and other executable fields cannot change merely because the
 required command strings remain present. Review and register the complete new
 definition whenever one of those controls must change.
 
-The stable check names are `Repository checks / repository-consistency` and
-`Repository checks / runtime`. The first checks Python formatting and lint,
-repository structure, policy consistency, and the validator itself. The second
-checks the TypeScript and Rust source, generated browser distribution, raw ABI,
-and real-browser execution. Coding-agent
-instruction review remains a separate reasoned review under
+The stable check names are `Repository checks / repository-consistency`,
+`Repository checks / runtime`, `Repository checks / browser-Chrome`, and
+`Repository checks / browser-Firefox`. The first checks Python formatting and
+lint, repository structure, policy consistency, and the validator itself. The
+second checks TypeScript and Rust source plus the generated distribution and
+Node.js behavior. The last two independently exercise the generated runtime in
+their named real browser. Coding-agent instruction review remains a separate
+reasoned review under
 [`agent-instruction-review.md`](agent-instruction-review.md). Continuous
 integration does not invoke AI models.
 
