@@ -21,10 +21,11 @@ The guide connects several authoritative policies rather than replacing them:
 
 ## Start with outcomes, not a predicted file tree
 
-Architecture documentation describes responsibilities and invariants that an
-implementation must preserve. It deliberately does not prescribe one class or
-module for every named concept. Implementation planning therefore starts from
-an observable capability, not from a checklist of architectural nouns.
+Architecture documentation describes system-wide responsibility boundaries,
+cross-system invariants, and accepted decisions that an implementation must
+preserve. It deliberately does not prescribe one class or module for every
+named concept. Implementation planning therefore starts from an observable
+capability, not from a checklist of architectural nouns.
 
 ## A narrow production slice is still production
 
@@ -71,7 +72,7 @@ Different records answer different questions:
 
 | Record | Question it answers |
 | --- | --- |
-| Architecture documentation | Which lasting responsibilities and invariants must every implementation preserve? |
+| Architecture documentation | Which lasting system boundaries, cross-system invariants, and accepted decisions must every implementation preserve? |
 | Milestone | Which bounded integrated outcome must exist before this objective is complete? |
 | Issue | Which independently completable and verifiable result is being changed? |
 | Compatibility record | Which public behavior is actually supported, in which environments, with what evidence? |
@@ -343,13 +344,25 @@ or incorrect information.
 | Established fact | Durable location |
 | --- | --- |
 | Public purpose or high-level execution behavior | Root `README.md` |
-| Lasting responsibility, invariant, ownership, or cross-component data flow | Relevant architecture chapter |
-| Supported public interface, errors, and examples | API documentation |
+| Lasting system boundary, cross-system invariant, or accepted technical decision | Relevant architecture chapter |
+| Meaning or distinction shared across implementations | Relevant concept documentation |
+| Concrete internal owner, external contract, lifetime, failure behavior, or material cost | Relevant component documentation, or source-level documentation when the fact is purely local |
+| Ordering, data movement, error propagation, or resource release across owners | Relevant flow documentation |
+| Supported public interface, errors, and examples | Public reference documentation |
+| Exact maintained internal interface | Internal reference documentation linked to its governing source |
 | Verified PyTorch support and environmental scope | `docs/compatibility.md` |
 | Reproducible setup, command, or required tool version | `docs/development.md` |
-| Non-obvious local invariant or implementation contract | Source-level type, function, module, or focused internal documentation |
+| Non-obvious local invariant | Source-level type, function, or module documentation |
 | Work progress, missing behavior, sequencing, or an unresolved choice | Issue, project item, or pull request |
 | Released historical behavior or migration | Changelog and release documentation |
+
+A change can affect several perspectives without giving the same fact several
+homes. During issue definition and implementation, identify the reader
+questions whose answers change, select one primary source using
+[`docs/documentation.md`](documentation.md#navigate-technical-documentation-by-reader-question),
+and update only the indexes or summaries that need to point to it. Record the
+affected perspectives in the pull request, or explain why no durable
+documentation can become inaccurate.
 
 A source file or class does not deserve architectural documentation merely
 because it exists. Record a concrete internal detail when another contributor
