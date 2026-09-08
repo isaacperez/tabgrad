@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Tabgrad browser integration test</title>
+  </head>
+  <body>
+    <script type="module">
+      import { createRuntimeSession } from "/index.js";
+      import { createTestRuntimeSession } from "/testing.js";
+
+      const parameters = new URLSearchParams(location.search);
+      const token = parameters.get("token");
+      const forceVariant = parameters.get("variant");
+
+      async function report(result) {
+        await fetch(`/__result?token=${encodeURIComponent(token)}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(result),
+        });
+      }
+
+      try {
+        const manifestUrl = new URL("/manifest.json", location.href);
+        const session = forceVariant === "auto"
+          ? createRuntimeSession({ manifestUrl })
+          : createTestRuntimeSession({ manifestUrl, forceVariant });
+        const left = session.tensor([1, 2, 3]);
+        const right = session.tensor([4, 5, 6]);
+        const result = left.add(right);
+        const before = session.diagnostics();
+        const values = Array.from(await result.toArray());
+        const after = session.diagnostics();
+        left.close();
+        right.close();
+        result.close();
+        await session.close();
+        await report({ ok: true, before, after, values });
+      } catch (error) {
+        await report({
+          ok: false,
+          error: {
+            code: error?.code,
+            message: error instanceof Error ? error.message : String(error),
+            stack: error instanceof Error ? error.stack : undefined,
+          },
+        });
+      }
+    </script>
+  </body>
+</html>

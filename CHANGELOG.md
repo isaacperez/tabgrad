@@ -7,4 +7,8 @@ Versioning.
 
 ## Unreleased
 
-No user-visible runtime behavior has been implemented.
+### Added
+
+- A direct JavaScript runtime path for lazy, out-of-place addition of
+  one-dimensional contiguous CPU `float32` tensors, backed by prebuilt scalar
+  and WebAssembly SIMD Rust kernels.
