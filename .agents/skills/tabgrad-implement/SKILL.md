@@ -155,6 +155,18 @@ small refactor may be included when it is necessary to implement the issue
 safely and its preserved behavior can be verified. Put broader cleanup or an
 independently useful refactor in separate work.
 
+For work that retains distributed production code, apply
+[the narrow-production-slice rule](../../../docs/implementation-workflow.md#a-narrow-production-slice-is-still-production).
+Identify the accepted ownership, interface, lifetime, failure, and performance
+boundaries that constrain the slice, together with any near-term variation axis
+established by repository evidence. A narrow behavior boundary does not
+authorize a test-only or example-specific seam, a knowingly provisional owner,
+or reliance on a planned wholesale replacement. Implement no deferred feature
+or speculative abstraction that the current invariants do not justify. Use the
+classifications in the primary rule for disposable research, retained
+experimental artifacts, non-production repository work, and production
+refactors rather than treating every small change as production implementation.
+
 Before selecting an implementation, state the assumptions that affect it, the
 invariant it must preserve, realistic alternatives, and the simplest
 structurally correct option. Inspect evidence that can resolve uncertainty and
@@ -289,6 +301,8 @@ Confirm that:
 
 - the implementation satisfies every completion condition it claims to
   complete;
+- retained distributed production code satisfies the narrow-production-slice
+  rule without provisional seams or speculative future machinery;
 - the code satisfies `docs/quality.md`, including its responsibility,
   abstraction, nested-helper, root-cause, scope, and performance rules;
 - tests would detect the behavior added or corrected;

@@ -26,6 +26,41 @@ implementation must preserve. It deliberately does not prescribe one class or
 module for every named concept. Implementation planning therefore starts from
 an observable capability, not from a checklist of architectural nouns.
 
+## A narrow production slice is still production
+
+An implementation issue may deliberately support one operation, one backend
+path, or another small observable subset. That boundary narrows the behavior to
+deliver; it does not make retained library code a disposable prototype or lower
+its engineering standard. Unless an approved research method identifies work as
+an experiment, distributed executable code must honor the accepted ownership,
+interfaces, lifetimes, failure boundaries, and performance constraints that
+apply to it.
+
+Plan the slice against extension axes already evidenced by its issue, callers,
+architecture, and directly related work. The chosen seam must not be knowingly
+test-only, tied to the example input, or dependent on a planned wholesale
+replacement when the next established variation arrives. A slice can omit
+records, passes, optimizations, and generality that its behavior does not need;
+its existing responsibilities must still be placed at the layer that will own
+them in the complete design.
+
+This rule does not authorize speculative frameworks. Use the smallest
+production representation that preserves the accepted boundaries and real
+invariants. Do not add a manager, interface, plug-in point, configuration axis,
+or future feature merely because broader support is expected eventually. If the
+bounded result cannot fit the accepted architecture without a new material
+choice, stop for the applicable research and architecture process instead of
+hiding a provisional decision in code.
+
+Classify work by what the repository retains. An authorized disposable
+experiment follows its research method and leaves no production implementation
+behind. A retained experimental artifact remains explicitly experimental and
+uses its content-specific checks; it does not silently become a library seam.
+Documentation, policies, and tooling that do not determine distributed
+executable behavior follow their own quality checks. A behavior-preserving
+production refactor and new distributed production behavior both retain code to
+which the production-slice rule applies.
+
 For example, “add a scheduler” names a possible mechanism but does not say what
 a user or another component can do afterward. A better planning result states
 that a bounded demanded computation is transformed into ordered backend work,
