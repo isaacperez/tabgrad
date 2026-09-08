@@ -42,7 +42,10 @@ Tabgrad name and are not published as `torch`.
 Pyodide executes the user's Python code in the browser. A Python compatibility
 layer exposes the supported API and connects Python calls to the Tabgrad tensor
 runtime. The Tabgrad runtime performs tensor operations and automatic
-differentiation on its CPU or WebGPU backend.
+differentiation on its CPU or WebGPU backend. CPU numerical kernels are authored
+in Rust and compiled into WebAssembly before distribution; browser users load
+the prebuilt artifacts and do not install Rust or another native tensor
+runtime.
 
 The Python and JavaScript frontends share one TypeScript semantic runtime.
 Operations are validated when called, while pure numerical payloads may remain

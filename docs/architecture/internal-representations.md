@@ -158,7 +158,9 @@ Preparing a compute-domain program chooses physical details for one backend,
 capability fingerprint, and generation. The opaque result is
 `PreparedExecutable`. WebGPU preparation can own pipelines, bind-group strategy,
 and a command-encoding plan. WebAssembly preparation can own modules, compiled
-exports, instance strategy, and a linear-memory plan.
+exports, instance strategy, and a linear-memory plan. The CPU-specific host,
+module, binary-interface, and memory boundaries are explained in
+[WebAssembly CPU backend](webassembly-cpu-backend.md).
 
 `PreparedExecutable` is reusable while its full key remains valid, but it is not
 portable between backends or device generations and it is not an invocation in

@@ -11,9 +11,20 @@ you need a short reminder.
   validation, metadata inference, effect ordering, and creation of logical
   records. See [Operation admission](operation-admission.md).
 
+**Ahead-of-time compilation**
+: Translation performed before a program is distributed or invoked. Tabgrad
+  compiles Rust CPU kernel source into portable WebAssembly modules during its
+  build; a browser still compiles the module for the user's processor when it
+  loads it.
+
 **Alias**
 : A tensor identity or view that shares logical storage with another tensor, so
   a mutation through one can affect what the other observes.
+
+**Application binary interface (ABI)**
+: The exact low-level calling, data-layout, versioning, memory, and error
+  agreement between separately compiled code and its caller. Tabgrad's raw
+  WebAssembly ABI is private to the CPU backend.
 
 **Automatic differentiation**
 : Construction of derivative computation from the operations the host program
@@ -122,6 +133,11 @@ callbacks, materializations, and prepared work cannot mutate a newer generation.
   reusable child-program fingerprints, boundary remaps, new exterior work, and
   a target profile. A hit does not copy every unchanged child computation.
 
+**Fixed-vector WebAssembly module**
+: The portable CPU module variant whose kernels use the required fixed-width
+  WebAssembly SIMD instructions. The CPU backend selects it only when the
+  capability snapshot validates those instructions.
+
 **Frontend**
 : The Python or JavaScript/TypeScript public surface that adopts a language's
   conventions and calls the common runtime client contract.
@@ -177,6 +193,11 @@ different internal descriptions.
 **Logical storage version**
 : The semantic version of shared storage observed by a `TensorValue`. It is
 independent of a physical buffer address.
+
+**Linear memory**
+: The contiguous byte-addressed storage imported by one WebAssembly module
+  instance. The CPU backend uses it for resident tensors, descriptors,
+  workspaces, and staging above the module's private prefix.
 
 **Lowering**
 : Translation from a richer computation description to a more concrete one
@@ -243,6 +264,10 @@ lifecycle for one frontend execution environment.
   The common program owns authoritative dependencies; the backend owns the
   physical schedule.
 
+**Scalar WebAssembly module**
+: The portable CPU module variant that does not require WebAssembly SIMD. It
+  preserves the same kernel semantics as the fixed-vector variant.
+
 **Semantic pin**
 : A runtime-owned obligation to keep one logical materialization usable until
   its semantic owner releases it.
@@ -292,7 +317,14 @@ calls, Pyodide, or a worker without owning tensor semantics.
 
 **WebAssembly**
 : The browser execution format used by Tabgrad's central-processing-unit
-numerical backend, including compiled scalar and vectorized kernels.
+  numerical backend. Rust kernel source is compiled into this portable format
+  before distribution.
+
+**WebAssembly CPU adapter**
+: The TypeScript-owned host side of the CPU backend. It selects and instantiates
+  a compatible prebuilt module, owns imported linear memory and instances,
+  invokes the private raw ABI, and translates completion and failure into the
+  shared backend contract.
 
 **WebGPU**
 : The browser graphics-processor interface used by Tabgrad's accelerator

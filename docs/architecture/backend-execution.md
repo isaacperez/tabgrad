@@ -25,6 +25,12 @@ The contract does not expose `GPUBuffer` objects, WebAssembly pointers, allocato
 internals, pipelines, compiled exports, or a backend's private schedule to the
 semantic runtime.
 
+The WebAssembly branch contains a second, lower-level boundary inside the CPU
+backend: its TypeScript adapter invokes Rust-authored compiled kernels through a
+private raw application binary interface. That private boundary does not replace
+or widen the backend execution contract. It is developed in
+[WebAssembly CPU backend](webassembly-cpu-backend.md).
+
 ## Capabilities make support explicit
 
 A backend exposes one immutable `BackendCapabilitySnapshot` for a particular
@@ -92,11 +98,11 @@ does not let concurrent requests mutate the same instance accidentally.
 
 | Concern | WebGPU backend | WebAssembly CPU backend |
 | --- | --- | --- |
-| Numerical code | WebGPU Shading Language kernels | Compiled WebAssembly functions and vectorized variants |
+| Numerical code | WebGPU Shading Language kernels | Rust-authored kernels compiled into scalar and fixed-vector WebAssembly modules |
 | Main storage | Graphics-processor buffers | WebAssembly linear memory |
 | Parallel work | Workgroups and device queue | Central-processing-unit instructions and optional bounded worker coordination |
-| Preparation | Shader modules, pipelines, binding and encoding strategy | Modules, exports, instance strategy, memory and call plan |
-| Submission | Fresh command encoding and queue submission | Invocation through a narrow application binary interface |
+| Preparation | Shader modules, pipelines, binding and encoding strategy | Compatible module selection, exports, instance strategy, memory and call plan |
+| Submission | Fresh command encoding and queue submission | Coarse invocation through Tabgrad's versioned raw application binary interface |
 | Completion | Promise-based queue and mapping signals plus error scopes | Synchronous or asynchronous host completion according to the invocation context |
 
 JavaScript may implement orchestration and small metadata work. Large numerical
@@ -115,8 +121,9 @@ A backend can realize a legal program in several ways:
 
 The mix need not be identical. WebGPU can combine tuned kernels with generated
 WGSL for elementwise regions. WebAssembly can prefer precompiled functions and
-vectorized variants, adding dynamic generation only when evidence justifies its
-complexity.
+its fixed-vector variant. Dynamic generation belongs only when evidence shows
+that it improves the complete CPU path enough to justify another compilation
+and cache mechanism.
 
 The runtime has already established whether a transformation is semantically
 legal. The backend decides whether and how it is profitable. A fusion cannot

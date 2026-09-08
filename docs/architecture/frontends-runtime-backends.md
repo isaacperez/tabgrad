@@ -147,8 +147,13 @@ Each backend owns:
 
 The WebGPU backend owns graphics-processor buffers, pipelines, bind groups, and
 queue submission. Its numerical kernels use WebGPU Shading Language. The CPU
-backend owns WebAssembly linear memory, compiled exports, vectorized variants,
-and any worker coordination used for CPU execution.
+backend combines a TypeScript host adapter with Rust-authored kernels compiled
+into prebuilt WebAssembly modules. It owns imported linear memory, compiled
+modules and instances, scalar or vector variant selection, and any worker
+coordination used for CPU execution. The Rust compiler is part of the build;
+the browser loads its output without installing Rust or another native runtime.
+The detailed boundary is explained in
+[WebAssembly CPU backend](webassembly-cpu-backend.md).
 
 JavaScript is the host language for coordination, not a slow third numerical
 backend. Pyodide supplies a Python interpreter, not a NumPy or PyTorch execution
