@@ -51,6 +51,41 @@ reader needs and link to the primary source. A code comment should explain a
 local reason or invariant that the code cannot make clear; it is not a
 replacement for public API or architecture documentation.
 
+## Navigate technical documentation by reader question
+
+Technical documentation offers several perspectives over one system. These
+perspectives help a reader choose an entry point; they do not create separate
+authorities for the same fact.
+
+| Perspective | Dominant reader question | Included material | Excluded material |
+| --- | --- | --- | --- |
+| [Architecture](architecture/README.md) | Why does the system have these boundaries and constraints? | The system map, accepted responsibilities, cross-system invariants, and lasting decisions | Release support claims, source-file walkthroughs, and task instructions |
+| [Concepts](concepts/README.md) | What does this abstraction mean independently of one implementation? | Semantic distinctions, terminology, relationships, and consequences that apply across components | Ownership details, exact APIs, and chronological execution traces |
+| [Components](components/README.md) | Which internal owner is responsible, and what contract must it preserve? | Concrete owners, boundaries, lifetimes, failure behavior, and material costs that matter outside one local implementation | A page for every source file, class, helper, or hypothetical subsystem |
+| [Flows](flows/README.md) | How do several owners collaborate from an initiating event to completion? | End-to-end control, data, error, and resource-lifetime sequences | A second copy of each participant's complete contract |
+| [Reference](reference/README.md) | What exact contract or supported behavior can I look up? | Public APIs, compatibility records, internal binary interfaces, registered artifacts, commands, and defined terms | Design rationale, implementation progress, and unverified examples |
+
+Place a document according to the dominant question its intended reader brings
+to it. A document may mention another perspective when the explanation needs
+context, but it must link to that perspective's primary source instead of
+restating the complete fact. Record that source in [`docs/README.md`](README.md)
+when contributors need an authoritative project-wide location.
+
+Do not divide a cohesive document merely because some paragraphs can be viewed
+from different perspectives. Divide it when its parts serve meaningfully
+different audiences, own independent contracts, or change for independent
+reasons. Move the primary content, source-of-truth registration, incoming
+links, and necessary summaries together so that no transitional duplicate can
+be mistaken for another authority.
+
+Every perspective index must explain its audience, boundary, relationship to
+the other perspectives, and admission criteria. When the perspective contains
+topic pages, the index also provides the path through that substantive
+material. Do not add empty topic lists, headings, or pages merely to reserve a
+place for anticipated work. A task-oriented guide is justified by a verified
+user or contributor task that needs a maintained procedure; the perspectives
+above do not require an empty guide hierarchy.
+
 ## Separate durable documentation from work tracking
 
 The root `README.md` and normative documents describe Tabgrad as a complete
@@ -117,8 +152,16 @@ or user must preserve or rely on. Put each fact at the level that owns it:
   documentation;
 - verified PyTorch behavior and environmental coverage belong in the
   compatibility record;
-- lasting ownership, lifecycle, data-flow, and cross-component invariants
-  belong in architecture documentation;
+- lasting system boundaries, cross-system invariants, and accepted technical
+  decisions belong in architecture documentation;
+- meanings and distinctions shared across implementations belong in concept
+  documentation;
+- concrete internal ownership, externally relevant contracts, lifetimes,
+  failures, and material costs belong in component documentation;
+- ordering, data movement, error propagation, and resource release across
+  owners belong in flow documentation;
+- exact maintained public or internal contracts belong in reference
+  documentation;
 - setup, commands, and required tool versions belong in development
   documentation; and
 - local mechanisms and non-obvious implementation invariants belong beside

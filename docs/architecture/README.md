@@ -5,10 +5,26 @@ JavaScript into efficient browser computation. It is written for programmers
 who understand ordinary software abstractions but have not designed a deep
 learning runtime.
 
-Start here. The documents introduce the main problems before explaining their
-detailed mechanisms. When a later concept must be mentioned early, the text
-gives a plain-language preview and points to the chapter that develops it. The
-[glossary](glossary.md) is a lookup aid, not a prerequisite.
+This directory presents the architecture perspective: the system map, accepted
+responsibility boundaries, cross-system constraints, and lasting technical
+decisions. Start here when the question is why Tabgrad is divided or
+constrained in a particular way. The documents introduce the main problems
+before explaining their detailed mechanisms. When a later concept must be
+mentioned early, the text gives a plain-language preview and points to the
+chapter that develops it. The [glossary](glossary.md) is a lookup aid, not a
+prerequisite.
+
+Other perspectives answer different questions about the same system:
+
+- [Concepts](../concepts/README.md) explains what shared abstractions mean.
+- [Components](../components/README.md) identifies concrete internal owners
+  and the contracts they preserve.
+- [Flows](../flows/README.md) follows work across several owners.
+- [Reference](../reference/README.md) collects exact contracts and supported
+  behavior for lookup.
+
+Those perspectives link back here for architectural rationale instead of
+creating a second version of a decision.
 
 ## Why a tensor library needs an architecture
 
