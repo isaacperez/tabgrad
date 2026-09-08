@@ -3,6 +3,9 @@
 **Decision:** accepted on 2026-09-07 under
 [research issue #11](https://github.com/isaacperez/tabgrad/issues/11).
 
+**CPU backend refinement:** accepted on 2026-09-08 under
+[research issue #31](https://github.com/isaacperez/tabgrad/issues/31).
+
 This record explains why Tabgrad uses one effect-aware, incrementally lazy
 TypeScript semantic runtime with bounded demand regions and two private numerical
 backends. The other architecture chapters define the resulting contracts in
@@ -51,8 +54,12 @@ Tabgrad adopts these connected constraints:
    coordinates both opaque endpoint operations and their shared staging
    lifecycle for a transfer domain.
 7. WebGPU with WebGPU Shading Language and the WebAssembly CPU implementation
-   are the only numerical backends. Selection and transfer are explicit, with
-   no silent fallback.
+   are the only numerical backends. CPU kernels are authored in Rust, compiled
+   into prebuilt scalar and fixed-vector WebAssembly modules, and called through
+   a Tabgrad-owned raw binary interface over backend-owned linear memory.
+   Selection and transfer are explicit, with no silent fallback. The complete
+   CPU contract is defined in
+   [WebAssembly CPU backend](webassembly-cpu-backend.md).
 8. Forward computation, vector-Jacobian and Jacobian-vector products, gradient
    accumulation, and optimizer work use the same admission, program, request,
    ticket, and backend path.
@@ -188,6 +195,7 @@ alone is not performance evidence.
 | Bounded transformer inference and training | [#25](https://github.com/isaacperez/tabgrad/issues/25) |
 | Repeated-program reuse | [#26](https://github.com/isaacperez/tabgrad/issues/26) |
 | Reusable training with dynamic differentiation | [#27](https://github.com/isaacperez/tabgrad/issues/27) |
+| WebAssembly CPU toolchain, binary interface, and memory ownership | [#31](https://github.com/isaacperez/tabgrad/issues/31) |
 
 ## Consequences
 
@@ -237,8 +245,10 @@ they do not change the responsibility boundaries above. These choices include:
 - compact physical packing for derivative-history entries;
 - the exact backend-neutral primitive vocabulary and individual optimization
   passes;
-- the WebAssembly implementation language, application binary interface,
-  vectorization, and worker topology;
+- exact WebAssembly call descriptors, allocator and pool policies, kernel
+  partitioning justified by measurement, and optional worker topology within
+  the constraints of
+  [the CPU backend decision](webassembly-cpu-backend.md);
 - the WebGPU kernel library, code generation, and tuning strategy;
 - numeric allocator and cache budgets;
 - operation, data-type, browser, and model support matrices;
