@@ -93,6 +93,13 @@ one does not justify evicting live state from another. This includes:
 - staging allocations; and
 - WebAssembly and WebGPU memory pools.
 
+Request metadata and resident tensor storage have different owners. An active
+request or a retained causal error can own its executable program. A resident
+materialization owns only the opaque backend allocation needed to use the
+tensor; it cannot retain or inherit an arbitrary downstream request program.
+Reusable prepared programs belong to their own explicitly bounded cache rather
+than being hidden inside materialization records.
+
 Independent limits do not require unrelated cache implementations. A runtime
 can reuse one bounded-store accounting and eviction mechanism while giving each
 owner its own quota, pin rules, progress condition, and error. The shared

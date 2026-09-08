@@ -342,6 +342,19 @@ class RepositoryCheckTests(unittest.TestCase):
         }
         self.assertTrue(expected.issubset(CHECKS.REQUIRED_FILES))
 
+    def test_runtime_sources_and_locked_toolchains_are_required(self):
+        expected = {
+            ".node-version",
+            "Cargo.lock",
+            "Cargo.toml",
+            "docs/javascript-api.md",
+            "package-lock.json",
+            "package.json",
+            "rust-toolchain.toml",
+            "tsconfig.json",
+        }
+        self.assertTrue(expected.issubset(CHECKS.REQUIRED_FILES))
+
     def test_exact_foundation_rules_cannot_be_commented_out(self):
         source_root = SCRIPT.parents[1]
         requirements = {
@@ -1001,6 +1014,20 @@ class RepositoryCheckTests(unittest.TestCase):
             "python3 -m ruff format --check scripts tests",
         }
         self.assertTrue(expected.issubset(CHECKS.REQUIRED_CI_COMMANDS))
+
+    def test_ci_requires_locked_runtime_setup_checks_and_tests(self):
+        expected = {
+            "npm ci --ignore-scripts --no-audit --no-fund",
+            "npm install --global npm@11.1.0 --ignore-scripts --no-audit --no-fund",
+            "npm run check",
+            "npm test",
+            "rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy --target wasm32-unknown-unknown",
+        }
+        self.assertTrue(expected.issubset(CHECKS.REQUIRED_CI_COMMANDS))
+        self.assertIn(
+            "actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+            CHECKS.APPROVED_ACTIONS,
+        )
 
     def test_ci_commands_must_be_documented(self):
         with tempfile.TemporaryDirectory() as directory:

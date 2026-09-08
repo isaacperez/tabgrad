@@ -30,6 +30,23 @@ Use these statuses:
 Do not use `Supported` for proposed behavior, an unmerged change, a backend
 that was not tested, or an implementation that silently uses another backend.
 
+## Direct JavaScript behavior without a PyTorch claim
+
+Tabgrad can establish its own browser integration behavior without claiming
+that the behavior implements a PyTorch interface. The direct contract in the
+[JavaScript tensor API](javascript-api.md)—session and tensor creation,
+one-dimensional CPU `float32` addition, asynchronous observation, diagnostics,
+and explicit close—is such an interface. Its tests establish Tabgrad's
+JavaScript and WebAssembly behavior only. The names are not `torch` names, and
+the bounded example does not establish PyTorch signatures, promotion,
+broadcasting, errors, gradients, or Python behavior.
+
+Do not add that interface to a release's PyTorch support matrix as `Supported`
+or `Partially supported` unless an independently tested Python compatibility
+surface gives it a real PyTorch counterpart. Its precise support and browser
+limits belong in the JavaScript API reference; this document records why those
+facts are not a disguised compatibility claim.
+
 ## Required operation record
 
 Each public operation or coherent API group in a release must record:

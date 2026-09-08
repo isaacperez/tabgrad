@@ -15,6 +15,12 @@ composite request with two endpoint generations and a staging lease, as
 described later in this chapter. Neither form owns reusable program structure or
 permanent model state.
 
+The immutable program associated with an invocation remains request-scoped.
+Successful resident materializations retain their opaque physical references,
+not the complete program that produced or later consumed them. A retained
+failure may keep its request program for diagnosis because the failure object,
+not an unrelated tensor lifetime, then owns that metadata.
+
 `RuntimeSession` owns the fresh semantic state associated with that request:
 
 - occurrence, output, and derivative-history identities;
@@ -93,7 +99,8 @@ a cancel button.
 Known metadata and support errors occur during operation admission. Preparation,
 compilation, execution, and device failures are asynchronous. They retain:
 
-- the causal operation and stable source provenance;
+- the causal operation occurrence, identified structurally within the retained
+  program, and its stable source provenance;
 - the executable program, declared execution domain, and relevant backend
   endpoints;
 - the phase that failed; and

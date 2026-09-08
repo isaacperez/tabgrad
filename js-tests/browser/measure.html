@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Tabgrad bounded runtime measurement</title>
+  </head>
+  <body>
+    <script type="module">
+      import { createTestRuntimeSession } from "/testing.js";
+
+      const parameters = new URLSearchParams(location.search);
+      const token = parameters.get("token");
+      const forceVariant = parameters.get("variant");
+      const lengths = [1, 4_096, 262_144, 1_048_576];
+      const warmRepetitions = 5;
+
+      async function report(result) {
+        await fetch(`/__result?token=${encodeURIComponent(token)}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(result),
+        });
+      }
+
+      try {
+        const observations = [];
+        for (const length of lengths) {
+          const session = createTestRuntimeSession({
+            manifestUrl: new URL("/manifest.json", location.href),
+            forceVariant,
+          });
+          let leftData = new Float32Array(length);
+          let rightData = new Float32Array(length);
+          leftData.fill(1.25);
+          rightData.fill(2.5);
+          const left = session.tensor(leftData);
+          const right = session.tensor(rightData);
+          leftData = null;
+          rightData = null;
+
+          const coldResult = left.add(right);
+          const coldStart = performance.now();
+          const coldValues = await coldResult.toArray();
+          const coldMilliseconds = performance.now() - coldStart;
+          if (coldValues.length !== length || coldValues[length - 1] !== 3.75) {
+            throw new Error(`Incorrect result for length ${length}.`);
+          }
+          coldResult.close();
+
+          const warmMilliseconds = [];
+          for (let repetition = 0; repetition < warmRepetitions; repetition += 1) {
+            const warmResult = left.add(right);
+            const warmStart = performance.now();
+            const warmValues = await warmResult.toArray();
+            warmMilliseconds.push(performance.now() - warmStart);
+            if (warmValues.length !== length || warmValues[0] !== 3.75) {
+              throw new Error(`Incorrect warm result for length ${length}.`);
+            }
+            warmResult.close();
+          }
+
+          const diagnostics = session.diagnostics();
+          if (diagnostics.highWaterAllocationBytes !== 12 * length) {
+            throw new Error(`Unexpected payload high-water mark for length ${length}.`);
+          }
+          if (diagnostics.hostToWasmBytes !== 8 * length) {
+            throw new Error(`Unexpected import byte count for length ${length}.`);
+          }
+          if (diagnostics.hostToWasmCopies !== 2) {
+            throw new Error(`Unexpected import copy count for length ${length}.`);
+          }
+          if (diagnostics.wasmToHostCopies !== warmRepetitions + 1) {
+            throw new Error(`Unexpected readback copy count for length ${length}.`);
+          }
+          if (diagnostics.kernelCalls !== warmRepetitions + 1) {
+            throw new Error(`Unexpected kernel call count for length ${length}.`);
+          }
+          left.close();
+          right.close();
+          await session.close();
+          const cleanupDiagnostics = session.diagnostics();
+          for (const [name, value] of Object.entries({
+            liveAllocationBytes: cleanupDiagnostics.liveAllocationBytes,
+            liveMaterializationRecords: cleanupDiagnostics.liveMaterializationRecords,
+            liveOperationRecords: cleanupDiagnostics.liveOperationRecords,
+            liveRequestLeases: cleanupDiagnostics.liveRequestLeases,
+            liveTensorHandles: cleanupDiagnostics.liveTensorHandles,
+            liveTensorValues: cleanupDiagnostics.liveTensorValues,
+          })) {
+            if (value !== 0) {
+              throw new Error(`Cleanup left ${name}=${value} for length ${length}.`);
+            }
+          }
+          observations.push({
+            length,
+            coldMilliseconds,
+            warmMilliseconds,
+            diagnostics,
+            cleanupDiagnostics,
+          });
+        }
+        await report({ ok: true, crossOriginIsolated, observations });
+      } catch (error) {
+        await report({
+          ok: false,
+          error: {
+            code: error?.code,
+            message: error instanceof Error ? error.message : String(error),
+            stack: error instanceof Error ? error.stack : undefined,
+          },
+        });
+      }
+    </script>
+  </body>
+</html>
