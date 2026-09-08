@@ -370,8 +370,8 @@ function runtimeSessionAccess(session: RuntimeSession): RuntimeSessionAccess {
 }
 
 let constructTensorHandle: ((state: TensorState) => Tensor) | undefined;
-let inspectTensorState: ((handle: unknown) => TensorState | null) | undefined;
 const TENSOR_CONSTRUCTION_TOKEN = Symbol("TensorConstructionToken");
+const TENSOR_STATES = new WeakMap<Tensor, TensorState>();
 
 function createTensorHandle(state: TensorState): Tensor {
   if (constructTensorHandle === undefined) {
@@ -381,12 +381,35 @@ function createTensorHandle(state: TensorState): Tensor {
 }
 
 function tensorStateFromHandle(handle: unknown): TensorState | null {
-  return inspectTensorState?.(handle) ?? null;
+  if (
+    (typeof handle !== "object" && typeof handle !== "function")
+    || handle === null
+  ) {
+    return null;
+  }
+  return TENSOR_STATES.get(handle as Tensor) ?? null;
+}
+
+function requireTensorState(handle: unknown): TensorState {
+  const state = tensorStateFromHandle(handle);
+  if (state === null) {
+    throw new TabgradError(
+      "INVALID_TENSOR",
+      "The value is not a valid Tabgrad tensor handle.",
+      { operation: "tensor", contract: "tensor-handle" },
+    );
+  }
+  return state;
+}
+
+function assertTensorOpen(state: TensorState): void {
+  if (state.closed) {
+    throw new TabgradError("CLOSED_TENSOR", "The tensor handle is closed.");
+  }
+  runtimeSessionAccess(state.session).assertOpen();
 }
 
 export class Tensor {
-  readonly #state: TensorState;
-
   private constructor(state: TensorState, token: symbol) {
     if (token !== TENSOR_CONSTRUCTION_TOKEN) {
       throw new TabgradError(
@@ -394,50 +417,48 @@ export class Tensor {
         "Tensor handles can only be created by a runtime session.",
       );
     }
-    this.#state = state;
+    TENSOR_STATES.set(this, state);
   }
 
   static {
     constructTensorHandle = (state) => new Tensor(state, TENSOR_CONSTRUCTION_TOKEN);
-    inspectTensorState = (handle) => handle instanceof Tensor ? handle.#state : null;
   }
 
   get shape(): readonly [number] {
-    this.#assertOpen();
-    return this.#state.value.shape;
+    const state = requireTensorState(this);
+    assertTensorOpen(state);
+    return state.value.shape;
   }
 
   get dtype(): TensorDType {
-    this.#assertOpen();
-    return this.#state.value.dtype;
+    const state = requireTensorState(this);
+    assertTensorOpen(state);
+    return state.value.dtype;
   }
 
   get device(): TensorDevice {
-    this.#assertOpen();
-    return this.#state.value.device;
+    const state = requireTensorState(this);
+    assertTensorOpen(state);
+    return state.value.device;
   }
 
   add(right: Tensor): Tensor {
-    return runtimeSessionAccess(this.#state.session).add(this.#state, right);
+    const state = requireTensorState(this);
+    return runtimeSessionAccess(state.session).add(state, right);
   }
 
   toArray(): Promise<Float32Array> {
-    this.#assertOpen();
-    return runtimeSessionAccess(this.#state.session).observe(this.#state);
+    const state = requireTensorState(this);
+    assertTensorOpen(state);
+    return runtimeSessionAccess(state.session).observe(state);
   }
 
   close(): void {
-    if (!this.#state.closed) {
-      this.#state.closed = true;
-      runtimeSessionAccess(this.#state.session).releaseHandle(this.#state);
+    const state = requireTensorState(this);
+    if (!state.closed) {
+      state.closed = true;
+      runtimeSessionAccess(state.session).releaseHandle(state);
     }
-  }
-
-  #assertOpen(): void {
-    if (this.#state.closed) {
-      throw new TabgradError("CLOSED_TENSOR", "The tensor handle is closed.");
-    }
-    runtimeSessionAccess(this.#state.session).assertOpen();
   }
 }
 

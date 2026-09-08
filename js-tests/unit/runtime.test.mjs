@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   TabgradError,
+  Tensor,
   createRuntimeSession,
 } from "../../dist/index.js";
 import {
@@ -462,6 +463,37 @@ test("rejects unsupported operations synchronously during admission", async () =
     () => session.tensor([1]),
     (error) => error instanceof TabgradError && error.code === "CLOSED_SESSION",
   );
+});
+
+test("rejects prototype-forged and proxied tensor handles synchronously", async () => {
+  const session = createRuntimeSession({
+    manifestUrl: new URL("manifest.json", distributionUrl),
+  });
+  const left = session.tensor([1]);
+  const realRight = session.tensor([2]);
+  const candidates = [
+    Object.create(Tensor.prototype),
+    new Proxy(realRight, {}),
+  ];
+
+  try {
+    const outcomes = candidates.map((candidate) => {
+      try {
+        left.add(candidate);
+        return { code: "NO_ERROR", name: "none" };
+      } catch (error) {
+        return { code: error.code, name: error.name };
+      }
+    });
+
+    assert.deepEqual(outcomes, [
+      { code: "INVALID_TENSOR", name: "TabgradError" },
+      { code: "INVALID_TENSOR", name: "TabgradError" },
+    ]);
+    assert.equal(session.diagnostics().backendLoads, 0);
+  } finally {
+    await session.close();
+  }
 });
 
 test("rejects nonnumeric JavaScript tensor data instead of coercing it", async () => {

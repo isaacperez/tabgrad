@@ -79,7 +79,10 @@ callers also receive a static `readonly number[]` type.
 `left.add(right)` validates both operands synchronously and returns a new
 tensor handle. It does not fetch, compile, instantiate, or call WebAssembly.
 The operands must be open, belong to the same session, and have equal shapes.
-The result is out of place: it has independent logical storage.
+The runtime checks handle identity in its module-private registry: inheriting
+from `Tensor.prototype` or wrapping a tensor in a JavaScript `Proxy` does not
+forge a valid handle. Invalid handles fail with `INVALID_TENSOR` before backend
+loading. The result is out of place: it has independent logical storage.
 
 `tensor.toArray()` is the asynchronous observation boundary. The runtime forms
 an immutable finite executable program for the demanded dependencies, chooses
