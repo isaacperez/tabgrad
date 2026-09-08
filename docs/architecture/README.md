@@ -63,8 +63,10 @@ its execution.
 The **backend** knows how to perform the numerical work on a particular kind of
 machine. Tabgrad has exactly two numerical backend families: WebGPU with kernels
 written in WebGPU Shading Language (WGSL), and a central-processing-unit backend
-implemented with WebAssembly. JavaScript and Pyodide coordinate work but are not
-additional numerical backends.
+whose Rust-authored kernels are compiled into WebAssembly before distribution.
+JavaScript and Pyodide coordinate work but are not additional numerical
+backends. An end user receives prebuilt browser assets and does not install the
+Rust build toolchain.
 
 The split matters because the parts change for different reasons. Python syntax
 can improve without rewriting a matrix-multiplication kernel. The runtime can
@@ -119,20 +121,23 @@ Read the documents in this order when learning the architecture:
    them.
 6. [Backend execution](backend-execution.md) covers the shared backend contract
    and the deliberately different WebGPU and WebAssembly implementations.
-7. [Requests, completion, and failure](execution-lifecycle.md) explains one
+7. [WebAssembly CPU backend](webassembly-cpu-backend.md) develops the CPU branch:
+   Rust-authored kernels, prebuilt scalar and vector modules, the private binary
+   interface, memory ownership, and optional worker constraints.
+8. [Requests, completion, and failure](execution-lifecycle.md) explains one
    invocation, asynchronous completion, cancellation, observation, transfer,
    and device loss.
-8. [Automatic differentiation and training](autograd-and-training.md) shows how
+9. [Automatic differentiation and training](autograd-and-training.md) shows how
    backward computation and optimizer effects reuse the ordinary path.
-9. [Reusable programs and compiled callables](reusable-programs.md) explains how
+10. [Reusable programs and compiled callables](reusable-programs.md) explains how
    stable repeated work avoids repeated formation while retaining fresh runtime
    state.
-10. [Memory and performance](memory-and-performance.md) states the complexity,
+11. [Memory and performance](memory-and-performance.md) states the complexity,
     lifetime, residency, and measurement constraints that keep the design
     practical for inference and training.
-11. [Model integration boundary](model-integration.md) places model conversion,
+12. [Model integration boundary](model-integration.md) places model conversion,
     weights, tokenization, and preprocessing around the tensor runtime.
-12. [Central architecture decision](central-decision.md) records the alternatives,
+13. [Central architecture decision](central-decision.md) records the alternatives,
     evidence, consequences, and conditions that would justify reconsideration.
 
 ## How to interpret these documents

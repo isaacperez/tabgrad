@@ -146,6 +146,15 @@ End-to-end latency and throughput can include:
 | Transfer | Movement between host, WebAssembly, and WebGPU memory |
 | Synchronization and readback | Waiting for completion or making values host-readable |
 
+For the CPU backend, “WebAssembly memory” is not an abstract pool shared by all
+modules. One module invocation can dereference only the linear memory imported
+by its own instance. Its complete working set must therefore fit that address
+space, or the backend must use explicit, measured tiling or staging and account
+for the extra copies and lifetimes. A shard identifier cannot make one instance
+read another instance's memory. The ownership, arena boundary, memory-growth,
+and scalar/vector module rules are defined in
+[WebAssembly CPU backend](webassembly-cpu-backend.md).
+
 An optimization can reduce one cost while increasing another. Fusion may remove
 launches and temporaries but increase compilation time or register pressure.
 Quantization may reduce weight bytes but require specialized kernels and

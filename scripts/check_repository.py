@@ -92,6 +92,7 @@ ARCHITECTURE_DOCUMENTS = {
     "docs/architecture/operation-admission.md",
     "docs/architecture/reusable-programs.md",
     "docs/architecture/semantic-state.md",
+    "docs/architecture/webassembly-cpu-backend.md",
 }
 TIMELESS_DOCUMENTS = ARCHITECTURE_DOCUMENTS | {
     "AGENTS.md",

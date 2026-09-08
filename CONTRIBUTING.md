@@ -245,13 +245,17 @@ evidence and accepted work do not already settle a choice that affects the
 result.
 
 Tabgrad is a browser-native project. Runtime changes must remain compatible
-with the browser execution model described in `README.md`. The tensor runtime
-is implemented in TypeScript or JavaScript, with WGSL for WebGPU shaders.
+with the browser execution model described in `README.md`. TypeScript owns the
+semantic runtime and browser orchestration. WebGPU kernels use WGSL, while CPU
+numerical kernels use Rust source compiled ahead of distribution into
+WebAssembly and called through the private boundary in
+[`docs/architecture/webassembly-cpu-backend.md`](docs/architecture/webassembly-cpu-backend.md).
 Python provides the compatibility layer that runs through Pyodide and may also
 be used for development tools and compatibility tests. Pyodide is not the
-tensor runtime. C and C++ are not runtime implementation languages for
-Tabgrad. Do not introduce a server requirement or an official PyTorch runtime
-dependency into Tabgrad execution.
+tensor runtime. Rust and Cargo are build-time tools rather than browser runtime
+requirements; C and C++ are not Tabgrad runtime implementation languages. Do
+not introduce a server requirement or an official PyTorch runtime dependency
+into Tabgrad execution.
 
 When a change affects tensor behavior, consider every relevant part of that
 behavior: shapes, data types, values, gradients, errors, devices, and backend
