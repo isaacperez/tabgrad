@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Tabgrad resident raw-kernel measurement</title>
+  </head>
+  <body>
+    <script type="module">
+      const PAGE_BYTES = 65_536;
+      const MEMORY_PAGES = 1_024;
+      const VECTOR_LENGTH = 262_144;
+      const WARMUPS = 7;
+      const MEASUREMENTS = 31;
+      const BASE = 2 * 1_024 * 1_024;
+
+      const parameters = new URLSearchParams(location.search);
+      const token = parameters.get("token");
+      const variant = parameters.get("variant");
+      const round = Number(parameters.get("round"));
+
+      async function report(result) {
+        await fetch(`/__result?token=${encodeURIComponent(token)}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(result),
+        });
+      }
+
+      function assertEqual(actual, expected, message) {
+        if (actual !== expected) {
+          throw new Error(`${message}: got ${actual}, expected ${expected}`);
+        }
+      }
+
+      function assertClose(actual, expected, tolerance, message) {
+        const scale = Math.max(1, Math.abs(actual), Math.abs(expected));
+        if (!Number.isFinite(actual) || Math.abs(actual - expected) > tolerance * scale) {
+          throw new Error(`${message}: got ${actual}, expected ${expected}`);
+        }
+      }
+
+      try {
+        assertEqual(crossOriginIsolated, true, "cross-origin isolation");
+        const manifestResponse = await fetch("/manifest.json", { cache: "no-store" });
+        assertEqual(manifestResponse.ok, true, "manifest response");
+        const manifest = await manifestResponse.json();
+        const selected = manifest.variants.find((candidate) => candidate.id === variant);
+        if (selected === undefined) {
+          throw new Error(`Manifest has no ${variant} variant.`);
+        }
+        const moduleResponse = await fetch(
+          `/${selected.path}?round=${round}&nonce=${crypto.randomUUID()}`,
+          { cache: "no-store" },
+        );
+        assertEqual(moduleResponse.ok, true, "module response");
+        const bytes = await moduleResponse.arrayBuffer();
+        assertEqual(bytes.byteLength, selected.byteLength, "artifact byte length");
+        const module = await WebAssembly.compile(bytes);
+        const memory = new WebAssembly.Memory({
+          initial: MEMORY_PAGES,
+          maximum: MEMORY_PAGES,
+        });
+        const instance = await WebAssembly.instantiate(module, { env: { memory } });
+        const api = instance.exports;
+        assertEqual(api.tabgrad_abi_version(), 1, "ABI version");
+        assertEqual(api.tabgrad_capabilities() & 1, 1, "addition capability");
+        if ((api.tabgrad_arena_base() >>> 0) > BASE) {
+          throw new Error("The production arena begins after the comparison buffers.");
+        }
+
+        const payloadBytes = VECTOR_LENGTH * Float32Array.BYTES_PER_ELEMENT;
+        const leftOffset = BASE;
+        const rightOffset = BASE + payloadBytes;
+        const outputOffset = BASE + 2 * payloadBytes;
+        const heap = new Float32Array(memory.buffer);
+        const leftIndex = leftOffset >>> 2;
+        const rightIndex = rightOffset >>> 2;
+        const outputIndex = outputOffset >>> 2;
+        for (let index = 0; index < VECTOR_LENGTH; index += 1) {
+          heap[leftIndex + index] = Math.fround(((index % 257) - 128) / 128);
+          heap[rightIndex + index] = Math.fround(((index % 251) - 125) / 127);
+        }
+
+        const invoke = () => {
+          const status = api.tabgrad_add_f32(
+            leftOffset,
+            rightOffset,
+            outputOffset,
+            VECTOR_LENGTH,
+          );
+          assertEqual(status, 0, "kernel status");
+        };
+        const firstCallStart = performance.now();
+        invoke();
+        const firstCallMilliseconds = performance.now() - firstCallStart;
+        for (let index = 0; index < WARMUPS; index += 1) {
+          invoke();
+        }
+        const samples = [];
+        for (let index = 0; index < MEASUREMENTS; index += 1) {
+          const start = performance.now();
+          invoke();
+          samples.push(performance.now() - start);
+        }
+        for (const index of [0, 1, 3, 17, 1_023, VECTOR_LENGTH - 1]) {
+          assertClose(
+            heap[outputIndex + index],
+            Math.fround(heap[leftIndex + index] + heap[rightIndex + index]),
+            1e-6,
+            `output sample ${index}`,
+          );
+        }
+
+        await report({
+          ok: true,
+          round,
+          crossOriginIsolated,
+          artifactBytes: bytes.byteLength,
+          firstCallMilliseconds,
+          samples,
+          warmups: WARMUPS,
+          observations: MEASUREMENTS,
+          kernelCalls: 1 + WARMUPS + MEASUREMENTS,
+          memoryBytes: memory.buffer.byteLength,
+          residentInputUploadBytes: 2 * payloadBytes,
+          tensorCopiesPerMeasuredKernel: 0,
+          moduleImports: WebAssembly.Module.imports(module),
+          moduleExports: WebAssembly.Module.exports(module),
+        });
+      } catch (error) {
+        await report({
+          ok: false,
+          error: {
+            message: error instanceof Error ? error.message : String(error),
+            stack: error instanceof Error ? error.stack : undefined,
+          },
+        });
+      }
+    </script>
+  </body>
+</html>

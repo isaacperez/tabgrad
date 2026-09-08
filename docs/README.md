@@ -28,6 +28,7 @@ link to its primary source, but they must not create a competing version.
 | Security and private vulnerability reporting | [`SECURITY.md`](../SECURITY.md) |
 | Dependencies, licenses, and third-party code | [`dependencies.md`](dependencies.md) |
 | PyTorch compatibility and public API support | [`compatibility.md`](compatibility.md) |
+| Direct JavaScript API | [`javascript-api.md`](javascript-api.md) |
 | Documentation structure and writing rules | [`documentation.md`](documentation.md) |
 | Development environment and commands | [`development.md`](development.md) |
 | Generated files and their source files | [`generated-files.md`](generated-files.md) |

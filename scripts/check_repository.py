@@ -52,6 +52,7 @@ EXCLUDED_DIRECTORIES = {
     "dist",
     "node_modules",
     "playwright-report",
+    "target",
     "test-results",
 }
 TEXT_SUFFIXES = {
@@ -72,6 +73,7 @@ TEXT_SUFFIXES = {
     ".yml",
 }
 TEXT_NAMES = {
+    ".node-version",
     ".editorconfig",
     ".gitattributes",
     ".gitignore",
@@ -108,6 +110,7 @@ TIMELESS_DOCUMENTS = ARCHITECTURE_DOCUMENTS | {
     "docs/documentation.md",
     "docs/generated-files.md",
     "docs/implementation-workflow.md",
+    "docs/javascript-api.md",
     "docs/performance.md",
     "docs/project-management.md",
     "docs/quality.md",
@@ -116,17 +119,43 @@ TIMELESS_DOCUMENTS = ARCHITECTURE_DOCUMENTS | {
     "docs/version-control.md",
 }
 REQUIRED_FILES = TIMELESS_DOCUMENTS | {
+    ".node-version",
     ".editorconfig",
     ".gitattributes",
     ".github/pull_request_template.md",
     ".github/workflows/repository-checks.yml",
     ".gitignore",
     "CHANGELOG.md",
+    "Cargo.lock",
+    "Cargo.toml",
+    "crates/tabgrad-wasm-kernels/Cargo.toml",
+    "crates/tabgrad-wasm-kernels/src/lib.rs",
+    "js-tests/browser/runtime.html",
+    "js-tests/browser/measure.html",
+    "js-tests/unit/runtime.test.mjs",
+    "js-tests/unit/public-types.test.mjs",
+    "package-lock.json",
+    "package.json",
     "requirements-dev.lock",
     "ruff.toml",
+    "rust-toolchain.toml",
+    "scripts/build-wasm.mjs",
+    "scripts/browser-harness.mjs",
+    "scripts/check-rust.mjs",
+    "scripts/clean.mjs",
     "scripts/check_repository.py",
+    "scripts/run-browser-tests.mjs",
+    "scripts/measure-runtime.mjs",
     "scripts/run_tests.py",
+    "scripts/write-wasm-manifest.mjs",
+    "src/cpu-backend.ts",
+    "src/errors.ts",
+    "src/executable-program.ts",
+    "src/index.ts",
+    "src/runtime.ts",
+    "src/testing.ts",
     "tests/test_repository_checks.py",
+    "tsconfig.json",
 }
 REQUIRED_EDITORCONFIG_SETTINGS = {
     "": {
@@ -163,6 +192,7 @@ REQUIRED_GITIGNORE_RULES = {
     "build/",
     "dist/",
     "node_modules/",
+    "target/",
     "test-results/",
 }
 REQUIRED_PULL_REQUEST_HEADINGS = {
@@ -329,18 +359,35 @@ CI_FORMAT_COMMAND = "python3 -m ruff format --check scripts tests"
 CI_LINT_COMMAND = "python3 -m ruff check scripts tests"
 CI_VALIDATE_COMMAND = "python3 scripts/check_repository.py"
 CI_TEST_COMMAND = "python3 scripts/run_tests.py"
+CI_RUST_INSTALL_COMMAND = (
+    "rustup toolchain install 1.98.1 --profile minimal --component rustfmt "
+    "--component clippy --target wasm32-unknown-unknown"
+)
+CI_NPM_INSTALL_COMMAND = "npm ci --ignore-scripts --no-audit --no-fund"
+CI_NPM_TOOL_COMMAND = (
+    "npm install --global npm@11.1.0 --ignore-scripts --no-audit --no-fund"
+)
+CI_RUNTIME_CHECK_COMMAND = "npm run check"
+CI_RUNTIME_TEST_COMMAND = "npm test"
 REQUIRED_CI_COMMANDS = {
     CI_INSTALL_COMMAND,
     CI_FORMAT_COMMAND,
     CI_LINT_COMMAND,
     CI_VALIDATE_COMMAND,
     CI_TEST_COMMAND,
+    CI_RUST_INSTALL_COMMAND,
+    CI_NPM_INSTALL_COMMAND,
+    CI_NPM_TOOL_COMMAND,
+    CI_RUNTIME_CHECK_COMMAND,
+    CI_RUNTIME_TEST_COMMAND,
 }
 CHECKOUT_ACTION = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
 SETUP_PYTHON_ACTION = "actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97"
+SETUP_NODE_ACTION = "actions/setup-node@820762786026740c76f36085b0efc47a31fe5020"
 APPROVED_ACTIONS = {
     CHECKOUT_ACTION: "v7.0.1",
     SETUP_PYTHON_ACTION: "v7.0.0",
+    SETUP_NODE_ACTION: "v7.0.0",
 }
 EXPECTED_REPOSITORY_CHECKS_WORKFLOW = {
     "name": "Repository checks",
@@ -385,7 +432,47 @@ EXPECTED_REPOSITORY_CHECKS_WORKFLOW = {
                 },
                 {"name": "Test the repository validator", "run": CI_TEST_COMMAND},
             ],
-        }
+        },
+        "runtime": {
+            "name": "runtime",
+            "runs-on": "ubuntu-24.04",
+            "timeout-minutes": 15,
+            "steps": [
+                {
+                    "name": "Check out the repository",
+                    "uses": CHECKOUT_ACTION,
+                    "with": {"persist-credentials": False},
+                },
+                {
+                    "name": "Set up Node.js",
+                    "uses": SETUP_NODE_ACTION,
+                    "with": {
+                        "node-version-file": ".node-version",
+                        "check-latest": False,
+                    },
+                },
+                {
+                    "name": "Install the pinned Rust toolchain",
+                    "run": CI_RUST_INSTALL_COMMAND,
+                },
+                {
+                    "name": "Select the pinned npm release",
+                    "run": CI_NPM_TOOL_COMMAND,
+                },
+                {
+                    "name": "Install locked JavaScript development dependencies",
+                    "run": CI_NPM_INSTALL_COMMAND,
+                },
+                {
+                    "name": "Check TypeScript and Rust",
+                    "run": CI_RUNTIME_CHECK_COMMAND,
+                },
+                {
+                    "name": "Build and test the browser runtime",
+                    "run": CI_RUNTIME_TEST_COMMAND,
+                },
+            ],
+        },
     },
 }
 

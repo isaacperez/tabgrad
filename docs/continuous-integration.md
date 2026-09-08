@@ -19,16 +19,31 @@ absent from [`dependencies.md`](dependencies.md).
 ## Repository consistency workflow
 
 `.github/workflows/repository-checks.yml` runs on pull requests, pushes to
-`main`, and manual dispatch. It has read-only repository permission and runs:
+`main`, and manual dispatch. It has read-only repository permission and two
+independent jobs.
+
+The `repository-consistency` job runs:
 
 1. `python3 -m ruff format --check scripts tests`.
 2. `python3 -m ruff check scripts tests`.
 3. `python3 scripts/check_repository.py`.
 4. `python3 scripts/run_tests.py`.
 
-The workflow installs only the exact artifacts accepted by
-`requirements-dev.lock`. The repository validator rejects a workflow until its
-path has been registered as reviewed. It checks every workflow for read-only
+The `runtime` job uses Node.js 22.12.0 from `.node-version`, installs the Rust
+1.98.1 minimal toolchain with `wasm32-unknown-unknown`, Rustfmt, and Clippy,
+installs the npm lockfile without lifecycle scripts, and runs:
+
+1. `npm run check` for strict TypeScript compilation and Rustfmt plus Clippy on
+   both fixed WebAssembly feature variants.
+2. `npm test` to build the distribution, run Node.js integration and raw-ABI
+   tests, and execute scalar and SIMD additions in the installed Chrome and
+   Firefox browsers one at a time.
+
+The Python job installs only the exact artifacts accepted by
+`requirements-dev.lock`. The runtime job installs the exact npm resolution,
+selected Rust toolchain, and direct tools recorded in
+[`dependencies.md`](dependencies.md). The repository validator rejects a
+workflow until its path has been registered as reviewed. It checks every workflow for read-only
 repository permission, job-level permission overrides, `pull_request_target`,
 and actions that are unregistered or are not pinned to a full commit. It also
 rejects an undocumented shell command in any workflow and a registered command
@@ -42,9 +57,11 @@ step order, and other executable fields cannot change merely because the
 required command strings remain present. Review and register the complete new
 definition whenever one of those controls must change.
 
-The job's stable required-check name is `Repository checks /
-repository-consistency`. It checks Python formatting and lint, repository
-structure, policy consistency, and the validator itself. Coding-agent
+The stable check names are `Repository checks / repository-consistency` and
+`Repository checks / runtime`. The first checks Python formatting and lint,
+repository structure, policy consistency, and the validator itself. The second
+checks the TypeScript and Rust source, generated browser distribution, raw ABI,
+and real-browser execution. Coding-agent
 instruction review remains a separate reasoned review under
 [`agent-instruction-review.md`](agent-instruction-review.md). Continuous
 integration does not invoke AI models.

@@ -42,6 +42,67 @@ command provided by Python's `venv` module on another shell. Dependency setup
 downloads packages and writes only to the selected virtual environment and
 the package manager's ordinary cache.
 
+## Prepare the browser-runtime build environment
+
+Building the browser runtime requires two toolchains because they own different
+artifacts. Node.js runs the TypeScript compiler and repository scripts. Rust
+compiles numerical CPU kernels to WebAssembly. Neither toolchain is shipped to
+or installed by a web application that uses the resulting files.
+
+| Tool | Selected version or requirement | Why it is needed |
+| --- | --- | --- |
+| Node.js | `22.12.0`, selected by `.node-version` | Run build, test, manifest, and measurement scripts |
+| npm | `11.1.0`, selected by `packageManager` in `package.json` | Install the exact `package-lock.json` resolution and run stable commands |
+| Rust compiler and standard library | `1.98.1`, selected by `rust-toolchain.toml` | Compile Rust kernel source for checks and the WebAssembly target |
+| WebAssembly Rust target | `wasm32-unknown-unknown` | Produce browser-portable CPU modules without an operating-system interface |
+| Rustfmt and Clippy | Components from the selected Rust toolchain | Check Rust formatting and static diagnostics |
+| Chrome and Firefox | Releases with baseline WebAssembly and WebAssembly SIMD | Run real-browser integration; exact tested releases belong in verification evidence |
+
+Install Node.js with a version manager that reads `.node-version`, or provide
+the exact selected version by an equivalent controlled method. An ordinary
+Node.js installation includes npm; verify that its version matches
+`package.json`. If it differs, deliberately select the pinned release before
+installing dependencies:
+
+```console
+npm install --global npm@11.1.0 --ignore-scripts --no-audit --no-fund
+```
+
+This setup command changes the active Node.js installation and npm's cache; it
+does not run a repository package lifecycle script.
+
+Install `rustup` from the official Rust distribution channel and make its
+`cargo` executable available on `PATH`. Then install the repository-selected
+compiler, target, and quality components:
+
+```console
+rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy --target wasm32-unknown-unknown
+```
+
+The minimal profile avoids documentation and unrelated targets. Rustup writes
+to its configured toolchain and Cargo directories. On its standard POSIX
+installation those directories are below `.rustup` and `.cargo` in the user's
+home directory; adding `.cargo/bin` to `PATH` is a shell-environment action,
+not a repository change.
+
+Install the locked JavaScript development dependency from the repository root:
+
+```console
+npm ci --ignore-scripts --no-audit --no-fund
+```
+
+This command downloads TypeScript and writes `node_modules/` plus npm's ordinary
+cache. It runs no package lifecycle scripts, performs no audit network request,
+and does not change `package-lock.json`. Use `npm install` only when deliberately
+changing the manifest and lockfile together under the dependency policy.
+
+The browser suite uses installed Chrome and Firefox executables; it does not
+download browsers. On macOS and the GitHub Actions Linux runner it checks the
+standard application paths. Set `TABGRAD_CHROME` or `TABGRAD_FIREFOX` to an
+absolute executable path on another installation. Each test starts one
+headless browser at a time with a disposable profile and a loopback-only HTTP
+server, then terminates the process and removes that profile.
+
 ## Use the prepared environment
 
 Run repository Python commands with the interpreter in `.venv`. On POSIX
@@ -101,11 +162,38 @@ does not authorize an unprepared global interpreter.
 | Lint maintained Python files | `python3 -m ruff check scripts tests` | The prepared repository tooling environment; read-only |
 | Validate repository policies and structure | `python3 scripts/check_repository.py` | The prepared repository tooling environment |
 | Test the repository validator | `python3 scripts/run_tests.py` | The prepared repository tooling environment |
+| Install the pinned Rust toolchain | `rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy --target wasm32-unknown-unknown` | Network access and authorized writes to the configured rustup directories; does not modify the repository |
+| Select the pinned npm release | `npm install --global npm@11.1.0 --ignore-scripts --no-audit --no-fund` | Node.js 22.12.0, network access, and authorized writes to that Node.js installation plus npm's cache; does not modify the repository |
+| Install locked JavaScript development dependencies | `npm ci --ignore-scripts --no-audit --no-fund` | Node.js 22.12.0 and npm 11.1.0; downloads TypeScript and recreates `node_modules/` from `package-lock.json` |
+| Build the browser distribution | `npm run build` | Prepared Node.js and Rust environments; rewrites ignored `dist/` and updates Cargo's ignored `target/` cache |
+| Check TypeScript and Rust | `npm run check` | Prepared Node.js and Rust environments; reads TypeScript source and runs Rustfmt plus Clippy for scalar and SIMD targets |
+| Run JavaScript and browser tests | `npm test` | Prepared build environment, Chrome, Firefox, permission to launch headless processes, and a free loopback port; rebuilds `dist/`, uses disposable browser profiles, and runs one browser at a time |
+| Run JavaScript integration tests only | `npm run test:unit` | An existing `dist/` build and permission to listen on a loopback port; does not rebuild source |
+| Run real-browser integration tests only | `npm run test:browser` | An existing `dist/` build, Chrome, Firefox, and a loopback port; launches one headless browser at a time |
+| Measure bounded runtime and artifact costs | `npm run measure` | Prepared build and browser environments; rebuilds `dist/` and writes an ignored report under `test-results/` |
+| Remove the browser distribution | `npm run clean` | Deletes only the ignored `dist/` directory |
+| Update the JavaScript lock after an authorized dependency change | `npm install --package-lock-only --ignore-scripts --no-audit --no-fund` | Node.js 22.12.0, npm 11.1.0, and registry access; rewrites only `package-lock.json` plus npm cache state |
+| Update the Rust lock after an authorized dependency change | `cargo generate-lockfile` | Rust and Cargo 1.98.1 plus registry access if a dependency is introduced; rewrites `Cargo.lock` |
+| Format maintained Rust files | `cargo fmt --all` | Rustfmt from toolchain 1.98.1; rewrites maintained Rust source |
 
 Ruff reads `ruff.toml`. The formatter and linter cover the maintained Python
 files under `scripts/` and `tests/`. The formatting command is the only command
 in this group that rewrites source; verification and continuous integration use
 the two read-only check commands.
+
+TypeScript reads `tsconfig.json`. Cargo reads `Cargo.toml`, `Cargo.lock`, and
+`rust-toolchain.toml`. `npm run check` does not rewrite maintained source;
+developers may run `cargo fmt --all` explicitly when they intend to format Rust
+source. `npm test` builds the exact ignored distribution tested by both the
+Node.js integration suite and the real browsers. No test installs or updates a
+dependency.
+
+Delete `node_modules/`, `target/`, `dist/`, or `test-results/` only when their
+corresponding disposable local state must be rebuilt. Each path is ignored.
+Do not use a broad recursive deletion against the repository root. The
+`npm run clean` command is the safe registered cleanup for the distribution;
+package-manager caches and installed toolchains are shared user resources and
+are not removed by repository commands.
 
 Every configured command must appear in this registry. Add or change an entry
 in the same repository change as its executable configuration and local

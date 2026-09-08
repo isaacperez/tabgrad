@@ -99,8 +99,15 @@ to reproduce a required check or release.
 | --- | --- | --- | --- |
 | `actions/checkout` | Read-only repository checkout in GitHub Actions | Commit `3d3c42e5aac5ba805825da76410c181273ba90b1`, release `v7.0.1` | Official `actions/checkout` repository, MIT License |
 | `actions/setup-python` | Provide the exact Python interpreter used by repository checks | Commit `5fda3b95a4ea91299a34e894583c3862153e4b97`, release `v7.0.0` | Official `actions/setup-python` repository, MIT License |
+| `actions/setup-node` | Provide Node.js selected by `.node-version` in the runtime CI job | Commit `820762786026740c76f36085b0efc47a31fe5020`, release `v7.0.0` | Official `actions/setup-node` repository, MIT License |
 | `PyYAML` | Parse repository YAML during local and continuous-integration checks; development only | `6.0.3`, with accepted artifact hashes in `requirements-dev.lock` | Python Package Index and `yaml/pyyaml`, MIT License |
 | `Ruff` | Format and lint maintained Python repository tooling and tests; development only | `0.16.5`, with accepted artifact hashes in `requirements-dev.lock` | Python Package Index and `astral-sh/ruff`, MIT License |
+| Node.js | Run TypeScript compilation, build scripts, tests, and bounded measurements; development and release time only | `22.12.0`, selected by `.node-version` | Official Node.js distribution, MIT License |
+| npm | Resolve the JavaScript development dependency and run package scripts; development and release time only | `11.1.0`, selected by `packageManager` in `package.json` | Official npm CLI distribution, Artistic License 2.0 |
+| TypeScript | Type-check and compile the browser-side semantic runtime and WebAssembly adapter; build time only | `6.0.3`, with registry URL and integrity in `package-lock.json` | npm registry and `microsoft/TypeScript`, Apache License 2.0 |
+| Rust toolchain | Compile the CPU numerical kernel to scalar and SIMD WebAssembly and run Rustfmt and Clippy; development and release time only | Compiler and standard library `1.98.1` plus `wasm32-unknown-unknown`, Rustfmt, and Clippy, selected by `rust-toolchain.toml` | Official Rust distribution, dual Apache License 2.0 and MIT License |
+| Google Chrome | Execute browser integration and bounded performance checks; test time only and not downloaded or redistributed by Tabgrad | Installed compatible release; exact version recorded with verification evidence | Google distribution under the Google Chrome Terms of Service |
+| Mozilla Firefox | Execute browser integration and bounded performance checks; test time only and not downloaded or redistributed by Tabgrad | Installed compatible release; exact version recorded with verification evidence | Mozilla distribution; source components under the Mozilla Public License 2.0 and accompanying notices |
 
 `requirements-dev.lock` is the authoritative direct development dependency
 manifest and integrity record. It accepts every CPython 3.11 wheel published
@@ -122,3 +129,33 @@ registered in [`development.md`](development.md). It is not included in a
 Tabgrad runtime or browser artifact. Remove it when the repository no longer
 maintains Python code or when an accepted replacement provides the same
 formatting and lint evidence with lower overall maintenance cost.
+
+`package.json` is the direct JavaScript dependency manifest and
+`package-lock.json` is its exact resolution and integrity record. TypeScript is
+the only npm package dependency and has no runtime role. Version 6.0.3 provides
+the required strict type checking and browser library definitions without the
+platform-specific compiler packages used by the compared 7.0.2 distribution.
+The larger uncompressed development installation is not shipped in `dist/`.
+Remove TypeScript only if maintained browser source no longer uses TypeScript;
+update it after reviewing diagnostics, emitted JavaScript, browser support,
+lockfile contents, license, and build size.
+
+`Cargo.toml` is the direct Rust package manifest and `Cargo.lock` fixes its
+resolution. The WebAssembly kernel crate has no third-party Rust crate
+dependencies. `rust-toolchain.toml` selects the compiler and target so a source
+build does not silently follow a contributor's default Rust version. Rust and
+its quality components do not appear in the browser distribution.
+
+Node.js and npm run build orchestration only. The browser executes the emitted
+standard JavaScript and WebAssembly through its own engines; it does not embed
+Node.js. Chrome and Firefox are external test environments, not linked or
+redistributed code. The custom browser runner uses their command-line
+interfaces and Node.js standard modules instead of adding a browser automation
+package. Reconsider that choice only if supported-browser lifecycle or
+diagnostic needs cannot be met reliably by the bounded runner.
+
+The runtime uses browser-provided `fetch`, Web Cryptography, and WebAssembly
+APIs. Rust exposes a project-owned raw ABI, so `wasm-bindgen`, `wasm-pack`, a
+JavaScript numerical package, and a native tensor runtime are not dependencies.
+The browser therefore downloads only Tabgrad-authored JavaScript, manifest, and
+the one selected WebAssembly module for this CPU path.

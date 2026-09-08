@@ -61,7 +61,9 @@ must provide and maintain that integration.
 
 The tensor runtime can also be used directly from JavaScript without Pyodide.
 Pyodide is required for the Python experience in the browser, but it is not the
-tensor runtime itself.
+tensor runtime itself. The supported direct interface, lazy observation model,
+errors, and browser delivery contract are documented in the
+[JavaScript API reference](docs/javascript-api.md).
 
 The responsibilities, data flow, lifetimes, and reasons for this design are
 explained in the [architecture guide](docs/architecture/README.md).

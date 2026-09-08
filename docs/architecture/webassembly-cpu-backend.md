@@ -233,6 +233,57 @@ conventions would make the hot numerical contract less explicit. A generated
 binding can be reconsidered only if it preserves the raw ABI, ownership, size,
 and call-overhead requirements with simpler total maintenance.
 
+## Version 1 manifest and addition ABI
+
+The first concrete raw ABI profile gives the general boundary above an exact,
+small instance. The generated JSON manifest has schema version 1 and module
+version 1. It declares ABI version 1, 32-bit addresses, non-shared memory, the
+`add-f32` capability, one `env.memory` import, an initial 32-page memory, a
+maximum 1024-page memory, and 16-byte host-arena alignment. Each scalar or
+`simd128` variant records its relative path, byte length, required features, and
+SHA-256 digest.
+
+The adapter validates the manifest before using it, selects one variant from a
+WebAssembly feature probe, fetches only that module, verifies its byte length
+and digest, compiles it, and inspects the compiled module's actual imports. A
+module must import exactly one non-shared memory as `env.memory`; an additional
+or renamed import is an ABI mismatch. The adapter then creates the bounded
+memory, instantiates the compiled module, and validates these exports:
+
+| Export | Signature | Meaning |
+| --- | --- | --- |
+| `tabgrad_abi_version` | `() -> u32` | Returns `1` for this ABI profile. |
+| `tabgrad_capabilities` | `() -> u32` | Returns a bit set containing the `add-f32` capability. |
+| `tabgrad_arena_base` | `() -> u32` | Returns the first byte available to the host allocator. |
+| `tabgrad_add_f32` | `(left_offset, right_offset, output_offset, length) -> u32` | Adds two contiguous `float32` input ranges into a distinct output range. |
+
+All offsets and the length are WebAssembly `i32` values interpreted as unsigned
+32-bit integers. The kernel checks four-byte alignment, checked byte ranges
+within the imported memory, and non-overlap between the output and either
+input. Input-to-input aliasing is legal. Status 0 means success; status 1 means
+misalignment, status 2 means an out-of-bounds range, and status 3 means output
+overlap. A nonzero status becomes a structured adapter error. A trap quarantines
+the context because its physical state can no longer be assumed valid.
+
+The adapter labels preparation failures by the phase that owns them: manifest
+fetch, parsing, or validation; capability selection; module fetch; integrity
+validation; compilation; instantiation; or ABI validation. Execution and
+readback have distinct phase labels. Before an asynchronous error crosses the
+observation boundary, the runtime associates it with the exact immutable
+program for that invocation, its execution domain, the causal operation and
+stable source provenance, and the CPU endpoint. A kernel status or trap carries
+the computation's output slot, which identifies the exact failing occurrence
+even when several operations share the same name and source. The association is
+internal, request-scoped diagnostic state rather than a public
+`ExecutableProgram` export, and a native browser or WebAssembly error remains
+available as the error cause.
+
+The scalar and SIMD modules are compiled from the same Rust source with
+opposite fixed `simd128` target-feature settings. The SIMD kernel performs
+four-lane addition and handles its remaining zero to three elements with the
+scalar tail. Neither module allocates, owns tensor metadata, interprets an
+operation stream, or calls JavaScript per element.
+
 ## Memory belongs to the CPU backend context
 
 WebAssembly kernels read and write a contiguous byte array called **linear
@@ -294,6 +345,14 @@ generation identity, cancellation state, and leases through the ordinary
 `ExecutionRequest`. Tensor data and reusable workspaces remain resident in the
 context's linear memory across compatible calls, which avoids repeated
 JavaScript-to-WebAssembly payload copies.
+
+Residency does not extend the lifetime of an invocation's executable program.
+A resident materialization records its allocation and backend generation, while
+the request owns the program used for execution or readback. Existing resident
+inputs are not rewritten with a downstream request's diagnostic context. This
+keeps program-metadata retention proportional to active requests, explicit
+prepared-program caches, and retained failures rather than to unrelated live
+tensors.
 
 The baseline path can serialize access to a mutable instance or lease an
 independent instance and memory to a request. In either case, one invocation
