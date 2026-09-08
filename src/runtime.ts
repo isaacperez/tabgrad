@@ -4,10 +4,14 @@ import {
   type WasmVariant,
   WebAssemblyCpuBackend,
 } from "./cpu-backend.js";
-import { TabgradError } from "./errors.js";
+import {
+  TabgradError,
+  retainExecutionFailureContext,
+} from "./errors.js";
 import {
   ExecutableProgram,
   type LoweredAddFloat32,
+  type ProgramProvenance,
   type ProgramSlot,
   type ProgramValue,
 } from "./executable-program.js";
@@ -68,6 +72,7 @@ interface AdmittedOperation {
 
 interface OperationDefinition {
   readonly name: "add";
+  readonly provenanceSource: "Tensor.add";
   readonly loweredKind: "add-f32";
   readonly pure: true;
   admit(
@@ -125,12 +130,91 @@ function copyFloat32TensorData(data: unknown): Float32Array {
   }
 }
 
+function invalidTensorShape(dataLength: number, cause?: unknown): TabgradError {
+  return new TabgradError(
+    "INVALID_SHAPE",
+    "This runtime slice requires one dimension equal to the data length.",
+    {
+      operation: "tensor",
+      contract: "one-dimensional-shape",
+      dataLength,
+    },
+    cause,
+  );
+}
+
+function copyTensorShape(shape: unknown, dataLength: number): readonly [number] {
+  if (shape === undefined) {
+    return Object.freeze([dataLength]);
+  }
+  try {
+    if (!Array.isArray(shape) || shape.length !== 1) {
+      throw invalidTensorShape(dataLength);
+    }
+    const firstDimension: unknown = shape[0];
+    if (
+      typeof firstDimension !== "number"
+      || !Number.isSafeInteger(firstDimension)
+      || firstDimension < 0
+      || firstDimension !== dataLength
+    ) {
+      throw invalidTensorShape(dataLength);
+    }
+    return Object.freeze([firstDimension]);
+  } catch (error) {
+    if (error instanceof TabgradError) {
+      throw error;
+    }
+    throw invalidTensorShape(dataLength, error);
+  }
+}
+
+function retainProgramFailureContext(
+  error: unknown,
+  program: ExecutableProgram,
+  fallbackPhase: string,
+): TabgradError {
+  const recordedPhase = error instanceof TabgradError
+    ? error.details.phase
+    : undefined;
+  const phase = typeof recordedPhase === "string"
+    ? recordedPhase
+    : fallbackPhase;
+  const tabgradError = error instanceof TabgradError
+    ? new TabgradError(
+      error.code,
+      error.message,
+      { ...error.details, backend: "webassembly-cpu", phase },
+      error.cause ?? error,
+    )
+    : new TabgradError(
+      "BACKEND_STATUS_ERROR",
+      "The WebAssembly CPU request failed.",
+      { backend: "webassembly-cpu", phase: fallbackPhase },
+      error,
+    );
+  const result = program.values.find((value) => value.slot === program.result);
+  const provenance = result?.provenance ?? Object.freeze({
+    operation: "tensor",
+    source: "RuntimeSession.tensor",
+  });
+  return retainExecutionFailureContext(tabgradError, {
+    operation: provenance.operation,
+    provenance,
+    program,
+    executionDomain: program.domain,
+    backendEndpoints: ["webassembly-cpu"],
+    phase,
+  });
+}
+
 class TensorValue {
   readonly shape: readonly [number];
   readonly dtype: TensorDType;
   readonly device: TensorDevice;
   readonly layout: TensorLayout;
   readonly producer: OperationRecord | null;
+  readonly provenance: ProgramProvenance;
   references = 1;
   dependenciesReleased = false;
 
@@ -140,12 +224,17 @@ class TensorValue {
     this.device = metadata.device;
     this.layout = metadata.layout;
     this.producer = producer;
+    this.provenance = producer?.provenance ?? Object.freeze({
+      operation: "tensor",
+      source: "RuntimeSession.tensor",
+    });
   }
 }
 
 class OperationRecord {
   readonly definition: OperationDefinition;
   readonly inputs: readonly [TensorValue, TensorValue];
+  readonly provenance: ProgramProvenance;
 
   constructor(
     definition: OperationDefinition,
@@ -153,6 +242,10 @@ class OperationRecord {
   ) {
     this.definition = definition;
     this.inputs = Object.freeze([...inputs]) as unknown as readonly [TensorValue, TensorValue];
+    this.provenance = Object.freeze({
+      operation: definition.name,
+      source: definition.provenanceSource,
+    });
     Object.freeze(this);
   }
 }
@@ -170,7 +263,11 @@ class TensorState {
 
 type Materialization =
   | { readonly kind: "host"; readonly data: Float32Array }
-  | { readonly kind: "resident"; readonly allocation: ResidentAllocation };
+  | {
+    readonly kind: "resident";
+    readonly allocation: ResidentAllocation;
+    readonly program: ExecutableProgram;
+  };
 
 class MaterializationTable {
   readonly #entries = new Map<TensorValue, Materialization>();
@@ -183,8 +280,12 @@ class MaterializationTable {
     this.#entries.set(value, { kind: "host", data });
   }
 
-  setResident(value: TensorValue, allocation: ResidentAllocation): void {
-    this.#entries.set(value, { kind: "resident", allocation });
+  setResident(
+    value: TensorValue,
+    allocation: ResidentAllocation,
+    program: ExecutableProgram,
+  ): void {
+    this.#entries.set(value, { kind: "resident", allocation, program });
   }
 
   delete(value: TensorValue): Materialization | undefined {
@@ -271,6 +372,7 @@ export class Tensor {
 
 class AddOperationDefinition implements OperationDefinition {
   readonly name = "add";
+  readonly provenanceSource = "Tensor.add";
   readonly loweredKind = "add-f32";
   readonly pure = true;
 
@@ -382,6 +484,7 @@ export class RuntimeSession {
   #closePromise: Promise<void> | null = null;
   #operationRecords = 0;
   #requestLeases = 0;
+  #onProgramFormed: ((program: ExecutableProgram) => void) | undefined;
 
   constructor(options: RuntimeSessionOptions = {}) {
     const manifestUrl = options.manifestUrl === undefined
@@ -394,12 +497,14 @@ export class RuntimeSession {
   static createForTesting(
     options: RuntimeSessionOptions,
     forceVariant: WasmVariant,
+    onProgramFormed?: (program: ExecutableProgram) => void,
   ): RuntimeSession {
     const session = new RuntimeSession(options);
     const manifestUrl = options.manifestUrl === undefined
       ? new URL("./manifest.json", import.meta.url)
       : new URL(options.manifestUrl, import.meta.url);
     session.#backend = new WebAssemblyCpuBackend(manifestUrl, forceVariant);
+    session.#onProgramFormed = onProgramFormed;
     return session;
   }
 
@@ -432,28 +537,9 @@ export class RuntimeSession {
     }
 
     const payload = copyFloat32TensorData(data);
-    const shape = options.shape ?? [payload.length];
-    const firstDimension = shape[0];
-    if (
-      shape.length !== 1
-      || !Number.isSafeInteger(firstDimension)
-      || firstDimension === undefined
-      || firstDimension < 0
-      || firstDimension !== payload.length
-    ) {
-      throw new TabgradError(
-        "INVALID_SHAPE",
-        "This runtime slice requires one dimension equal to the data length.",
-        {
-          operation: "tensor",
-          contract: "one-dimensional-shape",
-          dataLength: payload.length,
-          shape: [...shape],
-        },
-      );
-    }
+    const shape = copyTensorShape(options.shape, payload.length);
     const value = new TensorValue({
-      shape: [payload.length],
+      shape,
       dtype: "float32",
       device: "cpu",
       layout: "contiguous",
@@ -481,8 +567,19 @@ export class RuntimeSession {
     this.#retainValue(state.value);
     return this.#enqueue(async () => {
       try {
-        const allocation = await this.#materialize(state.value);
-        return this.#backend.read(allocation, state.value.shape[0]);
+        const materialization = await this.#materialize(state.value);
+        try {
+          return this.#backend.read(
+            materialization.allocation,
+            state.value.shape[0],
+          );
+        } catch (error) {
+          throw retainProgramFailureContext(
+            error,
+            materialization.program,
+            "readback",
+          );
+        }
       } finally {
         this.#releaseValue(state.value);
       }
@@ -588,35 +685,47 @@ export class RuntimeSession {
     }
   }
 
-  async #materialize(value: TensorValue): Promise<ResidentAllocation> {
+  async #materialize(value: TensorValue): Promise<{
+    readonly allocation: ResidentAllocation;
+    readonly program: ExecutableProgram;
+  }> {
     const existing = this.#materializations.get(value);
     if (existing?.kind === "resident") {
-      return existing.allocation;
+      return { allocation: existing.allocation, program: existing.program };
     }
     const formed = this.#formProgram(value);
-    const allocations = await this.#backend.execute(formed.program, formed.bindings);
-    for (const [slot, allocation] of allocations) {
-      const boundValue = formed.valuesBySlot.get(slot);
-      if (boundValue === undefined) {
-        throw new TabgradError(
-          "BACKEND_STATUS_ERROR",
-          "The backend returned an allocation for an unknown program slot.",
-          { slot },
+    try {
+      const allocations = await this.#backend.execute(formed.program, formed.bindings);
+      for (const [slot, allocation] of allocations) {
+        const boundValue = formed.valuesBySlot.get(slot);
+        if (boundValue === undefined) {
+          throw new TabgradError(
+            "BACKEND_STATUS_ERROR",
+            "The backend returned an allocation for an unknown program slot.",
+            { backend: "webassembly-cpu", phase: "execution", slot },
+          );
+        }
+        this.#materializations.setResident(
+          boundValue,
+          allocation,
+          formed.program,
         );
       }
-      this.#materializations.setResident(boundValue, allocation);
+      for (const computedValue of formed.newlyComputed) {
+        this.#releaseDependencies(computedValue);
+      }
+      const result = this.#materializations.get(value);
+      if (result?.kind !== "resident") {
+        throw new TabgradError(
+          "BACKEND_STATUS_ERROR",
+          "Execution completed without materializing the demanded result.",
+          { backend: "webassembly-cpu", phase: "execution" },
+        );
+      }
+      return { allocation: result.allocation, program: formed.program };
+    } catch (error) {
+      throw retainProgramFailureContext(error, formed.program, "execution");
     }
-    for (const computedValue of formed.newlyComputed) {
-      this.#releaseDependencies(computedValue);
-    }
-    const result = this.#materializations.get(value);
-    if (result?.kind !== "resident") {
-      throw new TabgradError(
-        "BACKEND_STATUS_ERROR",
-        "Execution completed without materializing the demanded result.",
-      );
-    }
-    return result.allocation;
   }
 
   #formProgram(root: TensorValue): FormedProgram {
@@ -647,6 +756,7 @@ export class RuntimeSession {
         layout: value.layout,
         shape: value.shape,
         source: producer === null ? "binding" : "computed",
+        provenance: value.provenance,
       });
       if (materialization?.kind === "host") {
         bindings.set(slot, { hostData: materialization.data });
@@ -659,6 +769,7 @@ export class RuntimeSession {
           left: inputSlots[0],
           right: inputSlots[1],
           output: slot,
+          provenance: producer.provenance,
         });
         newlyComputed.push(value);
       }
@@ -666,8 +777,10 @@ export class RuntimeSession {
     };
 
     const result = visit(root);
+    const program = new ExecutableProgram(values, computations, result);
+    this.#onProgramFormed?.(program);
     return {
-      program: new ExecutableProgram(values, computations, result),
+      program,
       bindings,
       valuesBySlot,
       newlyComputed,
@@ -695,6 +808,11 @@ export function createRuntimeSession(options: RuntimeSessionOptions = {}): Runti
 /** @internal */
 export function createRuntimeSessionForTesting(
   options: RuntimeSessionOptions & { readonly forceVariant: WasmVariant },
+  onProgramFormed?: (program: ExecutableProgram) => void,
 ): RuntimeSession {
-  return RuntimeSession.createForTesting(options, options.forceVariant);
+  return RuntimeSession.createForTesting(
+    options,
+    options.forceVariant,
+    onProgramFormed,
+  );
 }

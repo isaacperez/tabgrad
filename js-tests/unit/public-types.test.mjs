@@ -21,3 +21,19 @@ test("the public declarations do not expose runtime-to-backend plumbing", async 
     assert.doesNotMatch(declarations, new RegExp(internalName.replace("(", "\\(")));
   }
 });
+
+test("the package entry point does not export executable or failure internals", async () => {
+  const declarations = await readFile(
+    new URL("../../dist/index.d.ts", import.meta.url),
+    "utf8",
+  );
+
+  for (const internalName of [
+    "ExecutableProgram",
+    "InternalExecutionFailureContext",
+    "inspectExecutionFailureContext",
+    "retainExecutionFailureContext",
+  ]) {
+    assert.doesNotMatch(declarations, new RegExp(internalName));
+  }
+});

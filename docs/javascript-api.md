@@ -8,9 +8,9 @@ lets a reader see the complete lifecycle—admission, lazy recording, WebAssembl
 execution, observation, and release—without implying support for tensor
 features that have not been established by tests.
 
-Python does not sit between this API and the runtime. The future Python
-compatibility layer and this JavaScript interface share the same TypeScript
-semantic runtime, so they do not need separate numerical engines.
+Python does not sit between this API and the runtime. Any Python compatibility
+layer uses the same TypeScript semantic runtime as this JavaScript interface;
+Tabgrad does not define a separate numerical engine for each frontend.
 
 ## Browser delivery requires no developer toolchain
 
@@ -61,6 +61,12 @@ into a host `Float32Array`. Its default and supported metadata are:
 | Data type | `float32` |
 | Device | `cpu` |
 | Layout | `contiguous` |
+
+When supplied from JavaScript, `options.shape` must be an actual array with one
+non-negative safe-integer element equal to the copied data length. `null`, a
+number, an array-like object, a different rank, or a different length is an
+`INVALID_SHAPE` error. This runtime check is required even though TypeScript
+callers also receive a static `readonly number[]` type.
 
 `left.add(right)` validates both operands synchronously and returns a new
 tensor handle. It does not fetch, compile, instantiate, or call WebAssembly.
@@ -113,6 +119,15 @@ back to JavaScript arithmetic.
 `details`. Errors that can be determined from tensor metadata are thrown by
 `tensor()` or `add()` before any backend submission. Loading, ABI, memory, and
 kernel errors reject the promise returned by `toArray()`.
+
+An asynchronous backend error records the `webassembly-cpu` backend and its
+specific failure phase in `details`. It also retains, as internal diagnostic
+context, the demanded immutable executable program, its declared domain, the
+causal operation and stable source provenance, and the applicable backend
+endpoint. That program is not added to the public tensor API. When the browser
+or WebAssembly engine supplies a native error, `cause` preserves it. Repeated
+observations of one cached preparation failure receive distinct error objects
+and therefore cannot acquire another invocation's program or provenance.
 
 | Code | Meaning |
 | --- | --- |

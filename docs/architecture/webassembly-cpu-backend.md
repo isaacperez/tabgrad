@@ -265,6 +265,16 @@ misalignment, status 2 means an out-of-bounds range, and status 3 means output
 overlap. A nonzero status becomes a structured adapter error. A trap quarantines
 the context because its physical state can no longer be assumed valid.
 
+The adapter labels preparation failures by the phase that owns them: manifest
+fetch, parsing, or validation; capability selection; module fetch; integrity
+validation; compilation; instantiation; or ABI validation. Execution and
+readback have distinct phase labels. Before an asynchronous error crosses the
+observation boundary, the runtime associates it with the exact immutable
+program for that invocation, its execution domain, the causal operation and
+stable source provenance, and the CPU endpoint. The association is internal
+diagnostic state rather than a public `ExecutableProgram` export, and a native
+browser or WebAssembly error remains available as the error cause.
+
 The scalar and SIMD modules are compiled from the same Rust source with
 opposite fixed `simd128` target-feature settings. The SIMD kernel performs
 four-lane addition and handles its remaining zero to three elements with the

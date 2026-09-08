@@ -18,6 +18,24 @@ export type TabgradErrorCode =
   | "UNSUPPORTED_DTYPE"
   | "UNSUPPORTED_LAYOUT";
 
+/** @internal */
+export interface InternalExecutionFailureContext {
+  readonly operation: string;
+  readonly provenance: Readonly<{
+    readonly operation: string;
+    readonly source: string;
+  }>;
+  readonly program: unknown;
+  readonly executionDomain: string;
+  readonly backendEndpoints: readonly string[];
+  readonly phase: string;
+}
+
+const EXECUTION_FAILURE_CONTEXTS = new WeakMap<
+  TabgradError,
+  InternalExecutionFailureContext
+>();
+
 export class TabgradError extends Error {
   readonly code: TabgradErrorCode;
   readonly details: Readonly<Record<string, unknown>>;
@@ -33,4 +51,28 @@ export class TabgradError extends Error {
     this.code = code;
     this.details = Object.freeze({ ...details });
   }
+}
+
+/** @internal */
+export function retainExecutionFailureContext(
+  error: TabgradError,
+  context: InternalExecutionFailureContext,
+): TabgradError {
+  if (!EXECUTION_FAILURE_CONTEXTS.has(error)) {
+    EXECUTION_FAILURE_CONTEXTS.set(error, Object.freeze({
+      ...context,
+      provenance: Object.freeze({ ...context.provenance }),
+      backendEndpoints: Object.freeze([...context.backendEndpoints]),
+    }));
+  }
+  return error;
+}
+
+/** @internal */
+export function inspectExecutionFailureContext(
+  error: unknown,
+): InternalExecutionFailureContext | undefined {
+  return error instanceof TabgradError
+    ? EXECUTION_FAILURE_CONTEXTS.get(error)
+    : undefined;
 }

@@ -10,7 +10,10 @@ import {
   TabgradError,
   createRuntimeSession,
 } from "../../dist/index.js";
-import { createTestRuntimeSession } from "../../dist/testing.js";
+import {
+  createTestRuntimeSession,
+  getTestExecutionFailureContext,
+} from "../../dist/testing.js";
 import { ExecutableProgram } from "../../dist/executable-program.js";
 
 const distributionRoot = normalize(fileURLToPath(new URL("../../dist", import.meta.url)));
@@ -487,6 +490,30 @@ test("rejects nonnumeric JavaScript tensor data instead of coercing it", async (
   }
 });
 
+for (const [name, shape] of [
+  ["null", null],
+  ["array-like object", { length: 1, 0: 1 }],
+  ["non-collection number", 7],
+]) {
+  test(`rejects malformed shape option: ${name}`, async () => {
+    const session = createRuntimeSession({
+      manifestUrl: new URL("manifest.json", distributionUrl),
+    });
+    try {
+      assert.throws(
+        () => session.tensor([1], { shape }),
+        (error) => error instanceof TabgradError
+          && error.code === "INVALID_SHAPE"
+          && error.details.operation === "tensor"
+          && error.details.contract === "one-dimensional-shape",
+      );
+      assert.equal(session.diagnostics().backendLoads, 0);
+    } finally {
+      await session.close();
+    }
+  });
+}
+
 test("copies numeric iterable and array-like tensor inputs", async () => {
   const session = createTestRuntimeSession({
     manifestUrl: new URL("manifest.json", distributionUrl),
@@ -624,18 +651,20 @@ test("discards unreachable pure work without loading the backend", async () => {
 test("ExecutableProgram is immutable and contains only logical slots", () => {
   const program = new ExecutableProgram(
     [
-      { slot: 0, dtype: "float32", device: "cpu", layout: "contiguous", shape: [1], source: "binding" },
-      { slot: 1, dtype: "float32", device: "cpu", layout: "contiguous", shape: [1], source: "binding" },
-      { slot: 2, dtype: "float32", device: "cpu", layout: "contiguous", shape: [1], source: "computed" },
+      { slot: 0, dtype: "float32", device: "cpu", layout: "contiguous", shape: [1], source: "binding", provenance: { operation: "tensor", source: "RuntimeSession.tensor" } },
+      { slot: 1, dtype: "float32", device: "cpu", layout: "contiguous", shape: [1], source: "binding", provenance: { operation: "tensor", source: "RuntimeSession.tensor" } },
+      { slot: 2, dtype: "float32", device: "cpu", layout: "contiguous", shape: [1], source: "computed", provenance: { operation: "add", source: "Tensor.add" } },
     ],
-    [{ kind: "add-f32", left: 0, right: 1, output: 2 }],
+    [{ kind: "add-f32", left: 0, right: 1, output: 2, provenance: { operation: "add", source: "Tensor.add" } }],
     2,
   );
 
   assert.ok(Object.isFrozen(program));
   assert.ok(Object.isFrozen(program.values));
   assert.ok(Object.isFrozen(program.values[0].shape));
+  assert.ok(Object.isFrozen(program.values[0].provenance));
   assert.ok(Object.isFrozen(program.computations));
+  assert.ok(Object.isFrozen(program.computations[0].provenance));
   assert.deepEqual(Object.keys(program).sort(), [
     "computations",
     "domain",
@@ -644,6 +673,174 @@ test("ExecutableProgram is immutable and contains only logical slots", () => {
     "values",
   ]);
   assert.doesNotMatch(JSON.stringify(program), /offset|pointer|module|Float32Array/);
+});
+
+test("lowering an admitted addition forms the inspected ExecutableProgram", async () => {
+  let observedProgram;
+  const session = createTestRuntimeSession({
+    manifestUrl: new URL("manifest.json", distributionUrl),
+    forceVariant: "scalar",
+    onProgramFormed(program) {
+      observedProgram = program;
+    },
+  });
+  const result = session.tensor([1, 2]).add(session.tensor([3, 4]));
+
+  assert.deepEqual(Array.from(await result.toArray()), [4, 6]);
+  assert.ok(observedProgram instanceof ExecutableProgram);
+  assert.ok(Object.isFrozen(observedProgram));
+  assert.deepEqual(observedProgram.values, [
+    {
+      slot: 0,
+      dtype: "float32",
+      device: "cpu",
+      layout: "contiguous",
+      shape: [2],
+      source: "binding",
+      provenance: { operation: "tensor", source: "RuntimeSession.tensor" },
+    },
+    {
+      slot: 1,
+      dtype: "float32",
+      device: "cpu",
+      layout: "contiguous",
+      shape: [2],
+      source: "binding",
+      provenance: { operation: "tensor", source: "RuntimeSession.tensor" },
+    },
+    {
+      slot: 2,
+      dtype: "float32",
+      device: "cpu",
+      layout: "contiguous",
+      shape: [2],
+      source: "computed",
+      provenance: { operation: "add", source: "Tensor.add" },
+    },
+  ]);
+  assert.deepEqual(observedProgram.computations, [
+    {
+      kind: "add-f32",
+      left: 0,
+      right: 1,
+      output: 2,
+      provenance: { operation: "add", source: "Tensor.add" },
+    },
+  ]);
+  assert.equal(observedProgram.result, 2);
+  assert.doesNotMatch(
+    JSON.stringify(observedProgram),
+    /offset|pointer|module|Float32Array/,
+  );
+  await session.close();
+});
+
+test("a preparation failure retains operation, program, backend, phase, and cause", async () => {
+  let observedProgram;
+  const session = createTestRuntimeSession({
+    manifestUrl: new URL("missing-causal-context.json", distributionUrl),
+    forceVariant: "scalar",
+    onProgramFormed(program) {
+      observedProgram = program;
+    },
+  });
+  const result = session.tensor([1]).add(session.tensor([2]));
+  let caught;
+  try {
+    await result.toArray();
+  } catch (error) {
+    caught = error;
+  }
+
+  assert.ok(caught instanceof TabgradError);
+  assert.equal(caught.code, "BACKEND_LOAD_FAILED");
+  const context = getTestExecutionFailureContext(caught);
+  assert.ok(context);
+  assert.ok(Object.isFrozen(context));
+  assert.ok(Object.isFrozen(context.provenance));
+  assert.ok(Object.isFrozen(context.backendEndpoints));
+  assert.equal(caught.details.backend, "webassembly-cpu");
+  assert.equal(caught.details.phase, "manifest-fetch");
+  assert.equal(context.operation, "add");
+  assert.deepEqual(context.provenance, { operation: "add", source: "Tensor.add" });
+  assert.equal(context.program, observedProgram);
+  assert.equal(context.executionDomain, "webassembly-cpu");
+  assert.deepEqual(context.backendEndpoints, ["webassembly-cpu"]);
+  assert.equal(context.phase, "manifest-fetch");
+  assert.ok(caught.cause instanceof Error);
+  await session.close();
+});
+
+test("a kernel trap retains operation, program, backend, phase, and native cause", async () => {
+  const manifestUrl = installFixture("causal-kernel-trap", {
+    kernelBehavior: "trap",
+  });
+  let observedProgram;
+  const session = createTestRuntimeSession({
+    manifestUrl,
+    forceVariant: "scalar",
+    onProgramFormed(program) {
+      observedProgram = program;
+    },
+  });
+  const result = session.tensor([1]).add(session.tensor([2]));
+  let caught;
+  try {
+    await result.toArray();
+  } catch (error) {
+    caught = error;
+  }
+
+  assert.ok(caught instanceof TabgradError);
+  assert.equal(caught.code, "BACKEND_TRAP");
+  const context = getTestExecutionFailureContext(caught);
+  assert.ok(context);
+  assert.ok(Object.isFrozen(context));
+  assert.ok(Object.isFrozen(context.provenance));
+  assert.ok(Object.isFrozen(context.backendEndpoints));
+  assert.equal(caught.details.backend, "webassembly-cpu");
+  assert.equal(caught.details.phase, "execution");
+  assert.equal(context.operation, "add");
+  assert.deepEqual(context.provenance, { operation: "add", source: "Tensor.add" });
+  assert.equal(context.program, observedProgram);
+  assert.equal(context.executionDomain, "webassembly-cpu");
+  assert.deepEqual(context.backendEndpoints, ["webassembly-cpu"]);
+  assert.equal(context.phase, "execution");
+  assert.ok(caught.cause instanceof WebAssembly.RuntimeError);
+  await session.close();
+});
+
+test("a cached preparation failure keeps invocation contexts distinct", async () => {
+  const observedPrograms = [];
+  const session = createTestRuntimeSession({
+    manifestUrl: new URL("missing-distinct-context.json", distributionUrl),
+    forceVariant: "scalar",
+    onProgramFormed(program) {
+      observedPrograms.push(program);
+    },
+  });
+  const first = session.tensor([1]).add(session.tensor([2]));
+  const second = session.tensor([3]).add(session.tensor([4]));
+  const caught = [];
+  for (const result of [first, second]) {
+    try {
+      await result.toArray();
+    } catch (error) {
+      caught.push(error);
+    }
+  }
+
+  assert.equal(caught.length, 2);
+  assert.notEqual(caught[0], caught[1]);
+  assert.equal(
+    getTestExecutionFailureContext(caught[0]).program,
+    observedPrograms[0],
+  );
+  assert.equal(
+    getTestExecutionFailureContext(caught[1]).program,
+    observedPrograms[1],
+  );
+  await session.close();
 });
 
 test("executes a finite chain in dependency order and handles empty tensors", async () => {

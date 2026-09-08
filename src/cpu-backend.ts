@@ -6,6 +6,17 @@ const CAPABILITY_ADD_FLOAT32 = 1;
 const WEBASSEMBLY_PAGE_BYTES = 65_536;
 const MAXIMUM_ADDRESS = 0xffff_ffff;
 
+type BackendPreparationPhase =
+  | "manifest-fetch"
+  | "manifest-parse"
+  | "manifest-validation"
+  | "capability-selection"
+  | "module-fetch"
+  | "integrity-validation"
+  | "compilation"
+  | "instantiation"
+  | "abi-validation";
+
 export type WasmVariant = "scalar" | "simd128";
 
 export interface BackendDiagnostics {
@@ -318,6 +329,7 @@ export class WebAssemblyCpuBackend {
       throw new TabgradError(
         "BACKEND_TRAP",
         "The WebAssembly backend context is quarantined after a trap.",
+        { backend: "webassembly-cpu", phase: "execution" },
       );
     }
 
@@ -343,7 +355,7 @@ export class WebAssemblyCpuBackend {
           throw new TabgradError(
             "BACKEND_STATUS_ERROR",
             "An executable input has no host or resident binding.",
-            { slot: value.slot },
+            { backend: "webassembly-cpu", phase: "execution", slot: value.slot },
           );
         }
       }
@@ -357,7 +369,11 @@ export class WebAssemblyCpuBackend {
           throw new TabgradError(
             "BACKEND_STATUS_ERROR",
             "An executable computation references a missing output value.",
-            { slot: computation.output },
+            {
+              backend: "webassembly-cpu",
+              phase: "execution",
+              slot: computation.output,
+            },
           );
         }
         let status: number;
@@ -374,7 +390,11 @@ export class WebAssemblyCpuBackend {
           throw new TabgradError(
             "BACKEND_TRAP",
             "The WebAssembly addition kernel trapped.",
-            { operation: "add-f32" },
+            {
+              backend: "webassembly-cpu",
+              phase: "execution",
+              operation: "add-f32",
+            },
             error,
           );
         }
@@ -382,7 +402,12 @@ export class WebAssemblyCpuBackend {
           throw new TabgradError(
             "BACKEND_STATUS_ERROR",
             "The WebAssembly addition kernel rejected its call.",
-            { operation: "add-f32", status },
+            {
+              backend: "webassembly-cpu",
+              phase: "execution",
+              operation: "add-f32",
+              status,
+            },
           );
         }
       }
@@ -443,8 +468,10 @@ export class WebAssemblyCpuBackend {
 
   async #loadContext(): Promise<BackendContext> {
     this.#backendLoads += 1;
+    let phase: BackendPreparationPhase = "manifest-fetch";
     try {
       const manifest = await this.#loadManifest();
+      phase = "capability-selection";
       const supportsSimd = WebAssembly.validate(SIMD_PROBE);
       const selectedVariant = this.#forceVariant
         ?? (supportsSimd ? "simd128" : "scalar");
@@ -463,6 +490,7 @@ export class WebAssemblyCpuBackend {
         );
       }
       const moduleUrl = new URL(variant.path, this.#manifestUrl);
+      phase = "module-fetch";
       const moduleFetchStart = performance.now();
       const response = await fetch(moduleUrl);
       if (!response.ok) {
@@ -474,9 +502,15 @@ export class WebAssemblyCpuBackend {
         throw new TabgradError(
           "BACKEND_HASH_MISMATCH",
           "The WebAssembly module length does not match its manifest.",
-          { actualByteLength: bytes.byteLength, expectedByteLength: variant.byteLength },
+          {
+            actualByteLength: bytes.byteLength,
+            backend: "webassembly-cpu",
+            expectedByteLength: variant.byteLength,
+            phase: "integrity-validation",
+          },
         );
       }
+      phase = "integrity-validation";
       const integrityCheckStart = performance.now();
       const hash = await this.#sha256(bytes);
       this.#timings.integrityCheckMilliseconds = performance.now() - integrityCheckStart;
@@ -484,12 +518,19 @@ export class WebAssemblyCpuBackend {
         throw new TabgradError(
           "BACKEND_HASH_MISMATCH",
           "The WebAssembly module hash does not match its manifest.",
-          { actualSha256: hash, expectedSha256: variant.sha256 },
+          {
+            actualSha256: hash,
+            backend: "webassembly-cpu",
+            expectedSha256: variant.sha256,
+            phase,
+          },
         );
       }
+      phase = "compilation";
       const compilationStart = performance.now();
       const module = await WebAssembly.compile(bytes);
       this.#timings.compilationMilliseconds = performance.now() - compilationStart;
+      phase = "abi-validation";
       const imports = WebAssembly.Module.imports(module);
       if (
         imports.length !== 1
@@ -500,9 +541,10 @@ export class WebAssemblyCpuBackend {
         throw new TabgradError(
           "BACKEND_ABI_MISMATCH",
           "The WebAssembly module imports do not match the raw ABI.",
-          { imports },
+          { backend: "webassembly-cpu", imports, phase },
         );
       }
+      phase = "instantiation";
       const memory = new WebAssembly.Memory({
         initial: manifest.memory.initialPages,
         maximum: manifest.memory.maximumPages,
@@ -510,19 +552,26 @@ export class WebAssemblyCpuBackend {
       const instantiationStart = performance.now();
       const instance = await WebAssembly.instantiate(module, { env: { memory } });
       this.#timings.instantiationMilliseconds = performance.now() - instantiationStart;
+      phase = "abi-validation";
       const exports = instance.exports as KernelExports;
       this.#validateExports(exports);
       if (exports.tabgrad_abi_version() !== ABI_VERSION) {
         throw new TabgradError(
           "BACKEND_ABI_MISMATCH",
           "The WebAssembly module ABI version is incompatible.",
-          { actual: exports.tabgrad_abi_version(), expected: ABI_VERSION },
+          {
+            actual: exports.tabgrad_abi_version(),
+            backend: "webassembly-cpu",
+            expected: ABI_VERSION,
+            phase,
+          },
         );
       }
       if ((exports.tabgrad_capabilities() & CAPABILITY_ADD_FLOAT32) === 0) {
         throw new TabgradError(
           "BACKEND_CAPABILITY_MISMATCH",
           "The WebAssembly module does not provide float32 addition.",
+          { backend: "webassembly-cpu", phase },
         );
       }
       const arenaBase = exports.tabgrad_arena_base() >>> 0;
@@ -533,7 +582,7 @@ export class WebAssemblyCpuBackend {
         throw new TabgradError(
           "BACKEND_ABI_MISMATCH",
           "The WebAssembly module returned an invalid arena boundary.",
-          { arenaBase },
+          { arenaBase, backend: "webassembly-cpu", phase },
         );
       }
       const context: BackendContext = {
@@ -554,33 +603,88 @@ export class WebAssemblyCpuBackend {
       this.#selectedVariant = selectedVariant;
       return context;
     } catch (error) {
-      if (error instanceof TabgradError) {
-        throw error;
-      }
-      throw new TabgradError(
-        "BACKEND_LOAD_FAILED",
-        "The WebAssembly CPU backend could not be initialized.",
-        { manifestUrl: this.#manifestUrl.href },
-        error,
-      );
+      throw this.#asLoadError(error, phase);
     }
   }
 
   async #loadManifest(): Promise<WasmManifest> {
     const start = performance.now();
-    const response = await fetch(this.#manifestUrl);
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status} while fetching ${this.#manifestUrl.href}`);
+    let response: Response;
+    try {
+      response = await fetch(this.#manifestUrl);
+      if (!response.ok) {
+        throw new Error(
+          `HTTP ${response.status} while fetching ${this.#manifestUrl.href}`,
+        );
+      }
+    } catch (error) {
+      throw new TabgradError(
+        "BACKEND_LOAD_FAILED",
+        "The WebAssembly manifest could not be fetched.",
+        {
+          backend: "webassembly-cpu",
+          manifestUrl: this.#manifestUrl.href,
+          phase: "manifest-fetch",
+        },
+        error,
+      );
     }
-    const candidate: unknown = await response.json();
+    let candidate: unknown;
+    try {
+      candidate = await response.json();
+    } catch (error) {
+      throw new TabgradError(
+        "BACKEND_LOAD_FAILED",
+        "The WebAssembly manifest could not be parsed.",
+        {
+          backend: "webassembly-cpu",
+          manifestUrl: this.#manifestUrl.href,
+          phase: "manifest-parse",
+        },
+        error,
+      );
+    }
     this.#timings.manifestFetchMilliseconds = performance.now() - start;
     if (!this.#isManifest(candidate)) {
       throw new TabgradError(
         "BACKEND_MANIFEST_INVALID",
         "The WebAssembly manifest does not match the supported schema.",
+        {
+          backend: "webassembly-cpu",
+          manifestUrl: this.#manifestUrl.href,
+          phase: "manifest-validation",
+        },
       );
     }
     return candidate;
+  }
+
+  #asLoadError(error: unknown, fallbackPhase: BackendPreparationPhase): TabgradError {
+    if (error instanceof TabgradError) {
+      const recordedPhase = error.details.phase;
+      return new TabgradError(
+        error.code,
+        error.message,
+        {
+          ...error.details,
+          backend: "webassembly-cpu",
+          phase: typeof recordedPhase === "string"
+            ? recordedPhase
+            : fallbackPhase,
+        },
+        error.cause,
+      );
+    }
+    return new TabgradError(
+      "BACKEND_LOAD_FAILED",
+      "The WebAssembly CPU backend could not be initialized.",
+      {
+        backend: "webassembly-cpu",
+        manifestUrl: this.#manifestUrl.href,
+        phase: fallbackPhase,
+      },
+      error,
+    );
   }
 
   #isManifest(candidate: unknown): candidate is WasmManifest {
