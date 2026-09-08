@@ -216,6 +216,35 @@ setInterval(() => {}, 1_000);
   );
 });
 
+test("tokenless control messages cannot affect the active run", async () => {
+  await assert.rejects(
+    runFixtureBrowser(`
+await fetch(pageUrl);
+for (const [path, body] of [
+  ["/__phase", { phase: "application-started" }],
+  ["/__result", { ok: true }],
+]) {
+  const response = await fetch(new URL(path, pageUrl), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (response.status !== 404) {
+    throw new Error(\`Expected tokenless ${"${path}"} rejection, received ${"${response.status}"}.\`);
+  }
+}
+setInterval(() => {}, 1_000);
+`, { applicationTimeoutMilliseconds: 100 }),
+    expectBrowserFailure("application-timeout", (error) => {
+      assert.equal(error.diagnostics.lastPhase, "page-requested");
+      assert.deepEqual(
+        error.diagnostics.requests.map(({ method, path }) => ({ method, path })),
+        [{ method: "GET", path: "/runtime.html" }],
+      );
+    }),
+  );
+});
+
 test("reported application failure is validated and never retried", async () => {
   let browserStarts = 0;
   await assert.rejects(

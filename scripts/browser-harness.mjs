@@ -94,12 +94,12 @@ function classifyFailure(error, fallbackKind) {
   return new ClassifiedBrowserFailure(fallbackKind, message, { cause: error });
 }
 
-function requestToken(requestUrl, activeToken, runs) {
+function requestToken(requestUrl, activeToken, runs, allowActiveFallback) {
   const explicitToken = requestUrl.searchParams.get("token");
   if (explicitToken !== null) {
     return runs.has(explicitToken) ? explicitToken : undefined;
   }
-  return activeToken;
+  return allowActiveFallback ? activeToken : undefined;
 }
 
 function recordRequest(run, request, pathname, status) {
@@ -220,9 +220,10 @@ export async function startBrowserServer(
     : {};
   const server = createServer(async (request, response) => {
     const requestUrl = new URL(request.url, "http://localhost");
-    const token = requestToken(requestUrl, activeToken, runs);
-    const run = token === undefined ? undefined : runs.get(token);
     const pathname = requestUrl.pathname;
+    const isControlRequest = pathname === "/__phase" || pathname === "/__result";
+    const token = requestToken(requestUrl, activeToken, runs, !isControlRequest);
+    const run = token === undefined ? undefined : runs.get(token);
 
     if (pathname === "/__phase" && request.method === "POST") {
       if (run === undefined) {

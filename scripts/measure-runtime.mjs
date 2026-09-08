@@ -45,6 +45,10 @@ function summarize(samples) {
   };
 }
 
+function assertSuccessfulBrowserResult(result) {
+  assert.equal(result.ok, true, JSON.stringify(result.error));
+}
+
 async function artifactSizes() {
   const paths = await readdir(distributionRoot, { recursive: true });
   const sizes = [];
@@ -116,9 +120,10 @@ const server = await startBrowserServer(["measure.html", "raw-kernel-measure.htm
 try {
   for (const browser of browserDefinitions) {
     const executable = await resolveBrowser(browser);
+    const version = browserVersion(executable);
     const browserResult = {
       name: browser.name,
-      version: browserVersion(executable),
+      version,
       variants: [],
     };
     for (const variant of ["scalar", "simd128"]) {
@@ -129,8 +134,9 @@ try {
         page: "measure.html",
         parameters: { variant },
         applicationTimeoutMilliseconds: 60_000,
+        validateResult: assertSuccessfulBrowserResult,
+        version,
       });
-      assert.equal(publicPath.ok, true, JSON.stringify(publicPath.error));
       const rawRounds = [];
       for (let round = 0; round < 3; round += 1) {
         const rawRound = await runBrowserPage({
@@ -140,8 +146,9 @@ try {
           page: "raw-kernel-measure.html",
           parameters: { variant, round },
           applicationTimeoutMilliseconds: 60_000,
+          validateResult: assertSuccessfulBrowserResult,
+          version,
         });
-        assert.equal(rawRound.ok, true, JSON.stringify(rawRound.error));
         const { ok: _ok, ...measurements } = rawRound;
         rawRounds.push(measurements);
       }
