@@ -83,6 +83,12 @@ unless the approved issue requires a reusable test or tool. Use
 not authorize deploying the preferred alternative or turning experiment code
 into production code.
 
+Use the [language-quality protocol](../../../docs/quality.md#apply-the-language-quality-protocol)
+to classify disposable experiments, retained experimental code and maintained
+tools before choosing their checks. Record justified limitations with the
+research evidence; do not require production TDD for an experiment or carry an
+experimental typing exception into production without review.
+
 Do not publish credentials, private data, proprietary inputs, or sensitive
 vulnerability details in results, logs, issues, or pull requests. Follow the
 private reporting process in `CONTRIBUTING.md`.

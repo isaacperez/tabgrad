@@ -160,7 +160,7 @@ root-file count as a reason for a cosmetic move.
 | `package.json`, `package-lock.json` | JavaScript package definition, scripts and dependency constraints, paired with npm's exact resolution |
 | `Cargo.toml`, `Cargo.lock` | Rust workspace membership and shared build profile, paired with Cargo's resolution; each crate has its own manifest |
 | `requirements-dev.lock` | Hash-locked Python repository-tool dependencies used by the prepared development environment |
-| `tsconfig.json`, `rust-toolchain.toml`, `.node-version`, `ruff.toml` | TypeScript compilation, Rust toolchain selection, Node version selection and Python formatting/lint configuration |
+| `tsconfig.json`, `pyrightconfig.json`, `rust-toolchain.toml`, `.node-version`, `ruff.toml` | TypeScript compilation, Python type checking, Rust toolchain selection, Node version selection and Python formatting/lint configuration |
 | `.editorconfig`, `.gitattributes`, `.gitignore` | Editor text conventions, Git text/binary handling, and exclusions for local state |
 
 The package manifests describe accepted dependencies; lockfiles preserve the

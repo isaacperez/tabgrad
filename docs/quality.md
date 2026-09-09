@@ -58,6 +58,124 @@ methods document their purpose, inputs, result, observable side effects,
 errors, and restrictions when those facts are part of their contract. Change
 or remove documentation when the corresponding behavior changes.
 
+## Apply the language-quality protocol
+
+This protocol is for contributors writing or reviewing maintained code. Its
+purpose is to make contracts understandable and checkable before a change
+reaches another contributor. Formatting, annotations and a green test suite
+answer different questions; none is a substitute for the others.
+
+A formatter makes layout consistent. A linter detects selected problematic
+patterns and conventions, including missing annotations. A static type checker
+compares declarations with assignments, calls and returned values without
+executing the program. Tests then observe selected executions. Independent
+review examines whether the declared contract, test cases and chosen design
+are themselves appropriate. For example, a return annotation can be present
+yet disagree with the returned value: checking its presence is not checking
+its truth.
+
+### Establish the contract before choosing its notation
+
+Identify the inputs, outputs, optional states, ownership and failure behavior
+at the affected boundary. Make important state transitions visible: an absent
+resource, a released resource and an empty resource are not interchangeable
+merely because each can be represented by a false-like value. Give structured
+records meaningful field types rather than making callers reconstruct the
+meaning of heterogeneous containers.
+
+Use the language's ordinary mechanisms and the smallest type that describes
+the real contract. Inference is appropriate for obvious local values. Use a
+named record or interface when it clarifies a shared invariant; do not create
+one for every dictionary or require inheritance where a structural contract
+is sufficient. Dataclasses, slots, context managers and additional abstraction
+layers are choices justified by behavior, not a universal checklist.
+
+Types do not validate external data. Values from a parser, JavaScript bridge,
+browser message or native interface remain untrusted until their owner checks
+the relevant shape and semantics. Describe them broadly and narrow them before
+use. Recognizing a dictionary establishes neither string keys nor a particular
+value schema. A type assertion or stub must not turn an unchecked external
+payload into a trusted application record.
+
+### Use the controls appropriate to each language
+
+| Source language | Contract and verification expectations |
+| --- | --- |
+| Python | Annotate maintained function parameters and returns, including test helpers and `None` returns, plus state whose type or optional lifecycle is not clear from initialization. Use Ruff for formatting, lint and annotation presence, and Pyright for strict type consistency. |
+| TypeScript | Keep strict compilation and explicit module/public contracts. Use `unknown` with validation at external boundaries; preserve declaration emission and inspect the declarations consumers actually receive when an exported interface changes. |
+| JavaScript | Make cross-module inputs, results and error contracts understandable through source documentation and meaningful tests. Claim static checking only for source actually covered by a configured checker; TypeScript compilation of another directory is not JavaScript coverage. |
+| Rust | Use ordinary typed signatures, explicit ownership and documented unsafe preconditions. Run the selected compiler, Rustfmt and Clippy for each supported kernel feature configuration. Do not require redundant local annotations or change an ABI merely to resemble another language. |
+| WGSL | Keep buffer layouts, index bounds and numerical assumptions explicit at the host/shader boundary. Validate and test affected shaders on the relevant supported backend; host-language type checking does not establish shader correctness. |
+
+Exact commands, source discovery and execution environments belong in
+[`development.md`](development.md); executable configuration determines their
+coverage. Adding a maintained source root, generated interface or language
+boundary requires inspecting and updating that coverage in the same change.
+Do not let a new Python package escape checks because only an older tooling
+directory was included.
+
+Python uses syntax supported by its declared interpreter environment. Prefer
+ordinary built-in generic types and unions where supported. Public-compatible
+signatures retain the accepted PyTorch behavior; annotation conventions must
+not change dispatch or accepted arguments. Separate static-only imports with
+`TYPE_CHECKING` when needed, but account for runtime annotation evaluation and
+reflection. A browser Python module must not acquire a native-only import just
+to satisfy a checker.
+
+Keep third-party and bridge typing boundaries narrow. Prefer maintained upstream
+types when available; a local protocol or stub describes only the actual
+contract used and must remain consistent with integration evidence. Do not
+duplicate a maintained module's complete API in a protocol just to compensate
+for an unnecessarily dynamic test import. Annotated test functions must still
+call a statically visible target for those calls to be checked.
+
+### Classify exceptions and preserve meaningful evidence
+
+An `Any`, cast, ignore directive, custom stub or excluded path needs a specific
+technical reason and bounded reach. Use neither a global missing-import
+suppression nor a broad disabled diagnostic to make an unfinished migration
+green. Avoid redundant annotations, and do not make a checker accept code by
+asserting a condition that the program has not established. Tests deliberately
+passing invalid inputs may use a narrowly documented escape at that call; it
+must not hide the types of ordinary test helpers or the module under test.
+
+Apply this protocol to maintained library source, tools, tests and executable
+examples. Generated output is checked through its source/generator and relevant
+consumer contract, not edited by hand. Do not rewrite third-party sources for
+local style. Disposable research follows its approved method; retained
+experimental code has an explicit scope and reproducibility obligations and
+does not silently become production code. Prose and diagrams use editorial and
+content-specific checks, not type annotations or production TDD. The
+[test-first policy below](#develop-production-behavior-test-first) remains the
+authority for deciding when a failing behavioral test is required.
+
+### Apply and review the protocol with each change
+
+Before implementation, identify the affected language contracts and check
+coverage alongside the existing design and risk assessment. During work,
+correct the owning invariant, document non-obvious behavior and run the focused
+controls. Error paths must preserve the primary cause and respect resource
+ownership; type correctness alone does not establish cleanup or async lifetime
+behavior. Performance-sensitive changes retain the measurement obligations
+below; an annotation-only tooling change does not require a stress benchmark.
+
+Verification records the commands, actual source coverage and justified
+exceptions for the exact final state. When introducing a checker or changing
+its discovery rules, demonstrate with bounded disposable invalid input that
+it rejects a relevant violation, and confirm it covers the intended maintained
+files. Do not retain artificial tests of policy prose or replicate a type
+checker's own test suite.
+
+The independent reviewer checks the contracts and their uses, not just the
+command exit status. Review must challenge escaping types, unchecked parser or
+bridge assumptions, omitted failure cases, misleading docstrings and avoidable
+complexity within the affected scope. A finding introduced by the change is
+corrected and re-reviewed under the normal agent loop. This is a bounded part
+of ordinary work, not a requirement to audit the whole repository on every
+issue. The applicable coverage and exceptions belong in the existing
+verification/review report; no extra ceremony or parallel rule document is
+required.
+
 ## Resolve the design before writing code
 
 Before implementing non-trivial behavior, state the observed problem, the

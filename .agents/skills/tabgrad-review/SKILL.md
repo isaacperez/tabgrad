@@ -235,6 +235,13 @@ knowledge, independently responsible helpers are not nested, local callbacks
 and closures remain cohesive, comments explain non-obvious reasons, and the
 resulting structure remains understandable to a new contributor.
 
+Apply the [language-quality protocol](../../../docs/quality.md#apply-the-language-quality-protocol)
+when reviewing affected code. Challenge whether the types describe actual
+contracts, dynamic boundaries are validated, test calls are genuinely checked,
+and suppressions or stubs conceal missing guarantees. Use the protocol's
+applicability rules and record relevant coverage and exceptions; a passing
+checker does not replace this judgment.
+
 Look actively for a simpler structurally correct implementation and for
 refactoring or optimization needed because of the proposed change. Require a
 correction when the change introduces or worsens a quality problem. Keep a

@@ -53,6 +53,7 @@ or installed by a web application that uses the resulting files.
 | --- | --- | --- |
 | Node.js | `22.12.0`, selected by `.node-version` | Run build, test, manifest, and measurement scripts |
 | npm | `11.1.0`, selected by `packageManager` in `package.json` | Install the exact `package-lock.json` resolution and run stable commands |
+| Pyright | `1.1.413`, selected by `package.json` and `package-lock.json` | Check maintained Python types without executing Python code; works alongside Ruff |
 | Rust compiler and standard library | `1.98.1`, selected by `rust-toolchain.toml` | Compile Rust kernel source for checks and the WebAssembly target |
 | WebAssembly Rust target | `wasm32-unknown-unknown` | Produce browser-portable CPU modules without an operating-system interface |
 | Rustfmt and Clippy | Components from the selected Rust toolchain | Check Rust formatting and static diagnostics |
@@ -91,7 +92,8 @@ Install the locked JavaScript development dependency from the repository root:
 npm ci --ignore-scripts --no-audit --no-fund
 ```
 
-This command downloads TypeScript and writes `node_modules/` plus npm's ordinary
+This command downloads TypeScript, Pyright and their locked dependencies and
+writes `node_modules/` plus npm's ordinary
 cache. It runs no package lifecycle scripts, performs no audit network request,
 and does not change `package-lock.json`. Use `npm install` only when deliberately
 changing the manifest and lockfile together under the dependency policy.
@@ -156,26 +158,25 @@ token in repository files, command output, logs, or issue content.
 
 The repository provides these commands:
 
-The `python3` spelling below is valid locally only after `.venv` has been
-activated. A coding agent should avoid relying on shell activation and replace
-that leading executable with `.venv/bin/python` on POSIX or the corresponding
-`.venv\Scripts` interpreter on Windows. In continuous integration, the workflow
-prepares the selected Python interpreter and installs the same locked
-dependencies before it uses the documented `python3` entry points. The table
-does not authorize an unprepared global interpreter.
+Python checks use `.venv/bin/python` explicitly on POSIX. On Windows use the
+corresponding `.venv\Scripts` interpreter. CI creates the same isolated
+environment with the selected interpreter before installing locked tools;
+checks do not depend on shell activation or an unprepared global interpreter.
 
 | Purpose | Command | Requirements |
 | --- | --- | --- |
 | Install locked development dependencies | `python -m pip install --only-binary=:all: --require-hashes -r requirements-dev.lock` | An active Python 3.11 virtual environment; writes only to that environment and the package manager's ordinary cache |
-| Format maintained Python files | `python3 -m ruff format scripts tests` | The prepared repository tooling environment; rewrites files in place |
-| Check maintained Python formatting | `python3 -m ruff format --check scripts tests` | The prepared repository tooling environment; read-only |
-| Lint maintained Python files | `python3 -m ruff check scripts tests` | The prepared repository tooling environment; read-only |
-| Validate repository policies and structure | `python3 scripts/check_repository.py` | The prepared repository tooling environment |
-| Test the repository validator | `python3 scripts/run_tests.py` | The prepared repository tooling environment |
+| Prepare isolated Python tooling in a clean CI checkout | `python -m venv .venv && .venv/bin/python -m pip install --only-binary=:all: --require-hashes -r requirements-dev.lock` | Selected Python 3.11 interpreter and a fresh checkout; creates `.venv` and downloads locked packages; setup only |
+| Format maintained Python files | `.venv/bin/python -m ruff format scripts tests` | The prepared repository tooling environment; rewrites files in place |
+| Check maintained Python formatting | `.venv/bin/python -m ruff format --check scripts tests` | The prepared repository tooling environment; read-only |
+| Lint maintained Python files | `.venv/bin/python -m ruff check scripts tests` | The prepared repository tooling environment; read-only |
+| Check maintained Python types | `npm run check:python` | Prepared Node/npm environment and `.venv`; validates the isolated Python 3.11/PyYAML environment, then runs locked Pyright with `pyrightconfig.json`; does not execute repository Python modules or install packages |
+| Validate repository policies and structure | `.venv/bin/python scripts/check_repository.py` | The prepared repository tooling environment |
+| Test the repository validator | `.venv/bin/python scripts/run_tests.py` | The prepared repository tooling environment |
 | Install the pinned Rust toolchain | `rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy --target wasm32-unknown-unknown` | Network access and authorized writes to the configured rustup directories; does not modify the repository |
 | Install the pinned Rust build toolchain | `rustup toolchain install 1.98.1 --profile minimal --target wasm32-unknown-unknown` | Network access and authorized writes to the configured rustup directories; omits check-only components for isolated build-and-browser jobs |
 | Select the pinned npm release | `npm install --global npm@11.1.0 --ignore-scripts --no-audit --no-fund` | Node.js 22.12.0, network access, and authorized writes to that Node.js installation plus npm's cache; does not modify the repository |
-| Install locked JavaScript development dependencies | `npm ci --ignore-scripts --no-audit --no-fund` | Node.js 22.12.0 and npm 11.1.0; downloads TypeScript and recreates `node_modules/` from `package-lock.json` |
+| Install locked JavaScript development dependencies | `npm ci --ignore-scripts --no-audit --no-fund` | Node.js 22.12.0 and npm 11.1.0; downloads TypeScript, Pyright and locked transitives, and recreates `node_modules/` from `package-lock.json` |
 | Build the browser distribution | `npm run build` | Prepared Node.js and Rust environments; rewrites ignored `dist/` and updates Cargo's ignored `target/` cache |
 | Check TypeScript and Rust | `npm run check` | Prepared Node.js and Rust environments; reads TypeScript source and runs Rustfmt plus Clippy for scalar and SIMD targets |
 | Run JavaScript and browser tests | `npm test` | Prepared build environment, Chrome, Firefox, permission to launch headless processes, and a free loopback port; rebuilds `dist/`, uses disposable browser profiles, and runs one browser at a time |
@@ -192,7 +193,29 @@ does not authorize an unprepared global interpreter.
 Ruff reads `ruff.toml`. The formatter and linter cover the maintained Python
 files under `scripts/` and `tests/`. The formatting command is the only command
 in this group that rewrites source; verification and continuous integration use
-the two read-only check commands.
+the read-only check commands. Ruff's annotation rules check function signature
+coverage; they do not check that annotations agree with the implementation.
+
+Pyright runs on Node.js and analyzes Python statically. It is installed through
+the npm lockfile, not pip, and is not part of the browser distribution.
+`pyrightconfig.json` selects strict checking for maintained Python under
+`scripts/` and `tests/`, targets Python 3.11 and resolves imports against the
+prepared `.venv`. Its bundled type declarations include the standard library
+and PyYAML; an upstream typing update is reviewed with the locked checker.
+The command's small launcher first probes the prepared interpreter in isolated
+mode and checks that it can import PyYAML. Pyright alone can report success even
+when its configured virtual environment is absent; the launcher turns missing
+or incompatible setup into a nonzero exit without falling back or installing.
+For an editor, select this same project configuration and interpreter; an
+editor-only result does not replace `npm run check:python` in CI.
+
+The repository-consistency job runs Pyright beside Ruff and the tooling suite.
+`npm run check` remains the TypeScript/Rust entry point; it does not replace
+the Python checks. Embedded Python fixture strings are exercised by their
+own tests rather than analyzed as independent source files. Maintained `.mjs`
+scripts and embedded browser JavaScript are exercised by the corresponding
+Node/browser suites, not by `tsconfig.json`. These are command-coverage facts,
+not a claim that passing one language's checker validates another boundary.
 
 TypeScript reads `tsconfig.json`. Cargo reads `Cargo.toml`, `Cargo.lock`, and
 `rust-toolchain.toml`. `npm run check` does not rewrite maintained source;
