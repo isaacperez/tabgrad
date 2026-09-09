@@ -367,12 +367,16 @@ CI_RUST_INSTALL_COMMAND = (
     "rustup toolchain install 1.98.1 --profile minimal --component rustfmt "
     "--component clippy --target wasm32-unknown-unknown"
 )
+CI_RUST_BUILD_INSTALL_COMMAND = (
+    "rustup toolchain install 1.98.1 --profile minimal --target wasm32-unknown-unknown"
+)
 CI_NPM_INSTALL_COMMAND = "npm ci --ignore-scripts --no-audit --no-fund"
 CI_NPM_TOOL_COMMAND = (
     "npm install --global npm@11.1.0 --ignore-scripts --no-audit --no-fund"
 )
 CI_RUNTIME_CHECK_COMMAND = "npm run check"
-CI_RUNTIME_TEST_COMMAND = "npm test"
+CI_NODE_TEST_COMMAND = "npm run test:node"
+CI_BROWSER_TEST_COMMAND = "npm run test:browser:from-source"
 REQUIRED_CI_COMMANDS = {
     CI_INSTALL_COMMAND,
     CI_FORMAT_COMMAND,
@@ -380,10 +384,16 @@ REQUIRED_CI_COMMANDS = {
     CI_VALIDATE_COMMAND,
     CI_TEST_COMMAND,
     CI_RUST_INSTALL_COMMAND,
+    CI_RUST_BUILD_INSTALL_COMMAND,
     CI_NPM_INSTALL_COMMAND,
     CI_NPM_TOOL_COMMAND,
     CI_RUNTIME_CHECK_COMMAND,
-    CI_RUNTIME_TEST_COMMAND,
+    CI_NODE_TEST_COMMAND,
+    CI_BROWSER_TEST_COMMAND,
+}
+REPEATABLE_CI_SETUP_COMMANDS = {
+    CI_NPM_INSTALL_COMMAND,
+    CI_NPM_TOOL_COMMAND,
 }
 CHECKOUT_ACTION = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
 SETUP_PYTHON_ACTION = "actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97"
@@ -472,8 +482,49 @@ EXPECTED_REPOSITORY_CHECKS_WORKFLOW = {
                     "run": CI_RUNTIME_CHECK_COMMAND,
                 },
                 {
-                    "name": "Build and test the browser runtime",
-                    "run": CI_RUNTIME_TEST_COMMAND,
+                    "name": "Build and test the Node.js runtime",
+                    "run": CI_NODE_TEST_COMMAND,
+                },
+            ],
+        },
+        "browser": {
+            "name": "browser-${{ matrix.browser }}",
+            "runs-on": "ubuntu-24.04",
+            "timeout-minutes": 15,
+            "strategy": {
+                "fail-fast": False,
+                "matrix": {"browser": ["Chrome", "Firefox"]},
+            },
+            "env": {"TABGRAD_BROWSER": "${{ matrix.browser }}"},
+            "steps": [
+                {
+                    "name": "Check out the repository",
+                    "uses": CHECKOUT_ACTION,
+                    "with": {"persist-credentials": False},
+                },
+                {
+                    "name": "Set up Node.js",
+                    "uses": SETUP_NODE_ACTION,
+                    "with": {
+                        "node-version-file": ".node-version",
+                        "check-latest": False,
+                    },
+                },
+                {
+                    "name": "Install the pinned Rust toolchain",
+                    "run": CI_RUST_BUILD_INSTALL_COMMAND,
+                },
+                {
+                    "name": "Select the pinned npm release",
+                    "run": CI_NPM_TOOL_COMMAND,
+                },
+                {
+                    "name": "Install locked JavaScript development dependencies",
+                    "run": CI_NPM_INSTALL_COMMAND,
+                },
+                {
+                    "name": "Build and test the selected browser runtime",
+                    "run": CI_BROWSER_TEST_COMMAND,
                 },
             ],
         },
@@ -1030,7 +1081,7 @@ def check_ci_workflow(
             failures.append(
                 Failure(workflow_path, f"uses an unregistered command: {command}")
             )
-    for command in sorted(REQUIRED_CI_COMMANDS):
+    for command in sorted(REQUIRED_CI_COMMANDS - REPEATABLE_CI_SETUP_COMMANDS):
         occurrences = [
             workflow_path
             for workflow_path, candidate in all_run_commands

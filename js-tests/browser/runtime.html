@@ -6,12 +6,20 @@
   </head>
   <body>
     <script type="module">
-      import { createRuntimeSession } from "/index.js";
-      import { createTestRuntimeSession } from "/testing.js";
-
       const parameters = new URLSearchParams(location.search);
       const token = parameters.get("token");
       const forceVariant = parameters.get("variant");
+
+      async function reportPhase(phase) {
+        const response = await fetch(`/__phase?token=${encodeURIComponent(token)}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ phase }),
+        });
+        if (!response.ok) {
+          throw new Error(`Could not report browser phase ${phase}.`);
+        }
+      }
 
       async function report(result) {
         await fetch(`/__result?token=${encodeURIComponent(token)}`, {
@@ -22,7 +30,14 @@
       }
 
       try {
+        await reportPhase("application-started");
+        const [{ createRuntimeSession }, { createTestRuntimeSession }] = await Promise.all([
+          import("/index.js"),
+          import("/testing.js"),
+        ]);
+        await reportPhase("assets-loaded");
         const manifestUrl = new URL("/manifest.json", location.href);
+        await reportPhase("runtime-started");
         const session = forceVariant === "auto"
           ? createRuntimeSession({ manifestUrl })
           : createTestRuntimeSession({ manifestUrl, forceVariant });
@@ -36,6 +51,7 @@
         right.close();
         result.close();
         await session.close();
+        await reportPhase("runtime-finished");
         await report({ ok: true, before, after, values });
       } catch (error) {
         await report({

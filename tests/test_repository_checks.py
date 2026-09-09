@@ -1017,6 +1017,13 @@ class RepositoryCheckTests(unittest.TestCase):
             failures = CHECKS.check_ci_workflow(root)
             self.assertTrue(any("more than once" in item.message for item in failures))
 
+    def test_ci_allows_repeated_setup_in_isolated_jobs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.copy_repository_workflow(root)
+            failures = CHECKS.check_ci_workflow(root)
+            self.assertEqual(failures, [])
+
     def test_ci_requires_python_format_and_lint(self):
         expected = {
             "python3 -m ruff check scripts tests",
@@ -1029,7 +1036,9 @@ class RepositoryCheckTests(unittest.TestCase):
             "npm ci --ignore-scripts --no-audit --no-fund",
             "npm install --global npm@11.1.0 --ignore-scripts --no-audit --no-fund",
             "npm run check",
-            "npm test",
+            "npm run test:browser:from-source",
+            "npm run test:node",
+            "rustup toolchain install 1.98.1 --profile minimal --target wasm32-unknown-unknown",
             "rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy --target wasm32-unknown-unknown",
         }
         self.assertTrue(expected.issubset(CHECKS.REQUIRED_CI_COMMANDS))

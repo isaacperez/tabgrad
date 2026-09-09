@@ -25,8 +25,10 @@
     "check:rust": "node scripts/check-rust.mjs",
     "check": "npm run check:javascript && npm run check:rust",
     "test:unit": "node --test js-tests/unit/*.test.mjs",
+    "test:node": "npm run build && npm run test:unit",
     "test:browser": "node scripts/run-browser-tests.mjs",
-    "test": "npm run build && npm run test:unit && npm run test:browser",
+    "test:browser:from-source": "npm run build && npm run test:browser",
+    "test": "npm run test:node && npm run test:browser",
     "measure": "npm run build && node scripts/measure-runtime.mjs"
   },
   "devDependencies": {
