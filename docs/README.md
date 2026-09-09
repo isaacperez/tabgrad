@@ -71,6 +71,7 @@ link to its primary source, but they must not create a competing version.
 | Unexpected findings, blockers, and pending decisions | [`CONTRIBUTING.md`](../CONTRIBUTING.md#handling-unexpected-findings-and-pending-decisions) |
 | Branches, worktrees, commits, and merge history | [`version-control.md`](version-control.md) |
 | Code style, design quality, abstractions, and root-cause corrections | [`quality.md`](quality.md) |
+| Language contracts, type checking, exceptions and review protocol | [`quality.md`](quality.md#apply-the-language-quality-protocol) |
 | Test-driven development for distributed production behavior | [`quality.md`](quality.md#develop-production-behavior-test-first) |
 | Tests and repository quality checks | [`quality.md`](quality.md#select-checks-from-the-affected-risks) |
 | Refactoring, duplication, and technical debt | [`quality.md`](quality.md#review-code-quality-without-speculative-redesign) |

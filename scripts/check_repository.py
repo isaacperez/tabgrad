@@ -6,8 +6,10 @@ from __future__ import annotations
 import re
 import sys
 import tomllib
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TypedDict, TypeGuard
 from urllib.parse import unquote
 
 try:
@@ -18,27 +20,28 @@ except ImportError:  # Reported as a repository-check failure in check_yaml_synt
 
 if yaml is not None:
 
-    class RepositoryYamlLoader(yaml.SafeLoader):
+    class _RepositoryYamlLoader(yaml.SafeLoader):
         """Load repository YAML with YAML 1.2 boolean spelling."""
 
-    RepositoryYamlLoader.yaml_implicit_resolvers = {
+    _RepositoryYamlLoader.yaml_implicit_resolvers = {
         key: list(resolvers)
         for key, resolvers in yaml.SafeLoader.yaml_implicit_resolvers.items()
     }
     for (
         first_character,
         resolvers,
-    ) in RepositoryYamlLoader.yaml_implicit_resolvers.items():
-        RepositoryYamlLoader.yaml_implicit_resolvers[first_character] = [
+    ) in _RepositoryYamlLoader.yaml_implicit_resolvers.items():
+        _RepositoryYamlLoader.yaml_implicit_resolvers[first_character] = [
             (tag, pattern)
             for tag, pattern in resolvers
             if tag != "tag:yaml.org,2002:bool"
         ]
-    RepositoryYamlLoader.add_implicit_resolver(
-        "tag:yaml.org,2002:bool",
-        re.compile(r"^(?:true|false)$", re.IGNORECASE),
-        list("tTfF"),
-    )
+    boolean_pattern = re.compile(r"^(?:true|false)$", re.IGNORECASE)
+    for first_character in "tTfF":
+        _RepositoryYamlLoader.yaml_implicit_resolvers.setdefault(
+            first_character, []
+        ).append(("tag:yaml.org,2002:bool", boolean_pattern))
+    RepositoryYamlLoader = _RepositoryYamlLoader
 else:
     RepositoryYamlLoader = None
 
@@ -144,6 +147,8 @@ REQUIRED_FILES = TIMELESS_DOCUMENTS | {
     "js-tests/unit/public-types.test.mjs",
     "package-lock.json",
     "package.json",
+    "pyrightconfig.json",
+    "scripts/check-python.mjs",
     "requirements-dev.lock",
     "ruff.toml",
     "rust-toolchain.toml",
@@ -220,7 +225,7 @@ REQUIRED_PULL_REQUEST_TEXT = {
 EXPECTED_RUFF_CONFIGURATION = {
     "target-version": "py311",
     "line-length": 88,
-    "lint": {"select": ["B", "E4", "E7", "E9", "F", "I", "RUF", "UP"]},
+    "lint": {"select": ["ANN", "B", "E4", "E7", "E9", "F", "I", "RUF", "UP"]},
     "format": {"line-ending": "lf"},
 }
 REQUIRED_ISSUE_FIELDS = {
@@ -232,7 +237,16 @@ REQUIRED_ISSUE_FIELDS = {
     "dependencies-related-work",
     "effects-risks",
 }
-ISSUE_FORM_REQUIREMENTS = {
+
+
+class IssueFormRequirements(TypedDict):
+    """Required classification and extra field identifiers for one issue form."""
+
+    label: str
+    fields: set[str]
+
+
+ISSUE_FORM_REQUIREMENTS: dict[str, IssueFormRequirements] = {
     "bug.yml": {
         "label": "type: bug",
         "fields": {
@@ -360,13 +374,14 @@ APPROVED_WORKFLOW_PATHS = {
     Path(".github/workflows/repository-checks.yml"),
 }
 CI_INSTALL_COMMAND = (
-    "python -m pip install --only-binary=:all: --require-hashes "
+    "python -m venv .venv && .venv/bin/python -m pip install --only-binary=:all: --require-hashes "
     "-r requirements-dev.lock"
 )
-CI_FORMAT_COMMAND = "python3 -m ruff format --check scripts tests"
-CI_LINT_COMMAND = "python3 -m ruff check scripts tests"
-CI_VALIDATE_COMMAND = "python3 scripts/check_repository.py"
-CI_TEST_COMMAND = "python3 scripts/run_tests.py"
+CI_FORMAT_COMMAND = ".venv/bin/python -m ruff format --check scripts tests"
+CI_LINT_COMMAND = ".venv/bin/python -m ruff check scripts tests"
+CI_VALIDATE_COMMAND = ".venv/bin/python scripts/check_repository.py"
+CI_TEST_COMMAND = ".venv/bin/python scripts/run_tests.py"
+CI_PYTHON_TYPES_COMMAND = "npm run check:python"
 CI_RUST_INSTALL_COMMAND = (
     "rustup toolchain install 1.98.1 --profile minimal --component rustfmt "
     "--component clippy --target wasm32-unknown-unknown"
@@ -387,6 +402,7 @@ REQUIRED_CI_COMMANDS = {
     CI_LINT_COMMAND,
     CI_VALIDATE_COMMAND,
     CI_TEST_COMMAND,
+    CI_PYTHON_TYPES_COMMAND,
     CI_RUST_INSTALL_COMMAND,
     CI_RUST_BUILD_INSTALL_COMMAND,
     CI_NPM_INSTALL_COMMAND,
@@ -444,6 +460,20 @@ EXPECTED_REPOSITORY_CHECKS_WORKFLOW = {
                 },
                 {"name": "Check Python formatting", "run": CI_FORMAT_COMMAND},
                 {"name": "Lint Python", "run": CI_LINT_COMMAND},
+                {
+                    "name": "Set up Node.js",
+                    "uses": SETUP_NODE_ACTION,
+                    "with": {
+                        "node-version-file": ".node-version",
+                        "check-latest": False,
+                    },
+                },
+                {"name": "Select the pinned npm release", "run": CI_NPM_TOOL_COMMAND},
+                {
+                    "name": "Install locked JavaScript development dependencies",
+                    "run": CI_NPM_INSTALL_COMMAND,
+                },
+                {"name": "Check Python types", "run": CI_PYTHON_TYPES_COMMAND},
                 {
                     "name": "Validate repository policies and structure",
                     "run": CI_VALIDATE_COMMAND,
@@ -551,7 +581,7 @@ class YamlRepositoryState:
 
 
 def repository_files(root: Path) -> list[Path]:
-    files = []
+    files: list[Path] = []
     for path in root.rglob("*"):
         if not path.is_file():
             continue
@@ -570,7 +600,7 @@ def text_files(root: Path) -> list[Path]:
 
 
 def check_text_format(root: Path) -> list[Failure]:
-    failures = []
+    failures: list[Failure] = []
     for path in text_files(root):
         relative = path.relative_to(root)
         raw = path.read_bytes()
@@ -594,7 +624,7 @@ def check_text_format(root: Path) -> list[Failure]:
 
 
 def check_markdown_links(root: Path) -> list[Failure]:
-    failures = []
+    failures: list[Failure] = []
     for path in text_files(root):
         if path.suffix.lower() != ".md":
             continue
@@ -634,16 +664,26 @@ def check_markdown_links(root: Path) -> list[Failure]:
     return failures
 
 
+def is_yaml_mapping(value: object) -> TypeGuard[Mapping[object, object]]:
+    """Recognize a parsed dictionary without assuming key or value types."""
+    return isinstance(value, dict)
+
+
+def is_yaml_list(value: object) -> TypeGuard[Sequence[object]]:
+    """Recognize a parsed list, exposing its elements only as unknown objects."""
+    return isinstance(value, list)
+
+
 def contains_recursive_yaml_alias(
     value: object, ancestors: frozenset[int] = frozenset()
 ) -> bool:
-    if not isinstance(value, (dict, list)):
+    if not is_yaml_mapping(value) and not is_yaml_list(value):
         return False
     identity = id(value)
     if identity in ancestors:
         return True
     child_ancestors = ancestors | {identity}
-    children = value.values() if isinstance(value, dict) else value
+    children = value.values() if is_yaml_mapping(value) else value
     return any(
         contains_recursive_yaml_alias(child, child_ancestors) for child in children
     )
@@ -655,27 +695,31 @@ def load_yaml_repository(root: Path) -> YamlRepositoryState:
         for path in repository_files(root)
         if path.suffix.lower() in {".yaml", ".yml"}
     ]
-    if yaml is None:
+    if yaml is None or RepositoryYamlLoader is None:
         failure = Failure(
             Path("requirements-dev.lock"),
             "development dependencies are not installed; follow docs/development.md",
         )
         return YamlRepositoryState(False, {}, frozenset(), (failure,))
 
-    documents = {}
-    invalid_paths = set()
-    failures = []
+    documents: dict[Path, object] = {}
+    invalid_paths: set[Path] = set()
+    failures: list[Failure] = []
     for path in yaml_paths:
         relative = path.relative_to(root)
         text = path.read_text(encoding="utf-8")
         try:
-            document = yaml.load(text, Loader=RepositoryYamlLoader)
+            document: object = yaml.load(text, Loader=RepositoryYamlLoader)
         except yaml.YAMLError as error:
             failures.append(Failure(relative, f"contains invalid YAML: {error}"))
             invalid_paths.add(relative)
             continue
         documents[relative] = document
-        if document is not None and not isinstance(document, (dict, list)):
+        if (
+            document is not None
+            and not is_yaml_mapping(document)
+            and not is_yaml_list(document)
+        ):
             failures.append(
                 Failure(
                     relative,
@@ -720,15 +764,20 @@ def parse_frontmatter(
     if end < 0:
         return None, text, "has unterminated YAML frontmatter"
     body = text[end + 5 :]
-    if yaml is None:
+    if yaml is None or RepositoryYamlLoader is None:
         return None, body, None
     try:
-        fields = yaml.load(text[4:end], Loader=RepositoryYamlLoader)
+        fields: object = yaml.load(text[4:end], Loader=RepositoryYamlLoader)
     except yaml.YAMLError as error:
         return None, body, f"contains invalid frontmatter YAML: {error}"
-    if not isinstance(fields, dict):
+    if not is_yaml_mapping(fields):
         return None, body, "frontmatter must contain a YAML mapping"
-    return fields, body, None
+    frontmatter: dict[str, object] = {}
+    for key, value in fields.items():
+        if not isinstance(key, str):
+            return None, body, "frontmatter keys must be strings"
+        frontmatter[key] = value
+    return frontmatter, body, None
 
 
 def installed_skill_names(root: Path) -> set[str]:
@@ -739,7 +788,7 @@ def installed_skill_names(root: Path) -> set[str]:
 
 
 def check_skills(root: Path) -> list[Failure]:
-    failures = []
+    failures: list[Failure] = []
     skills_root = root / ".agents" / "skills"
     if not skills_root.is_dir():
         return [Failure(Path(".agents/skills"), "skill directory is missing")]
@@ -850,19 +899,19 @@ def check_issue_forms(
     elif config.relative_to(root) not in state.invalid_paths:
         config_document = state.documents.get(config.relative_to(root))
         if (
-            not isinstance(config_document, dict)
+            not is_yaml_mapping(config_document)
             or config_document.get("blank_issues_enabled") is not False
         ):
             failures.append(
                 Failure(config.relative_to(root), "must disable blank issues")
             )
-        contact_links = (
-            config_document.get("contact_links", [])
-            if isinstance(config_document, dict)
-            else []
+        contact_links: object = (
+            config_document.get("contact_links")
+            if is_yaml_mapping(config_document)
+            else None
         )
-        if not any(
-            isinstance(link, dict)
+        if not is_yaml_list(contact_links) or not any(
+            is_yaml_mapping(link)
             and "security/advisories/new" in str(link.get("url", ""))
             for link in contact_links
         ):
@@ -880,7 +929,7 @@ def check_issue_forms(
         if relative in state.invalid_paths:
             continue
         document = state.documents.get(relative)
-        if not isinstance(document, dict):
+        if not is_yaml_mapping(document):
             failures.append(Failure(relative, "must contain a YAML mapping"))
             continue
         if not isinstance(document.get("name"), str) or not isinstance(
@@ -890,19 +939,19 @@ def check_issue_forms(
                 Failure(path.relative_to(root), "must declare a name and description")
             )
         body = document.get("body")
-        if not isinstance(body, list):
+        if not is_yaml_list(body):
             failures.append(Failure(path.relative_to(root), "must contain a body list"))
             continue
-        fields = [item for item in body if isinstance(item, dict) and "id" in item]
+        fields = [item for item in body if is_yaml_mapping(item) and "id" in item]
         ids = [str(item["id"]) for item in fields]
         if len(ids) != len(set(ids)):
             failures.append(
                 Failure(path.relative_to(root), "contains duplicate field ids")
             )
         requirements = ISSUE_FORM_REQUIREMENTS.get(path.name)
-        required_ids = REQUIRED_ISSUE_FIELDS | (
-            requirements["fields"] if requirements else set()
-        )
+        required_ids = REQUIRED_ISSUE_FIELDS.copy()
+        if requirements is not None:
+            required_ids.update(requirements["fields"])
         missing = sorted(required_ids.difference(ids))
         if missing:
             failures.append(
@@ -915,8 +964,10 @@ def check_issue_forms(
         nonrequired = sorted(
             identifier
             for identifier in required_ids.intersection(field_by_id)
-            if not isinstance(field_by_id[identifier].get("validations"), dict)
-            or field_by_id[identifier]["validations"].get("required") is not True
+            if not is_yaml_mapping(
+                validations := field_by_id[identifier].get("validations")
+            )
+            or validations.get("required") is not True
         )
         if nonrequired:
             failures.append(
@@ -927,9 +978,7 @@ def check_issue_forms(
             )
         labels = document.get("labels")
         expected_label = requirements["label"] if requirements else None
-        if expected_label and (
-            not isinstance(labels, list) or labels != [expected_label]
-        ):
+        if expected_label and (not is_yaml_list(labels) or labels != [expected_label]):
             failures.append(
                 Failure(
                     path.relative_to(root),
@@ -942,9 +991,9 @@ def check_issue_forms(
 def find_workflow_string_values(
     value: object, path: Path, field: str
 ) -> tuple[list[tuple[Path, str]], list[Failure]]:
-    values = []
-    failures = []
-    if isinstance(value, dict):
+    values: list[tuple[Path, str]] = []
+    failures: list[Failure] = []
+    if is_yaml_mapping(value):
         for key, child in value.items():
             if key == field:
                 if isinstance(child, str):
@@ -961,7 +1010,7 @@ def find_workflow_string_values(
             )
             values.extend(child_values)
             failures.extend(child_failures)
-    elif isinstance(value, list):
+    elif is_yaml_list(value):
         for child in value:
             child_values, child_failures = find_workflow_string_values(
                 child, path, field
@@ -987,7 +1036,7 @@ def collect_workflow_run_commands(
     yaml_state: YamlRepositoryState | None = None,
 ) -> tuple[list[tuple[Path, str]], list[Failure]]:
 
-    commands = []
+    commands: list[tuple[Path, str]] = []
     state, failures = acquire_yaml_state(root, yaml_state)
     workflows = root / ".github" / "workflows"
     if not workflows.is_dir() or not state.available:
@@ -1004,22 +1053,22 @@ def collect_workflow_run_commands(
 def workflow_trigger_names(triggers: object) -> set[str]:
     if isinstance(triggers, str):
         return {triggers}
-    if isinstance(triggers, list):
+    if is_yaml_list(triggers):
         return {trigger for trigger in triggers if isinstance(trigger, str)}
-    if isinstance(triggers, dict):
+    if is_yaml_mapping(triggers):
         return {trigger for trigger in triggers if isinstance(trigger, str)}
     return set()
 
 
 def check_workflow_security(state: YamlRepositoryState) -> list[Failure]:
-    failures = []
+    failures: list[Failure] = []
     documents = repository_workflow_documents(state)
     workflow_paths = {relative for relative, _ in documents}
     for relative in sorted(workflow_paths.difference(APPROVED_WORKFLOW_PATHS)):
         failures.append(Failure(relative, "is not registered as a reviewed workflow"))
 
     for relative, document in documents:
-        if not isinstance(document, dict):
+        if not is_yaml_mapping(document):
             failures.append(Failure(relative, "must contain a YAML mapping"))
             continue
         if document.get("permissions") != {"contents": "read"}:
@@ -1034,9 +1083,9 @@ def check_workflow_security(state: YamlRepositoryState) -> list[Failure]:
                 Failure(relative, "must not use the pull_request_target event")
             )
         jobs = document.get("jobs")
-        if isinstance(jobs, dict):
+        if is_yaml_mapping(jobs):
             for job in jobs.values():
-                if isinstance(job, dict) and "permissions" in job:
+                if is_yaml_mapping(job) and "permissions" in job:
                     failures.append(
                         Failure(
                             relative,
@@ -1075,7 +1124,7 @@ def check_ci_workflow(
     if not path.is_file() or relative in state.invalid_paths:
         return failures
     document = state.documents.get(relative)
-    if not isinstance(document, dict):
+    if not is_yaml_mapping(document):
         return [*failures, Failure(relative, "must contain a YAML mapping")]
 
     all_run_commands, command_failures = collect_workflow_run_commands(root, state)
@@ -1128,7 +1177,7 @@ def markdown_table_rows(text: str, heading: str) -> list[list[str]]:
         if next_heading is not None
         else len(visible_text)
     )
-    rows = []
+    rows: list[list[str]] = []
     for line in visible_text[heading_match.end() : section_end].splitlines():
         stripped = line.strip()
         if not stripped.startswith("|") or not stripped.endswith("|"):
@@ -1176,10 +1225,10 @@ def normalized_package_name(name: str) -> str:
 def parse_locked_requirements(
     path: Path,
 ) -> tuple[dict[str, tuple[str, str]], list[Failure]]:
-    dependencies = {}
-    failures = []
+    dependencies: dict[str, tuple[str, str]] = {}
+    failures: list[Failure] = []
     current_name = None
-    current_hashes = set()
+    current_hashes: set[str] = set()
     requirement_pattern = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)==([^\s\\]+)\s+\\$")
     hash_pattern = re.compile(r"^--hash=sha256:([0-9a-f]{64})(\s+\\)?$")
     for line_number, raw_line in enumerate(
@@ -1260,7 +1309,7 @@ def check_dependency_records(root: Path) -> list[Failure]:
         )
         if row and (dependency := markdown_code_literal(row[0])) is not None
     }
-    failures = []
+    failures: list[Failure] = []
     for action, release in APPROVED_ACTIONS.items():
         repository, commit = action.split("@", 1)
         row = rows.get(repository)
@@ -1276,7 +1325,7 @@ def check_dependency_records(root: Path) -> list[Failure]:
 
     locked_dependencies, lock_failures = parse_locked_requirements(lockfile)
     failures.extend(lock_failures)
-    documented_dependencies = {}
+    documented_dependencies: dict[str, tuple[str, str]] = {}
     for dependency, row in rows.items():
         selected_version = row[2] if len(row) >= 3 else ""
         if "requirements-dev.lock" not in selected_version:
@@ -1327,7 +1376,7 @@ def check_dependency_records(root: Path) -> list[Failure]:
 
 
 def check_required_files(root: Path) -> list[Failure]:
-    failures = []
+    failures: list[Failure] = []
     for name in sorted(REQUIRED_FILES):
         if not (root / name).is_file():
             failures.append(Failure(Path(name), "required repository file is missing"))
@@ -1365,11 +1414,11 @@ def missing_exact_rules(text: str, required: set[str]) -> list[str]:
 
 
 def check_required_file_content(root: Path) -> list[Failure]:
-    failures = []
+    failures: list[Failure] = []
     editorconfig = root / ".editorconfig"
     if editorconfig.is_file():
         sections = parse_editorconfig(editorconfig.read_text(encoding="utf-8"))
-        missing = []
+        missing: list[str] = []
         for section, settings in REQUIRED_EDITORCONFIG_SETTINGS.items():
             actual = sections.get(section, {})
             missing.extend(
@@ -1447,7 +1496,7 @@ def check_required_file_content(root: Path) -> list[Failure]:
 
 
 def check_quality_policy_consumers(root: Path) -> list[Failure]:
-    failures = []
+    failures: list[Failure] = []
     for name in sorted(QUALITY_POLICY_CONSUMERS):
         path = root / name
         if not path.is_file():
@@ -1464,7 +1513,7 @@ def check_quality_policy_consumers(root: Path) -> list[Failure]:
 
 
 def check_instruction_review_routing(root: Path) -> list[Failure]:
-    failures = []
+    failures: list[Failure] = []
     for name, reference in sorted(INSTRUCTION_REVIEW_ROUTES.items()):
         path = root / name
         if not path.is_file():
@@ -1482,7 +1531,7 @@ def check_instruction_review_routing(root: Path) -> list[Failure]:
 
 
 def check_timeless_documentation(root: Path) -> list[Failure]:
-    failures = []
+    failures: list[Failure] = []
     paths = [root / name for name in TIMELESS_DOCUMENTS]
     skills_root = root / ".agents" / "skills"
     if skills_root.is_dir():

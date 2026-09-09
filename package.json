@@ -22,6 +22,7 @@
     "build:javascript": "tsc --project tsconfig.json",
     "build": "npm run clean && npm run build:wasm && npm run build:javascript && node scripts/write-wasm-manifest.mjs",
     "check:javascript": "tsc --project tsconfig.json --noEmit",
+    "check:python": "node scripts/check-python.mjs",
     "check:rust": "node scripts/check-rust.mjs",
     "check": "npm run check:javascript && npm run check:rust",
     "test:unit": "node --test js-tests/unit/*.test.mjs",
@@ -32,6 +33,7 @@
     "measure": "npm run build && node scripts/measure-runtime.mjs"
   },
   "devDependencies": {
+    "pyright": "1.1.413",
     "typescript": "6.0.3"
   }
 }

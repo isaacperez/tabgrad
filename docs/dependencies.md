@@ -105,6 +105,7 @@ to reproduce a required check or release.
 | Node.js | Run TypeScript compilation, build scripts, tests, and bounded measurements; development and release time only | `22.12.0`, selected by `.node-version` | Official Node.js distribution, MIT License |
 | npm | Resolve the JavaScript development dependency and run package scripts; development and release time only | `11.1.0`, selected by `packageManager` in `package.json` | Official npm CLI distribution, Artistic License 2.0 |
 | TypeScript | Type-check and compile the browser-side semantic runtime and WebAssembly adapter; build time only | `6.0.3`, with registry URL and integrity in `package-lock.json` | npm registry and `microsoft/TypeScript`, Apache License 2.0 |
+| Pyright | Check maintained Python contracts statically alongside Ruff; development and CI only | `1.1.413`, with registry URL and integrity in `package-lock.json` | npm registry and `microsoft/pyright`, MIT License |
 | Rust toolchain | Compile the CPU numerical kernel to scalar and SIMD WebAssembly and run Rustfmt and Clippy; development and release time only | Compiler and standard library `1.98.1` plus `wasm32-unknown-unknown`, Rustfmt, and Clippy, selected by `rust-toolchain.toml` | Official Rust distribution, dual Apache License 2.0 and MIT License |
 | Google Chrome | Execute browser integration and bounded performance checks; test time only and not downloaded or redistributed by Tabgrad | Installed compatible release; exact version recorded with verification evidence | Google distribution under the Google Chrome Terms of Service |
 | Mozilla Firefox | Execute browser integration and bounded performance checks; test time only and not downloaded or redistributed by Tabgrad | Installed compatible release; exact version recorded with verification evidence | Mozilla distribution; source components under the Mozilla Public License 2.0 and accompanying notices |
@@ -131,8 +132,8 @@ maintains Python code or when an accepted replacement provides the same
 formatting and lint evidence with lower overall maintenance cost.
 
 `package.json` is the direct JavaScript dependency manifest and
-`package-lock.json` is its exact resolution and integrity record. TypeScript is
-the only npm package dependency and has no runtime role. Version 6.0.3 provides
+`package-lock.json` is its exact resolution and integrity record. TypeScript
+has no runtime role. Version 6.0.3 provides
 the required strict type checking and browser library definitions without the
 platform-specific compiler packages used by the compared 7.0.2 distribution.
 The larger uncompressed development installation is not shipped in `dist/`.
@@ -146,7 +147,7 @@ dependencies. `rust-toolchain.toml` selects the compiler and target so a source
 build does not silently follow a contributor's default Rust version. Rust and
 its quality components do not appear in the browser distribution.
 
-Node.js and npm run build orchestration only. The browser executes the emitted
+Node.js and npm run development checks and build orchestration. The browser executes the emitted
 standard JavaScript and WebAssembly through its own engines; it does not embed
 Node.js. Chrome and Firefox are external test environments, not linked or
 redistributed code. The custom browser runner uses their command-line
@@ -159,3 +160,37 @@ APIs. Rust exposes a project-owned raw ABI, so `wasm-bindgen`, `wasm-pack`, a
 JavaScript numerical package, and a native tensor runtime are not dependencies.
 The browser therefore downloads only Tabgrad-authored JavaScript, manifest, and
 the one selected WebAssembly module for this CPU path.
+
+## Python static checking
+
+Pyright checks whether Python calls, assignments and return values agree with
+declared types. Ruff remains responsible for formatting, selected bug patterns
+and annotation presence; it is not a replacement for type consistency checks.
+Pyright uses the existing Node/npm toolchain, so contributors do not need a
+second checker installation in the pip environment. Mypy is a viable
+alternative, not an additional required tool. This choice makes no comparative
+speed claim.
+
+The [official installation guidance](https://github.com/microsoft/pyright/blob/main/docs/installation.md)
+describes its npm distribution. The selected release requires Node.js 14 or
+later, within the project's selected Node version. Its npm archive expands to
+approximately 19.3 MB before filesystem allocation overhead. It includes
+typeshed declarations used to describe Python libraries without executing
+them. Review checker diagnostics and bundled typing changes when updating it.
+It adds development installation and CI analysis cost but no browser download,
+tensor execution or runtime memory cost: only `dist/` is packaged, and no
+runtime source imports the checker.
+
+The lock also records optional `fsevents` 2.3.3 (MIT), Pyright's macOS filesystem
+watch dependency. Linux skips that platform-specific dependency. Repository
+checks use a one-shot command rather than a watch service, and installation
+continues to disable package lifecycle scripts. Do not enable its install
+script to run type checks. The npm lock records exact origins and integrity
+for both packages; upstream licenses remain in their installed distributions.
+
+Contributors maintaining Python tooling own updates through the normal issue
+and dependency-review workflow. Inspect release changes, upstream advisories,
+transitive dependencies, supported Python targets and false-negative risks;
+a clean checker result is not a security audit. Remove Pyright only when its
+required checking role is removed or replaced by an accepted alternative,
+updating configuration, setup, CI and skill-facing evidence together.
