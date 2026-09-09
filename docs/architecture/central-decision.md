@@ -196,6 +196,12 @@ alone is not performance evidence.
 | Repeated-program reuse | [#26](https://github.com/isaacperez/tabgrad/issues/26) |
 | Reusable training with dynamic differentiation | [#27](https://github.com/isaacperez/tabgrad/issues/27) |
 | WebAssembly CPU toolchain, binary interface, and memory ownership | [#31](https://github.com/isaacperez/tabgrad/issues/31) |
+| Python attachment, object-handle bridge, and wrapper lifetime | [#43](https://github.com/isaacperez/tabgrad/issues/43) |
+
+The [Python integration decision](python-integration.md) refines the frontend
+boundary without changing the central execution model. It assigns interpreter,
+session, wrapper, and proxy ownership while keeping operation semantics in the
+shared runtime.
 
 ## Consequences
 

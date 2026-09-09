@@ -75,10 +75,17 @@ to the same canonical operation, the boundary would have failed.
 
 ### Handles instead of repeated payload copies
 
-A public tensor normally carries a stable numeric **handle** and small metadata
-such as shape, data type, and device. The handle identifies state owned by the
-runtime. It is not a copy of the tensor's numerical payload and it is not a
-WebGPU buffer or WebAssembly address.
+A public tensor carries an opaque **handle** and small metadata such as shape,
+data type, and device. The handle identifies state owned by the runtime; its
+representation is not part of tensor semantics. In the same-realm Python
+integration, a wrapper holds the existing JavaScript tensor object and passes
+that object back through Pyodide. The runtime validates its identity. A numeric
+identifier is not required merely to cross the language boundary.
+
+Neither representation is a copy of the numerical payload, a WebGPU buffer,
+or a WebAssembly address. The [Python integration contract](python-integration.md)
+explains the selected object-handle route, interpreter attachment, and release
+ownership.
 
 Frontend metadata is a convenience snapshot, not a second source of truth. It
 is derived from the handle's current runtime state and must be refreshed or

@@ -32,6 +32,7 @@ link to its primary source, but they must not create a competing version.
 | --- | --- |
 | Project identity and public purpose | [`README.md`](../README.md) |
 | Central execution architecture and ownership boundaries | [`architecture/README.md`](architecture/README.md) |
+| Python interpreter attachment, bridge ownership, and integration constraints | [`architecture/python-integration.md`](architecture/python-integration.md) |
 | WebAssembly CPU kernel language, binary interface, modules, and memory ownership | [`architecture/webassembly-cpu-backend.md`](architecture/webassembly-cpu-backend.md) |
 | Contribution workflow | [`CONTRIBUTING.md`](../CONTRIBUTING.md) |
 | Integrated implementation workflow and reading guide | [`implementation-workflow.md`](implementation-workflow.md) |
