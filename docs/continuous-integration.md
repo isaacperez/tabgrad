@@ -23,12 +23,14 @@ absent from [`dependencies.md`](dependencies.md).
 job definitions. The browser matrix expands its definition into independent
 Chrome and Firefox jobs.
 
-The `repository-consistency` job runs:
+The `repository-consistency` job prepares an isolated `.venv` with locked
+Python tooling and the selected Node/npm environment with locked Pyright. It runs:
 
-1. `python3 -m ruff format --check scripts tests`.
-2. `python3 -m ruff check scripts tests`.
-3. `python3 scripts/check_repository.py`.
-4. `python3 scripts/run_tests.py`.
+1. `.venv/bin/python -m ruff format --check scripts tests`.
+2. `.venv/bin/python -m ruff check scripts tests`.
+3. `npm run check:python` for strict Python type checking.
+4. `.venv/bin/python scripts/check_repository.py`.
+5. `.venv/bin/python scripts/run_tests.py`.
 
 The `runtime` job uses Node.js 22.12.0 from `.node-version`, installs the Rust
 1.98.1 minimal toolchain with `wasm32-unknown-unknown`, Rustfmt, and Clippy,
@@ -49,8 +51,9 @@ the other browser. This deliberately duplicates a small build and setup cost in
 exchange for independent logs, results, and reruns without cross-job artifacts
 or additional actions.
 
-The Python job installs only the exact artifacts accepted by
-`requirements-dev.lock`. The runtime job installs the exact npm resolution,
+The repository-consistency job installs Python artifacts accepted by
+`requirements-dev.lock` and the exact npm resolution from `package-lock.json`.
+The runtime job installs the exact npm resolution,
 selected Rust toolchain, and direct tools recorded in
 [`dependencies.md`](dependencies.md). The repository validator rejects a
 workflow until its path has been registered as reviewed. It checks every
@@ -71,7 +74,7 @@ definition whenever one of those controls must change.
 The stable check names are `Repository checks / repository-consistency`,
 `Repository checks / runtime`, `Repository checks / browser-Chrome`, and
 `Repository checks / browser-Firefox`. The first checks Python formatting and
-lint, repository structure, policy consistency, and the validator itself. The
+lint, static types, repository structure, policy consistency, and the validator itself. The
 second checks TypeScript and Rust source plus the generated distribution and
 Node.js behavior. The last two independently exercise the generated runtime in
 their named real browser. Coding-agent instruction review remains a separate

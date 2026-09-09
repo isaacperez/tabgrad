@@ -1,5 +1,4 @@
 import ast
-import importlib.util
 import io
 import sys
 import tempfile
@@ -7,23 +6,16 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "check_repository.py"
-SPEC = importlib.util.spec_from_file_location("check_repository", SCRIPT)
-CHECKS = importlib.util.module_from_spec(SPEC)
-assert SPEC.loader is not None
-sys.modules[SPEC.name] = CHECKS
-SPEC.loader.exec_module(CHECKS)
+import yaml
 
-RUNNER_SCRIPT = SCRIPT.parents[1] / "scripts" / "run_tests.py"
-RUNNER_SPEC = importlib.util.spec_from_file_location("run_tests", RUNNER_SCRIPT)
-RUNNER = importlib.util.module_from_spec(RUNNER_SPEC)
-assert RUNNER_SPEC.loader is not None
-sys.modules[RUNNER_SPEC.name] = RUNNER
-RUNNER_SPEC.loader.exec_module(RUNNER)
+from scripts import check_repository as CHECKS
+from scripts import run_tests as RUNNER
+
+SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "check_repository.py"
 
 
 class RepositoryCheckTests(unittest.TestCase):
-    def write_valid_skill(self, root, name):
+    def write_valid_skill(self, root: Path, name: str) -> None:
         skill = root / ".agents" / "skills" / name
         skill.mkdir(parents=True, exist_ok=True)
         (skill / "SKILL.md").write_text(
@@ -32,8 +24,13 @@ class RepositoryCheckTests(unittest.TestCase):
         )
 
     def write_issue_form(
-        self, root, name="bug.yml", label=None, omitted=None, required=True
-    ):
+        self,
+        root: Path,
+        name: str = "bug.yml",
+        label: str | None = None,
+        omitted: str | None = None,
+        required: bool = True,
+    ) -> None:
         forms = root / ".github" / "ISSUE_TEMPLATE"
         forms.mkdir(parents=True, exist_ok=True)
         requirements = CHECKS.ISSUE_FORM_REQUIREMENTS[name]
@@ -54,23 +51,25 @@ class RepositoryCheckTests(unittest.TestCase):
             ],
         }
         (forms / name).write_text(
-            CHECKS.yaml.safe_dump(document, sort_keys=False), encoding="utf-8"
+            yaml.safe_dump(document, sort_keys=False), encoding="utf-8"
         )
 
-    def copy_repository_workflow(self, root):
+    def copy_repository_workflow(self, root: Path) -> Path:
         workflow = root / ".github" / "workflows" / "repository-checks.yml"
         workflow.parent.mkdir(parents=True)
         source = SCRIPT.parents[1] / ".github" / "workflows" / "repository-checks.yml"
         workflow.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
         return workflow
 
-    def write_additional_workflow(self, root, body):
+    def write_additional_workflow(self, root: Path, body: str) -> Path:
         workflow = root / ".github" / "workflows" / "additional.yml"
         workflow.parent.mkdir(parents=True, exist_ok=True)
         workflow.write_text(body, encoding="utf-8")
         return workflow
 
-    def assert_workflow_mutation_rejected(self, original, replacement):
+    def assert_workflow_mutation_rejected(
+        self, original: str, replacement: str
+    ) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             workflow = self.copy_repository_workflow(root)
@@ -84,7 +83,7 @@ class RepositoryCheckTests(unittest.TestCase):
                 any("complete reviewed executable" in item.message for item in failures)
             )
 
-    def test_text_format_reports_trailing_whitespace(self):
+    def test_text_format_reports_trailing_whitespace(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "bad.md").write_text("Bad line  \n", encoding="utf-8")
@@ -93,7 +92,7 @@ class RepositoryCheckTests(unittest.TestCase):
                 any("trailing whitespace" in item.message for item in failures)
             )
 
-    def test_markdown_links_report_missing_local_target(self):
+    def test_markdown_links_report_missing_local_target(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "README.md").write_text(
@@ -103,7 +102,7 @@ class RepositoryCheckTests(unittest.TestCase):
             self.assertEqual(len(failures), 1)
             self.assertIn("docs/missing.md", failures[0].message)
 
-    def test_markdown_links_reject_targets_outside_repository(self):
+    def test_markdown_links_reject_targets_outside_repository(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / "repository"
             root.mkdir()
@@ -113,7 +112,7 @@ class RepositoryCheckTests(unittest.TestCase):
                 any("outside the repository" in item.message for item in failures)
             )
 
-    def test_markdown_image_links_report_missing_local_target(self):
+    def test_markdown_image_links_report_missing_local_target(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "README.md").write_text(
@@ -122,7 +121,7 @@ class RepositoryCheckTests(unittest.TestCase):
             failures = CHECKS.check_markdown_links(root)
             self.assertEqual(len(failures), 1)
 
-    def test_skill_name_must_match_directory(self):
+    def test_skill_name_must_match_directory(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             skill = root / ".agents" / "skills" / "expected"
@@ -134,7 +133,7 @@ class RepositoryCheckTests(unittest.TestCase):
             failures = CHECKS.check_skills(root)
             self.assertTrue(any("does not match" in item.message for item in failures))
 
-    def test_skill_frontmatter_must_be_valid_yaml(self):
+    def test_skill_frontmatter_must_be_valid_yaml(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             for name in CHECKS.REQUIRED_SKILLS:
@@ -154,7 +153,7 @@ class RepositoryCheckTests(unittest.TestCase):
                 any("invalid frontmatter YAML" in item.message for item in failures)
             )
 
-    def test_skill_routing_and_workflow_references_must_be_visible(self):
+    def test_skill_routing_and_workflow_references_must_be_visible(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             for name in CHECKS.REQUIRED_SKILLS:
@@ -191,15 +190,15 @@ class RepositoryCheckTests(unittest.TestCase):
                 )
             )
 
-    def test_required_documents_cannot_disappear(self):
+    def test_required_documents_cannot_disappear(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             failures = CHECKS.check_required_files(Path(directory))
             self.assertEqual(len(failures), len(CHECKS.REQUIRED_FILES))
 
-    def test_required_files_include_every_timeless_document(self):
+    def test_required_files_include_every_timeless_document(self) -> None:
         self.assertTrue(CHECKS.TIMELESS_DOCUMENTS.issubset(CHECKS.REQUIRED_FILES))
 
-    def test_implementation_and_review_roles_must_link_quality_policy(self):
+    def test_implementation_and_review_roles_must_link_quality_policy(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             for name in CHECKS.QUALITY_POLICY_CONSUMERS:
@@ -221,7 +220,7 @@ class RepositoryCheckTests(unittest.TestCase):
             self.assertEqual(len(failures), 1)
             self.assertEqual(failures[0].path, missing_reference.relative_to(root))
 
-    def test_instruction_review_routes_must_remain_visible(self):
+    def test_instruction_review_routes_must_remain_visible(self) -> None:
         source_root = SCRIPT.parents[1]
         for name, reference in CHECKS.INSTRUCTION_REVIEW_ROUTES.items():
             with (
@@ -240,7 +239,7 @@ class RepositoryCheckTests(unittest.TestCase):
                 self.assertEqual(len(failures), 1)
                 self.assertEqual(failures[0].path, Path(name))
 
-    def test_durable_documentation_rejects_project_progress_wording(self):
+    def test_durable_documentation_rejects_project_progress_wording(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "README.md").write_text(
@@ -265,7 +264,7 @@ class RepositoryCheckTests(unittest.TestCase):
                 all("project-progress wording" in item.message for item in failures)
             )
 
-    def test_every_architecture_document_is_registered_as_timeless(self):
+    def test_every_architecture_document_is_registered_as_timeless(self) -> None:
         source_root = SCRIPT.parents[1]
         architecture_root = source_root / "docs" / "architecture"
         repository_documents = {
@@ -289,7 +288,7 @@ class RepositoryCheckTests(unittest.TestCase):
                 self.assertEqual(len(failures), 1)
                 self.assertEqual(failures[0].path, Path(relative_path))
 
-    def test_durable_documentation_allows_operational_check_state(self):
+    def test_durable_documentation_allows_operational_check_state(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             docs = root / "docs"
@@ -318,7 +317,9 @@ class RepositoryCheckTests(unittest.TestCase):
             )
             self.assertEqual(CHECKS.check_timeless_documentation(root), [])
 
-    def test_operational_state_language_is_outside_the_durable_prose_check(self):
+    def test_operational_state_language_is_outside_the_durable_prose_check(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             path = root / "docs" / "project-management.md"
@@ -326,13 +327,13 @@ class RepositoryCheckTests(unittest.TestCase):
             path.write_text("Record the issue's current status.\n", encoding="utf-8")
             self.assertEqual(CHECKS.check_timeless_documentation(root), [])
 
-    def test_workflow_is_a_required_repository_file(self):
+    def test_workflow_is_a_required_repository_file(self) -> None:
         self.assertIn(".github/workflows/repository-checks.yml", CHECKS.REQUIRED_FILES)
 
-    def test_validator_tests_are_a_required_repository_file(self):
+    def test_validator_tests_are_a_required_repository_file(self) -> None:
         self.assertIn("tests/test_repository_checks.py", CHECKS.REQUIRED_FILES)
 
-    def test_foundation_configuration_is_required(self):
+    def test_foundation_configuration_is_required(self) -> None:
         expected = {
             ".editorconfig",
             ".gitattributes",
@@ -342,7 +343,7 @@ class RepositoryCheckTests(unittest.TestCase):
         }
         self.assertTrue(expected.issubset(CHECKS.REQUIRED_FILES))
 
-    def test_runtime_sources_and_locked_toolchains_are_required(self):
+    def test_runtime_sources_and_locked_toolchains_are_required(self) -> None:
         expected = {
             ".node-version",
             "Cargo.lock",
@@ -355,7 +356,7 @@ class RepositoryCheckTests(unittest.TestCase):
         }
         self.assertTrue(expected.issubset(CHECKS.REQUIRED_FILES))
 
-    def test_documentation_perspective_indexes_are_timeless(self):
+    def test_documentation_perspective_indexes_are_timeless(self) -> None:
         expected = {
             "docs/components/README.md",
             "docs/concepts/README.md",
@@ -364,7 +365,7 @@ class RepositoryCheckTests(unittest.TestCase):
         }
         self.assertTrue(expected.issubset(CHECKS.TIMELESS_DOCUMENTS))
 
-    def test_exact_foundation_rules_cannot_be_commented_out(self):
+    def test_exact_foundation_rules_cannot_be_commented_out(self) -> None:
         source_root = SCRIPT.parents[1]
         requirements = {
             ".gitattributes": CHECKS.REQUIRED_GITATTRIBUTE_RULES,
@@ -386,7 +387,7 @@ class RepositoryCheckTests(unittest.TestCase):
                     failures = CHECKS.check_required_file_content(root)
                     self.assertTrue(any(item.path == Path(name) for item in failures))
 
-    def test_editorconfig_requires_settings_in_their_own_sections(self):
+    def test_editorconfig_requires_settings_in_their_own_sections(self) -> None:
         source_root = SCRIPT.parents[1]
         for section, settings in CHECKS.REQUIRED_EDITORCONFIG_SETTINGS.items():
             for key, value in settings.items():
@@ -405,7 +406,7 @@ class RepositoryCheckTests(unittest.TestCase):
                         any(item.path == Path(".editorconfig") for item in failures)
                     )
 
-    def test_pull_request_template_requires_visible_headings_and_rules(self):
+    def test_pull_request_template_requires_visible_headings_and_rules(self) -> None:
         source_root = SCRIPT.parents[1]
         requirements = [
             *(f"## {heading}" for heading in CHECKS.REQUIRED_PULL_REQUEST_HEADINGS),
@@ -432,7 +433,7 @@ class RepositoryCheckTests(unittest.TestCase):
                     )
                 )
 
-    def test_ruff_settings_are_parsed_as_toml(self):
+    def test_ruff_settings_are_parsed_as_toml(self) -> None:
         source_root = SCRIPT.parents[1]
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -447,7 +448,7 @@ class RepositoryCheckTests(unittest.TestCase):
             failures = CHECKS.check_required_file_content(root)
             self.assertTrue(any(item.path == Path("ruff.toml") for item in failures))
 
-    def test_ruff_configuration_cannot_exclude_maintained_python(self):
+    def test_ruff_configuration_cannot_exclude_maintained_python(self) -> None:
         source_root = SCRIPT.parents[1]
         source = (source_root / "ruff.toml").read_text(encoding="utf-8")
         documents = (
@@ -470,14 +471,14 @@ class RepositoryCheckTests(unittest.TestCase):
                     any(item.path == Path("ruff.toml") for item in failures)
                 )
 
-    def test_test_runner_rejects_zero_discovered_tests(self):
+    def test_test_runner_rejects_zero_discovered_tests(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             output = io.StringIO()
             result = RUNNER.run_tests(Path(directory), stream=output)
             self.assertEqual(result, 2)
             self.assertIn("zero tests", output.getvalue())
 
-    def test_test_runner_does_not_reuse_discovery_state(self):
+    def test_test_runner_does_not_reuse_discovery_state(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             populated = root / "populated"
@@ -497,7 +498,7 @@ class RepositoryCheckTests(unittest.TestCase):
             self.assertEqual(RUNNER.run_tests(empty, stream=output), 2)
             self.assertIn("zero tests", output.getvalue())
 
-    def test_test_runner_isolates_modules_between_invocations(self):
+    def test_test_runner_isolates_modules_between_invocations(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             for name in ("first", "second"):
@@ -513,7 +514,7 @@ class RepositoryCheckTests(unittest.TestCase):
                 self.assertEqual(RUNNER.run_tests(suite, stream=io.StringIO()), 0)
             self.assertNotIn("test_tabgrad_runner_same_name", sys.modules)
 
-    def test_required_skills_cannot_disappear(self):
+    def test_required_skills_cannot_disappear(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / ".agents" / "skills").mkdir(parents=True)
@@ -522,7 +523,7 @@ class RepositoryCheckTests(unittest.TestCase):
                 any("missing required skills" in item.message for item in failures)
             )
 
-    def test_installed_skill_names_include_only_directories(self):
+    def test_installed_skill_names_include_only_directories(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self.assertEqual(CHECKS.installed_skill_names(root), set())
@@ -531,7 +532,7 @@ class RepositoryCheckTests(unittest.TestCase):
             (skills / "not-a-skill.txt").write_text("text\n", encoding="utf-8")
             self.assertEqual(CHECKS.installed_skill_names(root), {"installed"})
 
-    def test_agents_must_declare_every_installed_skill(self):
+    def test_agents_must_declare_every_installed_skill(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             for name in CHECKS.REQUIRED_SKILLS:
@@ -551,7 +552,7 @@ class RepositoryCheckTests(unittest.TestCase):
                 )
             )
 
-    def test_agents_cannot_declare_a_missing_skill(self):
+    def test_agents_cannot_declare_a_missing_skill(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             for name in CHECKS.REQUIRED_SKILLS:
@@ -567,7 +568,7 @@ class RepositoryCheckTests(unittest.TestCase):
                 any("without directories" in item.message for item in failures)
             )
 
-    def test_required_issue_forms_cannot_disappear(self):
+    def test_required_issue_forms_cannot_disappear(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             forms = root / ".github" / "ISSUE_TEMPLATE"
@@ -581,7 +582,49 @@ class RepositoryCheckTests(unittest.TestCase):
                 any("missing required issue forms" in item.message for item in failures)
             )
 
-    def test_unregistered_issue_forms_are_rejected(self):
+    def test_malformed_contact_links_report_a_failure(self) -> None:
+        for value in (
+            None,
+            3,
+            "not a list",
+            {"url": "security/advisories/new"},
+            [None],
+        ):
+            with self.subTest(value=value), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                config = root / ".github" / "ISSUE_TEMPLATE" / "config.yml"
+                config.parent.mkdir(parents=True)
+                config.write_text(
+                    yaml.safe_dump(
+                        {"blank_issues_enabled": False, "contact_links": value}
+                    ),
+                    encoding="utf-8",
+                )
+                failures = CHECKS.check_issue_forms(root)
+                self.assertEqual(
+                    [
+                        failure
+                        for failure in failures
+                        if failure.path == config.relative_to(root)
+                    ],
+                    [
+                        CHECKS.Failure(
+                            config.relative_to(root),
+                            "does not link private vulnerability reporting",
+                        )
+                    ],
+                )
+
+    def test_frontmatter_rejects_non_string_keys(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "SKILL.md"
+            path.write_text("---\n42: value\n---\nBody\n", encoding="utf-8")
+            fields, body, error = CHECKS.parse_frontmatter(path)
+            self.assertIsNone(fields)
+            self.assertEqual(body, "Body\n")
+            self.assertEqual(error, "frontmatter keys must be strings")
+
+    def test_unregistered_issue_forms_are_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             forms = root / ".github" / "ISSUE_TEMPLATE"
@@ -592,7 +635,7 @@ class RepositoryCheckTests(unittest.TestCase):
                 any("unregistered issue forms" in item.message for item in failures)
             )
 
-    def test_invalid_yaml_is_rejected(self):
+    def test_invalid_yaml_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             workflow = root / ".github" / "workflows" / "bad.yml"
@@ -601,7 +644,7 @@ class RepositoryCheckTests(unittest.TestCase):
             failures = CHECKS.check_yaml_syntax(root)
             self.assertTrue(any("invalid YAML" in item.message for item in failures))
 
-    def test_invalid_yaml_does_not_cascade_into_semantic_failures(self):
+    def test_invalid_yaml_does_not_cascade_into_semantic_failures(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             form = root / ".github" / "ISSUE_TEMPLATE" / "bug.yml"
@@ -618,7 +661,7 @@ class RepositoryCheckTests(unittest.TestCase):
             self.assertEqual(len(form_failures), 1)
             self.assertIn("invalid YAML", form_failures[0].message)
 
-    def test_invalid_yaml_root_does_not_cascade_into_workflow_failures(self):
+    def test_invalid_yaml_root_does_not_cascade_into_workflow_failures(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             workflow = root / ".github" / "workflows" / "scalar.yml"
@@ -635,7 +678,7 @@ class RepositoryCheckTests(unittest.TestCase):
             self.assertEqual(len(workflow_failures), 1)
             self.assertIn("at its root", workflow_failures[0].message)
 
-    def test_recursive_yaml_alias_is_rejected_without_crashing(self):
+    def test_recursive_yaml_alias_is_rejected_without_crashing(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             workflow = root / ".github" / "workflows" / "recursive.yml"
@@ -652,8 +695,9 @@ class RepositoryCheckTests(unittest.TestCase):
             self.assertEqual(len(workflow_failures), 1)
             self.assertIn("recursive YAML alias", workflow_failures[0].message)
 
-    def test_nonrecursive_yaml_alias_occurrences_are_preserved(self):
-        document = CHECKS.yaml.load(
+    def test_nonrecursive_yaml_alias_occurrences_are_preserved(self) -> None:
+        assert CHECKS.RepositoryYamlLoader is not None
+        document: object = yaml.load(
             "shared: &shared\n  run: echo shared\nleft: *shared\nright: *shared\n",
             Loader=CHECKS.RepositoryYamlLoader,
         )
@@ -663,7 +707,7 @@ class RepositoryCheckTests(unittest.TestCase):
         self.assertEqual(failures, [])
         self.assertEqual(commands.count((Path("workflow.yml"), "echo shared")), 3)
 
-    def test_aggregate_missing_yaml_dependency_reports_one_root_cause(self):
+    def test_aggregate_missing_yaml_dependency_reports_one_root_cause(self) -> None:
         source_root = SCRIPT.parents[1]
         with mock.patch.object(CHECKS, "yaml", None):
             failures = CHECKS.check_repository(source_root)
@@ -678,7 +722,7 @@ class RepositoryCheckTests(unittest.TestCase):
             ],
         )
 
-    def test_aggregate_parses_each_yaml_source_once(self):
+    def test_aggregate_parses_each_yaml_source_once(self) -> None:
         source_root = SCRIPT.parents[1]
         yaml_files = [
             path
@@ -686,21 +730,25 @@ class RepositoryCheckTests(unittest.TestCase):
             if path.suffix.lower() in {".yaml", ".yml"}
         ]
         skill_files = list((source_root / ".agents" / "skills").glob("*/SKILL.md"))
-        with mock.patch.object(CHECKS.yaml, "load", wraps=CHECKS.yaml.load) as load:
+        with mock.patch.object(yaml, "load", wraps=yaml.load) as load:
             failures = CHECKS.check_repository(source_root)
         self.assertEqual(failures, [])
         self.assertEqual(load.call_count, len(yaml_files) + len(skill_files))
 
-    def test_yaml_loader_preserves_workflow_keys_and_boolean_values(self):
+    def test_yaml_loader_preserves_workflow_keys_and_boolean_values(self) -> None:
         source_root = SCRIPT.parents[1]
         state = CHECKS.load_yaml_repository(source_root)
         workflow = state.documents[Path(".github/workflows/repository-checks.yml")]
         issue_config = state.documents[Path(".github/ISSUE_TEMPLATE/config.yml")]
+        assert CHECKS.is_yaml_mapping(workflow)
+        assert CHECKS.is_yaml_mapping(issue_config)
+        concurrency = workflow["concurrency"]
+        assert CHECKS.is_yaml_mapping(concurrency)
         self.assertIn("on", workflow)
-        self.assertIs(workflow["concurrency"]["cancel-in-progress"], True)
+        self.assertIs(concurrency["cancel-in-progress"], True)
         self.assertIs(issue_config["blank_issues_enabled"], False)
 
-    def test_workflow_run_walker_is_not_a_nested_helper(self):
+    def test_workflow_run_walker_is_not_a_nested_helper(self) -> None:
         tree = ast.parse(SCRIPT.read_text(encoding="utf-8"))
         collector = next(
             node
@@ -715,7 +763,7 @@ class RepositoryCheckTests(unittest.TestCase):
         ]
         self.assertEqual(nested_helpers, [])
 
-    def test_issue_form_must_have_common_fields(self):
+    def test_issue_form_must_have_common_fields(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             forms = root / ".github" / "ISSUE_TEMPLATE"
@@ -728,28 +776,28 @@ class RepositoryCheckTests(unittest.TestCase):
                 any("missing required fields" in item.message for item in failures)
             )
 
-    def test_issue_form_must_keep_type_specific_fields(self):
+    def test_issue_form_must_keep_type_specific_fields(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self.write_issue_form(root, omitted="reproduction")
             failures = CHECKS.check_issue_forms(root)
             self.assertTrue(any("reproduction" in item.message for item in failures))
 
-    def test_issue_form_must_keep_exact_type_label(self):
+    def test_issue_form_must_keep_exact_type_label(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self.write_issue_form(root, label="type: feature")
             failures = CHECKS.check_issue_forms(root)
             self.assertTrue(any("type: bug" in item.message for item in failures))
 
-    def test_issue_form_fields_must_remain_required(self):
+    def test_issue_form_fields_must_remain_required(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self.write_issue_form(root, required=False)
             failures = CHECKS.check_issue_forms(root)
             self.assertTrue(any("not required" in item.message for item in failures))
 
-    def test_issue_config_must_link_private_security_reporting(self):
+    def test_issue_config_must_link_private_security_reporting(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             forms = root / ".github" / "ISSUE_TEMPLATE"
@@ -762,7 +810,7 @@ class RepositoryCheckTests(unittest.TestCase):
                 any("private vulnerability" in item.message for item in failures)
             )
 
-    def test_ci_actions_must_use_full_commit_pins(self):
+    def test_ci_actions_must_use_full_commit_pins(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             workflow = self.copy_repository_workflow(root)
@@ -776,7 +824,7 @@ class RepositoryCheckTests(unittest.TestCase):
                 any("without a full commit pin" in item.message for item in failures)
             )
 
-    def test_ci_must_keep_pull_request_trigger(self):
+    def test_ci_must_keep_pull_request_trigger(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             workflow = self.copy_repository_workflow(root)
@@ -787,7 +835,7 @@ class RepositoryCheckTests(unittest.TestCase):
                 any("complete reviewed executable" in item.message for item in failures)
             )
 
-    def test_ci_rejects_unregistered_pinned_action(self):
+    def test_ci_rejects_unregistered_pinned_action(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             workflow = self.copy_repository_workflow(root)
@@ -801,7 +849,7 @@ class RepositoryCheckTests(unittest.TestCase):
                 any("unregistered actions" in item.message for item in failures)
             )
 
-    def test_ci_rejects_job_level_permissions(self):
+    def test_ci_rejects_job_level_permissions(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             workflow = self.copy_repository_workflow(root)
@@ -813,7 +861,7 @@ class RepositoryCheckTests(unittest.TestCase):
             failures = CHECKS.check_ci_workflow(root)
             self.assertTrue(any("job level" in item.message for item in failures))
 
-    def test_ci_rejects_additional_unreviewed_jobs(self):
+    def test_ci_rejects_additional_unreviewed_jobs(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             workflow = self.copy_repository_workflow(root)
@@ -831,7 +879,7 @@ class RepositoryCheckTests(unittest.TestCase):
                 any("complete reviewed executable" in item.message for item in failures)
             )
 
-    def test_ci_rejects_changes_that_can_neutralize_required_checks(self):
+    def test_ci_rejects_changes_that_can_neutralize_required_checks(self) -> None:
         mutations = (
             (
                 "pull request path filter",
@@ -861,19 +909,19 @@ class RepositoryCheckTests(unittest.TestCase):
             ),
             (
                 "step error tolerance",
-                "        run: python3 scripts/run_tests.py\n",
-                "        run: python3 scripts/run_tests.py\n"
+                "        run: .venv/bin/python scripts/run_tests.py\n",
+                "        run: .venv/bin/python scripts/run_tests.py\n"
                 "        continue-on-error: true\n",
             ),
             (
                 "step condition",
-                "        run: python3 scripts/run_tests.py\n",
-                "        run: python3 scripts/run_tests.py\n        if: false\n",
+                "        run: .venv/bin/python scripts/run_tests.py\n",
+                "        run: .venv/bin/python scripts/run_tests.py\n        if: false\n",
             ),
             (
                 "replacement shell",
-                "        run: python3 scripts/run_tests.py\n",
-                "        run: python3 scripts/run_tests.py\n        shell: echo {0}\n",
+                "        run: .venv/bin/python scripts/run_tests.py\n",
+                "        run: .venv/bin/python scripts/run_tests.py\n        shell: echo {0}\n",
             ),
             (
                 "checkout branch override",
@@ -897,7 +945,7 @@ class RepositoryCheckTests(unittest.TestCase):
             with self.subTest(name=name):
                 self.assert_workflow_mutation_rejected(original, replacement)
 
-    def test_ci_rejects_unregistered_run_command(self):
+    def test_ci_rejects_unregistered_run_command(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             workflow = self.copy_repository_workflow(root)
@@ -911,7 +959,7 @@ class RepositoryCheckTests(unittest.TestCase):
                 any("unregistered command" in item.message for item in failures)
             )
 
-    def test_ci_rejects_unregistered_run_command_in_another_workflow(self):
+    def test_ci_rejects_unregistered_run_command_in_another_workflow(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             workflow = self.copy_repository_workflow(root)
@@ -930,7 +978,7 @@ class RepositoryCheckTests(unittest.TestCase):
                 )
             )
 
-    def test_ci_rejects_an_unregistered_workflow_without_commands(self):
+    def test_ci_rejects_an_unregistered_workflow_without_commands(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self.copy_repository_workflow(root)
@@ -948,7 +996,7 @@ class RepositoryCheckTests(unittest.TestCase):
                 )
             )
 
-    def test_ci_rejects_unpinned_action_in_another_workflow(self):
+    def test_ci_rejects_unpinned_action_in_another_workflow(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self.copy_repository_workflow(root)
@@ -967,7 +1015,7 @@ class RepositoryCheckTests(unittest.TestCase):
                 )
             )
 
-    def test_ci_rejects_write_permissions_in_another_workflow(self):
+    def test_ci_rejects_write_permissions_in_another_workflow(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self.copy_repository_workflow(root)
@@ -985,7 +1033,7 @@ class RepositoryCheckTests(unittest.TestCase):
                 )
             )
 
-    def test_ci_rejects_pull_request_target_in_another_workflow(self):
+    def test_ci_rejects_pull_request_target_in_another_workflow(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self.copy_repository_workflow(root)
@@ -1003,11 +1051,11 @@ class RepositoryCheckTests(unittest.TestCase):
                 )
             )
 
-    def test_ci_rejects_duplicate_registered_run_command(self):
+    def test_ci_rejects_duplicate_registered_run_command(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             workflow = self.copy_repository_workflow(root)
-            command = "python3 scripts/run_tests.py"
+            command = ".venv/bin/python scripts/run_tests.py"
             text = workflow.read_text(encoding="utf-8").replace(
                 f"      - name: Test the repository validator\n        run: {command}\n",
                 f"      - name: Test the repository validator\n        run: {command}\n"
@@ -1017,21 +1065,22 @@ class RepositoryCheckTests(unittest.TestCase):
             failures = CHECKS.check_ci_workflow(root)
             self.assertTrue(any("more than once" in item.message for item in failures))
 
-    def test_ci_allows_repeated_setup_in_isolated_jobs(self):
+    def test_ci_allows_repeated_setup_in_isolated_jobs(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self.copy_repository_workflow(root)
             failures = CHECKS.check_ci_workflow(root)
             self.assertEqual(failures, [])
 
-    def test_ci_requires_python_format_and_lint(self):
+    def test_ci_requires_python_format_lint_and_types(self) -> None:
         expected = {
-            "python3 -m ruff check scripts tests",
-            "python3 -m ruff format --check scripts tests",
+            ".venv/bin/python -m ruff check scripts tests",
+            ".venv/bin/python -m ruff format --check scripts tests",
+            "npm run check:python",
         }
         self.assertTrue(expected.issubset(CHECKS.REQUIRED_CI_COMMANDS))
 
-    def test_ci_requires_locked_runtime_setup_checks_and_tests(self):
+    def test_ci_requires_locked_runtime_setup_checks_and_tests(self) -> None:
         expected = {
             "npm ci --ignore-scripts --no-audit --no-fund",
             "npm install --global npm@11.1.0 --ignore-scripts --no-audit --no-fund",
@@ -1047,27 +1096,31 @@ class RepositoryCheckTests(unittest.TestCase):
             CHECKS.APPROVED_ACTIONS,
         )
 
-    def test_ci_commands_must_be_documented(self):
+    def test_ci_commands_must_be_documented(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             path = root / "docs" / "development.md"
             path.parent.mkdir(parents=True)
             source = SCRIPT.parents[1] / "docs" / "development.md"
             text = source.read_text(encoding="utf-8").replace(
-                "python3 scripts/run_tests.py", "python3 scripts/other_tests.py"
+                ".venv/bin/python scripts/run_tests.py",
+                ".venv/bin/python scripts/other_tests.py",
             )
             path.write_text(text, encoding="utf-8")
             failures = CHECKS.check_ci_command_documentation(root)
             self.assertTrue(
-                any("python3 scripts/run_tests.py" in item.message for item in failures)
+                any(
+                    ".venv/bin/python scripts/run_tests.py" in item.message
+                    for item in failures
+                )
             )
 
-    def test_ci_commands_hidden_in_comments_are_not_documented(self):
+    def test_ci_commands_hidden_in_comments_are_not_documented(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             path = root / "docs" / "development.md"
             path.parent.mkdir(parents=True)
-            command = "python3 scripts/run_tests.py"
+            command = ".venv/bin/python scripts/run_tests.py"
             source = (SCRIPT.parents[1] / "docs" / "development.md").read_text(
                 encoding="utf-8"
             )
@@ -1079,7 +1132,7 @@ class RepositoryCheckTests(unittest.TestCase):
             failures = CHECKS.check_ci_command_documentation(root)
             self.assertTrue(any(command in item.message for item in failures))
 
-    def test_dependency_action_hidden_in_a_comment_is_not_documented(self):
+    def test_dependency_action_hidden_in_a_comment_is_not_documented(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             docs = root / "docs" / "dependencies.md"
@@ -1105,7 +1158,7 @@ class RepositoryCheckTests(unittest.TestCase):
                 )
             )
 
-    def test_lockfile_dependencies_must_match_the_visible_record(self):
+    def test_lockfile_dependencies_must_match_the_visible_record(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             docs = root / "docs" / "dependencies.md"
@@ -1128,7 +1181,7 @@ class RepositoryCheckTests(unittest.TestCase):
             failures = CHECKS.check_dependency_records(root)
             self.assertTrue(any("example-package" in item.message for item in failures))
 
-    def test_lockfile_requires_complete_physical_continuations(self):
+    def test_lockfile_requires_complete_physical_continuations(self) -> None:
         malformed_entries = (
             "example==1.0.0\n    --hash=sha256:" + "0" * 64 + "\n",
             "example==1.0.0 \\\n    --hash=sha256:" + "0" * 64 + " \\\n",

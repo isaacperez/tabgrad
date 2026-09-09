@@ -133,6 +133,13 @@ checks needed to detect regressions. A focused test cannot replace the relevant
 full suite. A full suite cannot replace missing evidence for a specialized
 environment or completion condition.
 
+Apply the [language-quality protocol](../../../docs/quality.md#apply-the-language-quality-protocol)
+to the affected maintained code. Record actual source and test-call coverage,
+not merely annotation presence or the check's name. When discovery or a checker
+changes, inspect the required bounded rejection evidence and every justified
+typing exception. Do not apply production-code checks to prose or disposable
+research outside the protocol's scope.
+
 Confirm that every applicable formatter, linter, type checker, compiler, and
 static analysis command registered by the repository ran against the exact
 target. Inspect narrow suppressions and exclusions to ensure that their stated

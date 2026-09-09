@@ -128,6 +128,13 @@ they apply:
 - resource, performance, security, privacy, portability, or migration risks
   caused by the existing implementation's structure.
 
+For audits involving language conventions or type contracts, apply the
+[language-quality protocol](../../../docs/quality.md#apply-the-language-quality-protocol).
+Inspect the configured source coverage and real boundary contracts before
+treating missing annotations, an unconfigured tool or a checker diagnostic as
+debt. Distinguish existing adequate controls and justified exceptions from
+confirmed gaps; do not prescribe the same machinery for every language.
+
 Do not require every audit to cover every concern. Do not embed a fixed list of
 project technologies, packages, modules, or current experiments in this skill.
 Obtain domain-specific expectations from the current repository and the audit

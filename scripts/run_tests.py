@@ -21,6 +21,8 @@ def run_tests(start_directory: Path, stream: TextIO | None = None) -> int:
     original_path = list(sys.path)
     test_root = start_directory.resolve()
     try:
+        # Resolve maintained tooling imports even when called from another directory.
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
         try:
             suite = unittest.TestLoader().discover(
                 str(start_directory), pattern="test_*.py"

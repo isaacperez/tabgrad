@@ -198,7 +198,13 @@ GitHub mutations.
 
 ## Implement behavior, tests, and documentation together
 
-Apply `docs/quality.md`. Follow the surrounding structure and configured style.
+Apply `docs/quality.md`, including its
+[language-quality protocol](../../../docs/quality.md#apply-the-language-quality-protocol).
+Identify the affected contracts and source coverage before editing; update
+applicable checks when adding a source root or language boundary. Keep the
+coverage and justified exceptions with the verification handoff rather than
+assuming annotations or a green test suite establish type safety.
+Follow the surrounding structure and configured style.
 Keep responsibilities, names, control flow, state ownership, errors, data
 movement, and performance costs understandable. When several variations share
 a real invariant, encode that rule once and make the differences explicit. Do
