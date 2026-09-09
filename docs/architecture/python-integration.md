@@ -14,6 +14,35 @@ not a second tensor engine. It records design constraints rather than release
 support; [compatibility records](../compatibility.md) establish the supported
 API and tested environments of a release.
 
+If Pyodide itself is unfamiliar, start with
+[Python in the browser](../concepts/python-in-the-browser.md). That chapter
+distinguishes the Python language, its interpreter, and the numerical engine.
+Here the question becomes how to connect them without duplicating tensor
+semantics or losing track of resources. The
+[managed-session flow](../flows/managed-python-session.md) then follows the
+contract through one application interaction.
+
+## Separate three questions before choosing an owner
+
+First, who runs the Python program? Pyodide provides the interpreter that
+evaluates ordinary Python code and makes JavaScript objects accessible to it.
+The application that loads that interpreter is the **host**. The host may use
+Python for tasks unrelated to Tabgrad, so the interpreter cannot be treated as
+an exclusively owned tensor resource.
+
+Second, who knows what a tensor operation means? Tabgrad's shared semantic
+runtime owns that knowledge. A **runtime session** groups tensor work and its
+resources under one lifetime. The Python compatibility layer translates Python
+calls into that runtime's operations; it does not define another graph or
+repeat numerical work in Python. The selected backend performs the arithmetic.
+
+Third, who coordinates the relationship? A **binding** connects the host's
+interpreter to one session and manages entry and shutdown. It needs a separate
+lifetime because neither a Python function returning nor the host retaining a
+variable says when tensor work is safe to release. The following sections
+define that relationship precisely. These are ownership boundaries within an
+integration, not a requirement for three processes or network services.
+
 ## Attach an interpreter without taking ownership of it
 
 The application host loads a supported, pinned Pyodide build and supplies its

@@ -9,6 +9,14 @@ A flow is not another execution layer. It connects contracts owned elsewhere
 and links back to those primary sources rather than restating every
 participant's complete design.
 
+## Follow Python integration
+
+[A managed Python session](managed-python-session.md) follows the accepted
+collaboration from a host preparing an interpreter through managed execution
+and cooperative cleanup. It starts by introducing the participants, and links
+to a conceptual introduction for readers unfamiliar with Pyodide. The sequence
+explains the design rather than serving as an installation tutorial.
+
 ## Questions this perspective answers
 
 Flow documentation answers questions such as:

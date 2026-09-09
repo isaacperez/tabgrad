@@ -27,6 +27,57 @@ Explain unfamiliar subjects as a teacher would. State the background,
 mechanism, consequence, and practical meaning. Do not assume that the reader
 knows a fact merely because it is familiar to the author.
 
+## Develop explanations before compressing them
+
+Explanatory chapters teach a reader how to reason about a subject. They need
+room for motivation, mechanisms and consequences, not merely an inventory of
+names or a table of contracts. Use sustained prose between diagrams, examples
+and summaries so the reader can follow why one idea leads to the next. A long
+chapter is appropriate when the subject needs that development; brevity is not
+a reason to omit the reasoning that makes a correct statement understandable.
+
+Begin with a defined reader and question. For introductory technical material,
+the usual reader is a programmer familiar with functions, objects and ordinary
+software abstractions, but unfamiliar with deep-learning runtime design or the
+specific browser integration being explained. Do not reteach that reader basic
+programming. Do explain domain-specific prerequisites, including the role and
+limits of external technologies, before relying on them.
+
+Develop the explanation in dependency order: establish the practical problem,
+introduce the necessary concepts and participants, explain their mechanism,
+and show its consequences through a representative situation. Introduce a
+necessary term before using it in a diagram, comparison or failure analysis.
+A glossary entry or a link does not repair an unexplained first use. When a
+later topic must be mentioned early, provide a short plain-language preview
+that makes the current paragraph understandable without following the link.
+
+Choose an example whose prerequisites the reader already has. Walk through
+what enters the system, what changes, which result is observable and why it
+matters. Discuss the nearby failure or boundary case when it exposes an
+important constraint. A catalogue of edge cases without the normal mechanism
+is no more helpful than a happy path that hides its limits. Apply the example
+verification rules below; conceptual illustrations must not resemble a
+verified installation procedure or unsupported API promise.
+
+Introduce each diagram's participants and explain what its arrows represent.
+Follow it with the interpretation the reader should take away, including any
+important distinction it omits. Diagrams support the argument; readers should
+not have to infer that argument from labels. Use a table for a useful comparison
+or lookup, not as a replacement for explaining unfamiliar alternatives.
+
+Depth is proportional to the reader's task, not a minimum word count or a
+mandatory section template. Exact reference entries may stay compact and link
+to background. Small corrections need not generate an introductory chapter.
+Conversely, an introductory chapter should not be reduced to a reference card.
+Remove repetition and unrelated background, not necessary causal explanation.
+
+Provide a reading path when several existing chapters serve different levels
+of familiarity. State what a reader gains from each step and keep direct
+access for readers who already know the prerequisites. This navigation belongs
+in the existing indexes; it does not require a second folder hierarchy by
+experience level. Brief local reminders are appropriate, while the complete
+contract retains its single authoritative home.
+
 ## Put information in its authoritative place
 
 Use [`docs/README.md`](README.md) to find the primary source for each subject.
@@ -199,3 +250,17 @@ A documentation review must also ask whether a new contributor can understand
 the text without the conversation that produced it. Shorter text is useful
 when it removes repetition, but it must not remove context required for a
 correct decision.
+
+Apply [the explanatory-depth rule](#develop-explanations-before-compressing-them)
+from the stated reader's starting knowledge. Follow the actual reading path:
+check whether each prerequisite is available before the text relies on it,
+whether the prose explains why the mechanism exists, and whether the example
+and diagram teach the same result. For substantive changes, the independent
+review required by the agent workflow includes this editorial judgment as well
+as technical accuracy. Material unexplained concepts, missing causal steps or
+misleading examples are required corrections, even when automated checks pass.
+Personal preferences about paragraph length or optional background are not.
+
+Record the affected readers and questions, the primary documents changed, and
+the review evidence in the issue or pull request. Do not introduce prose TDD,
+word-count gates or simulated model scenarios to replace this judgment.
