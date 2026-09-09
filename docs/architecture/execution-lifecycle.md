@@ -149,7 +149,7 @@ These are general observation capabilities, not a promise that every frontend
 entry exposes every variant. The [Python integration contract](python-integration.md#observe-results-without-blocking-browser-progress)
 defines the managed script entry, the guarded `tolist()` surface, and the
 explicit awaitable observation. Its host and task-lifetime restrictions keep
-interpreter shutdown distinct from cancelling one observation waiter.
+binding shutdown distinct from cancelling one observation waiter.
 
 ## Explicit transfer
 

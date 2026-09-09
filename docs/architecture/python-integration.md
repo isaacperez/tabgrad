@@ -93,7 +93,7 @@ sequenceDiagram
     Binding->>Runtime: close owned session
     Runtime-->>Binding: accepted work drained
     Binding->>Binding: remove owned integration resources
-    Binding-->>Host: close settles; interpreter remains host-owned
+    Binding-->>Host: close settles#59; interpreter remains host-owned
 ```
 
 The script-settlement step applies when a managed entry is active. A failed
