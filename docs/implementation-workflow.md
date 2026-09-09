@@ -364,6 +364,16 @@ and update only the indexes or summaries that need to point to it. Record the
 affected perspectives in the pull request, or explain why no durable
 documentation can become inaccurate.
 
+For explanatory material, identify the reader's starting knowledge and the
+questions they must be able to answer as part of issue definition, then apply
+[the explanatory-depth rule](documentation.md#develop-explanations-before-compressing-them)
+while implementing and reviewing the change. Record the actual reading path
+and editorial evidence with the documentation effects in the pull request.
+Existing work applies this rule when its affected documentation is revised;
+it does not require speculative documentation issues or a bulk rewrite of
+unrelated chapters. The [documentation review](documentation.md#review-documentation)
+owns the criteria, including the distinction between explanation and reference.
+
 A source file or class does not deserve architectural documentation merely
 because it exists. Record a concrete internal detail when another contributor
 needs it to preserve a contract across modules, understand a non-obvious

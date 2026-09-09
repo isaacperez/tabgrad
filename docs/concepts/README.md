@@ -5,6 +5,13 @@ reasoning about a particular implementation. It is for readers who need the
 meaning of an abstraction, the distinctions around it, and the relationships
 that remain true when implementation details change.
 
+## Start with browser Python
+
+[Python in the browser](python-in-the-browser.md) introduces Pyodide and the
+difference between executing a language and executing tensor operations. It
+assumes programming experience, not familiarity with browser interpreters.
+The chapter leads into the integration architecture and its lifecycle flow.
+
 ## Questions this perspective answers
 
 Concept documentation answers questions such as:

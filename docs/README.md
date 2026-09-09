@@ -23,6 +23,26 @@ competing sources of truth. The [documentation policy](documentation.md#navigate
 defines how a fact receives one primary home and how the other perspectives
 refer to it.
 
+## Learn Python integration from the beginning
+
+If you know programming but are new to browser Python and tensor runtimes,
+follow this path. Each chapter answers a different question rather than
+repeating the same contract at a different length.
+
+1. [Python in the browser](concepts/python-in-the-browser.md) explains what
+   Pyodide provides, why Tabgrad uses it, and why an interpreter is not a tensor
+   engine. Start here before learning the integration's internal names.
+2. [Python integration architecture](architecture/python-integration.md)
+   assigns responsibilities and explains the constraints that keep the Python
+   frontend connected to one shared runtime.
+3. [A managed Python session](flows/managed-python-session.md) follows those
+   participants through preparation, execution, failure and cleanup.
+
+These are explanations of concepts and accepted design. For an exact supported
+interface, use the [reference index](reference/README.md); for toolchain setup,
+use [development](development.md). Neither architectural intent nor a
+conceptual walkthrough substitutes for a release's compatibility evidence.
+
 ## Sources of truth
 
 Each subject has one primary source. Other documents may summarize a rule and
@@ -33,6 +53,8 @@ link to its primary source, but they must not create a competing version.
 | Project identity and public purpose | [`README.md`](../README.md) |
 | Central execution architecture and ownership boundaries | [`architecture/README.md`](architecture/README.md) |
 | Python interpreter attachment, bridge ownership, and integration constraints | [`architecture/python-integration.md`](architecture/python-integration.md) |
+| Browser Python, interpreter and tensor-runtime distinctions | [`concepts/python-in-the-browser.md`](concepts/python-in-the-browser.md) |
+| Collaboration through a managed Python session | [`flows/managed-python-session.md`](flows/managed-python-session.md) |
 | WebAssembly CPU kernel language, binary interface, modules, and memory ownership | [`architecture/webassembly-cpu-backend.md`](architecture/webassembly-cpu-backend.md) |
 | Contribution workflow | [`CONTRIBUTING.md`](../CONTRIBUTING.md) |
 | Integrated implementation workflow and reading guide | [`implementation-workflow.md`](implementation-workflow.md) |
