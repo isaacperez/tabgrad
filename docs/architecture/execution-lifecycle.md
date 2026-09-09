@@ -145,6 +145,12 @@ and diagnostic context explicitly. Python task cancellation detaches its
 consumer from the JavaScript promise; it does not cancel an already owned
 producer.
 
+These are general observation capabilities, not a promise that every frontend
+entry exposes every variant. The [Python integration contract](python-integration.md#observe-results-without-blocking-browser-progress)
+defines the managed script entry, the guarded `tolist()` surface, and the
+explicit awaitable observation. Its host and task-lifetime restrictions keep
+binding shutdown distinct from cancelling one observation waiter.
+
 ## Explicit transfer
 
 A backend transfer is a transfer-domain `ExecutableProgram` with a declared
