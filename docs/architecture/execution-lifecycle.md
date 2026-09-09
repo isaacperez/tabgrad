@@ -164,7 +164,7 @@ sequenceDiagram
     Runtime->>Runtime: validate both generation tokens
     Runtime->>Source: submit read or copy-out endpoint
     Source->>Staging: produce staged bytes
-    Source-->>Runtime: source succeeds; staging is readable
+    Source-->>Runtime: source succeeds#59; staging is readable
     Runtime->>Destination: submit write or copy-in endpoint
     Staging->>Destination: provide staged bytes
     Destination-->>Runtime: destination result may publish
@@ -173,7 +173,7 @@ sequenceDiagram
     and
         Destination-->>Runtime: destination drained
     end
-    Runtime->>Runtime: aggregate drained; release staging
+    Runtime->>Runtime: aggregate drained#59; release staging
 ```
 
 The aggregate `ExecutionTicket.result` succeeds only when the destination
