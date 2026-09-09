@@ -101,7 +101,17 @@ download browsers. On macOS and the GitHub Actions Linux runner it checks the
 standard application paths. Set `TABGRAD_CHROME` or `TABGRAD_FIREFOX` to an
 absolute executable path on another installation. Each test starts one
 headless browser at a time with a disposable profile and a loopback-only HTTP
-server, then terminates the process and removes that profile.
+server, then terminates the process and removes that profile. Set
+`TABGRAD_BROWSER` to `Chrome` or `Firefox` to run just that browser; leave it
+unset to preserve the full local sequence.
+
+The browser harness distinguishes two bounded waits. Navigation has 60 seconds
+to request the test page; after that request, the application has 30 seconds to
+load its artifacts, execute, and report a result. It does not retry a failed
+run. A failure reports the selected browser and version, elapsed time, last
+reported lifecycle phase, bounded request history without query data, process
+exit state, and bounded standard error. Profile-cleanup failures are reported
+without replacing the primary execution failure.
 
 ## Use the prepared environment
 
@@ -163,13 +173,16 @@ does not authorize an unprepared global interpreter.
 | Validate repository policies and structure | `python3 scripts/check_repository.py` | The prepared repository tooling environment |
 | Test the repository validator | `python3 scripts/run_tests.py` | The prepared repository tooling environment |
 | Install the pinned Rust toolchain | `rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy --target wasm32-unknown-unknown` | Network access and authorized writes to the configured rustup directories; does not modify the repository |
+| Install the pinned Rust build toolchain | `rustup toolchain install 1.98.1 --profile minimal --target wasm32-unknown-unknown` | Network access and authorized writes to the configured rustup directories; omits check-only components for isolated build-and-browser jobs |
 | Select the pinned npm release | `npm install --global npm@11.1.0 --ignore-scripts --no-audit --no-fund` | Node.js 22.12.0, network access, and authorized writes to that Node.js installation plus npm's cache; does not modify the repository |
 | Install locked JavaScript development dependencies | `npm ci --ignore-scripts --no-audit --no-fund` | Node.js 22.12.0 and npm 11.1.0; downloads TypeScript and recreates `node_modules/` from `package-lock.json` |
 | Build the browser distribution | `npm run build` | Prepared Node.js and Rust environments; rewrites ignored `dist/` and updates Cargo's ignored `target/` cache |
 | Check TypeScript and Rust | `npm run check` | Prepared Node.js and Rust environments; reads TypeScript source and runs Rustfmt plus Clippy for scalar and SIMD targets |
 | Run JavaScript and browser tests | `npm test` | Prepared build environment, Chrome, Firefox, permission to launch headless processes, and a free loopback port; rebuilds `dist/`, uses disposable browser profiles, and runs one browser at a time |
+| Build and run Node.js tests | `npm run test:node` | Prepared Node.js and Rust environments; rebuilds `dist/` and runs the JavaScript integration and raw-ABI suite without launching a browser |
 | Run JavaScript integration tests only | `npm run test:unit` | An existing `dist/` build and permission to listen on a loopback port; does not rebuild source |
 | Run real-browser integration tests only | `npm run test:browser` | An existing `dist/` build, Chrome, Firefox, and a loopback port; launches one headless browser at a time |
+| Build and test one or both browsers from source | `npm run test:browser:from-source` | Prepared build environment, installed browsers, and a loopback port; rebuilds `dist/`, then honors `TABGRAD_BROWSER` or tests Chrome followed by Firefox when it is unset |
 | Measure bounded runtime and artifact costs | `npm run measure` | Prepared build and browser environments; rebuilds `dist/` and writes an ignored report under `test-results/` |
 | Remove the browser distribution | `npm run clean` | Deletes only the ignored `dist/` directory |
 | Update the JavaScript lock after an authorized dependency change | `npm install --package-lock-only --ignore-scripts --no-audit --no-fund` | Node.js 22.12.0, npm 11.1.0, and registry access; rewrites only `package-lock.json` plus npm cache state |
@@ -184,9 +197,11 @@ the two read-only check commands.
 TypeScript reads `tsconfig.json`. Cargo reads `Cargo.toml`, `Cargo.lock`, and
 `rust-toolchain.toml`. `npm run check` does not rewrite maintained source;
 developers may run `cargo fmt --all` explicitly when they intend to format Rust
-source. `npm test` builds the exact ignored distribution tested by both the
-Node.js integration suite and the real browsers. No test installs or updates a
-dependency.
+source. `npm test` builds the exact ignored distribution once, runs the Node.js
+suite, and then tests that same distribution in both real browsers. The two
+from-source commands intentionally rebuild so isolated continuous-integration
+jobs do not depend on an artifact produced elsewhere. No test installs or
+updates a dependency.
 
 Delete `node_modules/`, `target/`, `dist/`, or `test-results/` only when their
 corresponding disposable local state must be rebuilt. Each path is ignored.
