@@ -95,6 +95,13 @@ The format and evidence required for compatibility claims are defined in
   and required attribution are documented.
 - The core should remain small enough to understand, test, and maintain.
 
+## Explore the repository
+
+The [repository structure guide](docs/repository-structure.md) explains where
+source, tests, tools and documentation belong, and how they relate to generated
+browser artifacts and local development files. For contribution procedures,
+start with [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## License
 
 Tabgrad is licensed under the [Apache License 2.0](LICENSE).

@@ -122,6 +122,7 @@ TIMELESS_DOCUMENTS = ARCHITECTURE_DOCUMENTS | {
     "docs/quality.md",
     "docs/reference/README.md",
     "docs/releases.md",
+    "docs/repository-structure.md",
     "docs/agent-instruction-review.md",
     "docs/version-control.md",
 }

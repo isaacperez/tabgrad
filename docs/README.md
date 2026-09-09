@@ -5,6 +5,13 @@ An issue records why a particular piece of work is needed. A pull request
 records a proposed change and its evidence. The documents listed here describe
 the product contract and rules that all work must follow.
 
+## Find your way around the repository
+
+The [repository map](repository-structure.md) explains source, test, tooling
+and configuration locations, how builds produce browser artifacts, and where
+new content belongs. It complements the technical perspectives below: use it
+to navigate files, then use a perspective to understand their meaning or design.
+
 ## Choose a technical perspective
 
 The same library can be understood through different questions. Choose the
@@ -57,6 +64,7 @@ link to its primary source, but they must not create a competing version.
 | Collaboration through a managed Python session | [`flows/managed-python-session.md`](flows/managed-python-session.md) |
 | WebAssembly CPU kernel language, binary interface, modules, and memory ownership | [`architecture/webassembly-cpu-backend.md`](architecture/webassembly-cpu-backend.md) |
 | Contribution workflow | [`CONTRIBUTING.md`](../CONTRIBUTING.md) |
+| Repository map and content placement | [`repository-structure.md`](repository-structure.md) |
 | Integrated implementation workflow and reading guide | [`implementation-workflow.md`](implementation-workflow.md) |
 | Issues, labels, project fields, and milestones | [`project-management.md`](project-management.md) |
 | Agent delegation and independent checks | [`agent-workflow.md`](agent-workflow.md) |

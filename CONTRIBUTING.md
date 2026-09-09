@@ -51,6 +51,10 @@ primary source for each other project rule.
 
 ## Before starting work
 
+Use the [repository map](docs/repository-structure.md) to locate the owner of
+the change and distinguish maintained source from generated or local files.
+It also explains placement and when a structural change requires a map update.
+
 Read the `README.md`, the relevant issue, and any documentation related to the
 part of the project you will change. Inspect the existing code and tests before
 deciding how to implement the change.
