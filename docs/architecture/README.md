@@ -125,6 +125,9 @@ Read the documents in this order when learning the architecture:
 1. [Frontends, runtime, and backends](frontends-runtime-backends.md) explains the
    three responsibility boundaries, how calls cross them, and what remains in
    backend memory.
+   [Python integration](python-integration.md) develops the language boundary:
+   how a host-owned interpreter connects to a tensor session, how wrappers and
+   observations cross that boundary, and who releases each resource.
 2. [Semantic state](semantic-state.md) separates a public tensor's identity, a
    particular logical value, shared storage, an operation occurrence, derivative
    history, and physical materialization.
