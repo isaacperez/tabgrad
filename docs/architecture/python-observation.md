@@ -203,7 +203,10 @@ rebuild or serialize the entire unchanged program on every call. Forward,
 backward and optimizer work use this same
 [finite program boundary](internal-representations.md).
 
-Only an explicit host observation needs output bytes. For an output of
+An explicit host observation moves the requested output bytes across the
+backend boundary. Explicit transfers, such as GPU-to-CPU transfer, also move
+numerical bytes under their separate transfer contract; neither case requires
+ordinary chained operations to read back every intermediate. For an output of
 **B bytes**, the shared route adds one B-byte copy from mapped GPU readback
 memory into shared storage, before conversion into owned Python output. This
 is additional to readback and Python conversion, not a zero-copy route. It
