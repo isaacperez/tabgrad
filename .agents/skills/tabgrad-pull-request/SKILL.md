@@ -160,6 +160,13 @@ the coordinator's own independent work. If the target branch advanced, apply
 the overlap rules in `docs/agent-workflow.md`, record the current comparison
 state, and repeat the evidence that the advance can affect.
 
+Apply [the publication check](../../../docs/agent-workflow.md#check-content-before-publication)
+before every push, pull request publication or update, and report relay. Its
+scope includes new Git history, exact title and body, metadata, attachments,
+and embedded evidence. A verified diff or frozen review snapshot does not clear
+other outgoing content. Route unsafe reviewer reports back to their author
+under that procedure before relaying a safe version.
+
 Do not copy stale evidence from an earlier commit. Do not check a statement
 because the intended work should eventually make it true. Keep credentials,
 private information, and sensitive vulnerability details out of public pull

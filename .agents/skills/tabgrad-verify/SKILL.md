@@ -250,7 +250,11 @@ the change.
 Inspect the complete diff and status for unrelated changes, credentials,
 private data, local configuration, debugging code, accidental generated files,
 unexplained binary files, dependency drift, disabled checks, and unsupported
-claims. Do not expose sensitive findings in a public report.
+claims. Apply
+[the publication check](../../../docs/agent-workflow.md#check-content-before-publication)
+to any prepared report or evidence payload in scope. Record its exact identity
+and limits; verification of a repository diff does not clear later attachments
+or publication metadata. Do not expose sensitive findings in a public report.
 
 Verification may confirm observable consistency, but it does not replace the
 independent reasoning required by `tabgrad-review`. Record code-quality or

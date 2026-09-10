@@ -299,8 +299,12 @@ to link or copy the report; a deliberate later change to a snapshot field needs
 a new identity and affected review. If the target branch advanced without being
 retargeted, apply the overlap rules in `docs/agent-workflow.md` and record the
 resulting comparison state. Protect sensitive findings through the private
-reporting route and put only a safe conclusion and protected evidence location
-in the public report.
+reporting route and apply
+[the publication check](../../../docs/agent-workflow.md#check-content-before-publication)
+to the final report. Include a protected evidence reference only when that
+reference is safe to disclose. If the coordinator identifies unsafe content,
+author a safe replacement report under that procedure; do not ask for an
+unedited relay of private material.
 
 ## Decide and report the review result
 

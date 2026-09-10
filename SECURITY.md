@@ -4,6 +4,40 @@ Tabgrad executes user-provided Python and tensor operations in a browser and
 may process private model inputs and outputs. Please report a vulnerability
 privately so that it can be investigated before details expose users.
 
+## Publication confidentiality
+
+This policy applies to all project publication, not only vulnerability reports:
+repository files and Git history, issues, pull requests, comments, CI logs,
+research evidence, attachments, releases, and externally hosted artifacts.
+Permission to publish project work is not permission to disclose private data.
+
+Never publish credentials, sensitive personal or organizational information,
+private inputs or outputs, or literal copies or excerpts of messages from
+either participant in a private human–assistant conversation. Quoting only
+the assistant, removing the speaker's name, or encoding or compressing the
+content does not make a private exchange publishable. Do not request an
+exception to this prohibition as a way to complete a publication step.
+
+Write self-contained technical requirements, decisions, and evidence summaries
+for the intended public audience. A summary is acceptable only when its own
+content is safe: paraphrasing does not remove confidential facts. Minimize
+identifying context such as private paths, account details, internal addresses,
+and machine identifiers; retain only safe environment information that is
+necessary to understand or reproduce the result.
+
+Inspect the actual outgoing content before transmission. If it cannot be
+inspected or prepared safely, stop that publication and report the limitation
+privately. Repository checks and secret scanners can assist inspection but
+cannot establish that a payload is free of private context. Apply the shared
+[publication procedure](docs/agent-workflow.md#check-content-before-publication)
+for evidence, attachments, and publication handoffs.
+
+If an exposure is discovered, stop further disclosure, preserve only the
+minimum necessary protected evidence, and notify the owner privately through
+the reporting route below. Do not reproduce the exposed material in a public
+issue or attempt an unauthorized history rewrite. Removing public content
+does not establish that all copies have been recovered.
+
 ## Supported versions
 
 Security support applies to the default branch and to releases explicitly

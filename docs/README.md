@@ -75,7 +75,8 @@ link to its primary source, but they must not create a competing version.
 | Test-driven development for distributed production behavior | [`quality.md`](quality.md#develop-production-behavior-test-first) |
 | Tests and repository quality checks | [`quality.md`](quality.md#select-checks-from-the-affected-risks) |
 | Refactoring, duplication, and technical debt | [`quality.md`](quality.md#review-code-quality-without-speculative-redesign) |
-| Security and private vulnerability reporting | [`SECURITY.md`](../SECURITY.md) |
+| Security, publication confidentiality, and private vulnerability reporting | [`SECURITY.md`](../SECURITY.md) |
+| Publication content inspection and safe evidence handoffs | [`agent-workflow.md`](agent-workflow.md#check-content-before-publication) |
 | Dependencies, licenses, and third-party code | [`dependencies.md`](dependencies.md) |
 | PyTorch compatibility and public API support | [`compatibility.md`](compatibility.md) |
 | Direct JavaScript API | [`javascript-api.md`](javascript-api.md) |
