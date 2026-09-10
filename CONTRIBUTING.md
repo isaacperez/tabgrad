@@ -141,6 +141,11 @@ because information is missing. Use `Blocked` when work that was ready or in
 progress cannot continue. Do not create a separate label to indicate that a
 user response is pending.
 
+All project publication must follow
+[`SECURITY.md`](SECURITY.md#publication-confidentiality) and the shared
+[content inspection procedure](docs/agent-workflow.md#check-content-before-publication).
+This applies to the complete outgoing material, not just its visible summary.
+
 Do not publish sensitive details about a possible security or privacy problem
 in a public issue, pull request, test, or log. Stop public disclosure, preserve
 only the information needed for investigation, inform the repository owner,

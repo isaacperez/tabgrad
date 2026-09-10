@@ -9,6 +9,51 @@ defines the rules shared by issue investigation, research, implementation,
 verification, review, maintenance audits, and merge checks. Delegation never
 replaces the applicable skill or expands the authority given by the user.
 
+## Check content before publication
+
+[`SECURITY.md`](../SECURITY.md#publication-confidentiality) owns the
+confidentiality policy. The procedure here applies whenever project work leaves
+the local workspace for publication, including an issue comment, a branch push,
+a review report, or an evidence attachment. It is separate from authorization
+to perform the external action and from verification of technical correctness.
+
+1. Identify the destination, audience, and exact outgoing payload. Include
+   title and body text, attachments, embedded content, generated logs, metadata,
+   and every new commit and file made reachable by a push, not just the final
+   diff. Check identity metadata against the intended public contributor
+   identity; do not silently publish a private address or local account name.
+2. Inspect the complete payload. Decode embedded evidence and inspect archive
+   members, filenames, and metadata; render images or documents when text
+   extraction alone cannot reveal their content. Do not execute attachments
+   to inspect them. A safe summary, filename, checksum, or successful secret
+   scan is not a substitute for inspecting the material itself.
+3. Prepare only safe content under the policy. Keep necessary original evidence
+   protected outside version control and prepare a separate public derivative
+   when needed. Record the kinds of omissions or substitutions without
+   reproducing the removed values. Give the derivative its own identity and
+   checksum; do not claim it is the original raw output or that a modified
+   reproduction was executed when it was not. Preserve relevant failures and
+   uncertainty. If safe evidence cannot support a claim, narrow the claim or
+   leave the evidence requirement unmet rather than fabricating completeness.
+4. Check the final prepared bytes and destination immediately before the
+   authorized transmission. Any subsequent content, packaging, metadata, or
+   destination change invalidates that check for the affected payload. Retain
+   a safe record identifying what was inspected and any evidence limitations;
+   do not copy the private material into the inspection record.
+
+If any part is unsafe or cannot be inspected, stop the affected publication,
+preserve unrelated work, and explain the blocker privately. For automatically
+published material such as CI logs, inspect the generating inputs and output
+policy before triggering it; if their public output cannot be bounded safely,
+do not trigger publication. There is no scanner-based guarantee of privacy.
+
+When a reviewer-authored report needs sanitization, return it to its author for
+a safe publishable version that preserves the conclusion, relevant limitations,
+and snapshot identity. The coordinator checks and relays that version without
+silently rewriting it under the reviewer's name. If sanitization affects the
+evidence supporting the conclusion, repeat the affected verification and
+review. The requirement to preserve a report never overrides confidentiality.
+
 ## Start an existing issue through one entry point
 
 A contributor may explicitly invoke `$tabgrad-start <issue-number>` to begin or
@@ -298,7 +343,10 @@ An already durable issue comment, pull request report, or registered artifact
 may supply earlier evidence, but it does not replace final review of the frozen
 pull request snapshot. Keep sensitive security or private information in the
 protected channel required by `CONTRIBUTING.md`; a public final report should
-state only the safe conclusion and the protected evidence location.
+state only the safe conclusion and, when safe to disclose, a protected evidence
+reference. Do not expose a private path or access-bearing link to locate it.
+Apply [the publication check](#check-content-before-publication) before relaying
+any report or evidence.
 
 ## Perform a preflight before implementation
 

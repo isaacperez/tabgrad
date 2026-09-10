@@ -90,7 +90,7 @@ unexplained `Not applicable`.
 | WebGPU | <!-- Give the result of WebGPU and WGSL checks, or explain why WebGPU behavior is unaffected. --> |
 | Browser and Pyodide | <!-- Give the tested environments and results, or explain why browser integration is unaffected. --> |
 | Performance, memory, and bundle size | <!-- Provide comparable measurements for material effects or explain why none are expected. --> |
-| Security and privacy | <!-- Describe the assessment and any data-flow change. --> |
+| Security and privacy | <!-- Describe the assessment and any data-flow change. Identify the exact outgoing material checked under docs/agent-workflow.md#check-content-before-publication, including attachments and new Git history; do not copy private evidence into this record. --> |
 | Dependencies and licenses | <!-- Identify dependency and license changes, or state that there are none. --> |
 | Generated files | <!-- Identify each generated output and its registered source and command, or state that there are none. --> |
 | Development environment and CI | <!-- Identify changed commands, tool versions, workflows, or branch settings, or explain why they are unaffected. --> |
