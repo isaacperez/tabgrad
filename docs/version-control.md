@@ -129,6 +129,13 @@ authorize it. When publication is authorized, verify the remote and branch
 name, use an ordinary non-forced push, and check the remote state after an
 ambiguous result before retrying.
 
+Apply the [publication content check](agent-workflow.md#check-content-before-publication)
+before pushing. Inspect every newly published commit, its files and identity
+metadata; removing private material from the latest tree does not remove it
+from earlier commits. If publication requires a history correction, stop and
+obtain the separate authority required by this document rather than pushing
+the unsafe history or rewriting it silently.
+
 Search for an existing pull request from the same branch before opening
 another. The pull request identifies exactly one primary implementation issue
 except for the documented research and no-issue cases. The complete

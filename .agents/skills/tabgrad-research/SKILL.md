@@ -89,9 +89,10 @@ tools before choosing their checks. Record justified limitations with the
 research evidence; do not require production TDD for an experiment or carry an
 experimental typing exception into production without review.
 
-Do not publish credentials, private data, proprietary inputs, or sensitive
-vulnerability details in results, logs, issues, or pull requests. Follow the
-private reporting process in `CONTRIBUTING.md`.
+Before publishing methods, results, or evidence, apply
+[the publication check](../../../docs/agent-workflow.md#check-content-before-publication)
+and the confidentiality policy in `SECURITY.md`. Reproducibility does not
+authorize publishing private context or uninspected raw artifacts.
 
 ## Define a fair method before interpreting results
 
@@ -153,6 +154,11 @@ Record enough information for another contributor to reproduce the result:
 - failures, warnings, unavailable environments, deviations, and retries; and
 - a durable location for evidence that cannot be represented faithfully in the
   issue.
+
+Use the publication procedure's protected-original and public-derivative
+handling when these records need sanitization. Distinguish original observations
+from edited reproductions, identify the exact public artifact, and disclose
+limits on independent reproduction without exposing the omitted information.
 
 Do not discard unexpected or failed results. Determine whether noise, caching,
 measurement overhead, invalid controls, environment failure, or a mistaken

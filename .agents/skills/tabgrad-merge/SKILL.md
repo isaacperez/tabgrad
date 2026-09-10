@@ -152,6 +152,12 @@ asks for that additional work.
 
 ## Perform the merge
 
+Before the merge, apply
+[the publication check](../../../docs/agent-workflow.md#check-content-before-publication)
+to the final squash commit message and metadata. Reuse current evidence for
+unchanged reviewed content; check any newly prepared completion comment or
+other outgoing report separately before publishing it.
+
 Recheck the pull request head commit immediately before the mutation. Merge the
 reviewed commit into the resolved target branch using the authorized squash
 method.

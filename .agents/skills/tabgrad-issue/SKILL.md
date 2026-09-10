@@ -41,8 +41,11 @@ project fields, milestones, parent or sub-issue relationships, and
 dependencies. Ask the user about any additional mutation that is not already
 authorized.
 
-Do not publish credentials, private data, or sensitive vulnerability details
-in a public issue. Follow the private reporting rule in `CONTRIBUTING.md`.
+Before each authorized mutation that publishes content, apply
+[the publication check](../../../docs/agent-workflow.md#check-content-before-publication)
+to the exact issue text, metadata, comments, and any attached evidence. Follow
+`SECURITY.md` for confidentiality and private reporting; an issue does not need
+private conversation excerpts to establish its requirements or authority.
 
 ## Search before a publishable draft or creation
 
