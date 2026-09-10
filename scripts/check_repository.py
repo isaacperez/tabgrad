@@ -96,6 +96,7 @@ ARCHITECTURE_DOCUMENTS = {
     "docs/architecture/model-integration.md",
     "docs/architecture/operation-admission.md",
     "docs/architecture/python-integration.md",
+    "docs/architecture/python-observation.md",
     "docs/architecture/reusable-programs.md",
     "docs/architecture/semantic-state.md",
     "docs/architecture/webassembly-cpu-backend.md",
