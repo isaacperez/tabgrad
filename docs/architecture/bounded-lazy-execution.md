@@ -99,6 +99,15 @@ receive a timer-based flush. This distinction avoids running dead computations
 while ensuring that ordered mutations and updates do not wait forever for an
 unrelated observation.
 
+That microtask invokes the same explicit request-advancement mechanism as
+observation; it is not the only driver. Ordinary Python observation can park
+the interpreter worker before its event loop runs again. It must advance the
+necessary demanded and ordered work directly rather than wait for its own
+queued microtask. Managed-entry completion also provides a progress boundary
+for required effects. This preserves one lifecycle without flushing unrelated
+pure work. The [observation decision](python-observation.md#one-completion-path-with-two-ways-to-observe-it)
+explains the independent backend and shared completion path.
+
 Random-number position is reserved during admission. Removing an unused random
 result can therefore skip its numerical kernel without changing the semantic
 sequence seen by later random operations.
@@ -116,8 +125,10 @@ else:
     result = negative_branch(score)
 ```
 
-`score.item()` demands only the dependencies needed to produce the scalar,
-waits through the supported asynchronous observation path, and returns it. Only
+This conceptual example illustrates control flow, not a release's model or
+operation coverage. `score.item()` demands only the dependencies needed to
+produce the scalar, waits through the managed
+[ordinary Python observation path](python-observation.md), and returns it. Only
 the branch that Python then executes is admitted. Tabgrad does not need to
 capture both branches or invent a graph break.
 

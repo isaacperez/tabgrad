@@ -193,8 +193,23 @@ the interface. Long-running Python on the main browser thread can block the
 page. Pyodide documents running in a
 [web worker](https://pyodide.org/en/stable/usage/webworker.html) to separate that
 work from the interface, but the worker has a different global environment.
-Tabgrad's same-environment bridge and an application's worker communication
-are separate concerns; an asynchronous return type is not a worker manager.
+An asynchronous return type alone does not create a worker or make it safe to
+block one. Managed Tabgrad Python places the interpreter and semantic runtime
+together in an interpreter worker. A separate GPU backend worker can finish
+pending numerical work while ordinary Python waits. Prepared CPU computation
+remains local. This placement preserves local tensor handles without making
+the interpreter responsible for the callbacks that must wake it.
+
+The host loads Pyodide in that worker from the outset; an existing interpreter
+on the page cannot be moved with all of its live objects. Shared GPU completion
+also requires cross-origin isolation, a hosting policy that enables shared
+memory under restricted cross-origin interactions. The
+[observation decision](../architecture/python-observation.md) introduces the
+waiting mechanism, explains those hosting requirements and compares the
+alternatives. Ordinary Python methods and an asynchronous host call are
+compatible: the host awaits a complete script while a method inside that
+script waits for its numerical value. Explicitly awaitable tensor methods are
+optional when Python tasks need to cooperate during observation.
 
 For performance, ask where time and data go: interpreter startup, Python call
 overhead, language crossings, numerical execution and result conversion are
@@ -206,7 +221,7 @@ not benchmark results. Comparable evidence belongs under
 
 ## From technologies to an application lifecycle
 
-Imagine an application that already uses Python to retain user settings. It
+Imagine an application that already uses Python in its worker to retain user settings. It
 wants to run a tensor calculation and later release its numerical resources,
 without losing those settings. Destroying the interpreter would release too
 much; keeping every tensor resource until the page closes would release too

@@ -6,6 +6,10 @@
 **CPU backend refinement:** accepted on 2026-09-08 under
 [research issue #31](https://github.com/isaacperez/tabgrad/issues/31).
 
+**Python observation refinement:** accepted on 2026-09-10 under
+[research issue #52](https://github.com/isaacperez/tabgrad/issues/52), documented
+in [Ordinary Python observation](python-observation.md).
+
 This record explains why Tabgrad uses one effect-aware, incrementally lazy
 TypeScript semantic runtime with bounded demand regions and two private numerical
 backends. The other architecture chapters define the resulting contracts in
@@ -197,11 +201,25 @@ alone is not performance evidence.
 | Reusable training with dynamic differentiation | [#27](https://github.com/isaacperez/tabgrad/issues/27) |
 | WebAssembly CPU toolchain, binary interface, and memory ownership | [#31](https://github.com/isaacperez/tabgrad/issues/31) |
 | Python attachment, object-handle bridge, and wrapper lifetime | [#43](https://github.com/isaacperez/tabgrad/issues/43) |
+| Ordinary Python observation, independent GPU progress and CPU readiness | [#52](https://github.com/isaacperez/tabgrad/issues/52) |
 
 The [Python integration decision](python-integration.md) refines the frontend
 boundary without changing the central execution model. It assigns interpreter,
 session, wrapper, and proxy ownership while keeping operation semantics in the
 shared runtime.
+
+The [observation refinement](python-observation.md) keeps those semantic
+boundaries while selecting a different progress mechanism: Python and the
+runtime share an interpreter worker, prepared CPU execution is local, and GPU
+physical execution progresses in an independent worker. Shared completion
+allows ordinary Python methods without mandatory native JSPI. The runtime
+explicitly advances requests and publication instead of depending exclusively
+on Promise continuations. This is a substantive advancement and deployment
+change, not a second engine or a transparent transport wrapper. Finite programs,
+resident intermediates and guarded reuse remain required across forward,
+backward and optimizer work; stable definitions are not fully reserialized on
+each invocation. Comparative timing remains qualified by the evidence limits
+in that decision, not a demonstrated speed advantage.
 
 ## Consequences
 
@@ -224,7 +242,8 @@ It also rejects some apparent shortcuts:
 The boundaries leave physical policy reversible. Backends can change kernels,
 layouts, allocators, compilation, fusion, and schedules. Runtime passes can
 change record layout or program transformations. Frontends can change transport
-deployment. Those changes remain local while the documented ownership and
+mechanisms within the accepted deployment and progress constraints. Those
+changes remain local while the documented ownership and
 observable semantics stay intact.
 
 ## What this decision does not establish
@@ -277,7 +296,8 @@ Reconsider this central decision only when reproducible evidence shows that:
   with direct guarded reuse;
 - correct training requires a different semantic representation;
 - common `ExecutableProgram` data prevents an important backend optimization;
-- the single-owner worker and handle boundary is untenable on required browsers;
+- the single semantic owner and local frontend-handle boundary is untenable on
+  required browsers;
   or
 - representative supported models cannot reach bounded steady memory under the
   ownership and reclamation rules.

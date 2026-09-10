@@ -154,15 +154,31 @@ from the same kernel contract:
    multiple-data instructions, commonly called WebAssembly SIMD, to process a
    fixed number of values per instruction.
 
-The CPU backend obtains its capability facts once, selects the compatible
-variant, and lazily compiles and instantiates that variant when CPU execution
-first needs it. A context uses one selected baseline module; it does not
-instantiate both and race them. Selection is visible in the backend capability
-and diagnostic state, but it does not change tensor semantics.
+The CPU backend obtains its capability facts once and selects the compatible
+variant. Direct JavaScript use may fetch, validate and compile it lazily on
+first CPU demand because that caller can await preparation. Managed Python
+prepares the selected module once before the first managed script enters the
+interpreter, within the host's asynchronous run boundary. The host reserves
+entry before preparation so overlap rejects immediately and cooperative close
+joins accepted preparation. Failure settles that host call explicitly.
+
+This difference prevents ordinary Python CPU observation from waiting on an
+initialization Promise queued on its own parked worker. The compiled module
+is reused; a context's memory and instance may be created synchronously from
+it when needed. CPU numerical execution remains local. Module readiness does
+not compute tensors, force graph evaluation or make preparation a per-operation
+cost. The [observation decision](python-observation.md#prepare-cpu-execution-before-entering-python)
+explains the startup tradeoff and host contract.
+
+A context uses one selected baseline module; it does not instantiate both and
+race them. Selection is visible in backend capabilities and diagnostics but
+does not change tensor semantics. The two entry arrows below differ only in
+when the same preparation is required.
 
 ```mermaid
 flowchart TD
-    Need[First demanded CPU program]
+    Need[Direct JavaScript first CPU demand]
+    Python[Managed Python before first script execution]
     Snapshot[CPU capability snapshot]
     Vector{Required WebAssembly SIMD available?}
     Scalar[Load scalar module]
@@ -170,6 +186,7 @@ flowchart TD
     Context[CPU backend context<br/>one selected baseline variant]
 
     Need --> Snapshot --> Vector
+    Python --> Snapshot
     Vector -->|No| Scalar --> Context
     Vector -->|Yes| Simd --> Context
 ```
@@ -361,9 +378,11 @@ available before all physical use ends; allocations return to a pool only after
 both semantic pins and [`ExecutionTicket.drained`](execution-lifecycle.md) allow
 reuse.
 
-Web Workers, shared memory, and atomic instructions are an optional CPU
-acceleration profile, not a requirement of the portable scalar and vector
-modules. A threaded profile is valid only when the browser is cross-origin
+Web Workers, shared memory, and atomic instructions for parallel CPU arithmetic
+are an optional acceleration profile, not a requirement of the portable scalar
+and vector modules. The interpreter worker and shared GPU-observation protocol
+do not turn these CPU modules into threaded or shared-memory modules. A
+threaded CPU profile is valid only when the browser is cross-origin
 isolated where required, capability admission is explicit, TypeScript retains
 worker lifecycle and scheduling ownership, and each instance's private stack,
 static data, and thread-local storage regions are proven disjoint. Demonstrating

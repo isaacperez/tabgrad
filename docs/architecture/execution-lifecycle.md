@@ -113,17 +113,21 @@ erase an admitted effect or a failure that has no other public result.
 
 ## Observation from JavaScript and Python
 
-The canonical observation is asynchronous and owns one promise per logical
-observation. JavaScript exposes that asynchronous surface directly. Python
-always has an awaitable surface.
+An observation owns a request and its result state. JavaScript exposes a
+Promise for that observation; Python offers ordinary methods and optional
+awaitable methods over the same state. A Promise observes a transition rather
+than being the only mechanism capable of driving it. Request admission,
+submission and completion publication have explicit advancement that both
+synchronous observation and asynchronous notification can use without creating
+another invocation lifecycle.
 
-A synchronous-looking Python `item()` is allowed only when the runtime can prove
-that the complete entry stack is suspendible through JavaScript Promise
-Integration (JSPI), such as a Pyodide `runPythonAsync` or `callPromising` path.
-This is an architectural capability check, not a selected public method name.
-If numerical work is still pending under a non-suspendible `runPython` entry,
-the call fails before starting work. A scalar that is already available in host
-memory may return synchronously.
+The [Python observation decision](python-observation.md) selects shared waiting
+for pending GPU results without native JSPI. Python and semantic state share an
+interpreter worker; the independent backend can finish while that worker is
+parked. Ready host values and prepared CPU execution remain local. A supported
+managed entry establishes readiness and admission before Python runs; arbitrary
+raw interpreter entry is not implied. Work cannot depend on a local callback
+whose event loop is blocked by that same observation.
 
 ```mermaid
 sequenceDiagram
@@ -134,11 +138,18 @@ sequenceDiagram
     Python->>Runtime: observe(tensor handle)
     Runtime->>Runtime: select demanded closure
     Runtime->>Backend: prepare/bind/submit request
-    Backend-->>Runtime: result promise settles
+    Backend-->>Runtime: committed result state becomes available
     Runtime-->>Python: publish value or causal error
-    Backend-->>Runtime: drained promise settles
+    Backend-->>Runtime: physical drain becomes observable
     Runtime->>Runtime: release invocation-state semantic pins
 ```
+
+The arrows show logical transitions, not a requirement that a consumer-side
+Promise callback runs at each step. Synchronous observation validates shared
+request/generation state directly; asynchronous notification advances the same
+publication. Newly relevant transitions are processed without repeatedly
+rescanning retained history. Required ordered effects also progress at the
+managed-entry boundary.
 
 Reentrant Python-to-JavaScript-to-Python callbacks propagate and restore runtime
 and diagnostic context explicitly. Python task cancellation detaches its
@@ -147,7 +158,7 @@ producer.
 
 These are general observation capabilities, not a promise that every frontend
 entry exposes every variant. The [Python integration contract](python-integration.md#observe-results-without-blocking-browser-progress)
-defines the managed script entry, the guarded `tolist()` surface, and the
+defines the managed script entry, ordinary `tolist()`, and the
 explicit awaitable observation. Its host and task-lifetime restrictions keep
 binding shutdown distinct from cancelling one observation waiter.
 
@@ -215,6 +226,16 @@ entries from the retired generation cannot update that new owner. A request can
 be re-prepared and re-materialized only from a reproducible semantic source or
 valid recoverable copy. Otherwise it fails deterministically and identifies the
 lost backend state.
+
+For an independent worker owner, terminal retirement and physical drain must
+also remain distinct. An independently progressing supervisor can retire a
+generation and wake its consumers, which validate committed request state
+rather than trusting a notification. Retirement before result acceptance
+prevents that acceptance; it does not undo a previously accepted host value.
+Terminating the worker does not acknowledge GPU drain or prove hardware memory
+reclamation. Unconfirmed resources remain accounted for and quarantined from
+reuse. Attempting replacement preparation is not a guarantee that another
+adapter or device will be available.
 
 ## Closing a runtime session
 
