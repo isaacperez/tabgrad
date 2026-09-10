@@ -18,8 +18,9 @@ and [compatibility](../compatibility.md).
 
 ## Meet the participants before following the calls
 
-The **host** is the application code arranging the work. It prepares Pyodide,
-retains the interpreter and decides when it no longer needs a Tabgrad
+The **host** is the application code arranging the work. It prepares Pyodide
+in an interpreter worker, retains the interpreter and decides when it no
+longer needs a Tabgrad
 connection. The **interpreter** executes Python and holds its environment,
 including variables and imported modules. It can serve purposes other than
 tensor computation.
@@ -32,7 +33,15 @@ into that runtime's operations; the **backend** performs the selected numerical
 work. These names describe responsibilities, not a sequence of separate
 servers or a requirement for a new thread at each step.
 
-Keep one application situation in mind. A page retains a Python setting used
+Python and the semantic runtime share the interpreter worker. CPU arithmetic
+uses a prepared local backend; GPU execution uses an independent backend
+worker so it can complete while ordinary Python waits. The host's admission
+endpoint remains responsive outside the blocked interpreter. The
+[observation architecture](../architecture/python-observation.md) explains this
+placement and its shared-memory hosting requirements. Neither an existing
+page interpreter nor its objects can be silently relocated by attachment.
+
+Keep one application situation in mind. An application retains a Python setting used
 by several interactions. For one interaction it wants to create two small
 vectors, add them, inspect the result, and release the tensor session. The
 setting should survive that session. This situation exposes why script
@@ -68,8 +77,18 @@ connection whose Python modules refer to an incomplete or different session.
 After attachment, the host submits a script through the binding's managed
 `runPythonAsync` entry. Admission means accepting responsibility for that
 script's completion. One script is admitted at a time, with overlap rejected
-rather than silently queued. Reserving the entry before starting Python makes
-this rule apply even when the host makes two consecutive calls without waiting.
+rather than silently queued. The host endpoint reserves the entry before
+asynchronous CPU-module preparation, not after the script starts. It rejects
+busy or closed calls before posting to a worker that may already be blocked.
+This rule therefore applies even when the host makes two consecutive calls
+without waiting.
+
+Before the first accepted script enters Python, the selected CPU module is
+fetched, checked and compiled once for reuse. That preparation makes ordinary
+local CPU execution possible without waiting on a local initialization Promise
+from inside Python. It does not evaluate tensors. Failure here settles the
+accepted entry without starting its script; close still joins the accepted
+preparation. Later entries reuse the prepared module.
 
 In the vector situation, Python calls the frontend to create its inputs and
 record their addition. The runtime validates and records tensor meaning.
@@ -94,6 +113,8 @@ sequenceDiagram
     participant Backend as Selected numerical backend
     Host->>Binding: submit one managed script
     Binding->>Binding: reserve entry completion
+    Binding->>Runtime: prepare selected CPU module if needed
+    Runtime-->>Binding: module is ready for local execution
     Binding->>Python: execute accepted script
     Python->>Runtime: create inputs and record addition
     Python->>Runtime: request numerical observation
@@ -117,6 +138,15 @@ return would not identify a point at which it has stopped using the binding.
 Likewise, the host must not run raw interpreter calls concurrently with a
 managed entry. These are cooperation requirements: admission control does not
 inspect every possible Python task or turn arbitrary code into a sandbox.
+
+For a pending GPU observation, the backend worker publishes committed shared
+state and requested bytes. The interpreter worker checks that state directly
+when it wakes; completion cannot depend on a callback queued on that parked
+worker. Local Python tasks are parked too, whereas optional awaitable
+observation lets them cooperate at await points. Ready host values and prepared
+CPU numerical execution need no remote round trip. The sequence above shows
+logical collaboration, not a requirement to send every tensor operation to a
+worker or to read intermediate tensors back to Python.
 
 ## A return value has a lifetime too
 
@@ -160,7 +190,8 @@ switching to another backend.
 ## Closure: stop admission before releasing the session
 
 The host can request close while a script is still active. Close first stops
-new entries and then waits for the accepted script to settle. Only then can
+new entries at the independently progressing host endpoint and then waits for
+accepted preparation and script execution to settle. Only then can
 the session drain its accepted work and release owned resources. Repeated
 close calls share completion rather than initiating competing shutdowns.
 
@@ -168,11 +199,11 @@ close calls share completion rather than initiating competing shutdowns.
 sequenceDiagram
     participant Host as Application host
     participant Binding as Python binding
-    participant Script as Accepted Python script
+    participant Entry as Accepted managed entry
     participant Session as Owned runtime session
     Host->>Binding: request close
     Binding->>Binding: reject new entries
-    Script-->>Binding: settle successfully or with failure
+    Entry-->>Binding: preparation and script settle
     Binding->>Session: request drain and close
     Session-->>Binding: accepted work drained
     Binding->>Binding: remove owned integration resources
@@ -190,6 +221,13 @@ termination is an application-lifecycle decision outside this binding
 contract. For example, controlling a worker has different ownership and data
 loss consequences from closing a tensor session; the two must not be silently
 substituted for one another.
+
+An entry cannot await the close that is itself joining that entry; doing so
+creates a dependency cycle. Backend worker failure has a separate retirement
+path: an independent supervisor can invalidate its generation and wake waiting
+consumers, but worker termination does not prove GPU drain. Unconfirmed physical
+resources remain accounted for rather than being declared reusable. These
+failure rules do not make arbitrary user-code interruption part of close.
 
 ## After close: preserve the interpreter, not the old connection
 

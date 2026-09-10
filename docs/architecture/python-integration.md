@@ -20,7 +20,10 @@ distinguishes the Python language, its interpreter, and the numerical engine.
 Here the question becomes how to connect them without duplicating tensor
 semantics or losing track of resources. The
 [managed-session flow](../flows/managed-python-session.md) then follows the
-contract through one application interaction.
+contract through one application interaction. The
+[observation decision](python-observation.md) explains why ordinary Python
+methods can wait without native JSPI, and the resulting worker and hosting
+requirements.
 
 ## Separate three questions before choosing an owner
 
@@ -45,9 +48,10 @@ integration, not a requirement for three processes or network services.
 
 ## Attach an interpreter without taking ownership of it
 
-The application host loads a supported, pinned Pyodide build and supplies its
-interpreter instance to Tabgrad's attachment entry, `attachPython`. The returned
-**binding** associates that interpreter with one runtime session. The binding
+The application host loads a supported, pinned Pyodide build in an interpreter
+worker and supplies its local interpreter instance to Tabgrad's attachment
+entry, `attachPython`. The returned **binding** associates that interpreter
+with one runtime session. The binding
 owns the session it creates, but borrows the interpreter. This distinction
 means closing Tabgrad releases tensor resources without destroying the host's
 Python environment or unrelated Python objects.
@@ -68,11 +72,15 @@ flowchart TB
     Session --> Backend[Explicitly selected numerical backend]
 ```
 
-The arrows describe ownership or calls, not messages between processes. The
-Python frontend and runtime share one JavaScript realm, so the connection does
-not require serialization. The [deployment boundary](frontends-runtime-backends.md#logical-ownership-is-not-physical-deployment)
-also permits an application-owned worker; attachment itself is not a worker
-manager.
+The arrows describe ownership or calls, not a physical thread map. The Python
+frontend and semantic runtime share the interpreter worker's JavaScript realm,
+so their connection does not require serialization. The CPU numerical path is
+local; GPU physical execution belongs to an independently progressing backend
+worker. The [deployment boundary](frontends-runtime-backends.md#logical-ownership-is-not-physical-deployment)
+shows that placement. The host must create the interpreter in the worker:
+attachment cannot migrate a page-owned interpreter, preserve its objects by
+copying them, or silently replace it. A composed worker bootstrap does not
+change the fact that the interpreter is borrowed rather than session-owned.
 
 Only one attachment may be pending or active for an interpreter. A competing
 attachment fails before it can install a second session. Accepting a borrowed
@@ -90,6 +98,15 @@ is destroyed before the managed entry settles. Host code that obtains Python
 objects through other Pyodide APIs owns those objects and their proxies.
 
 One managed entry may run at a time. Overlap is rejected rather than queued.
+An independently progressing host endpoint reserves that entry before any
+asynchronous CPU-module preparation and rejects busy or closed calls before
+dispatching them to Python. It owns one active-entry record and a closing
+flag/Promise, not a second tensor runtime. Before the first accepted script
+enters the interpreter, the selected CPU module is prepared once for reuse.
+Preparation failure settles the accepted host call explicitly. The
+[preparation rationale](python-observation.md#prepare-cpu-execution-before-entering-python)
+explains why this is readiness work rather than eager tensor evaluation.
+
 The host must not concurrently drive the borrowed interpreter through raw
 Pyodide calls during a managed run. This is a cooperation contract, not a
 security sandbox or a mechanism for detecting every possible interpreter call.
@@ -106,27 +123,29 @@ does not prove that arbitrary Python tasks or JavaScript callbacks have stopped,
 and it does not introduce a hidden task scheduler or cancellation of host work.
 
 Closing the binding is idempotent and cooperative. It rejects new managed
-entries, lets an accepted entry settle, drains the owned session, and cleans up
-owned integration resources. It cannot forcibly interrupt an infinite Python
+entries, joins accepted preparation and script execution, drains the owned
+session, and cleans up owned integration resources. It cannot forcibly
+interrupt an infinite Python
 loop or promise to finish while user code waits forever for an external event.
 
 ```mermaid
 sequenceDiagram
     participant Host as Application host
     participant Binding as Python binding
-    participant Python as Accepted script
+    participant Entry as Accepted managed entry
     participant Runtime as Runtime session
     Host->>Binding: request close
     Binding->>Binding: reject new managed entries
-    Python-->>Binding: script and joined tasks settle
+    Entry-->>Binding: preparation, script and joined tasks settle
     Binding->>Runtime: close owned session
     Runtime-->>Binding: accepted work drained
     Binding->>Binding: remove owned integration resources
     Binding-->>Host: close settles#59; interpreter remains host-owned
 ```
 
-The script-settlement step applies when a managed entry is active. A failed
-entry still settles: failure does not remove the binding's cleanup obligation.
+The settlement step applies when a managed entry is active, even if preparation
+has not yet entered Python. A failed entry still settles: failure does not
+remove the binding's cleanup obligation.
 The runtime's detailed completion and drain distinction is defined in
 [Requests, completion, and failure](execution-lifecycle.md).
 
@@ -219,24 +238,33 @@ handle table does not establish a speed advantage.
 ## Observe results without blocking browser progress
 
 Producing a Python list requires actual numbers, so `tolist()` is an
-observation, not a metadata lookup. Both the synchronous-looking `tolist()`
-and the explicit Tabgrad extension `tolist_async()` use the same asynchronous
-runtime observation path. Neither selects another engine or recomputes the
-answer in Python.
+observation, not a metadata lookup. Ordinary `tolist()` and the optional
+Tabgrad extension `tolist_async()` observe the same runtime request and logical
+result. Neither selects another engine or recomputes the answer in Python.
+The [observation contract](python-observation.md) also governs scalar and
+control-flow observations without requiring model authors to rewrite their
+ordinary methods as awaitable calls.
 
-JavaScript Promise Integration (JSPI) allows a suitable WebAssembly entry stack
-to suspend while JavaScript continues making progress. The synchronous-looking
-surface is permitted only in a supported suspendible managed entry. Its guard
-runs before demanding numerical work; without the required capability or entry
-context, it raises a clear capability/context error. The awaitable surface
-remains the explicit alternative. This attachment contract does not promise a
-synchronous shortcut for cached host data or every raw Pyodide entry route.
+For pending GPU output, ordinary observation parks the interpreter worker while
+the independent backend commits shared completion state and requested bytes.
+The runtime explicitly advances request and publication state rather than
+depending solely on a local Promise callback. Ready host values and prepared
+CPU numerical execution remain local. Native JSPI and Pyodide's experimental
+`can_run_sync` are not prerequisites of this selected mechanism.
 
-Capabilities are checked, not inferred from a browser name. The research used
-Pyodide's experimental `can_run_sync` facility, so integration must pin and
-probe that dependency rather than assume its interface is stable. Tested
-Pyodide versions and browser support are versioned facts, not guarantees made
-by this chapter.
+The host's asynchronous script entry is different from an awaitable operation
+inside Python. Shared waiting parks local Python tasks too; deliberately
+awaitable observation lets those tasks cooperate. Scripts must join the tasks
+they create, and required GPU completion must not depend on a callback queued
+on the parked interpreter. Nested internal callbacks stay within the current
+invocation and propagate context explicitly. Arbitrary raw Pyodide entry and
+escaped task management are not implied by the ordinary-method contract.
+
+Capabilities and managed context are checked before admitting unsupported
+work. Missing worker placement, shared-memory isolation or selected backend
+capability produces an explicit integration/capability error, not a switch to
+JSPI or another numerical backend. Tested Pyodide versions and browser support
+remain versioned evidence, not promises inferred from a browser name.
 
 Cancelling a Python observation waiter detaches that consumer; it does not
 cancel already accepted runtime work. Its resource leases remain until the
@@ -270,11 +298,13 @@ remain tied to the old closed binding, not rebound to a new session.
 
 ## Decision, alternatives, and limits of the evidence
 
-The [accepted research record](https://github.com/isaacperez/tabgrad/issues/43#issuecomment-5600702674)
-compares the alternatives and preserves the method, sources, failed pilots,
+The [attachment research record](https://github.com/isaacperez/tabgrad/issues/43#issuecomment-5600702674)
+compares its alternatives and preserves the method, sources, failed pilots,
 raw results, and independent challenge. The
 [approval record](https://github.com/isaacperez/tabgrad/issues/43#issuecomment-5600895653)
-accepts the contract. Its material tradeoffs are:
+accepted that attachment contract. The
+[observation decision under #52](python-observation.md) supersedes its waiting
+and deployment choices while retaining the ownership boundaries below:
 
 | Choice | Reason and cost |
 | --- | --- |
@@ -283,7 +313,7 @@ accepts the contract. Its material tradeoffs are:
 | Existing opaque objects rather than a numeric handle table | Avoids a second mapping and its release rules in one realm; a serialized transport would need a separate representation. |
 | Static Python source rather than a wheel installation path | Avoids an installer dependency; artifact consistency and transactional import cleanup still require an explicit owner. |
 | Wrapper finalization plus session close rather than closing every expression temporary | Preserves ordinary Python use and escaping live values; cycle collection is not deterministic. |
-| One asynchronous observation path with guarded suspension | Preserves browser progress and shared semantics; synchronous-looking calls have an explicit entry-context restriction. |
+| One request lifecycle with explicit synchronous and asynchronous observation | Preserves shared semantics without mandatory JSPI; the managed Python GPU profile requires independent backend progress, worker placement and isolation. |
 
 The probe exercised both object and numeric routes through real Tabgrad
 JavaScript and WebAssembly artifacts, using Pyodide 314.0.6 in Chrome
@@ -298,6 +328,6 @@ Reconsider the private transport when measured object/proxy costs or a required
 serialization boundary justify another representation. Reconsider the managed
 execution contract if concurrent sessions or escaped background tasks become
 required behavior; adding a scheduler silently would change ownership. Changes
-to Pyodide's proxy, import, or suspension facilities require renewed versioned
+to Pyodide's proxy, import, or task facilities require renewed versioned
 evidence. None of these conditions justifies duplicating tensor semantics in
 Python or introducing an implicit numerical fallback.

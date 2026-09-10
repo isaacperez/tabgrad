@@ -44,6 +44,9 @@ repeating the same contract at a different length.
    frontend connected to one shared runtime.
 3. [A managed Python session](flows/managed-python-session.md) follows those
    participants through preparation, execution, failure and cleanup.
+4. [Ordinary Python observation](architecture/python-observation.md) examines
+   why waiting is a browser-design question, how independent backend progress
+   solves it without mandatory JSPI, and the tradeoffs behind that decision.
 
 These are explanations of concepts and accepted design. For an exact supported
 interface, use the [reference index](reference/README.md); for toolchain setup,
@@ -60,6 +63,7 @@ link to its primary source, but they must not create a competing version.
 | Project identity and public purpose | [`README.md`](../README.md) |
 | Central execution architecture and ownership boundaries | [`architecture/README.md`](architecture/README.md) |
 | Python interpreter attachment, bridge ownership, and integration constraints | [`architecture/python-integration.md`](architecture/python-integration.md) |
+| Python observation mechanism, worker progress, deployment decision and alternatives | [`architecture/python-observation.md`](architecture/python-observation.md) |
 | Browser Python, interpreter and tensor-runtime distinctions | [`concepts/python-in-the-browser.md`](concepts/python-in-the-browser.md) |
 | Collaboration through a managed Python session | [`flows/managed-python-session.md`](flows/managed-python-session.md) |
 | WebAssembly CPU kernel language, binary interface, modules, and memory ownership | [`architecture/webassembly-cpu-backend.md`](architecture/webassembly-cpu-backend.md) |
