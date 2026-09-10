@@ -168,29 +168,46 @@ engine. No existing tensor engine sits underneath these backends.
 
 ## Logical ownership is not physical deployment
 
-The boundaries above do not dictate a thread layout. In a simple JavaScript
-application, the frontend and runtime can call each other directly. When a
-worker is used, Pyodide, the TypeScript runtime, and the WebGPU device live in
-the same JavaScript realm. This keeps live Python proxies and `GPUBuffer`
-objects out of worker messages.
+The logical boundaries do not require a worker per component. A direct
+JavaScript application can keep frontend and runtime together and observe
+results asynchronously. Managed Python adds a specific progress requirement:
+ordinary Python observation can park its interpreter worker. Anything needed
+to complete a pending GPU request must therefore progress independently.
+
+The [Python observation decision](python-observation.md) places Pyodide, its
+frontend and the single semantic runtime together in an interpreter worker.
+Prepared CPU execution remains local. A separate backend worker owns the GPU
+device and finite physical execution. The application host admits scripts and
+coordinates close without depending on the parked interpreter's event loop.
 
 ```mermaid
 flowchart TB
     UI[Page or application code]
 
-    subgraph Worker[Optional single owning worker realm]
+    subgraph Worker[Interpreter worker realm]
         Pyodide[Pyodide and Python frontend]
         TS[TypeScript runtime]
-        Device[WebGPU device or WebAssembly backend context]
-        Pyodide --> TS --> Device
+        CPU[Prepared local WebAssembly backend]
+        Pyodide --> TS
+        TS -->|local numerical calls| CPU
     end
-
-    UI <-->|serializable requests, handles,<br/>small metadata and observations| Worker
+    subgraph BackendWorker[Independent GPU backend worker]
+        Device[WebGPU device and resident resources]
+    end
+    UI <-->|managed scripts and entry completion| Worker
+    TS <-->|finite programs and bindings / shared completion and observed bytes| Device
 ```
 
-Moving a boundary to a worker may improve interface responsiveness, but it does
-not change tensor semantics. Large tensor payloads should not shuttle through
-messages merely because the deployment uses a worker.
+These arrows describe the managed Python GPU profile, not a required topology
+for direct JavaScript CPU use. Live Python proxies and GPU objects stay with
+their owners. The backend boundary carries finite work and opaque physical
+identities, not a semantic remote call for every Python operation. Result
+observation can copy requested bytes; intermediates remain resident.
+
+Preserving that boundary requires explicit request/completion advancement in
+the semantic runtime. A Promise-only queue cannot be made safe simply by
+blocking its own worker. The [execution lifecycle](execution-lifecycle.md)
+keeps synchronous publication and asynchronous notification on one owned state.
 
 ## End-to-end example
 

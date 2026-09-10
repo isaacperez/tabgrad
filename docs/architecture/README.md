@@ -128,6 +128,9 @@ Read the documents in this order when learning the architecture:
    [Python integration](python-integration.md) develops the language boundary:
    how a host-owned interpreter connects to a tensor session, how wrappers and
    observations cross that boundary, and who releases each resource.
+   [Ordinary Python observation](python-observation.md) explains the waiting
+   problem, the independent GPU worker and shared-memory decision, CPU
+   readiness, alternatives and the limits of the research evidence.
 2. [Semantic state](semantic-state.md) separates a public tensor's identity, a
    particular logical value, shared storage, an operation occurrence, derivative
    history, and physical materialization.
