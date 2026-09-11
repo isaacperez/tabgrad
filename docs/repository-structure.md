@@ -38,6 +38,7 @@ responsibility, not a separately published product.
 | [`tests/`](../tests) | Python tests of repository tooling, including the policy checker and test discovery | Browser runtime tests use the separately configured `js-tests/` route |
 | [`scripts/`](../scripts) | Maintained build, check, test-runner and measurement tools used by contributors and CI | Tensor semantics and numerical implementations belong to their runtime or kernel owners |
 | [`docs/`](README.md) | Technical explanations, references and durable contributor rules | Work status and unresolved design discussions belong in issues and pull requests |
+| [`assets/brand/`](../assets/brand/README.md) | Maintained vector brand artwork and its palette, typography and usage guide | Runtime artifacts belong in `dist/`; font software and temporary design studies are not brand source files |
 | [`.github/`](../.github) | GitHub issue forms, the PR template and CI workflow configuration | Complete project rules live in their indexed documents, not only in a template |
 | [`.agents/`](../.agents) | Repository-specific skills that apply the documented contributor workflow | Skills do not establish competing technical or project policies |
 
