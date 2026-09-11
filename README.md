@@ -1,9 +1,9 @@
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/brand/tabgrad-logo-dark.svg">
-  <img src="assets/brand/tabgrad-logo.svg" alt="Tabgrad logo" width="400">
-</picture>
-
-# Tabgrad
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/brand/tabgrad-logo-dark.svg">
+    <img src="assets/brand/tabgrad-logo.svg" alt="Tabgrad" width="400">
+  </picture>
+</p>
 
 Tabgrad is an independent browser-native tensor runtime for running Python
 locally with a PyTorch-compatible API on WebGPU and CPU.
