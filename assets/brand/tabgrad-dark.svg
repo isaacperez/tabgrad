@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-labelledby="title">
+  <title id="title">Tabgrad symbol for dark backgrounds</title>
+  <defs>
+    <clipPath id="tabgrad-boundary-2" clipPathUnits="userSpaceOnUse">
+      <path d="M32 48H108L117.237604307 64H224L207.834192463 92H80.497422612L128 174.276877527L168.574374158 104H200.905989232L143.170962313 204H112.829037687L32 64Z"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#tabgrad-boundary-2)">
+    <path fill="#F6F5F2" d="M-256 -256H512V512H-256Z"/>
+    <path fill="#A796FF" d="M172.038475773 98H512V512H-66.984535672Z"/>
+  </g>
+</svg>

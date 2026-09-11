@@ -61,6 +61,7 @@ link to its primary source, but they must not create a competing version.
 | Subject | Primary source |
 | --- | --- |
 | Project identity and public purpose | [`README.md`](../README.md) |
+| Brand artwork, colors and wordmark typography | [`assets/brand/README.md`](../assets/brand/README.md) |
 | Central execution architecture and ownership boundaries | [`architecture/README.md`](architecture/README.md) |
 | Python interpreter attachment, bridge ownership, and integration constraints | [`architecture/python-integration.md`](architecture/python-integration.md) |
 | Python observation mechanism, worker progress, deployment decision and alternatives | [`architecture/python-observation.md`](architecture/python-observation.md) |

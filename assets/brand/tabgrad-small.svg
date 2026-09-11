@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="16 16 224 224" role="img" aria-label="Tabgrad small symbol">
+  <defs>
+    <clipPath id="tabgrad-boundary-4" clipPathUnits="userSpaceOnUse">
+      <path d="M32 48H108L117.237604307 64H224L207.834192463 92H80.497422612L128 174.276877527L163.955572004 112H196.287187079L143.170962313 204H112.829037687L32 64Z"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#tabgrad-boundary-4)">
+    <path fill="#222333" d="M-256 -256H512V512H-256Z"/>
+    <path fill="#7357FF" d="M172.038475773 98H512V512H-66.984535672Z"/>
+  </g>
+</svg>
