@@ -1,3 +1,8 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/brand/tabgrad-logo-dark.svg">
+  <img src="assets/brand/tabgrad-logo.svg" alt="Tabgrad logo" width="400">
+</picture>
+
 # Tabgrad
 
 Tabgrad is an independent browser-native tensor runtime for running Python
@@ -101,6 +106,9 @@ The [repository structure guide](docs/repository-structure.md) explains where
 source, tests, tools and documentation belong, and how they relate to generated
 browser artifacts and local development files. For contribution procedures,
 start with [CONTRIBUTING.md](CONTRIBUTING.md).
+
+The [brand assets and guide](assets/brand/README.md) provide the logo variants,
+color palette and wordmark typography.
 
 ## License
 
