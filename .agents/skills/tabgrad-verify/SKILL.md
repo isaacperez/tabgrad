@@ -247,6 +247,12 @@ capabilities, and that versioned support records make no claim broader than
 their evidence. Verify links and examples when their correctness is part of
 the change.
 
+Verify the chosen documentation scope and location against
+[the scope rule](../../../docs/documentation.md#choose-general-or-topic-specific-scope),
+including the distinction between maintained topic documentation and execution
+evidence. Report a material placement or claim-scope mismatch even when links
+and formatting checks pass.
+
 Inspect the complete diff and status for unrelated changes, credentials,
 private data, local configuration, debugging code, accidental generated files,
 unexplained binary files, dependency drift, disabled checks, and unsupported

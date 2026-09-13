@@ -264,6 +264,12 @@ incompletely. Apply the durable-document and work-tracking boundary in
 `docs/documentation.md`: normative documents must not become progress reports
 or roadmaps, while versioned support records must remain evidence-based.
 
+Before drafting, choose and record the documentation scope and primary location
+under [the scope rule](../../../docs/documentation.md#choose-general-or-topic-specific-scope).
+Apply it alongside the reader perspective, and keep the decision in the existing
+documentation handoff. Do not treat a general chapter as the default home for
+every detail established by this issue.
+
 When adding or changing a dependency or third-party code, establish its need,
 origin, version policy, license compatibility, required attribution, security
 consequences, maintenance cost, and effect on supported environments and
