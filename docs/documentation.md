@@ -137,6 +137,54 @@ place for anticipated work. A task-oriented guide is justified by a verified
 user or contributor task that needs a maintained procedure; the perspectives
 above do not require an empty guide hierarchy.
 
+## Choose general or topic-specific scope
+
+A perspective identifies the question a document answers; its scope identifies
+how broadly the answer applies. Both decisions matter. A general performance
+chapter and a guide to one measurement tool can serve contributors without
+belonging in the same document. Before drafting, identify the reader's question,
+the relevant perspective, the scope of the claims and their primary home.
+
+General chapters explain shared concepts, responsibilities, mechanisms and
+rules within their stated domain. Keep operation-specific contracts, individual
+tool procedures and experimental details out of those chapters when they need
+their own maintained explanation. Introduce the relationship briefly and link
+to the specific document. Do not make the broad chapter grow into a catalogue
+of everything implemented under its subject.
+
+Specific documentation is part of the library documentation, not merely issue
+evidence. An operation with a substantive contract needs a topic-focused home
+for its semantics, supported inputs, validation, execution and relevant costs
+or constraints. A maintained tool needs instructions for its actual task,
+configuration and interpretation. Choose the existing perspective that owns
+the reader's question; do not create a parallel hierarchy or duplicate shared
+contracts. Related variants may share a cohesive document. Split out a page
+when the topic has an independently useful explanation or contract, not simply
+because a source symbol exists.
+
+A general explanation may use a concrete worked example to teach its shared
+mechanism. Explain what the example illustrates and where it stops applying.
+Keep only the detail needed for that teaching purpose there; put the complete
+operation reference or reproducible tool procedure in its specific home.
+General scope does not mean terse, abstract or example-free writing.
+
+For measurements, separate a tool's maintained method and supported workload
+configuration from the parameters actually used, raw observations, failures
+and conclusions of a particular execution. The former belongs in the tool's
+documentation; the latter follows the evidence placement and interpretation
+rules in [Performance measurements](performance.md). Neither a document's
+location nor a successful narrow experiment turns an observation into a
+general guarantee. State the claim's domain and supporting evidence. Record
+an accepted lasting decision at its authoritative home without promoting the
+rest of the experiment into project-wide guidance.
+
+Apply this placement decision when authoring or revising affected content.
+Keep necessary summaries and links consistent when moving a topic, following
+the cohesive-document rule above. This is not a requirement for a bulk rewrite,
+empty pages or a fixed number of documents. Record the chosen scope and primary
+location with the existing documentation handoff rather than introducing a
+separate planning artifact.
+
 ## Separate durable documentation from work tracking
 
 The root `README.md` and normative documents describe Tabgrad as a complete
@@ -232,6 +280,13 @@ explained in
 [`implementation-workflow.md`](implementation-workflow.md#make-documentation-concrete-with-the-implementation).
 
 ## Review documentation
+
+Apply [the scope rule](#choose-general-or-topic-specific-scope) as well as the
+perspective taxonomy. Require correction when a general chapter absorbs an
+independent specific contract or procedure, when useful specifics have no
+appropriate home, or when claims exceed their evidence. Check that examples
+still teach the shared mechanism and that moving details has not left the
+general explanation without the context its reader needs.
 
 Check facts against source, tests, configured behavior, accepted decisions, and
 authoritative external documentation. Check that terminology and support

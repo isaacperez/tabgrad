@@ -364,6 +364,10 @@ and update only the indexes or summaries that need to point to it. Record the
 affected perspectives in the pull request, or explain why no durable
 documentation can become inaccurate.
 
+Before drafting, also choose the general or topic-specific scope under
+[the documentation scope rule](documentation.md#choose-general-or-topic-specific-scope).
+Include that choice and its primary location in the same documentation handoff.
+
 For explanatory material, identify the reader's starting knowledge and the
 questions they must be able to answer as part of issue definition, then apply
 [the explanatory-depth rule](documentation.md#develop-explanations-before-compressing-them)

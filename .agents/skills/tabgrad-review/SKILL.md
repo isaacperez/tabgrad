@@ -221,6 +221,12 @@ complete product and permanent rules rather than project progress or a
 roadmap. Check release-specific support and historical records against their
 named evidence.
 
+Review the author's placement and claim scope under
+[the scope rule](../../../docs/documentation.md#choose-general-or-topic-specific-scope).
+Require corrections for material mixing of general and specific documentation
+or unsupported generalization, while preserving useful examples and cohesive
+topic explanations. Judge the reader's need, not a preferred file count.
+
 Check whether the change introduces or bypasses an architectural decision. A
 lasting decision must have the evidence, user approval, and durable record
 required by `tabgrad-architecture`; a pull request description or code comment
