@@ -1,0 +1,296 @@
+{
+  "torchVersion": "2.14.0",
+  "torchBuildRevision": "08187d9e0fba026dc8217405802ab5381dc88d90",
+  "torchSourceRevision": "2b3ec34829036a65cd9d1398ea72a0167dc37470",
+  "pyodideVersion": "314.0.6",
+  "pyodideSourceRevision": "8cec1b9bb8ead68c7c09b0a6443576bec7512268",
+  "metadataExpression": "[list(result.shape), repr(result.shape), type(result.shape).__name__,\nrepr(result.dtype), isinstance(result.dtype, torch.dtype),\nrepr(result.device), str(result.device), result.device.type, result.device.index,\nisinstance(result.device, torch.device)]",
+  "comparison": "Exact float32 bits except NaN payload; exact metadata and error classes.",
+  "cases": [
+    {
+      "name": "finite: torch.add(left, right)",
+      "source": "left = torch.tensor([1.25, -2.5, 3, True], dtype=torch.float32, device='cpu')\nright = torch.tensor((0.75, 2.5, -1, False), dtype=torch.float32, device='cpu')\nresult = torch.add(left, right)\n",
+      "metadata": [
+        [
+          4
+        ],
+        "torch.Size([4])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ],
+      "bits": [
+        1073741824,
+        0,
+        1073741824,
+        1065353216
+      ]
+    },
+    {
+      "name": "finite: left.add(right)",
+      "source": "left = torch.tensor([1.25, -2.5, 3, True], dtype=torch.float32, device='cpu')\nright = torch.tensor((0.75, 2.5, -1, False), dtype=torch.float32, device='cpu')\nresult = left.add(right)\n",
+      "metadata": [
+        [
+          4
+        ],
+        "torch.Size([4])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ],
+      "bits": [
+        1073741824,
+        0,
+        1073741824,
+        1065353216
+      ]
+    },
+    {
+      "name": "finite: left + right",
+      "source": "left = torch.tensor([1.25, -2.5, 3, True], dtype=torch.float32, device='cpu')\nright = torch.tensor((0.75, 2.5, -1, False), dtype=torch.float32, device='cpu')\nresult = left + right\n",
+      "metadata": [
+        [
+          4
+        ],
+        "torch.Size([4])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ],
+      "bits": [
+        1073741824,
+        0,
+        1073741824,
+        1065353216
+      ]
+    },
+    {
+      "name": "empty: torch.add(left, right)",
+      "source": "left = torch.tensor([], dtype=torch.float32, device='cpu')\nright = torch.tensor((), dtype=torch.float32, device='cpu')\nresult = torch.add(left, right)\n",
+      "metadata": [
+        [
+          0
+        ],
+        "torch.Size([0])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ],
+      "bits": []
+    },
+    {
+      "name": "empty: left.add(right)",
+      "source": "left = torch.tensor([], dtype=torch.float32, device='cpu')\nright = torch.tensor((), dtype=torch.float32, device='cpu')\nresult = left.add(right)\n",
+      "metadata": [
+        [
+          0
+        ],
+        "torch.Size([0])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ],
+      "bits": []
+    },
+    {
+      "name": "empty: left + right",
+      "source": "left = torch.tensor([], dtype=torch.float32, device='cpu')\nright = torch.tensor((), dtype=torch.float32, device='cpu')\nresult = left + right\n",
+      "metadata": [
+        [
+          0
+        ],
+        "torch.Size([0])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ],
+      "bits": []
+    },
+    {
+      "name": "float32-edges: torch.add(left, right)",
+      "source": "left = torch.tensor([-0.0, 16777217, 1e-45, 1e40], dtype=torch.float32, device='cpu')\nright = torch.tensor([-0.0, 1, 1e-45, -1e40], dtype=torch.float32, device='cpu')\nresult = torch.add(left, right)\n",
+      "metadata": [
+        [
+          4
+        ],
+        "torch.Size([4])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ],
+      "bits": [
+        2147483648,
+        1266679808,
+        2,
+        "nan"
+      ]
+    },
+    {
+      "name": "float32-edges: left.add(right)",
+      "source": "left = torch.tensor([-0.0, 16777217, 1e-45, 1e40], dtype=torch.float32, device='cpu')\nright = torch.tensor([-0.0, 1, 1e-45, -1e40], dtype=torch.float32, device='cpu')\nresult = left.add(right)\n",
+      "metadata": [
+        [
+          4
+        ],
+        "torch.Size([4])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ],
+      "bits": [
+        2147483648,
+        1266679808,
+        2,
+        "nan"
+      ]
+    },
+    {
+      "name": "float32-edges: left + right",
+      "source": "left = torch.tensor([-0.0, 16777217, 1e-45, 1e40], dtype=torch.float32, device='cpu')\nright = torch.tensor([-0.0, 1, 1e-45, -1e40], dtype=torch.float32, device='cpu')\nresult = left + right\n",
+      "metadata": [
+        [
+          4
+        ],
+        "torch.Size([4])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ],
+      "bits": [
+        2147483648,
+        1266679808,
+        2,
+        "nan"
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "expression": "torch.tensor([1, 'x'], dtype=torch.float32)",
+      "type": "TypeError"
+    },
+    {
+      "expression": "torch.tensor([1j], dtype=torch.float32)",
+      "type": "TypeError"
+    },
+    {
+      "expression": "torch.tensor([10**1000], dtype=torch.float32)",
+      "type": "OverflowError"
+    },
+    {
+      "expression": "torch.add(left, right, alpha=True)",
+      "type": "RuntimeError"
+    },
+    {
+      "expression": "torch.add(left, 'x')",
+      "type": "TypeError"
+    },
+    {
+      "expression": "left.add(right, out=None)",
+      "type": "TypeError"
+    },
+    {
+      "expression": "torch.add(left, right, unknown=True)",
+      "type": "TypeError"
+    },
+    {
+      "expression": "torch.add(left, torch.tensor([1, 2], dtype=torch.float32))",
+      "type": "RuntimeError"
+    },
+    {
+      "expression": "torch.tensor([], dtype=torch.float32, requires_grad=0)",
+      "type": "TypeError"
+    },
+    {
+      "expression": "torch.tensor([], dtype=torch.float32, pin_memory=0)",
+      "type": "TypeError"
+    },
+    {
+      "expression": "torch.Size([1.0])",
+      "type": "TypeError"
+    },
+    {
+      "expression": "torch.dtype()",
+      "type": "TypeError"
+    }
+  ],
+  "metadataCases": [
+    {
+      "expression": "[repr(left.shape[:]), repr(left.shape + (3,)), repr(2 * left.shape), left.shape.numel()]",
+      "value": [
+        "torch.Size([4])",
+        "torch.Size([4, 3])",
+        "torch.Size([4, 4])",
+        4
+      ]
+    },
+    {
+      "expression": "[torch.float32.is_floating_point, torch.float32.is_complex, torch.float32.is_signed]",
+      "value": [
+        true,
+        false,
+        true
+      ]
+    },
+    {
+      "expression": "[torch.device('cpu') == left.device, left.device == 'cpu', left.dtype is torch.float32]",
+      "value": [
+        true,
+        false,
+        true
+      ]
+    },
+    {
+      "expression": "[repr(torch.Size([True, -1])), torch.Size([]).numel()]",
+      "value": [
+        "torch.Size([1, -1])",
+        1
+      ]
+    }
+  ]
+}

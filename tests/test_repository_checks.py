@@ -1074,8 +1074,8 @@ class RepositoryCheckTests(unittest.TestCase):
 
     def test_ci_requires_python_format_lint_and_types(self) -> None:
         expected = {
-            ".venv/bin/python -m ruff check scripts tests",
-            ".venv/bin/python -m ruff format --check scripts tests",
+            ".venv/bin/python -m ruff check scripts tests python",
+            ".venv/bin/python -m ruff format --check scripts tests python",
             "npm run check:python",
         }
         self.assertTrue(expected.issubset(CHECKS.REQUIRED_CI_COMMANDS))

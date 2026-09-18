@@ -9,6 +9,11 @@ import { fileURLToPath } from "node:url";
 const repositoryRoot = normalize(fileURLToPath(new URL("..", import.meta.url)));
 const distributionRoot = join(repositoryRoot, "dist");
 const browserTestRoot = join(repositoryRoot, "js-tests", "browser");
+const pyodideRoot = join(repositoryRoot, "node_modules", "pyodide");
+const pyodideAssets = new Set([
+  "pyodide.mjs", "pyodide.asm.mjs", "pyodide.asm.wasm",
+  "pyodide-lock.json", "python_stdlib.zip",
+]);
 
 const maxRecordedRequests = 64;
 const maxStandardErrorCharacters = 16_384;
@@ -18,7 +23,7 @@ const reportedPhaseOrder = Object.freeze([
   "runtime-started",
   "runtime-finished",
 ]);
-const requiredAssetExtensions = new Set([".html", ".js", ".json", ".wasm"]);
+const requiredAssetExtensions = new Set([".html", ".js", ".mjs", ".json", ".wasm", ".zip", ".py"]);
 
 export const defaultNavigationTimeoutMilliseconds = 60_000;
 export const defaultApplicationTimeoutMilliseconds = 30_000;
@@ -148,8 +153,14 @@ async function readRequestBody(request) {
 
 function contentTypeFor(path) {
   const extension = extname(path);
+  if (extension === ".py") {
+    return "text/plain; charset=utf-8";
+  }
   if (extension === ".wasm") {
     return "application/wasm";
+  }
+  if (extension === ".zip") {
+    return "application/octet-stream";
   }
   if (extension === ".json") {
     return "application/json";
@@ -206,10 +217,11 @@ export function browserVersion(executable) {
 
 export async function startBrowserServer(
   pageNames,
-  { crossOriginIsolation = false } = {},
+  { crossOriginIsolation = false, assets = [], distributionDirectory = distributionRoot } = {},
 ) {
   const runs = new Map();
   const allowedPages = new Set(pageNames);
+  const allowedAssets = new Set(assets);
   let activeToken;
   const isolationHeaders = crossOriginIsolation
     ? {
@@ -277,8 +289,16 @@ export async function startBrowserServer(
 
     const requestedPage = pathname.replace(/^\/+/, "");
     const isPage = allowedPages.has(requestedPage);
-    const sourceRoot = isPage ? browserTestRoot : distributionRoot;
-    const relativePath = isPage ? requestedPage : pathname.replace(/^\/+/, "");
+    const isFixtureAsset = allowedAssets.has(requestedPage);
+    const isPyodide = pathname.startsWith("/pyodide/");
+    const sourceRoot = isPage || isFixtureAsset ? browserTestRoot : isPyodide ? pyodideRoot : distributionDirectory;
+    const relativePath = isPyodide ? pathname.slice("/pyodide/".length) : requestedPage;
+    if (isPyodide && !pyodideAssets.has(relativePath)) {
+      recordRequest(run, request, pathname, 404);
+      rejectRun(run, "asset-loading", `Unregistered Pyodide asset ${pathname}.`);
+      response.writeHead(404).end();
+      return;
+    }
     const path = normalize(join(sourceRoot, relativePath));
     const pathFromRoot = relative(sourceRoot, path);
     if (

@@ -1,8 +1,16 @@
 {
-  "include": ["scripts/**/*.py", "tests/**/*.py"],
+  "include": ["scripts/**/*.py", "tests/**/*.py", "python/**/*.py", "python/**/*.pyi"],
   "pythonVersion": "3.11",
   "typeCheckingMode": "strict",
   "reportUnnecessaryTypeIgnoreComment": "error",
   "venvPath": ".",
-  "venv": ".venv"
+  "venv": ".venv",
+  "executionEnvironments": [
+    {
+      "root": "python",
+      "pythonVersion": "3.14",
+      "extraPaths": ["node_modules/pyodide/python-types"]
+    },
+    { "root": ".", "pythonVersion": "3.11" }
+  ]
 }

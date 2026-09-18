@@ -17,6 +17,7 @@ import {
   getTestResidentProgramReferenceCount,
 } from "../../dist/testing.js";
 import { ExecutableProgram } from "../../dist/executable-program.js";
+import { observeTensorSynchronously, prepareRuntimeSession } from "../../dist/runtime.js";
 
 const distributionRoot = normalize(fileURLToPath(new URL("../../dist", import.meta.url)));
 let server;
@@ -662,6 +663,144 @@ test("all concurrent close calls wait for the same terminal drain", async () => 
   await secondClosing;
 
   assert.equal(settledBeforeDrain, false);
+  assertNoLiveState(session);
+});
+
+test("queued observations share gated computation and drain after public handles close", async () => {
+  const gate = Promise.withResolvers();
+  const manifestUrl = new URL("manifest.json", distributionUrl);
+  const manifest = await readFile(join(distributionRoot, "manifest.json"));
+  virtualResponses.set("/queued-real-manifest.json", {
+    body: manifest,
+    contentType: "application/json",
+    waitFor: gate.promise,
+  });
+  const session = createTestRuntimeSession({
+    manifestUrl: new URL("queued-real-manifest.json", manifestUrl),
+    forceVariant: "scalar",
+  });
+  const host = session.tensor([1]);
+  const sum = host.add(session.tensor([2]));
+  const first = sum.toArray();
+  const second = sum.toArray();
+  try {
+    assert.equal(session.diagnostics().liveRequestLeases, 2);
+    for (const tensor of [host, sum]) {
+      assert.throws(() => observeTensorSynchronously(session, tensor), {
+        code: "SYNCHRONOUS_OBSERVATION_UNAVAILABLE",
+      });
+    }
+    assert.equal(session.diagnostics().liveRequestLeases, 2);
+    assert.equal(session.diagnostics().kernelCalls, 0);
+    const closing = session.close();
+    gate.resolve();
+    const [left, right] = await Promise.all([first, second]);
+    assert.deepEqual(Array.from(left), [3]);
+    assert.deepEqual(Array.from(right), [3]);
+    left[0] = 99;
+    assert.equal(right[0], 3);
+    await closing;
+    assert.equal(session.diagnostics().kernelCalls, 1);
+    assertNoLiveState(session);
+  } finally {
+    gate.resolve();
+    await Promise.allSettled([first, second]);
+    await session.close();
+    virtualResponses.delete("/queued-real-manifest.json");
+  }
+});
+
+test("failed queue head does not strand a ready host observation during close", async () => {
+  const gate = Promise.withResolvers();
+  const manifestUrl = installFixture("failed-queue-head", { abiVersion: 2 });
+  virtualResponses.get(manifestUrl.pathname).waitFor = gate.promise;
+  const session = createTestRuntimeSession({ manifestUrl, forceVariant: "scalar" });
+  const first = session.tensor([1]).add(session.tensor([2])).toArray();
+  const rejected = assert.rejects(first, { code: "BACKEND_ABI_MISMATCH" });
+  const second = session.tensor([7]).toArray();
+  try {
+    assert.equal(session.diagnostics().liveRequestLeases, 2);
+    const closing = session.close();
+    gate.resolve();
+    await rejected;
+    assert.deepEqual(Array.from(await second), [7]);
+    await closing;
+    assert.equal(session.diagnostics().backendLoads, 1);
+    assert.equal(session.diagnostics().kernelCalls, 0);
+    assertNoLiveState(session);
+  } finally {
+    gate.resolve();
+    await Promise.allSettled([rejected, second]);
+    await session.close();
+  }
+});
+
+test("ready host observations use owned copies without preparing CPU", async () => {
+  const session = createRuntimeSession({ manifestUrl: new URL("unused.json", distributionUrl) });
+  const tensor = session.tensor([1, 2]);
+  try {
+    const first = await tensor.toArray();
+    first[0] = 99;
+    assert.deepEqual(Array.from(await tensor.toArray()), [1, 2]);
+    assert.equal(session.diagnostics().backendLoads, 0);
+    assert.equal(session.diagnostics().hostToWasmCopies, 0);
+    assert.equal(session.diagnostics().wasmToHostCopies, 0);
+    assert.equal(session.diagnostics().liveRequestLeases, 0);
+  } finally {
+    await session.close();
+  }
+});
+
+test("session preparation is single-flight and belongs to the terminal drain", async () => {
+  const gate = Promise.withResolvers();
+  const manifestUrl = installFixture("preparation-drain");
+  virtualResponses.get(manifestUrl.pathname).waitFor = gate.promise;
+  const session = createTestRuntimeSession({ manifestUrl, forceVariant: "scalar" });
+  const preparing = prepareRuntimeSession(session);
+  assert.equal(prepareRuntimeSession(session), preparing);
+  assert.equal(session.diagnostics().liveRequestLeases, 1);
+  const closing = session.close();
+  let closed = false;
+  closing.then(() => { closed = true; });
+  try {
+    await Promise.resolve();
+    await Promise.resolve();
+    assert.equal(closed, false);
+    assert.throws(() => prepareRuntimeSession(session), { code: "CLOSED_SESSION" });
+  } finally {
+    gate.resolve();
+    await preparing;
+    await closing;
+  }
+  assertNoLiveState(session);
+  assert.equal(session.diagnostics().backendLoads, 1);
+  assert.equal(session.diagnostics().kernelCalls, 0);
+  assert.equal(session.diagnostics().wasmMemoryBytes, 0);
+});
+
+test("session preparation caches ABI failure without inventing operation provenance", async () => {
+  const manifestUrl = installFixture("preparation-abi-failure", { abiVersion: 2 });
+  let programs = 0;
+  const session = createTestRuntimeSession({
+    manifestUrl,
+    forceVariant: "scalar",
+    onProgramFormed() { programs += 1; },
+  });
+  const preparing = prepareRuntimeSession(session);
+  try {
+    await assert.rejects(preparing, (error) => {
+      assert.equal(error.code, "BACKEND_ABI_MISMATCH");
+      assert.equal(error.details.phase, "abi-validation");
+      assert.equal(getTestExecutionFailureContext(error), undefined);
+      return true;
+    });
+    assert.equal(prepareRuntimeSession(session), preparing);
+    assert.equal(programs, 0);
+    assert.equal(session.diagnostics().backendLoads, 1);
+    assert.equal(session.diagnostics().liveRequestLeases, 0);
+  } finally {
+    await session.close();
+  }
   assertNoLiveState(session);
 });
 

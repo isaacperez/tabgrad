@@ -41,6 +41,14 @@ endpoint remains responsive outside the blocked interpreter. The
 placement and its shared-memory hosting requirements. Neither an existing
 page interpreter nor its objects can be silently relocated by attachment.
 
+In the concrete host composition, `connectPythonWorker` owns the external
+admission endpoint and `servePythonWorker` forwards accepted scripts to the
+local binding. Their dedicated message port carries scripts and completions;
+it carries no tensor handles. The [connection chapter](../components/python-worker-connection.md)
+follows this transport, including why a lost connection cannot count as a
+successful close. The [host reference](../reference/python-host.md) supplies
+the exact application wiring.
+
 Keep one application situation in mind. An application retains a Python setting used
 by several interactions. For one interaction it wants to create two small
 vectors, add them, inspect the result, and release the tensor session. The
@@ -142,8 +150,9 @@ inspect every possible Python task or turn arbitrary code into a sandbox.
 For a pending GPU observation, the backend worker publishes committed shared
 state and requested bytes. The interpreter worker checks that state directly
 when it wakes; completion cannot depend on a callback queued on that parked
-worker. Local Python tasks are parked too, whereas optional awaitable
-observation lets them cooperate at await points. Ready host values and prepared
+worker. Local Python tasks are parked too; ordinary tensor observation is not
+an await point for them. Explicit await points elsewhere in the script remain
+subject to the joined-task contract. Ready host values and prepared
 CPU numerical execution need no remote round trip. The sequence above shows
 logical collaboration, not a requirement to send every tensor operation to a
 worker or to read intermediate tensors back to Python.
@@ -179,7 +188,7 @@ failure, but the binding still has to finish the associated cleanup. A script
 error does not authorize bypassing session drain or destroying the borrowed
 interpreter. Error type, timing and runtime provenance follow
 [the frontend error contract](../architecture/python-integration.md#keep-python-tensors-thin-but-genuinely-python-facing)
-and [the asynchronous observation contract](../architecture/python-integration.md#observe-results-without-blocking-browser-progress).
+and [the tensor observation contract](../architecture/python-integration.md#observe-results-without-blocking-browser-progress).
 
 These distinctions matter to recovery. A host can handle an ordinary script
 error and decide whether to submit different work or close the binding. A

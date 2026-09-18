@@ -6,6 +6,20 @@ accepted form and scope without following a complete design narrative.
 
 ## Questions this perspective answers
 
+Use [Python host attachment and worker connection](python-host.md) for the
+application's loading, entry, connection and cleanup contracts.
+
+Use [Python tensor creation, metadata, addition and observation](python-tensors.md) for the
+bounded Python call forms, metadata objects, errors and ownership obligations.
+
+For contributor measurements, use
+[WebAssembly addition measurements](webassembly-addition-measurements.md) for
+the direct JavaScript path and resident CPU kernel, or
+[Python tensor boundary measurements](python-boundary-measurements.md) for
+baseline configuration and equivalent JavaScript/Python workloads. These are
+command references; the shared [performance policy](../performance.md) owns
+the rules for interpreting and preserving evidence.
+
 Reference documentation answers questions such as:
 
 - What exact name, signature, value, layout, or command applies?

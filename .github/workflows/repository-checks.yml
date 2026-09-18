@@ -36,10 +36,10 @@ jobs:
         run: "python -m venv .venv && .venv/bin/python -m pip install --only-binary=:all: --require-hashes -r requirements-dev.lock"
 
       - name: Check Python formatting
-        run: .venv/bin/python -m ruff format --check scripts tests
+        run: .venv/bin/python -m ruff format --check scripts tests python
 
       - name: Lint Python
-        run: .venv/bin/python -m ruff check scripts tests
+        run: .venv/bin/python -m ruff check scripts tests python
 
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.1

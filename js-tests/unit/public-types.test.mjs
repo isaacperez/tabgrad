@@ -1,10 +1,31 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
+import ts from "typescript";
 
 import * as tabgrad from "../../dist/index.js";
 
 const { RuntimeSession, Tensor } = tabgrad;
+
+test("Python binding declarations typecheck without stripped internal or Node-only types", () => {
+  const program = ts.createProgram({
+    rootNames: [fileURLToPath(new URL("../../dist/python.d.ts", import.meta.url))],
+    options: {
+      strict: true,
+      noEmit: true,
+      skipLibCheck: false,
+      types: [],
+      target: ts.ScriptTarget.ES2022,
+      module: ts.ModuleKind.NodeNext,
+      moduleResolution: ts.ModuleResolutionKind.NodeNext,
+      lib: ["lib.es2022.d.ts", "lib.dom.d.ts"],
+    },
+  });
+  const diagnostics = ts.getPreEmitDiagnostics(program);
+  assert.deepEqual(diagnostics.map((diagnostic) =>
+    ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n")), []);
+});
 
 test("the JavaScript package entry point exposes only the supported runtime surface", () => {
   assert.deepEqual(
