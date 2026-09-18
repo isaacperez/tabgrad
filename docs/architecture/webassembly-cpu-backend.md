@@ -295,6 +295,19 @@ internal, request-scoped diagnostic state rather than a public
 `ExecutableProgram` export, and a native browser or WebAssembly error remains
 available as the error cause.
 
+The version 1 adapter prepares and retains the complete validated context,
+including its initial 32-page memory, through one cached preparation path.
+Managed Python requests this preparation before entering its first script;
+direct JavaScript reaches it on first CPU demand. Reusing the same path checks
+the actual instance's ABI in both cases without duplicating the loader.
+No tensor payload or numerical kernel is required to establish readiness.
+The runtime includes explicit frontend preparation in session drain ownership,
+so close cannot release the backend before accepted preparation settles.
+Unlike a preparation failure caused by an existing execution request, a
+pre-script setup failure has no operation or program provenance to attach.
+The [script binding component](../components/python-script-binding.md#prepare-cpu-before-handing-control-to-python)
+explains admission, cached failure and the visible startup cost.
+
 The scalar and SIMD modules are compiled from the same Rust source with
 opposite fixed `simd128` target-feature settings. The SIMD kernel performs
 four-lane addition and handles its remaining zero to three elements with the

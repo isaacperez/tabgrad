@@ -26,6 +26,31 @@ documented example file with placeholder values when a required local setting
 cannot have a safe default. Never place real secrets in an example, test,
 fixture, log, or generated artifact.
 
+## Understand the development stack
+
+The development machine and the browser do not need the same software.
+Contributors compile Tabgrad and check it against an independent reference;
+application users load prebuilt files. In particular, a Python-looking API
+does not mean that the browser installs or executes the official PyTorch
+runtime.
+
+| Part of the stack | Responsibility | Where it runs |
+| --- | --- | --- |
+| Python compatibility source | Present the supported Python API and translate language-level calls | Inside Pyodide in the browser |
+| Pyodide | Execute Python and provide its connection to JavaScript; it does not implement Tabgrad tensor arithmetic | Loaded by the application host; installed locally as a development dependency for integration checks |
+| TypeScript and emitted JavaScript | Own tensor semantics and coordinate execution; TypeScript is compiled before distribution | Compiler on the development machine; emitted JavaScript in the browser |
+| Rust and WebAssembly | Compile and execute Tabgrad's CPU numerical kernels | Rust toolchain on the development machine; prebuilt WebAssembly in the browser |
+| WGSL and WebGPU | Express and execute GPU numerical work under the accepted backend architecture | Browser-provided WebGPU; no native GPU toolkit is installed by the user |
+| Native CPython and official PyTorch | Run development tools and establish independent compatibility expectations | Development machine only; never a fallback tensor engine in the browser |
+| Node.js, npm, and installed test browsers | Build, resolve development packages, and check real browser behavior | Development machine and configured CI jobs |
+
+The [architecture guide](architecture/README.md) explains why these
+responsibilities are separate. The [dependency register](dependencies.md)
+owns exact dependency versions, origins and licenses; the setup sections below
+explain how to prepare them. A technology's role in the architecture is not a
+claim that every public operation or browser is supported: those claims belong
+in the [compatibility record](compatibility.md).
+
 ## Prepare the repository tooling environment
 
 Repository tooling uses Python 3.11. Create and activate a
@@ -92,7 +117,7 @@ Install the locked JavaScript development dependency from the repository root:
 npm ci --ignore-scripts --no-audit --no-fund
 ```
 
-This command downloads TypeScript, Pyright and their locked dependencies and
+This command downloads TypeScript, Pyodide, Pyright and their locked dependencies and
 writes `node_modules/` plus npm's ordinary
 cache. It runs no package lifecycle scripts, performs no audit network request,
 and does not change `package-lock.json`. Use `npm install` only when deliberately
@@ -107,6 +132,26 @@ server, then terminates the process and removes that profile. Set
 `TABGRAD_BROWSER` to `Chrome` or `Firefox` to run just that browser; leave it
 unset to preserve the full local sequence.
 
+The browser sequence also checks the Python script binding with the locked
+Pyodide assets from `node_modules/pyodide/`. Each browser runs ordinary Python
+observation and lifecycle checks in two fresh profiles: unmodified JSPI
+capabilities, then controlled absence of JSPI before loading Pyodide. The output
+records the observed capability in each case; controlled absence is not a claim
+about an older native browser. These runs remain sequential and separate from
+the direct JavaScript scalar/SIMD checks. The harness serves only its named
+Pyodide runtime files, not the complete dependency tree.
+Node integration tests reuse one Pyodide interpreter for their script-binding
+cases; no test installs packages or downloads an interpreter.
+
+Each browser also runs the application-owned interpreter-worker fixture with
+native and controlled-absent JSPI, without cross-origin isolation. A separate
+isolated run uses a four-byte shared test gate to park Python and verify
+independent host admission and close. The host releases that gate after its
+checks, and the wait has a five-second failure bound; it is not a CPU runtime
+dependency or a numerical stress workload. Worker fixture scripts are served
+as explicitly registered assets, not mistaken for page navigations. All runs
+remain sequential.
+
 The browser harness distinguishes two bounded waits. Navigation has 60 seconds
 to request the test page; after that request, the application has 30 seconds to
 load its artifacts, execute, and report a result. It does not retry a failed
@@ -114,6 +159,68 @@ run. A failure reports the selected browser and version, elapsed time, last
 reported lifecycle phase, bounded request history without query data, process
 exit state, and bounded standard error. Profile-cleanup failures are reported
 without replacing the primary execution failure.
+
+## Prepare Python integration and its compatibility oracle
+
+Pyodide and native Python serve different purposes. `npm ci` installs the
+pinned Pyodide 314.0.6 distribution under `node_modules/pyodide/`, including
+its interpreter WebAssembly and Python standard-library archive. Integration
+checks serve these local assets; they must not download an interpreter during
+a test. The application host supplies Pyodide to Tabgrad, as described in the
+[attachment contract](architecture/python-integration.md). No wheel installer,
+NumPy package, or official PyTorch runtime is needed for that browser path.
+
+Official PyTorch is a development-only **oracle**: an independently implemented
+reference used to establish expected Python values, metadata, and errors.
+Install it only when generating or checking compatibility evidence, not for
+ordinary repository tooling or direct JavaScript builds. The selected oracle
+is PyTorch 2.14.0. Its source tag identifies
+`2b3ec34829036a65cd9d1398ea72a0167dc37470`; the selected official wheel reports
+build revision `08187d9e0fba026dc8217405802ab5381dc88d90`. The
+[dependency record](dependencies.md#python-integration-and-oracle-dependencies)
+explains this distinction. Record the actual build revision when collecting
+reference results rather than substituting the tag revision.
+
+The committed oracle lock selects CPython 3.11 wheels for macOS 14 or later on
+Apple Silicon. It deliberately does not select Linux CUDA packages or claim
+to prepare another native platform. This restriction is on reference
+generation, not on the browser distribution. Use the prepared `.venv`:
+
+```console
+.venv/bin/python -m pip install --only-binary=:all: --require-hashes -r requirements-oracle.lock
+```
+
+The command installs the exact PyTorch wheel and its transitive dependencies
+into `.venv`; it can update packages there, including `setuptools`. It writes
+the ordinary pip cache, performs no source build, and installs no CUDA toolkit.
+The selected PyTorch wheel alone is approximately 127 MB compressed; its
+installed footprint is larger. Do not confuse this contributor download with
+the browser application's download. On another native platform, stop before
+installation and establish a reviewed platform-specific oracle resolution.
+
+To update that lock deliberately, resolve `requirements-oracle.in` using pip
+23.2.1 in the same prepared CPython 3.11/macOS arm64 environment. The dry run
+can download wheels into pip's cache but does not install them. Keep its report
+outside version control, review the resolution, and translate it with the
+maintained generator:
+
+```console
+.venv/bin/python -m pip install --dry-run --ignore-installed --only-binary=:all: --report /tmp/tabgrad-oracle-resolution.json -r requirements-oracle.in
+node scripts/write-oracle-lock.mjs /tmp/tabgrad-oracle-resolution.json
+```
+
+The generator checks the report's platform, direct requirements, origins, and
+SHA-256 digests before replacing `requirements-oracle.lock`. It performs no
+network request. The package manager owns dependency resolution; do not edit
+the resulting wheel URLs or hashes by hand. Review licenses and run the
+affected compatibility checks after a deliberate update.
+
+PyTorch can warn on import that NumPy is unavailable. This environment does
+not install NumPy: the oracle uses tensor/list interfaces, not NumPy
+interoperation. Preserve that warning in evidence and do not count NumPy-based
+checks as covered. Limit native oracle work to one intra-operation and one
+inter-operation thread and small CPU tensors; importing a large package is not
+permission to run a large benchmark.
 
 ## Use the prepared environment
 
@@ -158,6 +265,12 @@ token in repository files, command output, logs, or issue content.
 
 The repository provides these commands:
 
+For a small Python/direct-JavaScript resource comparison, use
+`npm run measure:python` with the separately built baseline configured in
+[Python tensor boundary measurements](reference/python-boundary-measurements.md).
+It uses the prepared dependencies and local browsers, not an installation or
+a load test. Its raw reports remain ignored local output.
+
 Python checks use `.venv/bin/python` explicitly on POSIX. On Windows use the
 corresponding `.venv\Scripts` interpreter. CI creates the same isolated
 environment with the selected interpreter before installing locked tools;
@@ -167,17 +280,24 @@ checks do not depend on shell activation or an unprepared global interpreter.
 | --- | --- | --- |
 | Install locked development dependencies | `python -m pip install --only-binary=:all: --require-hashes -r requirements-dev.lock` | An active Python 3.11 virtual environment; writes only to that environment and the package manager's ordinary cache |
 | Prepare isolated Python tooling in a clean CI checkout | `python -m venv .venv && .venv/bin/python -m pip install --only-binary=:all: --require-hashes -r requirements-dev.lock` | Selected Python 3.11 interpreter and a fresh checkout; creates `.venv` and downloads locked packages; setup only |
-| Format maintained Python files | `.venv/bin/python -m ruff format scripts tests` | The prepared repository tooling environment; rewrites files in place |
-| Check maintained Python formatting | `.venv/bin/python -m ruff format --check scripts tests` | The prepared repository tooling environment; read-only |
-| Lint maintained Python files | `.venv/bin/python -m ruff check scripts tests` | The prepared repository tooling environment; read-only |
-| Check maintained Python types | `npm run check:python` | Prepared Node/npm environment and `.venv`; validates the isolated Python 3.11/PyYAML environment, then runs locked Pyright with `pyrightconfig.json`; does not execute repository Python modules or install packages |
+| Format maintained Python files | `.venv/bin/python -m ruff format scripts tests python` | The prepared repository tooling environment; rewrites files in place |
+| Check maintained Python formatting | `.venv/bin/python -m ruff format --check scripts tests python` | The prepared repository tooling environment; read-only |
+| Lint maintained Python files | `.venv/bin/python -m ruff check scripts tests python` | The prepared repository tooling environment; read-only |
+| Check maintained Python types | `npm run check:python` | Prepared Node/npm environment and `.venv`; validates the isolated Python 3.11/PyYAML environment, exposes installed Pyodide type sources, then runs locked Pyright with `pyrightconfig.json`; does not execute browser Python modules or install packages |
+| Expose installed Pyodide type sources | `.venv/bin/python -I scripts/prepare_pyodide_types.py` | Reads the locked Pyodide standard-library archive and writes only its upstream Python modules under ignored `node_modules/pyodide/python-types/`; no download, installation or import of browser modules; included in `check:python` |
 | Validate repository policies and structure | `.venv/bin/python scripts/check_repository.py` | The prepared repository tooling environment |
 | Test the repository validator | `.venv/bin/python scripts/run_tests.py` | The prepared repository tooling environment |
+| Generate bounded native tensor expectations | `.venv/bin/python scripts/generate_tensor_oracle.py` | Authorized, prepared PyTorch oracle; writes the registered JSON fixture, with one intra-operation and one inter-operation thread |
+| Verify native tensor fixture freshness | `.venv/bin/python scripts/generate_tensor_oracle.py --check` | The same prepared native oracle; compares exact fixture bytes without rewriting or installing anything |
 | Install the pinned Rust toolchain | `rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy --target wasm32-unknown-unknown` | Network access and authorized writes to the configured rustup directories; does not modify the repository |
 | Install the pinned Rust build toolchain | `rustup toolchain install 1.98.1 --profile minimal --target wasm32-unknown-unknown` | Network access and authorized writes to the configured rustup directories; omits check-only components for isolated build-and-browser jobs |
 | Select the pinned npm release | `npm install --global npm@11.1.0 --ignore-scripts --no-audit --no-fund` | Node.js 22.12.0, network access, and authorized writes to that Node.js installation plus npm's cache; does not modify the repository |
-| Install locked JavaScript development dependencies | `npm ci --ignore-scripts --no-audit --no-fund` | Node.js 22.12.0 and npm 11.1.0; downloads TypeScript, Pyright and locked transitives, and recreates `node_modules/` from `package-lock.json` |
+| Install locked JavaScript development dependencies | `npm ci --ignore-scripts --no-audit --no-fund` | Node.js 22.12.0 and npm 11.1.0; downloads TypeScript, Pyodide, Pyright and locked transitives, and recreates `node_modules/` from `package-lock.json` |
+| Install the compatibility oracle | `.venv/bin/python -m pip install --only-binary=:all: --require-hashes -r requirements-oracle.lock` | Prepared CPython 3.11 environment on macOS 14+ arm64; downloads exact wheels and writes `.venv` plus pip cache; development only |
+| Resolve an authorized oracle update | `.venv/bin/python -m pip install --dry-run --ignore-installed --only-binary=:all: --report /tmp/tabgrad-oracle-resolution.json -r requirements-oracle.in` | pip 23.2.1 in the prepared oracle environment; registry access, wheel downloads/cache and a disposable report; no installation |
+| Generate the oracle lock from a reviewed pip report | `node scripts/write-oracle-lock.mjs /tmp/tabgrad-oracle-resolution.json` | Node.js 22.12.0; reads the report and direct requirements, rewrites only `requirements-oracle.lock`; no network |
 | Build the browser distribution | `npm run build` | Prepared Node.js and Rust environments; rewrites ignored `dist/` and updates Cargo's ignored `target/` cache |
+| Copy and hash maintained Python assets | `node scripts/build-python.mjs` | Prepared Node.js environment; writes `dist/python/`; included in `npm run build` |
 | Check TypeScript and Rust | `npm run check` | Prepared Node.js and Rust environments; reads TypeScript source and runs Rustfmt plus Clippy for scalar and SIMD targets |
 | Run JavaScript and browser tests | `npm test` | Prepared build environment, Chrome, Firefox, permission to launch headless processes, and a free loopback port; rebuilds `dist/`, uses disposable browser profiles, and runs one browser at a time |
 | Build and run Node.js tests | `npm run test:node` | Prepared Node.js and Rust environments; rebuilds `dist/` and runs the JavaScript integration and raw-ABI suite without launching a browser |
@@ -185,13 +305,14 @@ checks do not depend on shell activation or an unprepared global interpreter.
 | Run real-browser integration tests only | `npm run test:browser` | An existing `dist/` build, Chrome, Firefox, and a loopback port; launches one headless browser at a time |
 | Build and test one or both browsers from source | `npm run test:browser:from-source` | Prepared build environment, installed browsers, and a loopback port; rebuilds `dist/`, then honors `TABGRAD_BROWSER` or tests Chrome followed by Firefox when it is unset |
 | Measure bounded runtime and artifact costs | `npm run measure` | Prepared build and browser environments; rebuilds `dist/` and writes an ignored report under `test-results/` |
+| Compare Python and direct JavaScript boundary costs | `npm run measure:python` | Prepared build and browser environments plus an isolated baseline distribution; rebuilds current `dist/` and writes timestamped ignored reports under `test-results/`; workloads, baseline variables and limits are defined in [the command reference](reference/python-boundary-measurements.md) |
 | Remove the browser distribution | `npm run clean` | Deletes only the ignored `dist/` directory |
 | Update the JavaScript lock after an authorized dependency change | `npm install --package-lock-only --ignore-scripts --no-audit --no-fund` | Node.js 22.12.0, npm 11.1.0, and registry access; rewrites only `package-lock.json` plus npm cache state |
 | Update the Rust lock after an authorized dependency change | `cargo generate-lockfile` | Rust and Cargo 1.98.1 plus registry access if a dependency is introduced; rewrites `Cargo.lock` |
 | Format maintained Rust files | `cargo fmt --all` | Rustfmt from toolchain 1.98.1; rewrites maintained Rust source |
 
 Ruff reads `ruff.toml`. The formatter and linter cover the maintained Python
-files under `scripts/` and `tests/`. The formatting command is the only command
+files under `scripts/`, `tests/` and `python/`. The formatting command is the only command
 in this group that rewrites source; verification and continuous integration use
 the read-only check commands. Ruff's annotation rules check function signature
 coverage; they do not check that annotations agree with the implementation.
@@ -199,11 +320,36 @@ coverage; they do not check that annotations agree with the implementation.
 Pyright runs on Node.js and analyzes Python statically. It is installed through
 the npm lockfile, not pip, and is not part of the browser distribution.
 `pyrightconfig.json` selects strict checking for maintained Python under
-`scripts/` and `tests/`, targets Python 3.11 and resolves imports against the
-prepared `.venv`. Its bundled type declarations include the standard library
-and PyYAML; an upstream typing update is reviewed with the locked checker.
+`scripts/`, `tests/` and `python/`, including the private bridge declaration.
+Repository tools and their tests target Python 3.11 in the prepared `.venv`;
+the compatibility source targets Python 3.14, as embedded by the selected
+Pyodide build (CPython 3.14.2). The latter is a static-analysis target, not a
+requirement to install a second native interpreter. Browser integration tests
+execute that source inside the real pinned Pyodide interpreter.
+
+Pyright's bundled declarations cover the standard library and PyYAML. For
+Pyodide, the check exposes the already-installed upstream typed modules from
+`python_stdlib.zip` using `scripts/prepare_pyodide_types.py`. Only `pyodide/`
+and `_pyodide/` are copied into the dependency's ignored `python-types/`
+directory; the native tooling never imports those browser modules. This keeps
+the checker aligned with the selected upstream version without maintaining a
+second imitation of its API. `npm ci` recreates the dependency directory on a
+version change. A missing archive fails the command, without downloading one.
+
+The private `_tabgrad_runtime_bridge.pyi` instead describes a module that
+Tabgrad itself registers from JavaScript. It is not an upstream replacement
+or executable Python. Its `session` is opaque where installation only retains
+its identity; code that calls bridge operations must describe and verify those
+consumed contracts. The import has one scoped `reportMissingModuleSource`
+exception because JavaScript provides the implementation, not a `.py` file.
+No missing-import or unknown-type diagnostic is disabled globally. Real
+installation tests establish that the registered module exists and retains
+the correct session across close and reattachment.
+
+Upstream typing changes are reviewed with their respective locked packages.
 The command's small launcher first probes the prepared interpreter in isolated
-mode and checks that it can import PyYAML. Pyright alone can report success even
+mode and checks that it can import PyYAML, then prepares the local Pyodide type
+sources before invoking Pyright. Pyright alone can report success even
 when its configured virtual environment is absent; the launcher turns missing
 or incompatible setup into a nonzero exit without falling back or installing.
 For an editor, select this same project configuration and interpreter; an

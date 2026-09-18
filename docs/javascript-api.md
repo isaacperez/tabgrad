@@ -16,8 +16,9 @@ Tabgrad does not define a separate numerical engine for each frontend.
 
 A web application serves the files emitted under `dist/` by the Tabgrad build.
 The application imports `index.js`; Tabgrad resolves `manifest.json` beside that
-module and loads one compatible WebAssembly module when CPU data is first
-observed. Browser users do not install Node.js, npm, Rust, Cargo, TypeScript, a
+module and loads one compatible WebAssembly module when observation first
+demands CPU computation. Reading already available host data needs no module
+load. Browser users do not install Node.js, npm, Rust, Cargo, TypeScript, a
 native tensor library, or a browser extension.
 
 The web server must serve `.wasm` files as `application/wasm` and preserve the
@@ -84,12 +85,20 @@ from `Tensor.prototype` or wrapping a tensor in a JavaScript `Proxy` does not
 forge a valid handle. Invalid handles fail with `INVALID_TENSOR` before backend
 loading. The result is out of place: it has independent logical storage.
 
-`tensor.toArray()` is the asynchronous observation boundary. The runtime forms
-an immutable finite executable program for the demanded dependencies, chooses
-one WebAssembly module, copies host inputs into its linear memory, invokes the
-coarse addition kernel, and returns a new `Float32Array`. Intermediate results
-remain resident in WebAssembly memory; observing one result does not execute an
-unrelated pure operation.
+`tensor.toArray()` returns a Promise for an independent `Float32Array`. Ready
+host data is copied directly; it is not uploaded to WebAssembly solely for
+readback. When computation is required, the runtime forms an immutable finite
+executable program for the demanded dependencies, prepares one WebAssembly
+module, copies host inputs into its linear memory and invokes the coarse
+addition kernel. Intermediate results remain resident in WebAssembly memory;
+observing one result does not execute an unrelated pure operation.
+
+Local work with a ready backend may finish during `toArray()` itself, before
+the returned Promise's callbacks run. Those callbacks retain ordinary
+JavaScript scheduling. Failures of accepted execution still reject the Promise
+rather than becoming synchronous throws. The same
+[request progression](components/runtime-observation.md) serves ordinary Python
+observation; no second engine is selected by the caller's waiting convention.
 
 The executable program contains JavaScript metadata collections because the
 backend needs an ordered list of logical values and computations. It never
@@ -179,6 +188,11 @@ materialization records, and accepted observation requests. These semantic
 counters make it possible to distinguish a retained computation from
 WebAssembly memory growth and to prove that explicit shutdown drains both
 layers. Reading diagnostics does not demand a tensor.
+
+Copy counters describe the named WebAssembly boundaries, not every host or
+Python allocation. A ready-host observation creates an owned host copy without
+incrementing upload or readback counters. An immediately completed local request
+has already released its request lease even if its Promise callback has not run.
 
 For an addition of two distinct length-`n` host inputs, the first observation
 uses one `4n`-byte import for each input, one `4n`-byte output allocation, one

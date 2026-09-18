@@ -107,6 +107,12 @@ Preparation failure settles the accepted host call explicitly. The
 [preparation rationale](python-observation.md#prepare-cpu-execution-before-entering-python)
 explains why this is readiness work rather than eager tensor evaluation.
 
+The [worker connection](../components/python-worker-connection.md) makes this
+lifecycle boundary concrete. A failed or terminated connection is not an
+acknowledgment that local binding cleanup or runtime drain succeeded. The host
+retains worker lifetime and known-failure reporting; transport does not add
+automatic interpreter recovery or cancellation of numerical work.
+
 The host must not concurrently drive the borrowed interpreter through raw
 Pyodide calls during a managed run. This is a cooperation contract, not a
 security sandbox or a mechanism for detecting every possible interpreter call.
@@ -238,8 +244,9 @@ handle table does not establish a speed advantage.
 ## Observe results without blocking browser progress
 
 Producing a Python list requires actual numbers, so `tolist()` is an
-observation, not a metadata lookup. Ordinary `tolist()` and the optional
-Tabgrad extension `tolist_async()` observe the same runtime request and logical
+observation, not a metadata lookup. Python uses ordinary observation methods,
+without a parallel awaitable tensor API. These methods and JavaScript's
+asynchronous observation share one runtime request lifecycle and logical
 result. Neither selects another engine or recomputes the answer in Python.
 The [observation contract](python-observation.md) also governs scalar and
 control-flow observations without requiring model authors to rewrite their
@@ -252,24 +259,34 @@ depending solely on a local Promise callback. Ready host values and prepared
 CPU numerical execution remain local. Native JSPI and Pyodide's experimental
 `can_run_sync` are not prerequisites of this selected mechanism.
 
-The host's asynchronous script entry is different from an awaitable operation
-inside Python. Shared waiting parks local Python tasks too; deliberately
-awaitable observation lets those tasks cooperate. Scripts must join the tasks
-they create, and required GPU completion must not depend on a callback queued
-on the parked interpreter. Nested internal callbacks stay within the current
-invocation and propagate context explicitly. Arbitrary raw Pyodide entry and
+The host's asynchronous script entry is different from an await point inside
+Python. An ordinary tensor observation does not yield to local Python tasks;
+shared waiting parks those tasks too. Unrelated Python code can still use
+explicit await points, and scripts must join the tasks they create. Required
+GPU completion must not depend on a callback queued on the parked interpreter.
+Nested internal callbacks stay within the current invocation and propagate
+context explicitly. Arbitrary raw Pyodide entry and
 escaped task management are not implied by the ordinary-method contract.
 
-Capabilities and managed context are checked before admitting unsupported
-work. Missing worker placement, shared-memory isolation or selected backend
-capability produces an explicit integration/capability error, not a switch to
-JSPI or another numerical backend. Tested Pyodide versions and browser support
-remain versioned evidence, not promises inferred from a browser name.
+The host establishes the interpreter-worker placement and independent entry
+endpoint. Local attachment is not a check of that complete deployment: it
+borrows an interpreter in its existing realm rather than detecting or repairing
+the application's thread topology. The CPU profile needs no shared-memory
+isolation. Its worker placement remains a hosting requirement, not a capability
+error that attachment promises to detect.
 
-Cancelling a Python observation waiter detaches that consumer; it does not
-cancel already accepted runtime work. Its resource leases remain until the
-producer settles and drains, including during close. Input errors preserve
-their synchronous admission timing and appropriate Python exception class.
+Managed-entry context and selected-backend prerequisites are checked before
+admitting unsupported work. In particular, the shared-wait GPU profile must
+reject a context that cannot wait or lacks shared-memory isolation. A failed
+prerequisite produces an explicit integration/capability error, not a switch
+to JSPI or another numerical backend. Tested Pyodide versions and browser
+support remain versioned evidence, not promises inferred from a browser name.
+
+Ordinary observation does not expose a separately cancellable Python waiter.
+Where another runtime consumer has a supported cancellation interface,
+detachment does not cancel already accepted producer work. Its resource leases
+remain until the producer settles and drains, including during close. Input
+errors preserve their synchronous admission timing and appropriate Python exception class.
 Asynchronous backend errors preserve code, phase, operation provenance, and
 cause through the Python error presentation. Lifecycle and browser-capability
 errors must remain distinguishable from PyTorch semantic errors.
@@ -313,7 +330,7 @@ and deployment choices while retaining the ownership boundaries below:
 | Existing opaque objects rather than a numeric handle table | Avoids a second mapping and its release rules in one realm; a serialized transport would need a separate representation. |
 | Static Python source rather than a wheel installation path | Avoids an installer dependency; artifact consistency and transactional import cleanup still require an explicit owner. |
 | Wrapper finalization plus session close rather than closing every expression temporary | Preserves ordinary Python use and escaping live values; cycle collection is not deterministic. |
-| One request lifecycle with explicit synchronous and asynchronous observation | Preserves shared semantics without mandatory JSPI; the managed Python GPU profile requires independent backend progress, worker placement and isolation. |
+| One request lifecycle for ordinary Python and asynchronous JavaScript observation | Preserves shared semantics without mandatory JSPI or a second Python calling convention; the managed Python GPU profile requires independent backend progress, worker placement and isolation. |
 
 The probe exercised both object and numeric routes through real Tabgrad
 JavaScript and WebAssembly artifacts, using Pyodide 314.0.6 in Chrome

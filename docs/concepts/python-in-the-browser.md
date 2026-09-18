@@ -208,8 +208,11 @@ memory under restricted cross-origin interactions. The
 waiting mechanism, explains those hosting requirements and compares the
 alternatives. Ordinary Python methods and an asynchronous host call are
 compatible: the host awaits a complete script while a method inside that
-script waits for its numerical value. Explicitly awaitable tensor methods are
-optional when Python tasks need to cooperate during observation.
+script waits for its numerical value. Python tensor observation does not
+provide an await point for other Python tasks in that interpreter. Those tasks
+can cooperate at explicit await points in other Python code, but cannot advance
+while an ordinary observation occupies or parks their worker. The host's
+asynchronous call does not change that local scheduling limit.
 
 For performance, ask where time and data go: interpreter startup, Python call
 overhead, language crossings, numerical execution and result conversion are

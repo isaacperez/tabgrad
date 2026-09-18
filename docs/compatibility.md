@@ -49,6 +49,35 @@ facts are not a disguised compatibility claim.
 
 ## Required operation record
 
+### Python tensor evidence
+
+The [Python tensor reference](reference/python-tensors.md) defines the bounded
+creation, metadata, addition and ordinary observation contract. Its native expectations are generated
+from the pinned oracle by `scripts/generate_tensor_oracle.py` and consumed by
+real-interpreter tests. The fixture records exact build/source revisions,
+inputs, comparison rules and selected error classes. Tabgrad-only restrictions
+have separate assertions rather than being attributed to PyTorch.
+
+Real Pyodide tests also consume those numerical fixtures through `tolist()` and
+check independent lists of Python floats, nested control flow, common demand
+with JavaScript, entry-context rejection and failure ownership. Browser
+fixtures exercise ordinary CPU observation with unmodified capabilities and a
+controlled absence of JSPI established before Pyodide loads. That control is
+reported as such, not as evidence from an older native browser build.
+
+The worker fixture additionally exercises application-owned interpreter
+placement, off-worker entry and close, borrowed globals and stale wrappers.
+Normal CPU cases run without isolation; a separate shared test gate verifies
+host responsiveness while Python is parked. The gate is not a runtime CPU
+requirement. Endpoint tests separately cover loss and diagnostic transport.
+
+This evidence group does not establish a release support status, general
+PyTorch compatibility or coverage of every CPU variant in every Python/browser combination. A release
+record must still identify its exact environment and interface dimensions
+under the rules below.
+
+### Contents of a release record
+
 Each public operation or coherent API group in a release must record:
 
 - its public Python and JavaScript names and supported signatures;

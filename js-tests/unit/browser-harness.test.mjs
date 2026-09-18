@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 
 import {
   BrowserRunError,
@@ -22,6 +24,20 @@ async function post(path, body) {
   });
 }
 `;
+
+test("an isolated distribution can be measured without replacing the working distribution", async () => {
+  const directory = fileURLToPath(new URL("../fixtures", import.meta.url));
+  const original = await readFile(new URL("../../dist/manifest.json", import.meta.url), "utf8");
+  const server = await startBrowserServer([], { distributionDirectory: directory });
+  try {
+    const response = await fetch(`${server.origin}/python-tensor-oracle.json`);
+    assert.equal(response.status, 200);
+    assert.equal(await response.text(), await readFile(`${directory}/python-tensor-oracle.json`, "utf8"));
+    assert.equal((await fetch(`${server.origin}/manifest.json`)).status, 404);
+  } finally { await server.close(); }
+  assert.equal(await readFile(new URL("../../dist/manifest.json", import.meta.url), "utf8"), original);
+});
+
 
 function fixtureBrowser(script, onArguments = undefined) {
   return {

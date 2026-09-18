@@ -8,6 +8,7 @@ import {
   TabgradError,
   retainExecutionFailureContext,
 } from "./errors.js";
+import { ExecutionRequest, type QueuedExecutionRequest } from "./execution-request.js";
 import {
   ExecutableProgram,
   type LoweredAddFloat32,
@@ -349,6 +350,8 @@ interface InternalRuntimeSessionOptions extends RuntimeSessionOptions {
 }
 
 interface RuntimeSessionAccess {
+  readonly prepare: () => Promise<void>;
+  readonly observeSynchronously: (state: TensorState) => Float32Array;
   readonly add: (left: TensorState, rightHandle: unknown) => Tensor;
   readonly observe: (state: TensorState) => Promise<Float32Array>;
   readonly assertOpen: () => void;
@@ -571,7 +574,11 @@ export class RuntimeSession {
   readonly #materializations = new MaterializationTable();
   readonly #states = new Set<TensorState>();
   readonly #values = new Set<TensorValue>();
-  #tail: Promise<void> = Promise.resolve();
+  #requestHead: QueuedExecutionRequest | undefined;
+  #requestTail: QueuedExecutionRequest | undefined;
+  #advancing = false;
+  #drainCompletion: { readonly promise: Promise<void>; readonly resolve: () => void } | undefined;
+  #preparation: Promise<void> | undefined;
   #closed = false;
   #closePromise: Promise<void> | null = null;
   #operationRecords = 0;
@@ -593,6 +600,8 @@ export class RuntimeSession {
     this.#onProgramFormed = testConfiguration?.onProgramFormed;
     this.#beforeReadback = testConfiguration?.beforeReadback;
     RUNTIME_SESSION_ACCESS.set(this, Object.freeze({
+      prepare: () => this.#prepare(),
+      observeSynchronously: (state: TensorState) => this.#observeSynchronously(state),
       add: (left: TensorState, rightHandle: unknown) => (
         this.#add(left, rightHandle)
       ),
@@ -657,29 +666,70 @@ export class RuntimeSession {
     return this.#createHandle(result);
   }
 
+  #prepare(): Promise<void> {
+    this.#assertOpen();
+    // Preparation shares the session's drain ownership, but has no tensor
+    // operation or executable program to attach to a setup failure.
+    this.#preparation ??= this.#enqueue(this.#prepareBackend()).asPromise();
+    return this.#preparation;
+  }
+
+  *#prepareBackend(): Generator<Promise<void>, void, void> {
+    const preparation = this.#backend.prepare();
+    if (preparation !== undefined) yield preparation;
+  }
+
   #observe(state: TensorState): Promise<Float32Array> {
     this.#assertOpen();
     this.#retainValue(state.value);
-    return this.#enqueue(async () => {
-      try {
-        const materialization = await this.#materialize(state.value);
+    return this.#enqueue(this.#observation(state.value)).asPromise();
+  }
+
+  #observeSynchronously(state: TensorState): Float32Array {
+    this.#assertOpen();
+    const host = this.#materializations.get(state.value)?.kind === "host";
+    if (this.#requestHead !== undefined || (!host && !this.#backend.ready)) {
+      throw new TabgradError(
+        "SYNCHRONOUS_OBSERVATION_UNAVAILABLE",
+        "Synchronous observation requires local readiness and no pending asynchronous predecessor.",
+      );
+    }
+    this.#retainValue(state.value);
+    return this.#enqueue(this.#observation(state.value)).read();
+  }
+
+  *#observation(value: TensorValue): Generator<Promise<void>, Float32Array, void> {
+    try {
+      const host = this.#materializations.get(value);
+      if (host?.kind === "host") {
+        const formed = this.#formProgram(value);
         try {
           this.#beforeReadback?.();
-          return this.#backend.read(
-            materialization.allocation,
-            state.value.shape[0],
-          );
+          return host.data.slice();
         } catch (error) {
-          throw retainProgramFailureContext(
-            error,
-            materialization.program,
-            "readback",
-          );
+          throw retainProgramFailureContext(error, formed.program, "readback");
         }
-      } finally {
-        this.#releaseValue(state.value);
       }
-    });
+      const formed = this.#formProgram(value);
+      try {
+        yield* this.#prepareBackend();
+        this.#materialize(value, formed);
+      } catch (error) {
+        throw retainProgramFailureContext(error, formed.program, "execution");
+      }
+      const materialization = this.#materializations.get(value);
+      if (materialization?.kind !== "resident") {
+        throw new TabgradError("BACKEND_STATUS_ERROR", "Observation has no resident result.");
+      }
+      try {
+        this.#beforeReadback?.();
+        return this.#backend.read(materialization.allocation, value.shape[0]);
+      } catch (error) {
+        throw retainProgramFailureContext(error, formed.program, "readback");
+      }
+    } finally {
+      this.#releaseValue(value);
+    }
   }
 
   diagnostics(): RuntimeDiagnostics {
@@ -709,7 +759,7 @@ export class RuntimeSession {
   }
 
   async #finishClose(): Promise<void> {
-    await this.#tail;
+    await this.#drainRequests();
     for (const materialization of this.#materializations.values()) {
       if (materialization.kind === "resident") {
         this.#backend.release(materialization.allocation);
@@ -779,17 +829,13 @@ export class RuntimeSession {
     }
   }
 
-  async #materialize(value: TensorValue): Promise<{
-    readonly allocation: ResidentAllocation;
-    readonly program: ExecutableProgram;
-  }> {
-    const formed = this.#formProgram(value);
+  #materialize(value: TensorValue, formed: FormedProgram): void {
     const existing = this.#materializations.get(value);
     if (existing?.kind === "resident") {
-      return { allocation: existing.allocation, program: formed.program };
+      return;
     }
     try {
-      const allocations = await this.#backend.execute(formed.program, formed.bindings);
+      const allocations = this.#backend.execute(formed.program, formed.bindings);
       for (const [slot, allocation] of allocations) {
         const boundValue = formed.valuesBySlot.get(slot);
         if (boundValue === undefined) {
@@ -827,7 +873,6 @@ export class RuntimeSession {
           { backend: "webassembly-cpu", phase: "execution" },
         );
       }
-      return { allocation: result.allocation, program: formed.program };
     } catch (error) {
       throw retainProgramFailureContext(error, formed.program, "execution");
     }
@@ -892,22 +937,73 @@ export class RuntimeSession {
     };
   }
 
-  #enqueue<T>(task: () => Promise<T>): Promise<T> {
-    this.#requestLeases += 1;
-    const execution = this.#tail.then(task, task);
-    const result = execution.finally(() => {
-      this.#requestLeases -= 1;
-    });
-    this.#tail = result.then(
-      () => undefined,
-      () => undefined,
+  #enqueue<T>(steps: Generator<Promise<void>, T, void>): ExecutionRequest<T> {
+    const request = new ExecutionRequest(
+      steps,
+      () => this.#advanceRequests(),
+      () => this.#retireRequest(request),
     );
-    return result;
+    this.#requestLeases += 1;
+    if (this.#requestTail === undefined) this.#requestHead = request;
+    else this.#requestTail.next = request;
+    this.#requestTail = request;
+    this.#advanceRequests();
+    return request;
+  }
+
+  #advanceRequests(): void {
+    if (this.#advancing) return;
+    this.#advancing = true;
+    try {
+      while (this.#requestHead !== undefined) {
+        const current = this.#requestHead;
+        current.advance();
+        if (this.#requestHead === current) break;
+      }
+    } finally {
+      this.#advancing = false;
+    }
+  }
+
+  #retireRequest(request: QueuedExecutionRequest): void {
+    this.#requestHead = request.next;
+    request.next = undefined;
+    this.#requestLeases -= 1;
+    if (this.#requestHead === undefined) {
+      this.#requestTail = undefined;
+      this.#drainCompletion?.resolve();
+      this.#drainCompletion = undefined;
+    }
+  }
+
+  #drainRequests(): Promise<void> {
+    if (this.#requestHead === undefined) return Promise.resolve();
+    if (this.#drainCompletion === undefined) {
+      let resolve!: () => void;
+      const promise = new Promise<void>((onDrained) => { resolve = onDrained; });
+      this.#drainCompletion = { promise, resolve };
+    }
+    return this.#drainCompletion.promise;
   }
 }
 
 export function createRuntimeSession(options: RuntimeSessionOptions = {}): RuntimeSession {
   return new RuntimeSession(options);
+}
+
+/** @internal Prepare the owned backend before entering a synchronous frontend. */
+export function prepareRuntimeSession(session: RuntimeSession): Promise<void> {
+  return runtimeSessionAccess(session).prepare();
+}
+
+/** @internal Observe an opaque handle through its owning session's common request path. */
+export function observeTensorSynchronously(session: RuntimeSession, handle: unknown): Float32Array {
+  const state = requireTensorState(handle);
+  assertTensorOpen(state);
+  if (state.session !== session) {
+    throw new TabgradError("DIFFERENT_SESSION", "Observation requires a tensor from this session.");
+  }
+  return runtimeSessionAccess(session).observeSynchronously(state);
 }
 
 /** @internal */

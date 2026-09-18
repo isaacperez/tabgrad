@@ -1,0 +1,2 @@
+# Development-only compatibility oracle. Never installed in the browser.
+torch==2.14.0

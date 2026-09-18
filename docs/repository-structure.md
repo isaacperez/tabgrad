@@ -33,6 +33,7 @@ responsibility, not a separately published product.
 | Location | Purpose | What belongs elsewhere |
 | --- | --- | --- |
 | [`src/`](../src) | TypeScript source for runtime semantics, browser coordination and backend adaptation, plus internal access used to test those contracts | Build orchestration and executable test cases belong under `scripts/` and `js-tests/` |
+| [`python/`](../python) | Maintained Python compatibility source and its interpreter-installation bootstrap, plus static declarations for the registered JavaScript boundary | Native contributor tooling belongs in `scripts/`; emitted executable copies belong in `dist/python/`; static-only `.pyi` files are not browser assets |
 | [`crates/`](../crates) | Rust packages, called crates, compiled by Cargo; `tabgrad-wasm-kernels/` owns CPU numerical kernel source | Emitted WebAssembly belongs in build output, not beside the maintained Rust source |
 | [`js-tests/`](../js-tests) | JavaScript/Node test cases and browser test or measurement pages | General runner infrastructure belongs in `scripts/`; these pages are not a public example gallery |
 | [`tests/`](../tests) | Python tests of repository tooling, including the policy checker and test discovery | Browser runtime tests use the separately configured `js-tests/` route |
@@ -106,6 +107,12 @@ variants, their requirements and their hashes. It connects the runtime's
 artifact loading to the binaries produced by that build. A hash identifies
 the selected bytes; it is not a replacement for reviewing the source.
 
+Python compatibility source follows a different path: it is copied, not
+compiled by the TypeScript or Rust toolchain. Its own manifest ties the copied
+source bytes to the installation protocol and pinned interpreter. Pyodide
+executes that source after attachment verifies the complete asset set. This
+does not insert Python into the direct JavaScript execution path.
+
 The diagram follows build inputs into outputs. Arrows mean “produces or
 supplies input to,” not runtime method calls or permission to publish.
 
@@ -119,6 +126,9 @@ flowchart TD
     COPY --> WASM["dist/wasm/: WebAssembly modules"]
     WASM --> HASH["Manifest generation"]
     HASH --> MANIFEST["dist/manifest.json"]
+    PY["Python source: python/"] --> PYCOPY["Copy source and hash bytes"]
+    PYCOPY --> PYDIST["dist/python/: source and Python manifest"]
+    PYDIST --> CHECK
     JS --> CHECK["Node and browser artifact checks"]
     WASM --> CHECK
     MANIFEST --> CHECK
@@ -132,7 +142,8 @@ toolchain configuration and individual test cases to keep that relationship
 visible; neither omitted category is optional to a reproducible build.
 
 [`package.json`](../package.json) orchestrates the build: clear `dist/`, build
-the CPU variants, compile TypeScript, and write the manifest.
+the CPU variants, compile TypeScript, write the kernel manifest, and copy/hash
+the Python assets through [`scripts/build-python.mjs`](../scripts/build-python.mjs).
 [`tsconfig.json`](../tsconfig.json) maps `src/` into `dist/`.
 [`scripts/build-wasm.mjs`](../scripts/build-wasm.mjs) compiles and copies the
 CPU modules, and

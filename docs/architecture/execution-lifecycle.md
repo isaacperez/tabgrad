@@ -114,9 +114,9 @@ erase an admitted effect or a failure that has no other public result.
 ## Observation from JavaScript and Python
 
 An observation owns a request and its result state. JavaScript exposes a
-Promise for that observation; Python offers ordinary methods and optional
-awaitable methods over the same state. A Promise observes a transition rather
-than being the only mechanism capable of driving it. Request admission,
+Promise for that observation; Python offers ordinary methods over the same
+state, not a parallel awaitable tensor API. A Promise observes a transition
+rather than being the only mechanism capable of driving it. Request admission,
 submission and completion publication have explicit advancement that both
 synchronous observation and asynchronous notification can use without creating
 another invocation lifecycle.
@@ -152,15 +152,16 @@ rescanning retained history. Required ordered effects also progress at the
 managed-entry boundary.
 
 Reentrant Python-to-JavaScript-to-Python callbacks propagate and restore runtime
-and diagnostic context explicitly. Python task cancellation detaches its
-consumer from the JavaScript promise; it does not cancel an already owned
-producer.
+and diagnostic context explicitly. Where an interface supports consumer
+cancellation, detachment does not cancel an already owned producer. A Promise
+is not itself a cancellation interface, and ordinary Python observation does
+not expose a separately cancellable awaitable waiter.
 
 These are general observation capabilities, not a promise that every frontend
 entry exposes every variant. The [Python integration contract](python-integration.md#observe-results-without-blocking-browser-progress)
-defines the managed script entry, ordinary `tolist()`, and the
-explicit awaitable observation. Its host and task-lifetime restrictions keep
-binding shutdown distinct from cancelling one observation waiter.
+defines the asynchronous host script entry and ordinary Python `tolist()`.
+Its host and task-lifetime restrictions keep cooperative binding shutdown
+distinct from cancelling a consumer or forcibly interrupting Python.
 
 ## Explicit transfer
 

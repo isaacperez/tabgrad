@@ -26,11 +26,17 @@ Chrome and Firefox jobs.
 The `repository-consistency` job prepares an isolated `.venv` with locked
 Python tooling and the selected Node/npm environment with locked Pyright. It runs:
 
-1. `.venv/bin/python -m ruff format --check scripts tests`.
-2. `.venv/bin/python -m ruff check scripts tests`.
+1. `.venv/bin/python -m ruff format --check scripts tests python`.
+2. `.venv/bin/python -m ruff check scripts tests python`.
 3. `npm run check:python` for strict Python type checking.
 4. `.venv/bin/python scripts/check_repository.py`.
 5. `.venv/bin/python scripts/run_tests.py`.
+
+Python type checking includes the maintained compatibility source with the
+Pyodide interpreter target, separately from native tooling's Python target.
+The check reads upstream type sources from the locked npm-installed Pyodide
+archive; it does not install dependencies or import browser modules into
+native Python. See [the command coverage](development.md#configured-commands).
 
 The `runtime` job uses Node.js 22.12.0 from `.node-version`, installs the Rust
 1.98.1 minimal toolchain with `wasm32-unknown-unknown`, Rustfmt, and Clippy,

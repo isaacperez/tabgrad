@@ -87,7 +87,7 @@ link to its primary source, but they must not create a competing version.
 | Direct JavaScript API | [`javascript-api.md`](javascript-api.md) |
 | Documentation structure and writing rules | [`documentation.md`](documentation.md) |
 | Technical documentation perspectives and placement | [`documentation.md`](documentation.md#navigate-technical-documentation-by-reader-question) |
-| Development environment and commands | [`development.md`](development.md) |
+| Development stack, environment, and commands | [`development.md`](development.md) |
 | Generated files and their source files | [`generated-files.md`](generated-files.md) |
 | Performance and resource measurements | [`performance.md`](performance.md) |
 | Versions, releases, migrations, and release notes | [`releases.md`](releases.md) |

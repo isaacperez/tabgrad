@@ -22,6 +22,12 @@ if (environment.error || environment.status !== 0) {
   process.exit(environment.status || 1);
 }
 
+const declarations = spawnSync(interpreter, [
+  "-I", fileURLToPath(new URL("./prepare_pyodide_types.py", import.meta.url)),
+], { cwd: repositoryRoot, stdio: "inherit" });
+if (declarations.error) throw declarations.error;
+if (declarations.status !== 0) process.exit(declarations.status ?? 1);
+
 const result = spawnSync(process.execPath, [
   fileURLToPath(new URL("../node_modules/pyright/index.js", import.meta.url)),
   "--project", fileURLToPath(new URL("../pyrightconfig.json", import.meta.url)),
