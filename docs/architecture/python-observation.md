@@ -3,6 +3,9 @@
 **Decision:** accepted on 2026-09-10 under
 [research issue #52](https://github.com/isaacperez/tabgrad/issues/52), with an
 [explicit decision record](https://github.com/isaacperez/tabgrad/issues/52#issuecomment-5622218870).
+The [surface refinement under #44](https://github.com/isaacperez/tabgrad/issues/44#issuecomment-5644951988)
+removes the optional Python awaitable observation API while retaining this
+waiting mechanism and JavaScript's asynchronous interfaces.
 
 This chapter explains how an ordinary Python call can wait for GPU-produced
 numbers without requiring JavaScript Promise Integration (JSPI). It is for a
@@ -156,13 +159,25 @@ waiter must not lose a notification between inspection and sleep. Physical
 resource drain is deliberately omitted from this success diagram because it
 has a different lifetime from returning the logical result.
 
-JavaScript retains an asynchronous observation surface. Python retains optional
-awaitable observations, such as `tolist_async()`, for deliberate concurrency;
-ordinary tensor code does not need to use them. Both surfaces observe the
-same owned request and result. A synchronous shared wait parks the entire
-interpreter worker, including its local Python asynchronous tasks. Such tasks
-can run at explicit await points, but the required completion path cannot
-depend on them while the worker is parked.
+JavaScript exposes asynchronous observation; Python uses ordinary tensor
+methods. Both language surfaces observe the same owned request and result,
+without a parallel family of Python awaitable tensor methods. The host can
+await a complete Python script from JavaScript without requiring that script
+to await each tensor observation.
+
+This smaller Python surface has a deliberate concurrency limit. An ordinary
+observation does not yield to other Python tasks: local CPU work occupies the
+interpreter worker, and a synchronous shared wait parks it, including its
+Python asynchronous tasks. Other Python code can use explicit await points,
+but those points do not occur inside an ordinary tensor observation. Required
+backend completion must progress without those local tasks.
+
+The alternative of retaining optional awaitable tensor methods would give
+Python callers an explicit observation await point, at the cost of another
+public calling convention, documentation and cancellation tests. The selected
+surface omits that extension; it does not remove the runtime's shared
+completion machinery or JavaScript's asynchronous API. Neither choice alone
+establishes a numerical performance advantage.
 
 Internal Python-to-JavaScript-to-Python callbacks belong to the current
 invocation. They are not new host entries queued behind their own caller.
@@ -222,10 +237,12 @@ event loop. Terminal and error state has reserved capacity, so inability to
 allocate a result cannot itself prevent failure delivery.
 
 Three events must remain distinct: a consumer accepts a result, a consumer
-detaches, and physical use drains. Cancelling an awaitable Python task can
-detach it while the backend still owns admitted work and mappings. The backend
-retains its leases until the physical obligations end. Complete result, drain
-and cancellation contracts remain in
+detaches, and physical use drains. Where a caller-facing interface provides
+cancellation, detaching that consumer does not end admitted backend work or
+mapping ownership. A JavaScript Promise alone does not provide cancellation,
+and ordinary Python observation does not expose an awaitable waiter to cancel.
+The backend retains its leases until the physical obligations end. Complete
+result, drain and cancellation contracts remain in
 [Requests, completion, and failure](execution-lifecycle.md).
 
 A **generation** identifies one lifetime of a backend owner. Every response
@@ -346,7 +363,9 @@ not certification of mobile browsers, embedded views or complete models.
 Physical-lease, generation, variable-size output and managed-entry probes
 examined result acceptance, stale replies, mapping lifetimes, shutdown and
 actual cancellation of an awaitable Python task. They establish the behavior
-of those fixtures, not verification of a production implementation. A Firefox
+of those fixtures, not verification of a production implementation. That
+awaitable fixture is historical evidence, not a requirement to expose a Python
+awaitable tensor method under the refined surface. A Firefox
 adapter-recreation failure also occurred in a plain-JavaScript control;
 removing Python or JSPI did not remove that observed recovery limit.
 

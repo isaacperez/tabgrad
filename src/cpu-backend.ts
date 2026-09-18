@@ -319,12 +319,22 @@ export class WebAssemblyCpuBackend {
     });
   }
 
-  async execute(
+  /** Validate and retain the CPU context without allocating tensor payloads. */
+  get ready(): boolean {
+    return this.#context !== undefined && !this.#closed;
+  }
+
+  prepare(): Promise<void> | undefined {
+    this.#assertOpen();
+    if (this.#context !== undefined) return undefined;
+    return this.#getContext().then(() => undefined);
+  }
+
+  execute(
     program: ExecutableProgram,
     bindings: ReadonlyMap<ProgramSlot, ProgramBinding>,
-  ): Promise<ReadonlyMap<ProgramSlot, ResidentAllocation>> {
-    this.#assertOpen();
-    const context = await this.#getContext();
+  ): ReadonlyMap<ProgramSlot, ResidentAllocation> {
+    const context = this.#requiredContext();
     if (context.poisoned) {
       throw new TabgradError(
         "BACKEND_TRAP",

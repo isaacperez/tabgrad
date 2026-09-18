@@ -7,6 +7,17 @@ lifecycle or cost must be preserved.
 
 ## Questions this perspective answers
 
+Start with [The Python script binding](python-script-binding.md) for the
+managed-entry, interpreter-borrowing and session-drain boundary.
+Read [Python worker connection](python-worker-connection.md) for off-worker
+admission, lifecycle messages, connection loss and acknowledged closure.
+Read [Python package installation](python-package-installation.md) for the
+verified static assets and the resources installed inside a borrowed interpreter.
+Read [Python tensor wrappers](python-tensor-wrappers.md) for handle ownership,
+argument presentation, lazy addition and metadata from the shared runtime.
+Read [Runtime observation](runtime-observation.md) for common request progression,
+result publication, synchronous consumers and asynchronous observers.
+
 Component documentation answers questions such as:
 
 - Which owner is responsible for a behavior or decision?

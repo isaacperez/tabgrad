@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8"><title>Python worker integration</title></head>
+  <body>
+    <script type="module">
+      import { connectPythonWorker } from "/python.js";
+
+      const parameters = new URLSearchParams(location.search);
+      const token = parameters.get("token");
+      const lifetime = new AbortController();
+      const worker = new Worker("/python-worker.mjs", { type: "module" });
+      const channel = new MessageChannel();
+      const client = connectPythonWorker(channel.port1, lifetime.signal);
+      const output = [];
+      const events = new Map();
+      const gate = parameters.get("gate") === "shared" ? new SharedArrayBuffer(4) : undefined;
+
+      function next(kind) {
+        return new Promise((resolve, reject) => { events.set(kind, { resolve, reject }); });
+      }
+      function failed(error) {
+        lifetime.abort(error);
+        for (const event of events.values()) event.reject(error);
+        events.clear();
+      }
+      worker.addEventListener("error", (event) => failed(new Error(event.message)));
+      worker.addEventListener("message", ({ data }) => {
+        if (data.kind === "failure") { failed(new Error(data.message)); return; }
+        if (data.kind === "stdout") { output.push(data.text); return; }
+        const event = events.get(data.kind);
+        events.delete(data.kind);
+        event?.resolve(data);
+      });
+      async function send(endpoint, value) {
+        const response = await fetch(`${endpoint}?token=${encodeURIComponent(token)}`, {
+          method: "POST", headers: { "content-type": "application/json" },
+          body: JSON.stringify(value),
+        });
+        if (!response.ok) throw new Error(`Reporting failed: ${response.status}`);
+      }
+      async function rejects(promise, code) {
+        try { await promise; } catch (error) {
+          if (error.code === code) return;
+          throw error;
+        }
+        throw new Error(`Expected ${code}.`);
+      }
+      // Observe all terminal promises before starting the worker or any script.
+      const ready = next("ready");
+      const finished = next("finished");
+      void finished.catch(() => undefined);
+      try {
+        await send("/__phase", { phase: "application-started" });
+        worker.postMessage({ port: channel.port2,
+          disableJspi: parameters.get("jspi") === "disabled",
+          variant: parameters.get("variant") ?? "simd128", gate }, [channel.port2]);
+        const environment = await ready;
+        await send("/__phase", { phase: "assets-loaded" });
+        const preparing = client.runPythonAsync("pass");
+        await rejects(client.runPythonAsync("rejected_script = True"), "PYTHON_ENTRY_BUSY");
+        await preparing;
+        await send("/__phase", { phase: "runtime-started" });
+        await client.runPythonAsync(`
+import torch
+session = torch._runtime_session
+assert session.diagnostics().backendLoads == 1
+selected_variant = session.diagnostics().selectedVariant
+assert session.diagnostics().kernelCalls == 0
+a = torch.tensor([1.0, 2.0], dtype=torch.float32, device='cpu')
+b = torch.tensor([3.0, 4.0], dtype=torch.float32, device='cpu')
+result = a + b
+assert session.diagnostics().kernelCalls == 0
+def observe(value):
+    return value.tolist()
+if observe(result) == [4.0, 6.0]:
+    answer = host_value + 2
+else:
+    raise AssertionError('Worker observation failed')
+print(result.tolist())
+assert session.diagnostics().kernelCalls == 1
+assert session.diagnostics().liveRequestLeases == 0
+`);
+        try {
+          await client.runPythonAsync("raise ValueError('controlled script failure')");
+          throw new Error("Python failure was reported as success.");
+        } catch (error) {
+          if (error.name !== "PythonError" || !error.message.includes("controlled script failure")) throw error;
+        }
+        if (gate !== undefined) {
+          const parked = next("parked");
+          const running = client.runPythonAsync("import _test_worker_gate; _test_worker_gate.park(); answer += 1");
+          await parked;
+          await rejects(client.runPythonAsync("rejected_script = True"), "PYTHON_ENTRY_BUSY");
+          const closing = client.close();
+          if (client.close() !== closing) throw new Error("Close completion is not shared.");
+          await rejects(client.runPythonAsync("rejected_script = True"), "CLOSED_PYTHON_BINDING");
+          let settled = false;
+          void closing.then(() => { settled = true; });
+          await new Promise((resolve) => setTimeout(resolve, 20));
+          if (settled) throw new Error("Close completed while Python was parked.");
+          Atomics.store(new Int32Array(gate), 0, 1);
+          Atomics.notify(new Int32Array(gate), 0);
+          await running;
+          await closing;
+        } else {
+          await client.runPythonAsync("answer += 1");
+          await client.close();
+        }
+        const result = await finished;
+        if (output.join("\n") !== "[4.0, 6.0]") throw new Error("Unexpected printed result.");
+        await send("/__phase", { phase: "runtime-finished" });
+        await send("/__result", { ok: true, ...environment, answer: result.answer,
+          selectedVariant: result.selectedVariant, gated: gate !== undefined });
+      } catch (error) {
+        failed(error);
+        await send("/__result", { ok: false, error: { message: String(error), stack: error?.stack } });
+      } finally {
+        if (gate !== undefined) { Atomics.store(new Int32Array(gate), 0, 1); Atomics.notify(new Int32Array(gate), 0); }
+        lifetime.abort(new Error("Test host stopped its worker."));
+        worker.terminate();
+      }
+    </script>
+  </body>
+</html>

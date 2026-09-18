@@ -20,7 +20,7 @@
     "clean": "node scripts/clean.mjs",
     "build:wasm": "node scripts/build-wasm.mjs",
     "build:javascript": "tsc --project tsconfig.json",
-    "build": "npm run clean && npm run build:wasm && npm run build:javascript && node scripts/write-wasm-manifest.mjs",
+    "build": "npm run clean && npm run build:wasm && npm run build:javascript && node scripts/write-wasm-manifest.mjs && node scripts/build-python.mjs",
     "check:javascript": "tsc --project tsconfig.json --noEmit",
     "check:python": "node scripts/check-python.mjs",
     "check:rust": "node scripts/check-rust.mjs",
@@ -30,9 +30,11 @@
     "test:browser": "node scripts/run-browser-tests.mjs",
     "test:browser:from-source": "npm run build && npm run test:browser",
     "test": "npm run test:node && npm run test:browser",
-    "measure": "npm run build && node scripts/measure-runtime.mjs"
+    "measure": "npm run build && node scripts/measure-runtime.mjs",
+    "measure:python": "npm run build && node scripts/measure-python.mjs"
   },
   "devDependencies": {
+    "pyodide": "314.0.6",
     "pyright": "1.1.413",
     "typescript": "6.0.3"
   }

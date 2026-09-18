@@ -110,6 +110,8 @@ TIMELESS_DOCUMENTS = ARCHITECTURE_DOCUMENTS | {
     "docs/agent-workflow.md",
     "docs/compatibility.md",
     "docs/components/README.md",
+    "docs/components/python-script-binding.md",
+    "docs/components/python-package-installation.md",
     "docs/continuous-integration.md",
     "docs/concepts/README.md",
     "docs/concepts/python-in-the-browser.md",
@@ -143,9 +145,11 @@ REQUIRED_FILES = TIMELESS_DOCUMENTS | {
     "crates/tabgrad-wasm-kernels/Cargo.toml",
     "crates/tabgrad-wasm-kernels/src/lib.rs",
     "js-tests/browser/runtime.html",
+    "js-tests/browser/python-lifecycle.html",
     "js-tests/browser/measure.html",
     "js-tests/unit/runtime.test.mjs",
     "js-tests/unit/public-types.test.mjs",
+    "js-tests/unit/python-binding.test.mjs",
     "package-lock.json",
     "package.json",
     "pyrightconfig.json",
@@ -154,6 +158,11 @@ REQUIRED_FILES = TIMELESS_DOCUMENTS | {
     "ruff.toml",
     "rust-toolchain.toml",
     "scripts/build-wasm.mjs",
+    "scripts/build-python.mjs",
+    "scripts/prepare_pyodide_types.py",
+    "python/bootstrap.py",
+    "python/_tabgrad_runtime_bridge.pyi",
+    "python/torch/__init__.py",
     "scripts/browser-harness.mjs",
     "scripts/check-rust.mjs",
     "scripts/clean.mjs",
@@ -166,6 +175,7 @@ REQUIRED_FILES = TIMELESS_DOCUMENTS | {
     "src/errors.ts",
     "src/executable-program.ts",
     "src/index.ts",
+    "src/python.ts",
     "src/runtime.ts",
     "src/testing.ts",
     "tests/test_repository_checks.py",
@@ -378,8 +388,8 @@ CI_INSTALL_COMMAND = (
     "python -m venv .venv && .venv/bin/python -m pip install --only-binary=:all: --require-hashes "
     "-r requirements-dev.lock"
 )
-CI_FORMAT_COMMAND = ".venv/bin/python -m ruff format --check scripts tests"
-CI_LINT_COMMAND = ".venv/bin/python -m ruff check scripts tests"
+CI_FORMAT_COMMAND = ".venv/bin/python -m ruff format --check scripts tests python"
+CI_LINT_COMMAND = ".venv/bin/python -m ruff check scripts tests python"
 CI_VALIDATE_COMMAND = ".venv/bin/python scripts/check_repository.py"
 CI_TEST_COMMAND = ".venv/bin/python scripts/run_tests.py"
 CI_PYTHON_TYPES_COMMAND = "npm run check:python"

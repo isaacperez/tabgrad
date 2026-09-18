@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8"><title>Bounded Python boundary measurements</title></head>
+  <body>
+    <script type="module">
+      const parameters = new URLSearchParams(location.search);
+      const token = parameters.get("token");
+      const worker = new Worker("/python-measure.mjs", { type: "module" });
+      async function send(endpoint, value) {
+        const response = await fetch(`${endpoint}?token=${encodeURIComponent(token)}`, {
+          method: "POST", headers: { "content-type": "application/json" },
+          body: JSON.stringify(value),
+        });
+        if (!response.ok) throw new Error(`Measurement reporting failed: ${response.status}`);
+      }
+      const result = new Promise((resolve, reject) => {
+        worker.addEventListener("error", (event) => reject(new Error(event.message)), { once: true });
+        worker.addEventListener("message", ({ data }) => resolve(data), { once: true });
+        worker.addEventListener("messageerror", () => reject(new Error("Invalid measurement message")), { once: true });
+      });
+      try {
+        await send("/__phase", { phase: "application-started" });
+        worker.postMessage({ python: parameters.get("python") === "yes",
+          diagnostic: parameters.get("diagnostic") === "yes", variant: parameters.get("variant") });
+        await send("/__result", await result);
+      } catch (error) {
+        await send("/__result", { ok: false, error: { message: String(error), stack: error?.stack } });
+      } finally { worker.terminate(); }
+    </script>
+  </body>
+</html>

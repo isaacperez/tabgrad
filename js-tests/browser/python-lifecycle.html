@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8"><title>Python binding lifecycle</title></head>
+  <body>
+    <script type="module">
+      const token = new URLSearchParams(location.search).get("token");
+      async function send(endpoint, value) {
+        const response = await fetch(`${endpoint}?token=${encodeURIComponent(token)}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(value),
+        });
+        if (!response.ok) throw new Error(`Reporting failed: ${response.status}`);
+      }
+      try {
+        await send("/__phase", { phase: "application-started" });
+        const disableJspi = new URLSearchParams(location.search).get("jspi") === "disabled";
+        if (disableJspi) {
+          // Pyodide probes property presence, not only the value's type.
+          for (const name of ["Suspending", "promising", "Suspender"]) {
+            if (!Reflect.deleteProperty(WebAssembly, name) || name in WebAssembly) {
+              throw new Error(`Cannot disable JSPI capability: ${name}`);
+            }
+          }
+        }
+        const jspiAvailable = typeof WebAssembly.Suspending === "function"
+          && typeof WebAssembly.promising === "function";
+        if (disableJspi && jspiAvailable) throw new Error("JSPI control was not applied.");
+        const [{ loadPyodide }, { attachPython }] = await Promise.all([
+          import("/pyodide/pyodide.mjs"), import("/python.js"),
+        ]);
+        const interpreter = await loadPyodide({ indexURL: "/pyodide/" });
+        await send("/__phase", { phase: "assets-loaded" });
+        interpreter.runPython("host_value = 40");
+        const binding = await attachPython(interpreter);
+        await send("/__phase", { phase: "runtime-started" });
+        try {
+          const session = interpreter.runPython("__import__('torch')._runtime_session");
+          if (session.diagnostics().backendLoads !== 0) {
+            throw new Error("Attachment prepared CPU before an accepted script.");
+          }
+          await binding.runPythonAsync("pass");
+          if (session.diagnostics().backendLoads !== 1
+              || session.diagnostics().wasmMemoryBytes !== 32 * 65_536
+              || session.diagnostics().kernelCalls !== 0) {
+            throw new Error("A no-tensor script did not prepare CPU without computation.");
+          }
+          await binding.runPythonAsync(`
+import torch, sys
+assert torch.__file__.endswith('/torch/__init__.py')
+old_session = torch._runtime_session
+old_tensor = torch.tensor([1, 2], dtype=torch.float32) + torch.tensor([3, 4], dtype=torch.float32)
+assert old_tensor.shape == torch.Size([2])
+assert old_tensor.dtype is torch.float32
+assert old_tensor.device == torch.device('cpu')
+assert old_session.diagnostics().kernelCalls == 0
+assert old_session.diagnostics().backendLoads == 1
+assert old_session.diagnostics().hostToWasmCopies == 0
+assert old_session.diagnostics().liveTensorHandles == 1
+assert old_tensor.tolist() == [4, 6]
+assert old_session.diagnostics().kernelCalls == 1
+assert old_session.diagnostics().liveRequestLeases == 0
+`);
+          const result = await binding.runPythonAsync(`
+import weakref
+class ScriptResult:
+    pass
+script_result = ScriptResult()
+script_result_ref = weakref.ref(script_result)
+answer = host_value + 2
+script_result
+`);
+          if (result !== undefined) throw new Error("Managed entry exported a result.");
+          await binding.runPythonAsync("del script_result; assert script_result_ref() is None");
+          const running = binding.runPythonAsync(`
+import asyncio
+await asyncio.sleep(0)
+answer += 1
+`);
+          const closing = binding.close();
+          await running;
+          await closing;
+        } finally {
+          await binding.close();
+        }
+        const answer = interpreter.runPython("answer");
+        if (answer !== 43) throw new Error(`Host globals lost: ${answer}`);
+        if (!interpreter.runPython("'torch' not in sys.modules and '_tabgrad_runtime_bridge' not in sys.modules")) {
+          throw new Error("Binding left imported modules behind.");
+        }
+        const replacement = await attachPython(interpreter);
+        try {
+          await replacement.runPythonAsync("assert host_value == 40");
+          await replacement.runPythonAsync(`
+import torch
+assert torch._runtime_session != old_session
+from pyodide.ffi import JsException
+try:
+    old_tensor.shape
+except JsException as error:
+    assert error.js_error.code == 'CLOSED_TENSOR'
+else:
+    raise AssertionError('Old tensor became usable after reattachment')
+del old_tensor
+try:
+    old_session.tensor([])
+except Exception as error:
+    assert 'closed' in str(error).lower()
+else:
+    raise AssertionError('Old session became usable after reattachment')
+`);
+        } finally {
+          await replacement.close();
+        }
+        await send("/__phase", { phase: "runtime-finished" });
+        await send("/__result", { ok: true, answer, pyodide: interpreter.version, jspiAvailable });
+      } catch (error) {
+        await send("/__result", {
+          ok: false,
+          error: { message: String(error), stack: error?.stack },
+        });
+      }
+    </script>
+  </body>
+</html>
