@@ -908,6 +908,49 @@ test("lowering an admitted addition forms the inspected ExecutableProgram", asyn
   await session.close();
 });
 
+test("deep selected graphs form before backend preparation without recursive stack growth", async () => {
+  // A bounded workload, not an assertion about any engine's overflow threshold.
+  const depth = 8192;
+  const preparationFailure = new Error("formation reached backend preparation");
+  const originalFetch = globalThis.fetch;
+  let observedProgram;
+  const session = createTestRuntimeSession({
+    forceVariant: "scalar",
+    onProgramFormed(program) { observedProgram = program; },
+  });
+  const increment = session.tensor([1]);
+  let root = session.tensor([0]);
+  const handles = [root];
+  globalThis.fetch = async () => { throw preparationFailure; };
+  try {
+    for (let index = 0; index < depth; index += 1) {
+      const next = root.add(increment);
+      root = next;
+      handles.push(root);
+    }
+    await assert.rejects(root.toArray(), (error) => {
+      assert.ok(!(error instanceof RangeError), error.stack);
+      assert.equal(error.cause, preparationFailure);
+      return true;
+    });
+    assert.equal(observedProgram.computations.length, depth);
+    assert.equal(observedProgram.values.length, depth + 2);
+    assert.equal(observedProgram.result, depth + 1);
+    assert.equal(session.diagnostics().liveRequestLeases, 0);
+    assert.equal(session.diagnostics().kernelCalls, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+    // Release dependants first while every ancestor still has its own handle;
+    // this isolates formation from the separate dependency-release traversal.
+    for (let index = handles.length - 1; index >= 0; index -= 1) {
+      handles[index].close();
+    }
+    increment.close();
+    await session.close();
+  }
+  assertNoLiveState(session);
+});
+
 test("a preparation failure retains operation, program, backend, phase, and cause", async () => {
   let observedProgram;
   const session = createTestRuntimeSession({

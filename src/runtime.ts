@@ -1,5 +1,4 @@
 import {
-  type ProgramBinding,
   type ResidentAllocation,
   type WasmVariant,
   WebAssemblyCpuBackend,
@@ -11,11 +10,13 @@ import {
 import { ExecutionRequest, type QueuedExecutionRequest } from "./execution-request.js";
 import {
   ExecutableProgram,
-  type LoweredAddFloat32,
   type ProgramProvenance,
-  type ProgramSlot,
-  type ProgramValue,
 } from "./executable-program.js";
+import {
+  formExecutableProgram,
+  type FormedProgram,
+  type Materialization,
+} from "./program-formation.js";
 
 export type TensorDType = "float32";
 export type TensorDevice = "cpu";
@@ -274,13 +275,6 @@ class TensorState {
   }
 }
 
-type Materialization =
-  | { readonly kind: "host"; readonly data: Float32Array }
-  | {
-    readonly kind: "resident";
-    readonly allocation: ResidentAllocation;
-  };
-
 class MaterializationTable {
   readonly #entries = new Map<TensorValue, Materialization>();
 
@@ -329,13 +323,6 @@ class MaterializationTable {
   clear(): void {
     this.#entries.clear();
   }
-}
-
-interface FormedProgram {
-  readonly program: ExecutableProgram;
-  readonly bindings: ReadonlyMap<ProgramSlot, ProgramBinding>;
-  readonly valuesBySlot: ReadonlyMap<ProgramSlot, TensorValue>;
-  readonly newlyComputed: readonly TensorValue[];
 }
 
 interface RuntimeSessionTestConfiguration {
@@ -831,7 +818,7 @@ export class RuntimeSession {
     }
   }
 
-  #materialize(value: TensorValue, formed: FormedProgram): void {
+  #materialize(value: TensorValue, formed: FormedProgram<TensorValue>): void {
     const existing = this.#materializations.get(value);
     if (existing?.kind === "resident") {
       return;
@@ -880,63 +867,10 @@ export class RuntimeSession {
     }
   }
 
-  #formProgram(root: TensorValue): FormedProgram {
-    const slots = new Map<TensorValue, ProgramSlot>();
-    const values: ProgramValue[] = [];
-    const computations: LoweredAddFloat32[] = [];
-    const bindings = new Map<ProgramSlot, ProgramBinding>();
-    const valuesBySlot = new Map<ProgramSlot, TensorValue>();
-    const newlyComputed: TensorValue[] = [];
-
-    const visit = (value: TensorValue): ProgramSlot => {
-      const known = slots.get(value);
-      if (known !== undefined) {
-        return known;
-      }
-      const materialization = this.#materializations.get(value);
-      const producer = materialization?.kind === "resident" ? null : value.producer;
-      const inputSlots = producer === null
-        ? undefined
-        : producer.inputs.map(visit) as [ProgramSlot, ProgramSlot];
-      const slot = values.length;
-      slots.set(value, slot);
-      valuesBySlot.set(slot, value);
-      values.push({
-        slot,
-        dtype: value.dtype,
-        device: value.device,
-        layout: value.layout,
-        shape: value.shape,
-        source: producer === null ? "binding" : "computed",
-        provenance: value.provenance,
-      });
-      if (materialization?.kind === "host") {
-        bindings.set(slot, { hostData: materialization.data });
-      } else if (materialization?.kind === "resident") {
-        bindings.set(slot, { resident: materialization.allocation });
-      }
-      if (producer !== null && inputSlots !== undefined) {
-        computations.push({
-          kind: producer.definition.loweredKind,
-          left: inputSlots[0],
-          right: inputSlots[1],
-          output: slot,
-          provenance: producer.provenance,
-        });
-        newlyComputed.push(value);
-      }
-      return slot;
-    };
-
-    const result = visit(root);
-    const program = new ExecutableProgram(values, computations, result);
-    this.#onProgramFormed?.(program);
-    return {
-      program,
-      bindings,
-      valuesBySlot,
-      newlyComputed,
-    };
+  #formProgram(root: TensorValue): FormedProgram<TensorValue> {
+    const formed = formExecutableProgram(root, this.#materializations);
+    this.#onProgramFormed?.(formed.program);
+    return formed;
   }
 
   #enqueue<T>(steps: Generator<Promise<void>, T, void>): ExecutionRequest<T> {
