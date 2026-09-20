@@ -786,33 +786,49 @@ export class RuntimeSession {
   }
 
   #releaseValue(value: TensorValue): void {
-    value.references -= 1;
-    if (value.references > 0) {
-      return;
+    // Entries represent owning references, not distinct values: repeated
+    // input positions must each be released, even when they share a value.
+    const pending = [value];
+    while (pending.length > 0) {
+      const current = pending.pop()!;
+      current.references -= 1;
+      if (current.references > 0) continue;
+      if (current.references < 0) {
+        throw new TabgradError(
+          "BACKEND_STATUS_ERROR",
+          "A tensor value was released more times than it was retained.",
+        );
+      }
+      this.#values.delete(current);
+      const materialization = this.#materializations.delete(current);
+      if (materialization?.kind === "resident") {
+        this.#backend.release(materialization.allocation);
+      }
+      const producer = this.#detachProducer(current);
+      if (producer !== null) {
+        // Reverse insertion preserves depth-first, left-to-right release.
+        for (let index = producer.inputs.length - 1; index >= 0; index -= 1) {
+          pending.push(producer.inputs[index]!);
+        }
+      }
     }
-    if (value.references < 0) {
-      throw new TabgradError(
-        "BACKEND_STATUS_ERROR",
-        "A tensor value was released more times than it was retained.",
-      );
-    }
-    this.#values.delete(value);
-    const materialization = this.#materializations.delete(value);
-    if (materialization?.kind === "resident") {
-      this.#backend.release(materialization.allocation);
-    }
-    this.#releaseDependencies(value);
   }
 
-  #releaseDependencies(value: TensorValue): void {
+  #detachProducer(value: TensorValue): OperationRecord | null {
     const producer = value.producer;
     if (producer === null) {
-      return;
+      return null;
     }
     // Sever the strong edge as well as its logical ownership. Keeping a
     // released record attached would retain its entire upstream object graph.
     value.producer = null;
     this.#operationRecords -= 1;
+    return producer;
+  }
+
+  #releaseDependencies(value: TensorValue): void {
+    const producer = this.#detachProducer(value);
+    if (producer === null) return;
     for (const input of producer.inputs) {
       this.#releaseValue(input);
     }
