@@ -29,6 +29,10 @@ calculation. The request selects the necessary finite program, establishes
 backend readiness when necessary, materializes its result and copies the
 observed bytes. A finalizer releases its reference on success or failure.
 
+[Program formation](program-formation.md) owns the selected dependency traversal
+and returns executable structure separately from invocation bindings. It does
+not execute numerical work or change semantic ownership.
+
 Ready host data takes a shorter route inside this same owner. It already has
 numerical storage, so the runtime copies that storage directly rather than
 uploading it into WebAssembly and immediately downloading it. Neither the

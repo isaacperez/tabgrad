@@ -17,6 +17,8 @@ Read [Python tensor wrappers](python-tensor-wrappers.md) for handle ownership,
 argument presentation, lazy addition and metadata from the shared runtime.
 Read [Runtime observation](runtime-observation.md) for common request progression,
 result publication, synchronous consumers and asynchronous observers.
+Read [Program formation](program-formation.md) for selected dependency traversal,
+logical slot ordering and the separation of executable structure from invocation bindings.
 Read [Semantic value lifetimes](semantic-value-lifetimes.md) for dependency
 ownership, completed producer reclamation and the distinction between keeping
 a result and keeping its calculation history.
