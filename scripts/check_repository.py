@@ -207,6 +207,7 @@ REQUIRED_GITATTRIBUTE_RULES = {
     "*.woff2 binary",
 }
 REQUIRED_GITIGNORE_RULES = {
+    "/.agents/skills",
     ".env",
     ".env.*",
     "!.env.example",
@@ -325,10 +326,6 @@ REQUIRED_SKILLS = {
     "tabgrad-verify",
 }
 QUALITY_POLICY_CONSUMERS = {
-    ".agents/skills/tabgrad-implement/SKILL.md",
-    ".agents/skills/tabgrad-maintenance/SKILL.md",
-    ".agents/skills/tabgrad-review/SKILL.md",
-    ".agents/skills/tabgrad-verify/SKILL.md",
     ".github/pull_request_template.md",
     "CONTRIBUTING.md",
 }
@@ -594,6 +591,8 @@ class YamlRepositoryState:
 def repository_files(root: Path) -> list[Path]:
     files: list[Path] = []
     for path in root.rglob("*"):
+        if path.relative_to(root).parts[:2] == (".agents", "skills"):
+            continue
         if not path.is_file():
             continue
         if any(part in EXCLUDED_DIRECTORIES for part in path.relative_to(root).parts):
@@ -765,117 +764,23 @@ def check_yaml_syntax(
     return list(state.failures)
 
 
-def parse_frontmatter(
-    path: Path,
-) -> tuple[dict[str, object] | None, str, str | None]:
-    text = path.read_text(encoding="utf-8")
-    if not text.startswith("---\n"):
-        return None, text, "is missing YAML frontmatter"
-    end = text.find("\n---\n", 4)
-    if end < 0:
-        return None, text, "has unterminated YAML frontmatter"
-    body = text[end + 5 :]
-    if yaml is None or RepositoryYamlLoader is None:
-        return None, body, None
-    try:
-        fields: object = yaml.load(text[4:end], Loader=RepositoryYamlLoader)
-    except yaml.YAMLError as error:
-        return None, body, f"contains invalid frontmatter YAML: {error}"
-    if not is_yaml_mapping(fields):
-        return None, body, "frontmatter must contain a YAML mapping"
-    frontmatter: dict[str, object] = {}
-    for key, value in fields.items():
-        if not isinstance(key, str):
-            return None, body, "frontmatter keys must be strings"
-        frontmatter[key] = value
-    return frontmatter, body, None
-
-
-def installed_skill_names(root: Path) -> set[str]:
-    skills_root = root / ".agents" / "skills"
-    if not skills_root.is_dir():
-        return set()
-    return {path.name for path in skills_root.iterdir() if path.is_dir()}
-
-
-def check_skills(root: Path) -> list[Failure]:
-    failures: list[Failure] = []
-    skills_root = root / ".agents" / "skills"
-    if not skills_root.is_dir():
-        return [Failure(Path(".agents/skills"), "skill directory is missing")]
-    present_skills = installed_skill_names(root)
-    missing_skills = sorted(REQUIRED_SKILLS.difference(present_skills))
-    if missing_skills:
-        failures.append(
-            Failure(
-                Path(".agents/skills"),
-                f"is missing required skills: {', '.join(missing_skills)}",
-            )
-        )
-
+def check_skill_routing(root: Path) -> list[Failure]:
+    """Check public agent routing without reading private skill installations."""
     agents_path = root / "AGENTS.md"
     if not agents_path.is_file():
-        failures.append(
+        return [
+            Failure(Path("AGENTS.md"), "is missing, so skill routing cannot be checked")
+        ]
+    visible_text = visible_markdown_text(agents_path.read_text(encoding="utf-8"))
+    declared_skills = set(re.findall(r"\$([a-z][a-z0-9-]+)", visible_text))
+    if declared_skills != REQUIRED_SKILLS:
+        return [
             Failure(
                 Path("AGENTS.md"),
-                "is missing, so required skill routing cannot be checked",
+                "required skill routing does not match the validator registry",
             )
-        )
-    else:
-        visible_agents_text = visible_markdown_text(
-            agents_path.read_text(encoding="utf-8")
-        )
-        declared_skills = set(re.findall(r"\$([a-z][a-z0-9-]+)", visible_agents_text))
-        missing_declarations = sorted(present_skills.difference(declared_skills))
-        missing_directories = sorted(declared_skills.difference(present_skills))
-        if missing_declarations:
-            failures.append(
-                Failure(
-                    Path("AGENTS.md"),
-                    f"does not declare installed skills: {', '.join(missing_declarations)}",
-                )
-            )
-        if missing_directories:
-            failures.append(
-                Failure(
-                    Path("AGENTS.md"),
-                    f"declares skills without directories: {', '.join(missing_directories)}",
-                )
-            )
-        if declared_skills != REQUIRED_SKILLS:
-            failures.append(
-                Failure(
-                    Path("AGENTS.md"),
-                    "required skill routing does not match the validator registry",
-                )
-            )
-    for directory in sorted(path for path in skills_root.iterdir() if path.is_dir()):
-        skill_file = directory / "SKILL.md"
-        relative = skill_file.relative_to(root)
-        if not skill_file.is_file():
-            failures.append(Failure(relative, "is missing"))
-            continue
-        frontmatter, body, frontmatter_error = parse_frontmatter(skill_file)
-        if frontmatter_error:
-            failures.append(Failure(relative, frontmatter_error))
-        elif frontmatter is not None:
-            name = frontmatter.get("name")
-            description = frontmatter.get("description")
-            if not isinstance(name, str) or name != directory.name:
-                failures.append(
-                    Failure(relative, "frontmatter name does not match its directory")
-                )
-            if not isinstance(description, str) or not description.strip():
-                failures.append(
-                    Failure(relative, "frontmatter description is missing or invalid")
-                )
-        if "docs/agent-workflow.md" not in visible_markdown_text(body):
-            failures.append(
-                Failure(relative, "does not reference the common agent workflow")
-            )
-        if re.search(r"\b(TODO|TBD|PLACEHOLDER)\b", body, re.IGNORECASE):
-            failures.append(Failure(relative, "contains an unfinished placeholder"))
-    return failures
+        ]
+    return []
 
 
 def check_issue_forms(
@@ -1544,9 +1449,6 @@ def check_instruction_review_routing(root: Path) -> list[Failure]:
 def check_timeless_documentation(root: Path) -> list[Failure]:
     failures: list[Failure] = []
     paths = [root / name for name in TIMELESS_DOCUMENTS]
-    skills_root = root / ".agents" / "skills"
-    if skills_root.is_dir():
-        paths.extend(skills_root.glob("*/SKILL.md"))
     for path in sorted(paths):
         if not path.is_file():
             continue
@@ -1572,7 +1474,7 @@ def check_repository(root: Path) -> list[Failure]:
         check_markdown_links,
     )
     checks_after_yaml = (
-        check_skills,
+        check_skill_routing,
         check_quality_policy_consumers,
         check_instruction_review_routing,
         check_ci_command_documentation,

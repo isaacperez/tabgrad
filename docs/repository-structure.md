@@ -41,7 +41,7 @@ responsibility, not a separately published product.
 | [`docs/`](README.md) | Technical explanations, references and durable contributor rules | Work status and unresolved design discussions belong in issues and pull requests |
 | [`assets/brand/`](../assets/brand/README.md) | Maintained vector brand artwork and its palette, typography and usage guide | Runtime artifacts belong in `dist/`; font software and temporary design studies are not brand source files |
 | [`.github/`](../.github) | GitHub issue forms, the PR template and CI workflow configuration | Complete project rules live in their indexed documents, not only in a template |
-| [`.agents/`](../.agents) | Repository-specific skills that apply the documented contributor workflow | Skills do not establish competing technical or project policies |
+| `.agents/skills/` (local, ignored) | Links to separately maintained Tabgrad agent skills | Not part of the public tree or library distribution; see [installation](development.md#install-project-agent-skills) |
 
 This separation lets us change how a check is launched without moving the
 behavior being checked into the launcher. It also gives readers a way to

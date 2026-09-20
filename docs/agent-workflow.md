@@ -9,6 +9,14 @@ defines the rules shared by issue investigation, research, implementation,
 verification, review, maintenance audits, and merge checks. Delegation never
 replaces the applicable skill or expands the authority given by the user.
 
+The skills are maintained separately from the public library and installed
+locally as described in [development setup](development.md#install-project-agent-skills).
+Their storage location does not change these rules. A skill resolves project
+documents in the active Tabgrad checkout; it must not read a different worktree
+or private skill repository as though it contained the project's current rules.
+Public contribution rules and CI remain usable without private access. An agent
+missing a required skill stops that workflow and reports the installation gap.
+
 ## Check content before publication
 
 [`SECURITY.md`](../SECURITY.md#publication-confidentiality) owns the

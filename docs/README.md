@@ -94,9 +94,11 @@ link to its primary source, but they must not create a competing version.
 | Coding-agent instruction review | [`agent-instruction-review.md`](agent-instruction-review.md) |
 | Continuous integration and protected branches | [`continuous-integration.md`](continuous-integration.md) |
 
-Repository skills define agent procedures that apply these primary sources;
-they do not form competing policy sources. For example, the
+Separately maintained Tabgrad skills define agent procedures that apply these
+primary sources; they do not form competing policy sources. For example, the
 `tabgrad-maintenance` skill applies the maintenance policy in `quality.md`.
+Their [local installation](development.md#install-project-agent-skills) is
+separate from public development tooling and continuous integration.
 
 ## Resolving disagreement
 

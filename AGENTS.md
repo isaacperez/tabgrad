@@ -49,7 +49,12 @@ bounded question, path or concern, and stopping condition under
 
 ## Required skills
 
-Use the repository skill that corresponds to the work being performed:
+Use the installed Tabgrad skill that corresponds to the work being performed.
+Skills are maintained separately and are not included in a public clone. See
+`docs/development.md#install-project-agent-skills` for project-local setup.
+Resolve every project path from the active Tabgrad checkout, not from the
+external skill directory. Missing installation blocks the applicable agent
+workflow, not human contribution or public repository checks.
 
 - Use `$tabgrad-start <issue-number>` only when the user explicitly invokes it
   to begin or resume an existing issue through every applicable skill.
