@@ -326,6 +326,15 @@ Confirm that:
 - every known limitation or necessary follow-up is visible rather than hidden
   in code or memory.
 
+For code changes, include affected owners, contracts, accepted constraints and
+evidenced extension axes in the handoff required by the
+[design and extensibility gate](../../../docs/agent-workflow.md#assess-design-and-extensibility-before-code-delivery).
+Explicitly assign that assessment to the independent reviewer, reusing the
+existing review assignment where appropriate. Resolve required findings through
+the author-review loop before claiming completion; the writer's account and
+passing tests do not replace the independent conclusion. Apply the gate's
+nonproduction boundaries rather than inventing future library requirements.
+
 Use `tabgrad-verify` against the final working-tree state before describing the
 implementation as complete or ready for review. Verification and independent
 review must examine the same final content. If the verification skill or a

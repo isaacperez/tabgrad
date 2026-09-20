@@ -241,6 +241,14 @@ knowledge, independently responsible helpers are not nested, local callbacks
 and closures remain cohesive, comments explain non-obvious reasons, and the
 resulting structure remains understandable to a new contributor.
 
+For code changes, perform and explicitly report the
+[design and extensibility assessment](../../../docs/agent-workflow.md#assess-design-and-extensibility-before-code-delivery).
+Read its linked production-slice rule when library code is retained. Trace the
+affected contracts through evidenced variations, challenge the writer's claimed
+reuse and cost boundaries, and record justified specialization or required
+corrections. Apply the assessment's scope limits and correction loop; a passing
+functional suite or general maintainability summary does not satisfy this gate.
+
 Apply the [language-quality protocol](../../../docs/quality.md#apply-the-language-quality-protocol)
 when reviewing affected code. Challenge whether the types describe actual
 contracts, dynamic boundaries are validated, test calls are genuinely checked,

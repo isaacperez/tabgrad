@@ -457,6 +457,72 @@ material risk. The merge coordinator must still inspect the live pull request,
 head, required checks, review state, authorization, and branch safety
 immediately before the mutation.
 
+## Assess design and extensibility before code delivery
+
+Before reporting a code implementation as complete or ready for review, assign
+an agent independent of its writer to assess the affected design explicitly.
+The existing independent reviewer may perform this assessment within its
+bounded assignment; do not launch a duplicate general audit. A specialist is
+needed only when a distinct material concern cannot be covered responsibly.
+The assessment applies to new code, fixes and behavior-preserving refactors,
+including changes to generators or configuration that determine distributed
+code. A small functional scope does not waive it.
+
+Use the engineering criteria in [quality.md](quality.md#build-abstractions-from-real-invariants)
+and, for retained library code, the
+[production-slice rule](implementation-workflow.md#a-narrow-production-slice-is-still-production).
+The writer's handoff identifies affected owners, contracts, accepted design
+constraints and evidenced extension axes. The reviewer checks the source and
+its relevant producers and consumers rather than accepting that account or
+inferring design quality from passing tests.
+
+Record a design and extensibility conclusion in the existing review report:
+
+- Identify the inspected boundaries and their governing architecture or
+  project standards. Explain whether ownership, interfaces, conventions and
+  shared invariants are consistent, or whether duplication or coupling makes
+  another component depend on implementation details.
+- For retained library code, trace representative variations established by
+  accepted architecture, callers, the issue or directly related work. State
+  what would change and what would remain stable. Distinguish a deliberately
+  narrow capability from a supposedly shared contract tied to one operation,
+  backend, shape or consumer. If no relevant extension axis is evidenced,
+  explain that limitation rather than inventing a future feature.
+- Examine affected computational and memory growth, repeated dispatch,
+  allocation, data movement and retention. Distinguish reasoned cost analysis
+  from measured results; use [performance.md](performance.md) when a material
+  risk or claim requires bounded measurements. Extensibility must not be bought
+  with unnecessary hot-path overhead.
+- Cite concrete code and evidence for justified specializations, required
+  corrections, unsupported claims and remaining uncertainty. A generic
+  statement that the design is modular or future-proof is not evidence.
+
+Require a correction when the change introduces, worsens or depends on a
+blocking design defect: for example, duplicating a shared invariant or making
+an established variation require replacement of the owner that should support
+it. The smallest correction may reshape a contract, extract a responsibility,
+reuse an existing component, or remove an unnecessary abstraction. Do not
+require a new interface merely for its name, implement deferred capabilities,
+or demand zero future refactoring. An extension-path assessment does not claim
+that an unimplemented capability works.
+
+Apply the existing finding classification and author-review loop below.
+Required corrections return to the sole writer and the resulting state must
+be verified and independently reviewed again. A material architectural choice
+still needs its research and approval process; an unrelated pre-existing
+improvement remains separate work. The reviewer identifies the violated
+contract and required outcome without materially designing its own correction.
+Missing independent coverage is incomplete, and unresolved required findings
+block completion and readiness even when all functional tests pass.
+
+For maintained tools and tests, assess the affected owners, reuse, conventions
+and costs in their own domain, without imposing library extension contracts.
+Prose, instruction-only changes and disposable research do not acquire this
+code-delivery assessment or production benchmarks. Retained experimental code
+is assessed against its declared experimental purpose, not silently certified
+as production. These distinctions do not waive the applicable instruction,
+research, verification or review rules.
+
 ## Repeat the author-review loop until the current state passes
 
 For an implementation result, independent verification and skeptical review

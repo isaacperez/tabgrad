@@ -269,6 +269,13 @@ an unexplained magic threshold, or a helper nested contrary to
 `docs/quality.md`, then leave judgment about maintainability, abstraction
 quality, refactoring, and optimization to that skill.
 
+For code changes, identify who owns the
+[design and extensibility assessment](../../../docs/agent-workflow.md#assess-design-and-extensibility-before-code-delivery)
+and hand its relevant evidence to `tabgrad-review`. In a combined assignment,
+report that conclusion under review, separately from verification. Verification
+can finish before review, but must not imply implementation completion or
+readiness while the required assessment is missing or has unresolved findings.
+
 ## Decide and report the verification result
 
 Use these ordinary outcomes:
