@@ -53,6 +53,12 @@ bounded result cannot fit the accepted architecture without a new material
 choice, stop for the applicable research and architecture process instead of
 hiding a provisional decision in code.
 
+Before delivery, the independent reviewer must explicitly assess these
+boundaries and evidenced extension paths under the
+[design and extensibility gate](agent-workflow.md#assess-design-and-extensibility-before-code-delivery).
+Passing the bounded behavior's tests does not by itself establish that its
+contracts are reusable or that its costs scale appropriately.
+
 Classify work by what the repository retains. An authorized disposable
 experiment follows its research method and leaves no production implementation
 behind. A retained experimental artifact remains explicitly experimental and
