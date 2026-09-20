@@ -6,6 +6,7 @@
 *~
 
 # Local environment and credentials
+/.agents/skills
 .env
 .env.*
 !.env.example
