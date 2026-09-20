@@ -15,14 +15,6 @@ SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "check_repository.py"
 
 
 class RepositoryCheckTests(unittest.TestCase):
-    def write_valid_skill(self, root: Path, name: str) -> None:
-        skill = root / ".agents" / "skills" / name
-        skill.mkdir(parents=True, exist_ok=True)
-        (skill / "SKILL.md").write_text(
-            f"---\nname: {name}\ndescription: Test.\n---\n\nRead docs/agent-workflow.md.\n",
-            encoding="utf-8",
-        )
-
     def write_issue_form(
         self,
         root: Path,
@@ -121,79 +113,68 @@ class RepositoryCheckTests(unittest.TestCase):
             failures = CHECKS.check_markdown_links(root)
             self.assertEqual(len(failures), 1)
 
-    def test_skill_name_must_match_directory(self) -> None:
+    def test_skill_routing_does_not_require_local_installation(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            skill = root / ".agents" / "skills" / "expected"
-            skill.mkdir(parents=True)
-            (skill / "SKILL.md").write_text(
-                "---\nname: different\ndescription: Test.\n---\n\nRead docs/agent-workflow.md.\n",
-                encoding="utf-8",
-            )
-            failures = CHECKS.check_skills(root)
-            self.assertTrue(any("does not match" in item.message for item in failures))
-
-    def test_skill_frontmatter_must_be_valid_yaml(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            for name in CHECKS.REQUIRED_SKILLS:
-                self.write_valid_skill(root, name)
-            skill = root / ".agents" / "skills" / sorted(CHECKS.REQUIRED_SKILLS)[0]
-            (skill / "SKILL.md").write_text(
-                "---\nname: broken\ndescription: [unterminated\n---\n\n"
-                "Read docs/agent-workflow.md.\n",
-                encoding="utf-8",
-            )
             declarations = "\n".join(
                 f"Use `${name}`." for name in sorted(CHECKS.REQUIRED_SKILLS)
             )
             (root / "AGENTS.md").write_text(declarations + "\n", encoding="utf-8")
-            failures = CHECKS.check_skills(root)
-            self.assertTrue(
-                any("invalid frontmatter YAML" in item.message for item in failures)
-            )
+            self.assertEqual(CHECKS.check_skill_routing(root), [])
 
-    def test_skill_routing_and_workflow_references_must_be_visible(self) -> None:
+    def test_skill_routing_rejects_missing_extra_and_hidden_declarations(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            for name in CHECKS.REQUIRED_SKILLS:
-                self.write_valid_skill(root, name)
-            declarations = "\n".join(
-                f"Use `${name}`." for name in sorted(CHECKS.REQUIRED_SKILLS)
-            )
-            (root / "AGENTS.md").write_text(
-                f"<!--\n{declarations}\n-->\n", encoding="utf-8"
-            )
-            failures = CHECKS.check_skills(root)
-            self.assertTrue(
-                any(
-                    "does not declare installed skills" in item.message
-                    for item in failures
-                )
-            )
+            names = sorted(CHECKS.REQUIRED_SKILLS)
+            valid = "\n".join(f"Use `${name}`." for name in names)
+            for text in (
+                valid.replace(f"Use `${names[0]}`.", ""),
+                valid + "\nUse `$tabgrad-unknown`.",
+                f"<!-- {valid} -->",
+            ):
+                with self.subTest(text=text):
+                    (root / "AGENTS.md").write_text(text + "\n", encoding="utf-8")
+                    self.assertTrue(CHECKS.check_skill_routing(root))
+            (root / "AGENTS.md").unlink()
+            self.assertTrue(CHECKS.check_skill_routing(root))
 
-            (root / "AGENTS.md").write_text(declarations + "\n", encoding="utf-8")
-            skill = root / ".agents" / "skills" / sorted(CHECKS.REQUIRED_SKILLS)[0]
-            (skill / "SKILL.md").write_text(
-                "---\nname: "
-                + skill.name
-                + "\ndescription: Test.\n---\n\n"
-                + "<!-- Read docs/agent-workflow.md. -->\n",
+    def test_private_skill_files_do_not_affect_public_checks(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            skills = root / ".agents" / "skills" / "example"
+            skills.mkdir(parents=True)
+            (skills / "SKILL.md").write_text(
+                "[Missing](missing.md)  \nThe runtime is not yet implemented.\n",
                 encoding="utf-8",
             )
-            failures = CHECKS.check_skills(root)
-            self.assertTrue(
-                any(
-                    item.path == (skill / "SKILL.md").relative_to(root)
-                    and "common agent workflow" in item.message
-                    for item in failures
-                )
-            )
+            (skills / "metadata.yaml").write_text("broken: [\n", encoding="utf-8")
+            public_file = root / ".agents" / "public.md"
+            public_file.write_text("Public text.\n", encoding="utf-8")
+            self.assertEqual(CHECKS.repository_files(root), [public_file])
+            self.assertEqual(CHECKS.check_text_format(root), [])
+            self.assertEqual(CHECKS.check_markdown_links(root), [])
+            self.assertEqual(CHECKS.check_yaml_syntax(root), [])
+            self.assertEqual(CHECKS.check_timeless_documentation(root), [])
 
     def test_required_documents_cannot_disappear(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             failures = CHECKS.check_required_files(Path(directory))
             self.assertEqual(len(failures), len(CHECKS.REQUIRED_FILES))
+
+    def test_private_skill_symlinks_are_outside_public_validation(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "public"
+            (root / ".agents").mkdir(parents=True)
+            private = Path(directory) / "private"
+            private.mkdir()
+            (private / "SKILL.md").write_bytes(b"\xff")
+            link = root / ".agents" / "skills"
+            link.symlink_to(private, target_is_directory=True)
+            self.assertEqual(CHECKS.repository_files(root), [])
+            self.assertEqual(CHECKS.check_text_format(root), [])
+            link.unlink()
+            link.symlink_to(private / "missing", target_is_directory=True)
+            self.assertEqual(CHECKS.repository_files(root), [])
 
     def test_required_files_include_every_timeless_document(self) -> None:
         self.assertTrue(CHECKS.TIMELESS_DOCUMENTS.issubset(CHECKS.REQUIRED_FILES))
@@ -207,7 +188,7 @@ class RepositoryCheckTests(unittest.TestCase):
                 path.write_text("Follow docs/quality.md.\n", encoding="utf-8")
             self.assertEqual(CHECKS.check_quality_policy_consumers(root), [])
 
-            missing_reference = root / ".agents/skills/tabgrad-review/SKILL.md"
+            missing_reference = root / ".github/pull_request_template.md"
             missing_reference.write_text("Review the change.\n", encoding="utf-8")
             failures = CHECKS.check_quality_policy_consumers(root)
             self.assertEqual(len(failures), 1)
@@ -252,14 +233,8 @@ class RepositoryCheckTests(unittest.TestCase):
                 "The browser runtime will be added in a later phase.\n",
                 encoding="utf-8",
             )
-            skill = root / ".agents" / "skills" / "example" / "SKILL.md"
-            skill.parent.mkdir(parents=True)
-            skill.write_text(
-                "A compatibility layer will be implemented later.\n",
-                encoding="utf-8",
-            )
             failures = CHECKS.check_timeless_documentation(root)
-            self.assertEqual(len(failures), 5)
+            self.assertEqual(len(failures), 4)
             self.assertTrue(
                 all("project-progress wording" in item.message for item in failures)
             )
@@ -514,60 +489,6 @@ class RepositoryCheckTests(unittest.TestCase):
                 self.assertEqual(RUNNER.run_tests(suite, stream=io.StringIO()), 0)
             self.assertNotIn("test_tabgrad_runner_same_name", sys.modules)
 
-    def test_required_skills_cannot_disappear(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            (root / ".agents" / "skills").mkdir(parents=True)
-            failures = CHECKS.check_skills(root)
-            self.assertTrue(
-                any("missing required skills" in item.message for item in failures)
-            )
-
-    def test_installed_skill_names_include_only_directories(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            self.assertEqual(CHECKS.installed_skill_names(root), set())
-            skills = root / ".agents" / "skills"
-            (skills / "installed").mkdir(parents=True)
-            (skills / "not-a-skill.txt").write_text("text\n", encoding="utf-8")
-            self.assertEqual(CHECKS.installed_skill_names(root), {"installed"})
-
-    def test_agents_must_declare_every_installed_skill(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            for name in CHECKS.REQUIRED_SKILLS:
-                self.write_valid_skill(root, name)
-            declarations = "\n".join(
-                f"Use `${name}`."
-                for name in sorted(
-                    CHECKS.REQUIRED_SKILLS.difference({"tabgrad-review"})
-                )
-            )
-            (root / "AGENTS.md").write_text(declarations, encoding="utf-8")
-            failures = CHECKS.check_skills(root)
-            self.assertTrue(
-                any(
-                    "does not declare installed skills" in item.message
-                    for item in failures
-                )
-            )
-
-    def test_agents_cannot_declare_a_missing_skill(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            for name in CHECKS.REQUIRED_SKILLS:
-                self.write_valid_skill(root, name)
-            declarations = "\n".join(
-                f"Use `${name}`." for name in sorted(CHECKS.REQUIRED_SKILLS)
-            )
-            (root / "AGENTS.md").write_text(
-                f"{declarations}\nUse `$tabgrad-missing`.\n", encoding="utf-8"
-            )
-            failures = CHECKS.check_skills(root)
-            self.assertTrue(
-                any("without directories" in item.message for item in failures)
-            )
-
     def test_required_issue_forms_cannot_disappear(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -614,15 +535,6 @@ class RepositoryCheckTests(unittest.TestCase):
                         )
                     ],
                 )
-
-    def test_frontmatter_rejects_non_string_keys(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "SKILL.md"
-            path.write_text("---\n42: value\n---\nBody\n", encoding="utf-8")
-            fields, body, error = CHECKS.parse_frontmatter(path)
-            self.assertIsNone(fields)
-            self.assertEqual(body, "Body\n")
-            self.assertEqual(error, "frontmatter keys must be strings")
 
     def test_unregistered_issue_forms_are_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -729,11 +641,10 @@ class RepositoryCheckTests(unittest.TestCase):
             for path in CHECKS.repository_files(source_root)
             if path.suffix.lower() in {".yaml", ".yml"}
         ]
-        skill_files = list((source_root / ".agents" / "skills").glob("*/SKILL.md"))
         with mock.patch.object(yaml, "load", wraps=yaml.load) as load:
             failures = CHECKS.check_repository(source_root)
         self.assertEqual(failures, [])
-        self.assertEqual(load.call_count, len(yaml_files) + len(skill_files))
+        self.assertEqual(load.call_count, len(yaml_files))
 
     def test_yaml_loader_preserves_workflow_keys_and_boolean_values(self) -> None:
         source_root = SCRIPT.parents[1]

@@ -50,10 +50,14 @@ agent's decision. Preserve judgment where several safe approaches are valid,
 and use absolute steps only for permissions, safety, integrity, or another
 failure mode that justifies them.
 
-Repository validation should continue to check deterministic properties such
-as required files, valid frontmatter, installed-skill routing, active links,
-and configured commands. Do not turn a judgment about instruction quality into
-a brittle text search merely to automate it.
+Public repository validation checks deterministic properties such as required
+files, declared skill routing, active public links, and configured commands.
+It must not require access to the separately maintained skill collection or
+read ignored local installations. Skill maintainers check frontmatter, names,
+metadata, routing and active-checkout references in that collection and record
+both revisions when a change spans public rules and private procedures. Do not
+turn a judgment about instruction quality into a brittle text search merely
+to automate it.
 
 ## Record the result briefly
 

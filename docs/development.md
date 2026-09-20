@@ -26,6 +26,43 @@ documented example file with placeholder values when a required local setting
 cannot have a safe default. Never place real secrets in an example, test,
 fixture, log, or generated artifact.
 
+## Install project agent skills
+
+Tabgrad's agent skills are contributor procedures, not library source or build
+dependencies. They are maintained in a separate private Git repository. Public
+clones and CI do not download, require or validate that repository. The public
+rules in `CONTRIBUTING.md` and `docs/` remain authoritative for every contributor.
+The agent-specific routing in `AGENTS.md` requires the relevant skills when an
+agent performs that workflow; without them, report the missing installation
+rather than improvising a replacement.
+
+An authorized maintainer clones the skill repository outside the library and
+follows its installation guide to link its `skills` directory at
+`.agents/skills` in each intended Tabgrad checkout. Use a durable local location,
+not a temporary directory. Git ignores that project-local path. Do not force-add
+it or copy the private content into public documentation, packages or CI.
+An existing directory or link must be inspected and preserved before migration;
+installation must not overwrite it. Contributors without access should request
+setup from the maintainer only when they need the agent workflow, not to build,
+test or contribute to Tabgrad by ordinary means.
+
+New clones and worktrees need their own local link. An older checkout may still
+track skills: do not replace those files under unrelated work. Integrate the
+reviewed migration when safe, preserve any local skill edits, and then install
+the external collection. Skills read project documents from the active Tabgrad
+checkout, never relative to private storage. Restart Codex if skill discovery
+has not refreshed. Project-local links avoid exposing Tabgrad procedures in
+unrelated projects.
+
+Edits through these links belong to the separate repository. Review and commit
+them there, and push under the usual publication authority to back them up.
+Changing public rules still requires updating their skill consumers; review
+both revisions together under [instruction review](agent-instruction-review.md).
+All worktrees linked to one skill clone share its updates, so do not update
+that clone during an active check or review without invalidating affected
+evidence. Removing public tracked files does not remove historical copies from
+Git; rewriting history is a separate action, not part of this setup.
+
 ## Understand the development stack
 
 The development machine and the browser do not need the same software.
