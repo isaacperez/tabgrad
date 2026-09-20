@@ -15,6 +15,7 @@ import {
   createTestRuntimeSession,
   getTestExecutionFailureContext,
   getTestResidentProgramReferenceCount,
+  getTestTensorAncestry,
 } from "../../dist/testing.js";
 import { ExecutableProgram } from "../../dist/executable-program.js";
 import { observeTensorSynchronously, prepareRuntimeSession } from "../../dist/runtime.js";
@@ -288,7 +289,7 @@ test("records float32 addition lazily and materializes it on observation", async
     kernelCalls: 1,
     liveMaterializationRecords: 3,
     liveAllocationBytes: 36,
-    liveOperationRecords: 1,
+    liveOperationRecords: 0,
     liveRequestLeases: 0,
     liveTensorHandles: 3,
     liveTensorValues: 3,
@@ -1102,6 +1103,138 @@ test("a retained input does not keep or inherit a completed downstream program",
     for (const tensor of disposable) {
       tensor.close();
     }
+    await session.close();
+  }
+});
+
+test("completed values and retained closed handles do not retain producer ancestry", async () => {
+  const session = createTestRuntimeSession({
+    manifestUrl: new URL("manifest.json", distributionUrl),
+    forceVariant: "scalar",
+  });
+  const increment = session.tensor([1]);
+  let root = session.tensor([0]);
+  const closedHandles = [];
+  try {
+    for (let index = 0; index < 64; index += 1) {
+      const next = root.add(increment);
+      root.close();
+      closedHandles.push(root);
+      root = next;
+      assert.deepEqual(Array.from(await root.toArray()), [index + 1]);
+      assert.deepEqual(getTestTensorAncestry(root), {
+        values: 1, operations: 0, releasedValues: 0,
+      });
+      assert.equal(session.diagnostics().liveOperationRecords, 0);
+    }
+    for (const handle of closedHandles) {
+      assert.deepEqual(getTestTensorAncestry(handle), {
+        values: 1, operations: 0, releasedValues: 1,
+      });
+    }
+  } finally {
+    await session.close();
+  }
+  assertNoLiveState(session);
+});
+
+test("shared and repeated inputs survive closed handles and queued observations", async () => {
+  const session = createTestRuntimeSession({
+    manifestUrl: new URL("manifest.json", distributionUrl),
+    forceVariant: "scalar",
+  });
+  const input = session.tensor([2]);
+  const middle = input.add(input);
+  const result = middle.add(middle);
+  input.close();
+  try {
+    assert.deepEqual(getTestTensorAncestry(result), {
+      values: 3, operations: 2, releasedValues: 0,
+    });
+    const observed = result.toArray();
+    const middleObserved = middle.toArray();
+    result.close();
+    assert.deepEqual(Array.from(await observed), [8]);
+    assert.deepEqual(Array.from(await middleObserved), [4]);
+    assert.deepEqual(Array.from(await middle.toArray()), [4]);
+    assert.deepEqual(getTestTensorAncestry(middle), {
+      values: 1, operations: 0, releasedValues: 0,
+    });
+    assert.deepEqual(getTestTensorAncestry(result), {
+      values: 1, operations: 0, releasedValues: 1,
+    });
+    assert.equal(session.diagnostics().kernelCalls, 2);
+    assert.equal(session.diagnostics().liveAllocationBytes, 4);
+  } finally {
+    await session.close();
+  }
+  assertNoLiveState(session);
+});
+
+test("readback failure preserves provenance without retaining completed ancestry", async () => {
+  const cause = new Error("readback ownership probe");
+  let fail = true;
+  const session = createTestRuntimeSession({
+    manifestUrl: new URL("manifest.json", distributionUrl),
+    forceVariant: "scalar",
+    beforeReadback() { if (fail) throw cause; },
+  });
+  const input = session.tensor([2]);
+  const result = input.add(input);
+  input.close();
+  try {
+    await assert.rejects(result.toArray(), (error) => {
+      const context = getTestExecutionFailureContext(error);
+      assert.equal(error.cause, cause);
+      assert.equal(context.operation, "add");
+      assert.equal(context.phase, "readback");
+      assert.equal(context.program.computations.length, 1);
+      return true;
+    });
+    assert.deepEqual(getTestTensorAncestry(result), {
+      values: 1, operations: 0, releasedValues: 0,
+    });
+    fail = false;
+    assert.deepEqual(Array.from(await result.toArray()), [4]);
+    assert.equal(session.diagnostics().kernelCalls, 1);
+  } finally {
+    await session.close();
+  }
+  assertNoLiveState(session);
+});
+
+test("failed execution keeps retry dependencies only until their final owner closes", async () => {
+  const session = createTestRuntimeSession({
+    manifestUrl: installFixture("ancestry-kernel-trap", { kernelBehavior: "trap" }),
+    forceVariant: "scalar",
+  });
+  const input = session.tensor([2]);
+  const middle = input.add(input);
+  const result = middle.add(middle);
+  input.close();
+  middle.close();
+  let retainedError;
+  try {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      await assert.rejects(result.toArray(), (error) => {
+        retainedError = error;
+        assert.equal(error.code, "BACKEND_TRAP");
+        assert.equal(getTestExecutionFailureContext(error).program.computations.length, 2);
+        return true;
+      });
+      assert.deepEqual(getTestTensorAncestry(result), {
+        values: 3, operations: 2, releasedValues: 0,
+      });
+    }
+    result.close();
+    for (const handle of [input, middle, result]) {
+      assert.deepEqual(getTestTensorAncestry(handle), {
+        values: 1, operations: 0, releasedValues: 1,
+      });
+    }
+    assert.equal(getTestExecutionFailureContext(retainedError).program.computations.length, 2);
+    assertNoLiveState(session);
+  } finally {
     await session.close();
   }
 });

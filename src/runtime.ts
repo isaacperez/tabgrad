@@ -225,10 +225,11 @@ class TensorValue {
   readonly dtype: TensorDType;
   readonly device: TensorDevice;
   readonly layout: TensorLayout;
-  readonly producer: OperationRecord | null;
+  // The logical value and provenance stay fixed; this owning edge ends once
+  // execution no longer needs the producer's inputs.
+  producer: OperationRecord | null;
   readonly provenance: ProgramProvenance;
   references = 1;
-  dependenciesReleased = false;
 
   constructor(metadata: TensorMetadata, producer: OperationRecord | null) {
     this.shape = Object.freeze([...metadata.shape]) as readonly [number];
@@ -809,9 +810,6 @@ export class RuntimeSession {
       );
     }
     this.#values.delete(value);
-    if (value.producer !== null) {
-      this.#operationRecords -= 1;
-    }
     const materialization = this.#materializations.delete(value);
     if (materialization?.kind === "resident") {
       this.#backend.release(materialization.allocation);
@@ -820,11 +818,15 @@ export class RuntimeSession {
   }
 
   #releaseDependencies(value: TensorValue): void {
-    if (value.producer === null || value.dependenciesReleased) {
+    const producer = value.producer;
+    if (producer === null) {
       return;
     }
-    value.dependenciesReleased = true;
-    for (const input of value.producer.inputs) {
+    // Sever the strong edge as well as its logical ownership. Keeping a
+    // released record attached would retain its entire upstream object graph.
+    value.producer = null;
+    this.#operationRecords -= 1;
+    for (const input of producer.inputs) {
       this.#releaseValue(input);
     }
   }
@@ -1028,4 +1030,27 @@ export function countResidentProgramReferencesForTesting(
   session: RuntimeSession,
 ): number {
   return runtimeSessionAccess(session).countResidentProgramReferences();
+}
+
+/** @internal Inspect actual strong dependency edges, including closed handles. */
+export function inspectTensorAncestryForTesting(handle: Tensor): {
+  readonly values: number;
+  readonly operations: number;
+  readonly releasedValues: number;
+} {
+  const pending = [requireTensorState(handle).value];
+  const seen = new Set<TensorValue>();
+  let operations = 0;
+  let releasedValues = 0;
+  while (pending.length > 0) {
+    const value = pending.pop()!;
+    if (seen.has(value)) continue;
+    seen.add(value);
+    if (value.references === 0) releasedValues += 1;
+    if (value.producer !== null) {
+      operations += 1;
+      pending.push(...value.producer.inputs);
+    }
+  }
+  return { values: seen.size, operations, releasedValues };
 }
