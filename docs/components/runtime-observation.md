@@ -114,6 +114,11 @@ have retired, including failed requests. The request caller owns its failure;
 close does not replay that failure as a cleanup error. This local CPU boundary
 does not equate logical publication with physical GPU drain.
 
+Request pins are distinct from the producer edges needed to compute a pending
+value. The [semantic lifetime owner](semantic-value-lifetimes.md) releases those
+edges after materialization or final value release, while preserving independently
+owned values and causal metadata.
+
 Each returned array or Python list is an owned observation. Reading a resident
 CPU result copies its bytes out of WebAssembly; Python conversion also creates
 interpreter-side storage and boxed list elements. Ready host data avoids the

@@ -77,6 +77,7 @@ test("the public declarations do not expose runtime-to-backend plumbing", async 
     "assertOpen",
     "cpu-backend",
     "createRuntimeSessionForTesting",
+    "inspectTensorAncestryForTesting",
     "observe(state",
     "releaseHandle",
   ]) {
@@ -96,6 +97,7 @@ test("the package entry point does not export executable or failure internals", 
     "inspectExecutionFailureContext",
     "retainExecutionFailureContext",
     "getTestResidentProgramReferenceCount",
+    "getTestTensorAncestry",
   ]) {
     assert.doesNotMatch(declarations, new RegExp(internalName));
   }

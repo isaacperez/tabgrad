@@ -3,6 +3,8 @@ import { inspectExecutionFailureContext } from "./errors.js";
 import { ExecutableProgram } from "./executable-program.js";
 import {
   countResidentProgramReferencesForTesting,
+  inspectTensorAncestryForTesting,
+  type Tensor,
   type RuntimeSession,
   type RuntimeSessionOptions,
   createRuntimeSessionForTesting,
@@ -48,4 +50,13 @@ export function getTestResidentProgramReferenceCount(
   session: RuntimeSession,
 ): number {
   return countResidentProgramReferencesForTesting(session);
+}
+
+/** Count reachable semantic objects without keeping them alive after inspection. */
+export function getTestTensorAncestry(handle: Tensor): {
+  readonly values: number;
+  readonly operations: number;
+  readonly releasedValues: number;
+} {
+  return inspectTensorAncestryForTesting(handle);
 }
