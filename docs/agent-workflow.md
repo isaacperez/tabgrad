@@ -4,7 +4,7 @@ This document defines how a coding agent coordinates independent agents while
 working on Tabgrad. Its purpose is to make delegated work inspectable and to
 prevent one agent from silently confirming its own assumptions or changes.
 
-The repository skills define the requirements of each activity. This document
+The Tabgrad agent skills define the requirements of each activity. This document
 defines the rules shared by issue investigation, research, implementation,
 verification, review, maintenance audits, and merge checks. Delegation never
 replaces the applicable skill or expands the authority given by the user.
@@ -65,7 +65,7 @@ review. The requirement to preserve a report never overrides confidentiality.
 ## Start an existing issue through one entry point
 
 A contributor may explicitly invoke `$tabgrad-start <issue-number>` to begin or
-resume one existing issue without naming each specialized repository skill.
+resume one existing issue without naming each specialized Tabgrad agent skill.
 The issue remains the source of the work-specific problem, boundaries,
 relationships, risks, and completion conditions. The entry point inspects that
 record and routes the work to every applicable specialized skill; it does not
