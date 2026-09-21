@@ -139,6 +139,13 @@ tensor and storage state. Training can replace their current `TensorValue`
 without changing stable parameter identity or invalidating a program solely
 because bytes changed.
 
+For memory reuse, structural use facts and logical release constraints are
+common program information. Whether a current handle, pending consumer or
+request needs a value to survive belongs to fresh invocation state instead.
+The backend combines those obligations with its actual physical schedule; a
+program's local last use is not proof of global semantic death. This distinction
+is developed in [CPU intermediate memory reuse](cpu-intermediate-reuse.md).
+
 Diagnostic provenance inside the program is likewise structural: it identifies
 stable operation names and source slots. Fresh occurrence identifiers and the
 mapping from this invocation to those slots belong to invocation state. A cache

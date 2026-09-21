@@ -157,6 +157,9 @@ Read the documents in this order when learning the architecture:
 11. [Memory and performance](memory-and-performance.md) states the complexity,
     lifetime, residency, and measurement constraints that keep the design
     practical for inference and training.
+    [CPU intermediate memory reuse](cpu-intermediate-reuse.md) explains how
+    common use analysis, runtime ownership and backend physical completion
+    cooperate to reuse temporary storage without losing observable values.
 12. [Model integration boundary](model-integration.md) places model conversion,
     weights, tokenization, and preprocessing around the tensor runtime.
 13. [Central architecture decision](central-decision.md) records the alternatives,

@@ -137,11 +137,17 @@ The runtime sees only opaque references through the `MaterializationTable`.
 Intermediate outputs can remain resident and feed later kernels without host
 readback.
 
-Logical liveness from the executable program tells the backend when virtual
-storage no longer needs a value. Physical bytes are reusable only after the
-semantic pin is released and every submitted physical use has drained. The
+Common program analysis supplies structural uses and logical release
+constraints; the runtime supplies fresh invocation-specific retention
+obligations. Neither a local last use nor an absent public handle alone proves
+that a value has no other owner. Physical bytes are reusable only when semantic
+obligations permit it and all accesses to those bytes have finished. The backend
+may prove this earlier for private scratch than for the whole request; resources
+with outstanding submitted uses remain protected through their drain. The
 backend may retain an unpinned allocation in a bounded pool, but the allocation
-is no longer associated with live tensor meaning.
+is no longer associated with live tensor meaning. See
+[CPU intermediate memory reuse](cpu-intermediate-reuse.md) for the ownership,
+failure and physical-completion distinctions behind this contract.
 
 ## Transfers are programs, not fallback
 

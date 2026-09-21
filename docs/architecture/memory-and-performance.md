@@ -72,12 +72,19 @@ are reserved for physical use.
 The two lifetimes end under different conditions:
 
 1. Semantic reachability and history determine when the pin can be released.
-2. `ExecutionTicket.drained` determines when the last physical use has finished.
+2. The backend establishes when the last physical access to the allocation has
+   finished. `ExecutionTicket.drained` provides the whole-request guarantee for
+   resources whose outstanding uses are tracked by that request.
 3. Only after both facts permit it can the backend reuse the bytes for an
    unrelated value.
 
-Logical liveness in `ExecutableProgram` can plan virtual storage reuse. The
-backend remains the owner of physical reuse, barriers, and pools.
+Logical liveness in `ExecutableProgram` can plan virtual storage reuse, but
+local last use alone does not establish that other semantic owners are gone.
+The runtime supplies fresh invocation-specific retention obligations. The
+backend remains the owner of physical reuse, barriers, and pools. It may prove
+private scratch safe to reuse before the whole request drains, without relaxing
+the leases protecting borrowed or still-used resources. The accepted boundary
+and its CPU rationale are explained in [CPU intermediate memory reuse](cpu-intermediate-reuse.md).
 
 ## Bounded owner-specific state
 

@@ -387,9 +387,13 @@ tensors.
 The baseline path can serialize access to a mutable instance or lease an
 independent instance and memory to a request. In either case, one invocation
 cannot race another through unowned mutable memory. A logical result may become
-available before all physical use ends; allocations return to a pool only after
-both semantic pins and [`ExecutionTicket.drained`](execution-lifecycle.md) allow
-reuse.
+available before all physical use ends; externally leased resources remain
+protected by semantic pins and their outstanding physical uses through
+[`ExecutionTicket.drained`](execution-lifecycle.md). Inside an invocation, the
+backend can reuse its private scratch earlier when it proves that the last
+physical access has finished and runtime retention obligations permit reuse.
+The distinction, including borrowed-input and failure preservation, is explained
+in [CPU intermediate memory reuse](cpu-intermediate-reuse.md).
 
 Web Workers, shared memory, and atomic instructions for parallel CPU arithmetic
 are an optional acceleration profile, not a requirement of the portable scalar
