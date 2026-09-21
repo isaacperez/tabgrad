@@ -47,6 +47,29 @@ function assertNoLiveState(session) {
   );
 }
 
+function pendingReleaseChain(session, depth, repeatedInputs = false) {
+  const increment = session.tensor([1]);
+  let root = session.tensor([0]);
+  const closedHandles = [];
+  for (let index = 0; index < depth; index += 1) {
+    const next = root.add(repeatedInputs ? root : increment);
+    root.close();
+    closedHandles.push(root);
+    root = next;
+  }
+  increment.close();
+  closedHandles.push(increment);
+  return { root, closedHandles };
+}
+
+function assertReleasedAncestry(handles) {
+  for (const handle of handles) {
+    assert.deepEqual(getTestTensorAncestry(handle), {
+      values: 1, operations: 0, releasedValues: 1,
+    });
+  }
+}
+
 function unsignedLeb128(value) {
   const bytes = [];
   do {
@@ -1148,6 +1171,102 @@ test("a retained input does not keep or inherit a completed downstream program",
     }
     await session.close();
   }
+});
+
+for (const repeatedInputs of [false, true]) {
+  for (const closeSession of [false, true]) {
+    test(`deep pending release: repeated inputs ${repeatedInputs}, session close ${closeSession}`, async () => {
+      const session = createRuntimeSession();
+      // A bounded regression workload, not a portable JavaScript stack limit.
+      const { root, closedHandles } = pendingReleaseChain(session, 8192, repeatedInputs);
+      assert.equal(session.diagnostics().liveOperationRecords, 8192);
+      if (closeSession) {
+        await session.close();
+      } else {
+        root.close();
+      }
+      assertReleasedAncestry([...closedHandles, root]);
+      assertNoLiveState(session);
+      assert.equal(session.diagnostics().backendLoads, 0);
+      assert.equal(session.diagnostics().kernelCalls, 0);
+      root.close();
+      await session.close();
+      assertNoLiveState(session);
+    });
+  }
+}
+
+test("deep pending release on failed request retirement preserves the failure and drains", async () => {
+  const gate = Promise.withResolvers();
+  const manifestUrl = installFixture("deep-release-failure", { abiVersion: 2 });
+  virtualResponses.get(manifestUrl.pathname).waitFor = gate.promise;
+  const session = createTestRuntimeSession({ manifestUrl, forceVariant: "scalar" });
+  const { root, closedHandles } = pendingReleaseChain(session, 8192);
+  const failed = assert.rejects(root.toArray(), (error) => {
+    assert.ok(!(error instanceof RangeError), error.stack);
+    assert.equal(error.code, "BACKEND_ABI_MISMATCH");
+    const context = getTestExecutionFailureContext(error);
+    assert.equal(context.phase, "abi-validation");
+    assert.equal(context.program.computations.length, 8192);
+    return true;
+  });
+  const host = session.tensor([7]);
+  const queued = host.toArray();
+  const closing = session.close();
+  try {
+    assert.equal(session.diagnostics().liveRequestLeases, 2);
+    assert.equal(session.diagnostics().liveOperationRecords, 8192);
+    assert.equal(getTestTensorAncestry(root).releasedValues, 0);
+    gate.resolve();
+    await failed;
+    assert.deepEqual(Array.from(await queued), [7]);
+    await closing;
+    assertReleasedAncestry([...closedHandles, root, host]);
+    assertNoLiveState(session);
+    assert.equal(session.diagnostics().kernelCalls, 0);
+  } finally {
+    gate.resolve();
+    await Promise.allSettled([failed, queued, closing]);
+    virtualResponses.delete(manifestUrl.pathname);
+  }
+});
+
+test("deep pending release stops at an independently retained ancestor", async () => {
+  const session = createTestRuntimeSession({
+    manifestUrl: new URL("manifest.json", distributionUrl),
+    forceVariant: "scalar",
+  });
+  const input = session.tensor([2]);
+  const retained = input.add(input);
+  input.close();
+  let root = retained;
+  const closedHandles = [];
+  for (let index = 0; index < 8192; index += 1) {
+    const next = root.add(retained);
+    if (root !== retained) {
+      root.close();
+      closedHandles.push(root);
+    }
+    root = next;
+  }
+  try {
+    root.close();
+    assertReleasedAncestry([...closedHandles, root]);
+    assert.deepEqual(getTestTensorAncestry(retained), {
+      values: 2, operations: 1, releasedValues: 0,
+    });
+    assert.equal(session.diagnostics().liveTensorHandles, 1);
+    assert.equal(session.diagnostics().liveTensorValues, 2);
+    assert.equal(session.diagnostics().liveOperationRecords, 1);
+    assert.equal(session.diagnostics().backendLoads, 0);
+    assert.deepEqual(Array.from(await retained.toArray()), [4]);
+    assert.equal(session.diagnostics().kernelCalls, 1);
+    assertReleasedAncestry([input]);
+  } finally {
+    await session.close();
+  }
+  assertReleasedAncestry([retained]);
+  assertNoLiveState(session);
 });
 
 test("completed values and retained closed handles do not retain producer ancestry", async () => {
