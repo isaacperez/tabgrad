@@ -26,7 +26,7 @@ network access cannot establish an authentication failure. Do not open a
 browser or change stored credentials without the evidence and authority that
 document requires.
 
-Follow `docs/agent-instruction-review.md` when `AGENTS.md`, a repository skill,
+Follow `docs/agent-instruction-review.md` when `AGENTS.md`, a Tabgrad agent skill,
 or a project rule applied by a skill changes. Use its bounded reasoned review;
 do not create or run a catalogue of model-behavior scenarios.
 

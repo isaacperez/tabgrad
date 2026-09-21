@@ -1,6 +1,6 @@
 # Reviewing coding-agent instructions
 
-This document defines how Tabgrad reviews changes to `AGENTS.md`, repository
+This document defines how Tabgrad reviews changes to `AGENTS.md`, Tabgrad agent
 skills, and the project rules that those skills apply. The review uses bounded
 reasoning over the actual instructions. It does not run AI models through a
 catalogue of simulated scenarios.
