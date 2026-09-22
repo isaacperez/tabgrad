@@ -101,6 +101,14 @@ Do not invoke this entry point implicitly for an ordinary request. Contributors
 may call a specialized skill directly when they already know the required
 activity or want a narrower operation.
 
+An explicit start of a capability-route index routes only its coordination
+activity through `tabgrad-issue`; its links are not executable sub-issues.
+Apply the [route procedure](project-management.md#maintain-the-capability-route)
+at the relevant issue, preflight, delivery and finalization boundaries. The
+existing verifier and reviewer cover the planning-impact conclusion in their
+bounded assignment. The coordinator owns any authorized reconciliation; this
+does not add a reviewer, change a skill's authority or require a full-map audit.
+
 ## Bound work before loading broad context
 
 An issue, the coordinating agent, and each subagent have separate boundaries.

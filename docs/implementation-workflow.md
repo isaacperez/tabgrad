@@ -79,6 +79,7 @@ Different records answer different questions:
 | Record | Question it answers |
 | --- | --- |
 | Architecture documentation | Which lasting system boundaries, cross-system invariants, and accepted decisions must every implementation preserve? |
+| Capability-route issue | Which broad outcomes matter, what prerequisite contracts connect them, and why is their order worth revisiting? |
 | Milestone | Which bounded integrated outcome must exist before this objective is complete? |
 | Issue | Which independently completable and verifiable result is being changed? |
 | Compatibility record | Which public behavior is actually supported, in which environments, with what evidence? |
@@ -177,6 +178,29 @@ planning horizon is not a fixed number of issues or a time-box. It ends where
 the next issue would require an unsupported prediction.
 
 ## Choose issue boundaries from verifiable results
+
+The [capability-route procedure](project-management.md#maintain-the-capability-route)
+connects this planning cycle to a shared index of future outcomes. Find the
+current route in the development project's overview. Read its general direction
+when choosing an objective, then follow only the entries and immediate
+dependencies relevant to a particular issue.
+
+The route and an implementation issue answer different questions. The route
+preserves context across increments; the issue limits what this increment must
+deliver. For example, a narrow result may establish one prerequisite for a
+larger capability without completing that capability or authorizing its next
+part. The handoff should say which fact changed and point to its evidence,
+rather than replacing a broad entry with an unexplained completion mark.
+
+Learning also flows back during work. A discovered prerequisite may require
+replanning before implementation continues. A speculative improvement can
+remain an open route question, whereas a concrete required defect follows the
+normal issue process. Neither kind of finding silently expands the current
+change. The existing verification and review examine the proposed planning
+impact; established results are reconciled after merge or outcome acceptance.
+This is part of the increment, not another routine subissue or a second tracker.
+
+### Bound the implementation result
 
 An implementation issue should normally fit one coherent branch and pull
 request. It is large enough to leave the repository with a meaningful result
@@ -412,3 +436,7 @@ After merge, the milestone is evaluated against its outcome rather than its
 original ticket count. The next planning wave reflects what the repository now
 proves, which is the mechanism that lets Tabgrad learn from implementation
 without accumulating a speculative backlog.
+
+The same handoff reconciles affected capability-route entries under the
+[route procedure](project-management.md#reconcile-established-outcomes), or
+records why no change is needed or which decision or authorized update remains.

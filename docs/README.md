@@ -73,6 +73,7 @@ link to its primary source, but they must not create a competing version.
 | Repository map and content placement | [`repository-structure.md`](repository-structure.md) |
 | Integrated implementation workflow and reading guide | [`implementation-workflow.md`](implementation-workflow.md) |
 | Issues, labels, project fields, and milestones | [`project-management.md`](project-management.md) |
+| Capability-route discovery, consultation and impact handoffs | [`project-management.md`](project-management.md#maintain-the-capability-route) |
 | Agent delegation and independent checks | [`agent-workflow.md`](agent-workflow.md) |
 | Unexpected findings, blockers, and pending decisions | [`CONTRIBUTING.md`](../CONTRIBUTING.md#handling-unexpected-findings-and-pending-decisions) |
 | Branches, worktrees, commits, and merge history | [`version-control.md`](version-control.md) |
