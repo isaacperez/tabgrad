@@ -840,7 +840,13 @@ export class RuntimeSession {
       return;
     }
     try {
-      const allocations = this.#backend.execute(formed.program, formed.bindings);
+      // Preparation can suspend. Capture current external owners only at this
+      // synchronous admission boundary, not in immutable program formation.
+      const retainedSlots = new Array<boolean>(formed.program.values.length);
+      for (const [slot, selectedValue] of formed.valuesBySlot) {
+        retainedSlots[slot] = selectedValue.references > formed.program.inputUseCounts[slot]!;
+      }
+      const allocations = this.#backend.execute(formed.program, formed.bindings, retainedSlots);
       for (const [slot, allocation] of allocations) {
         const boundValue = formed.valuesBySlot.get(slot);
         if (boundValue === undefined) {

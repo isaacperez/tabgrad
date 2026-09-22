@@ -266,6 +266,54 @@ class LinearMemoryAllocator {
   }
 }
 
+/**
+ * Invocation-local ownership and remaining physical uses for the sequential
+ * CPU schedule. Borrowed bindings never become scratch, even without an
+ * external semantic owner. Only active allocations participate in rollback.
+ */
+class InvocationStorage {
+  readonly allocations = new Map<ProgramSlot, ResidentAllocation>();
+  readonly #allocator: LinearMemoryAllocator;
+  readonly #bindings: ReadonlyMap<ProgramSlot, ProgramBinding>;
+  readonly #remainingUses: number[];
+
+  constructor(
+    allocator: LinearMemoryAllocator,
+    program: ExecutableProgram,
+    bindings: ReadonlyMap<ProgramSlot, ProgramBinding>,
+    retainedSlots: readonly boolean[],
+  ) {
+    this.#allocator = allocator;
+    this.#bindings = bindings;
+    // A negative count protects retained or borrowed values from reclamation.
+    this.#remainingUses = new Array<number>(program.values.length);
+    for (let slot = 0; slot < program.values.length; slot += 1) {
+      this.#remainingUses[slot] = retainedSlots[slot] || bindings.get(slot)?.resident !== undefined
+        ? -1
+        : program.inputUseCounts[slot]!;
+    }
+  }
+
+  completeInputUse(slot: ProgramSlot): void {
+    const remaining = this.#remainingUses[slot]!;
+    if (remaining <= 0) return;
+    this.#remainingUses[slot] = remaining - 1;
+    if (remaining === 1) {
+      const allocation = this.allocations.get(slot)!;
+      this.#allocator.release(allocation);
+      this.allocations.delete(slot);
+    }
+  }
+
+  rollback(): void {
+    for (const [slot, allocation] of this.allocations) {
+      if (allocation !== this.#bindings.get(slot)?.resident) {
+        this.#allocator.release(allocation);
+      }
+    }
+  }
+}
+
 const SIMD_PROBE = new Uint8Array([
   0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
   0x01, 0x05, 0x01, 0x60, 0x00, 0x01, 0x7b,
@@ -333,6 +381,7 @@ export class WebAssemblyCpuBackend {
   execute(
     program: ExecutableProgram,
     bindings: ReadonlyMap<ProgramSlot, ProgramBinding>,
+    retainedSlots: readonly boolean[],
   ): ReadonlyMap<ProgramSlot, ResidentAllocation> {
     const context = this.#requiredContext();
     if (context.poisoned) {
@@ -343,10 +392,11 @@ export class WebAssemblyCpuBackend {
       );
     }
 
-    const allocations = new Map<ProgramSlot, ResidentAllocation>();
-    const newlyAllocated: ResidentAllocation[] = [];
+    const storage = new InvocationStorage(context.allocator, program, bindings, retainedSlots);
+    const { allocations } = storage;
     try {
       for (const value of program.values) {
+        if (value.source === "computed") continue;
         const binding = bindings.get(value.slot);
         if (binding?.resident !== undefined) {
           this.#validateAllocation(context, binding.resident);
@@ -355,7 +405,6 @@ export class WebAssemblyCpuBackend {
         }
         const byteLength = value.shape[0] * Float32Array.BYTES_PER_ELEMENT;
         const allocation = context.allocator.allocate(byteLength);
-        newlyAllocated.push(allocation);
         allocations.set(value.slot, allocation);
         if (binding?.hostData !== undefined) {
           this.#floatView(context.memory, allocation, value.shape[0]).set(binding.hostData);
@@ -373,7 +422,6 @@ export class WebAssemblyCpuBackend {
       for (const computation of program.computations) {
         const left = this.#requiredAllocation(allocations, computation.left);
         const right = this.#requiredAllocation(allocations, computation.right);
-        const output = this.#requiredAllocation(allocations, computation.output);
         const length = program.values[computation.output]?.shape[0];
         if (length === undefined) {
           throw new TabgradError(
@@ -387,6 +435,10 @@ export class WebAssemblyCpuBackend {
             },
           );
         }
+        // Reserve the output before retiring inputs: kernels require disjoint
+        // output storage, including at the final use of an input.
+        const output = context.allocator.allocate(length * Float32Array.BYTES_PER_ELEMENT);
+        allocations.set(computation.output, output);
         let status: number;
         try {
           this.#kernelCalls += 1;
@@ -423,12 +475,12 @@ export class WebAssemblyCpuBackend {
             },
           );
         }
+        storage.completeInputUse(computation.left);
+        storage.completeInputUse(computation.right);
       }
       return allocations;
     } catch (error) {
-      for (const allocation of newlyAllocated) {
-        context.allocator.release(allocation);
-      }
+      storage.rollback();
       throw error;
     }
   }

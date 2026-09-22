@@ -43,6 +43,8 @@ test("formation preserves branch order, repeated inputs and shared ancestry once
   });
   assert.deepEqual([...formed.valuesBySlot.values()], [right, left, shared, firstBranch, secondBranch, root]);
   assert.deepEqual(slots(formed.program), [[0, 1, 2], [2, 1, 3], [2, 2, 4], [3, 4, 5]]);
+  assert.deepEqual(formed.program.inputUseCounts, [1, 2, 3, 1, 1, 0]);
+  assert.ok(Object.isFrozen(formed.program.inputUseCounts));
   assert.deepEqual(formed.newlyComputed, [shared, firstBranch, secondBranch, root]);
   assert.equal(reads.length, 6);
   assert.equal(new Set(reads).size, 6);
