@@ -95,6 +95,7 @@ unexplained `Not applicable`.
 | Generated files | <!-- Identify each generated output and its registered source and command, or state that there are none. --> |
 | Development environment and CI | <!-- Identify changed commands, tool versions, workflows, or branch settings, or explain why they are unaffected. --> |
 | Architecture | <!-- Link the accepted decision and documentation update, or explain why architecture is unaffected. --> |
+| Capability-route impact | <!-- Apply docs/project-management.md#record-and-review-the-impact: link relevant route entries, state no planning change with a reason, an evidenced factual update, or a proposed planning decision; identify any follow-up destination. Distinguish proposed changes from merged/accepted facts. Finalization reconciles established outcomes afterward, without editing this frozen review snapshot merely to record reconciliation. --> |
 | Release and migration notes | <!-- Link the notes, or explain why users need no release or migration guidance. --> |
 
 ## Known limitations and follow-up work

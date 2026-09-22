@@ -211,6 +211,9 @@ PyTorch surface into a speculative issue for every component or operation.
 
 The authoritative milestone and issue rules are in
 [`docs/project-management.md`](docs/project-management.md#plan-the-active-horizon).
+Use its [capability-route procedure](docs/project-management.md#maintain-the-capability-route)
+to find the current plan, consult relevant entries and carry an increment's
+evidenced planning impact through review and finalization.
 The complete connection between architecture, planning, test-driven
 implementation, performance, compatibility, and documentation is explained in
 [`docs/implementation-workflow.md`](docs/implementation-workflow.md).

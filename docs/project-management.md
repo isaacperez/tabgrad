@@ -17,6 +17,8 @@ Each piece of information has one authoritative location:
   concerns.
 - The project records workflow status, priority, and size.
 - A milestone groups work needed to complete one bounded objective or release.
+- A capability-route issue connects broad outcomes, prerequisite contracts and
+  sequencing rationale without duplicating issue status or release support.
 - Sub-issues divide a larger result into independently completable work.
 - Issue dependencies record which work blocks other work.
 - A pull request contains and verifies the proposed repository change.
@@ -638,6 +640,114 @@ milestone silently when optional work is discovered.
 The complete relationship between architecture, milestones, issues, tests,
 performance evidence, compatibility, and documentation is explained in
 [`implementation-workflow.md`](implementation-workflow.md).
+
+## Maintain the capability route
+
+A capability route is a living planning index: it connects desired outcomes,
+their prerequisite contracts, the reasons for their proposed order and questions
+that cannot yet become precise implementation issues. It makes distant needs
+visible without treating them as approved designs or scheduled commitments.
+Keep its changing content in one GitHub coordination issue, not in `docs/`.
+This section owns the procedure; the route applies it rather than defining
+another workflow.
+
+### Locate and interpret the current route
+
+The Tabgrad development project's overview README identifies exactly one
+`Current capability route` link. The linked issue names its responsible
+coordinator, explains its boundary and carries stable capability identifiers.
+An entry records the outcome and reason, prerequisite or conditional contracts,
+recommended horizon and uncertainty, open questions, and links to decisions,
+issues and evidence. Preserve identifiers or explain splits and replacements.
+Do not copy issue status, priority or size from project fields, or claim an
+entire family is complete because one limited result works.
+
+Use the current body to understand the plan and comments for dated explanations
+of material changes. Capabilities do not all need tickets. A speculative wish
+may stay in the register; a concrete required defect, prerequisite or follow-up
+must use the normal issue process in `CONTRIBUTING.md`.
+
+A route is not a parent authorizing work on all referenced capabilities. Start
+only the approved bounded issue or real required sub-issues. The route needs no
+implementation branch and remains open while actively maintained. Retire it
+only by an explicit planning decision: preserve unresolved entries, link any
+successor and update the project overview together. A superseded route uses
+`Not planned`, not `Done` to imply implementation of every listed capability.
+Bounded execution objectives retain their own milestone completion conditions.
+
+If discovery is missing, ambiguous, inaccessible or points to a retired issue,
+report the gap rather than guessing the current route. Existing bounded work
+may proceed when its scope and readiness can be established independently;
+stop only the planning or work that needs the unavailable evidence. Report any
+unresolved route review in the handoff. Do not make public builds, CI or a
+purely editorial correction depend on access to the project or private skills.
+
+### Consult it at the relevant boundaries
+
+When choosing the next objective, read the overview and active planning horizon.
+When defining an issue, identify relevant capability entries and their immediate
+dependencies; put the route link, identifiers and relationship in `Dependencies
+and related work`, or explain why the work has no planning effect. Starting or
+resuming applicable work checks that context against current prerequisites.
+Do not require every contributor or subagent to reread the whole register.
+
+The implementer and independent preflight use that context to detect a stale
+premise, not to silently expand the issue or implement distant extensions. A
+new fact that changes viability or ordering is classified when discovered,
+rather than postponed to closure. Changes to accepted architecture, scope,
+priority or other material decisions retain their existing approval process.
+
+### Record and review the impact
+
+Every delivery records its planning impact in the existing PR evidence or, for
+research and audits without a PR, in their outcome report. Use one of these
+conclusions with the evidence needed to support it:
+
+- **No planning change:** explain why the result does not change the route.
+  An unrelated or editorial change may state that route review is not
+  applicable and give the bounded reason. No empty roadmap comment is needed.
+- **Factual update:** identify the entries, exact demonstrated scope and
+  evidence, and what fact or prerequisite changes. A proposed implementation
+  is not merged evidence; an unaccepted conclusion is not an accepted decision.
+- **Planning decision proposed:** describe the discovery, affected order or
+  boundary, alternatives and required decision. Record its destination rather
+  than silently accepting the proposed change.
+
+Include any necessary follow-up issue or unresolved capability entry. Do not
+create a routine subissue solely to check this impact. Verification checks the
+evidence and the existing independent reviewer challenges the conclusion; a
+separate roadmap reviewer or general audit is not required. Review the impact
+against the relevant route state and revisit it when a later change affects
+its assumptions, without rerunning unrelated code checks.
+
+### Reconcile established outcomes
+
+Before review, describe the proposed update. After merge and the applicable
+post-merge checks, or after acceptance of a research/audit outcome, the
+coordinator reconciles only the affected entries with the established evidence.
+Acceptance of a conclusion does not establish that its required documentation
+has merged or its proposed capability is implemented. A PR that retains an
+experimental artifact does not complete its research by itself.
+
+Use `tabgrad-issue` for agent-authored GitHub mutations under current authority.
+Inspection and an impact proposal grant no authority to edit the route, create
+issues, change priorities or start work. Before writing, reread the live route,
+its successor reference and the relevant project state; preserve unrelated
+updates and do not overwrite a stale whole-body copy. Serialize conflicting
+route edits and confirm the resulting body and relationships after publication.
+
+There is no requirement to publish post-merge facts before the merge that
+establishes them. If reconciliation lacks authority, access or a decision,
+preserve the proposed update and report incomplete finalization with its owner
+and next action. Do not invent a completed update, undo an actual merge or
+change an automatically closed issue's state without authority. No-change
+conclusions need no route mutation. A planning-only update does not require a
+source commit or another implementation PR.
+
+Apply this procedure to new work and at the next applicable handoff of active
+work. Link missing route context then; do not reopen completed issues or create
+retroactive review tickets. Recheck only evidence whose assumptions the new
+context actually changes.
 
 ## Parent issues, sub-issues, and dependencies
 
