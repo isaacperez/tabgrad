@@ -89,6 +89,13 @@ context. Direct JavaScript can instead yield preparation on first demand.
 Both paths use the same program formation, backend execution, materialization
 updates and readback.
 
+After preparation, the runtime establishes fresh per-slot retention obligations
+immediately before synchronous CPU execution. These protect handles, pending
+consumers and accepted requests outside the selected internal uses. They do not
+become part of reusable program structure. The
+[CPU invocation storage contract](cpu-invocation-storage.md) owns the resulting
+allocation handoff, scratch reclamation and rollback boundary.
+
 The binding owns a registered `PythonRuntimeBridge` and activates its
 observation context around the accepted interpreter call and cleanup of its
 owned result proxy. A finalizer triggered by that cleanup can still observe

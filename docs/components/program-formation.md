@@ -39,6 +39,13 @@ program therefore does not keep the invocation's arrays, allocations or
 semantic graph. The accompanying maps do reference invocation state and must
 not become a persistent program cache.
 
+`ExecutableProgram` also derives frozen `inputUseCounts` from its selected
+computations. Each input position contributes one use, including repeated
+positions referring to the same slot. The runtime and backend share these
+structural facts; they do not include current owners. The
+[CPU storage contract](cpu-invocation-storage.md) explains how fresh runtime
+retention and actual kernel completion combine with those counts.
+
 ## Follow dependencies without using the call stack
 
 Formation walks inputs before emitting their consumer. This dependency-first

@@ -107,6 +107,23 @@ function section(identifier, contents) {
   return [identifier, ...unsignedLeb128(contents.length), ...contents];
 }
 
+// A one-element arithmetic fixture that fails on exactly one selected call.
+// The failure is a real Wasm status/exception, not a thrown JavaScript probe.
+function scalarFaultKernel(behavior, failureCall) {
+  return [
+    0x23, 0x00, 0x41, 0x01, 0x6a, 0x24, 0x00, // ++global call counter
+    0x23, 0x00, 0x41, ...signedLeb128(failureCall), 0x46,
+    0x04, 0x40, // if counter == failureCall
+    ...(behavior === "trap" ? [0x00] : [0x41, 0x07, 0x0f]),
+    0x0b,
+    0x20, 0x02, // output address
+    0x20, 0x00, 0x2a, 0x02, 0x00, // load left f32
+    0x20, 0x01, 0x2a, 0x02, 0x00, // load right f32
+    0x92, 0x38, 0x02, 0x00, // add and store
+    0x41, 0x00, 0x0b,
+  ];
+}
+
 function fixtureModule({
   abiVersion = 1,
   arenaBase = 1_048_576,
@@ -114,6 +131,7 @@ function fixtureModule({
   kernelBehavior = "success",
   memoryImportName = "memory",
   omitKernelExport = false,
+  failureCall,
 } = {}) {
   const functionType = (parameters, results) => [
     0x60,
@@ -157,7 +175,9 @@ function fixtureModule({
     const body = [0x00, ...instructions];
     return [...unsignedLeb128(body.length), ...body];
   };
-  const kernelInstructions = kernelBehavior === "trap"
+  const kernelInstructions = failureCall !== undefined
+    ? scalarFaultKernel(kernelBehavior, failureCall)
+    : kernelBehavior === "trap"
     ? [0x00, 0x0b]
     : [0x41, ...signedLeb128(kernelBehavior === "status" ? 7 : 0), 0x0b];
   const kernelBody = [0x00, ...kernelInstructions];
@@ -175,6 +195,7 @@ function fixtureModule({
     ...types,
     ...imports,
     ...functions,
+    ...(failureCall === undefined ? [] : section(6, [0x01, i32, 0x01, 0x41, 0x00, 0x0b])),
     ...exports,
     ...code,
   ]);
@@ -639,6 +660,223 @@ test("reuses released allocations instead of growing live memory", async () => {
   await session.close();
 });
 
+for (const depth of [4, 17, 64]) {
+  test(`recycles private intermediate storage during a ${depth}-step chain`, async () => {
+    const session = createTestRuntimeSession({
+      manifestUrl: new URL("manifest.json", distributionUrl), forceVariant: "scalar",
+    });
+    const { root } = pendingReleaseChain(session, depth);
+    try {
+      assert.deepEqual(Array.from(await root.toArray()), [depth]);
+      // Output cannot overlap either input: one increment and two rotating values.
+      assert.equal(session.diagnostics().highWaterAllocationBytes, 3 * 4);
+      assert.equal(session.diagnostics().highWaterReservedAllocationBytes, 3 * 16);
+      assert.equal(session.diagnostics().liveAllocationBytes, 4);
+      assert.equal(session.diagnostics().kernelCalls, depth);
+      assert.deepEqual(Array.from(await root.toArray()), [depth]);
+      assert.equal(session.diagnostics().kernelCalls, depth);
+      root.close();
+      assertNoLiveState(session);
+    } finally {
+      await session.close();
+    }
+  });
+}
+
+test("scratch reuse preserves retained intermediates and outside pending consumers", async () => {
+  const session = createTestRuntimeSession({
+    manifestUrl: new URL("manifest.json", distributionUrl), forceVariant: "simd128",
+  });
+  const increment = session.tensor([1, 2, 3]);
+  let root = session.tensor([0, 0, 0]);
+  const retained = [];
+  let outside;
+  try {
+    for (let index = 1; index <= 12; index += 1) {
+      const next = root.add(increment);
+      root.close();
+      root = next;
+      if (index === 3) outside = root.add(root);
+      if (index === 6) {
+        retained.push(root);
+        root = root.add(increment);
+      }
+    }
+    increment.close();
+    assert.deepEqual(Array.from(await root.toArray()), [13, 26, 39]);
+    assert.equal(session.diagnostics().kernelCalls, 13);
+    assert.deepEqual(Array.from(await retained[0].toArray()), [6, 12, 18]);
+    assert.equal(session.diagnostics().kernelCalls, 13);
+    assert.deepEqual(Array.from(await outside.toArray()), [6, 12, 18]);
+    assert.equal(session.diagnostics().kernelCalls, 14);
+    // Scratch still reuses storage even though selected middle values survive.
+    assert.ok(session.diagnostics().highWaterAllocationBytes <= 5 * 3 * 4);
+    root.close();
+    outside.close();
+    retained[0].close();
+    assertNoLiveState(session);
+  } finally {
+    await session.close();
+  }
+});
+
+test("admission refreshes retention after preparation and protects a queued middle observation", async () => {
+  const gate = Promise.withResolvers();
+  const path = "/reuse-gated-manifest.json";
+  const readbackPeaks = [];
+  virtualResponses.set(path, {
+    body: await readFile(join(distributionRoot, "manifest.json")),
+    contentType: "application/json", waitFor: gate.promise,
+  });
+  const session = createTestRuntimeSession({
+    manifestUrl: new URL(path, distributionUrl), forceVariant: "scalar",
+    beforeReadback() { readbackPeaks.push(session.diagnostics().highWaterAllocationBytes); },
+  });
+  const increment = session.tensor([1]);
+  const handles = [session.tensor([0])];
+  for (let index = 0; index < 16; index += 1) handles.push(handles.at(-1).add(increment));
+  const rootRequest = handles.at(-1).toArray();
+  const middleRequest = handles[8].toArray();
+  try {
+    assert.equal(session.diagnostics().liveRequestLeases, 2);
+    // Formation has happened but execution is gated: only requests survive.
+    handles.forEach((handle) => handle.close());
+    increment.close();
+    const closing = session.close();
+    gate.resolve();
+    assert.deepEqual(Array.from(await rootRequest), [16]);
+    assert.deepEqual(Array.from(await middleRequest), [8]);
+    await closing;
+    assert.equal(session.diagnostics().kernelCalls, 16);
+    assert.deepEqual(readbackPeaks, [4 * 4, 4 * 4]);
+    assertNoLiveState(session);
+  } finally {
+    gate.resolve();
+    await Promise.allSettled([rootRequest, middleRequest]);
+    await session.close();
+    virtualResponses.delete(path);
+  }
+});
+
+for (const [kernelBehavior, retainResident] of [["status", true], ["status", false], ["trap", false]]) {
+  test(`${kernelBehavior} after scratch reuse preserves borrowed inputs (handle retained: ${retainResident})`, async () => {
+    const session = createTestRuntimeSession({
+      manifestUrl: installFixture(`reuse-${kernelBehavior}`, { kernelBehavior, failureCall: 5 }),
+      forceVariant: "scalar",
+    });
+    const source = session.tensor([2]);
+    const resident = source.add(source);
+    try {
+      assert.deepEqual(Array.from(await resident.toArray()), [4]);
+      source.close();
+      let root = resident;
+      for (let index = 0; index < 8; index += 1) {
+        const next = root.add(resident);
+        if (root !== resident) root.close();
+        root = next;
+      }
+      if (!retainResident) resident.close();
+      await assert.rejects(root.toArray(), {
+        code: kernelBehavior === "trap" ? "BACKEND_TRAP" : "BACKEND_STATUS_ERROR",
+      });
+      const failed = session.diagnostics();
+      assert.equal(failed.kernelCalls, 5);
+      assert.equal(failed.highWaterAllocationBytes, 12);
+      assert.equal(failed.liveAllocationBytes, 4);
+      assert.equal(failed.reservedAllocationBytes, 16);
+      assert.equal(failed.liveOperationRecords, 8);
+      if (retainResident) assert.deepEqual(Array.from(await resident.toArray()), [4]);
+      if (kernelBehavior === "status") {
+        assert.deepEqual(Array.from(await root.toArray()), [36]);
+        assert.equal(session.diagnostics().kernelCalls, 13);
+        assert.equal(session.diagnostics().liveOperationRecords, 0);
+      } else {
+        await assert.rejects(root.toArray(), { code: "BACKEND_TRAP" });
+        assert.equal(session.diagnostics().kernelCalls, 5);
+      }
+      root.close();
+      resident.close();
+      assertNoLiveState(session);
+    } finally {
+      await session.close();
+    }
+  });
+}
+
+for (const length of [0, 3, 17]) {
+  test(`repeated inputs reuse storage without losing ${length}-element values`, async () => {
+    const session = createTestRuntimeSession({
+      manifestUrl: new URL("manifest.json", distributionUrl), forceVariant: "scalar",
+    });
+    let root = session.tensor(new Float32Array(length).fill(1));
+    try {
+      for (let index = 0; index < 8; index += 1) {
+        const next = root.add(root);
+        root.close();
+        root = next;
+      }
+      assert.deepEqual(Array.from(await root.toArray()), new Array(length).fill(256));
+      assert.equal(session.diagnostics().highWaterAllocationBytes, 2 * length * 4);
+      assert.equal(session.diagnostics().highWaterReservedAllocationBytes, 2 * Math.ceil(length / 4) * 16);
+      root.close();
+      assertNoLiveState(session);
+    } finally {
+      await session.close();
+    }
+  });
+}
+
+test("all retained intermediates remain independently observable", async () => {
+  const session = createTestRuntimeSession({
+    manifestUrl: new URL("manifest.json", distributionUrl), forceVariant: "scalar",
+  });
+  const increment = session.tensor([1]);
+  const handles = [session.tensor([0])];
+  try {
+    for (let index = 0; index < 16; index += 1) handles.push(handles.at(-1).add(increment));
+    await handles.at(-1).toArray();
+    assert.equal(session.diagnostics().liveAllocationBytes, 18 * 4);
+    for (let index = 0; index < handles.length; index += 1) {
+      assert.deepEqual(Array.from(await handles[index].toArray()), [index]);
+    }
+    assert.equal(session.diagnostics().kernelCalls, 16);
+    handles.forEach((handle) => handle.close());
+    increment.close();
+    assertNoLiveState(session);
+  } finally {
+    await session.close();
+  }
+});
+
+test("readback failure after scratch reuse does not repeat numerical work", async () => {
+  let failReadback = true;
+  const cause = new Error("readback fixture failure");
+  const session = createTestRuntimeSession({
+    manifestUrl: new URL("manifest.json", distributionUrl), forceVariant: "scalar",
+    beforeReadback() {
+      if (failReadback) throw cause;
+    },
+  });
+  const { root } = pendingReleaseChain(session, 16);
+  try {
+    await assert.rejects(root.toArray(), (error) => {
+      assert.equal(error.cause, cause);
+      assert.equal(getTestExecutionFailureContext(error).phase, "readback");
+      return true;
+    });
+    assert.equal(session.diagnostics().highWaterAllocationBytes, 12);
+    assert.equal(session.diagnostics().liveAllocationBytes, 4);
+    assert.equal(session.diagnostics().liveOperationRecords, 0);
+    failReadback = false;
+    assert.deepEqual(Array.from(await root.toArray()), [16]);
+    assert.equal(session.diagnostics().kernelCalls, 16);
+    root.close();
+    assertNoLiveState(session);
+  } finally {
+    await session.close();
+  }
+});
+
 test("drains an accepted observation when the session closes", async () => {
   const session = createTestRuntimeSession({
     manifestUrl: new URL("manifest.json", distributionUrl),
@@ -865,6 +1103,7 @@ test("ExecutableProgram is immutable and contains only logical slots", () => {
     "computations",
     "domain",
     "formatVersion",
+    "inputUseCounts",
     "result",
     "values",
   ]);

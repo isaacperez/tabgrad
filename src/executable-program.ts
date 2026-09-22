@@ -28,6 +28,8 @@ export class ExecutableProgram {
   readonly domain = "webassembly-cpu";
   readonly values: readonly ProgramValue[];
   readonly computations: readonly LoweredAddFloat32[];
+  /** Input occurrences per slot, independent of scheduling or invocation owners. */
+  readonly inputUseCounts: readonly number[];
   readonly result: ProgramSlot;
 
   constructor(
@@ -40,12 +42,18 @@ export class ExecutableProgram {
       shape: Object.freeze([...value.shape]) as readonly [number],
       provenance: Object.freeze({ ...value.provenance }),
     })));
+    const inputUseCounts = new Array<number>(values.length).fill(0);
     this.computations = Object.freeze(
-      computations.map((computation) => Object.freeze({
-        ...computation,
-        provenance: Object.freeze({ ...computation.provenance }),
-      })),
+      computations.map((computation) => {
+        inputUseCounts[computation.left]! += 1;
+        inputUseCounts[computation.right]! += 1;
+        return Object.freeze({
+          ...computation,
+          provenance: Object.freeze({ ...computation.provenance }),
+        });
+      }),
     );
+    this.inputUseCounts = Object.freeze(inputUseCounts);
     this.result = result;
     Object.freeze(this);
   }

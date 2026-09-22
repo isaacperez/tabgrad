@@ -29,6 +29,30 @@
         });
       }
 
+      async function checkIntermediateReuse(session) {
+        const increment = session.tensor([1, 2, 3]);
+        let root = session.tensor([0, 0, 0]);
+        for (let index = 0; index < 32; index += 1) {
+          const next = root.add(increment);
+          root.close();
+          root = next;
+        }
+        increment.close();
+        const values = Array.from(await root.toArray());
+        if (JSON.stringify(values) !== JSON.stringify([32, 64, 96])) {
+          throw new Error("Intermediate reuse changed the numerical result.");
+        }
+        const diagnostics = session.diagnostics();
+        if (diagnostics.highWaterAllocationBytes !== 36
+          || diagnostics.highWaterReservedAllocationBytes !== 48) {
+          throw new Error("Closed intermediates did not reuse the three-buffer working set.");
+        }
+        root.close();
+        if (session.diagnostics().liveAllocationBytes !== 0) {
+          throw new Error("Intermediate reuse left live allocations after close.");
+        }
+      }
+
       try {
         await reportPhase("application-started");
         const [{ createRuntimeSession }, { createTestRuntimeSession }] = await Promise.all([
@@ -50,6 +74,7 @@
         left.close();
         right.close();
         result.close();
+        await checkIntermediateReuse(session);
         await session.close();
         await reportPhase("runtime-finished");
         await report({ ok: true, before, after, values });

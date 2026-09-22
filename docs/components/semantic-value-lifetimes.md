@@ -34,8 +34,10 @@ For example, consider a chain whose intermediate handles are closed while its
 final result is still pending. Before execution, producer edges keep the chain
 usable. After successful execution has installed the resident materializations,
 those edges are released. An intermediate with another open handle retains its
-own stored result; an intermediate with no remaining owner releases its
-materialization. The final result does not retain the completed upstream chain.
+own stored result. An intermediate with no remaining owner releases any
+materialization it has; execution can also reclaim private scratch before
+publishing survivors, as described in [CPU invocation storage](cpu-invocation-storage.md).
+The final result does not retain the completed upstream chain.
 
 ## Releasing an owner must release its references
 
