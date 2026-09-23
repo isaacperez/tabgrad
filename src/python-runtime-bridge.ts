@@ -53,12 +53,12 @@ export class PythonRuntimeBridge {
     return observeTensorSynchronously(this.session, handle);
   }
 
-  tensorFromBuffer(buffer: PythonBuffer): Tensor {
+  tensorFromBuffer(buffer: PythonBuffer, shape?: readonly number[]): Tensor {
     const view = buffer.getBuffer("f32");
     try {
       // Runtime import performs the owned copy synchronously. Neither this view
       // nor the argument proxy may escape into deferred numerical execution.
-      return this.session.tensor(boundedFloat32View(view));
+      return this.session.tensor(boundedFloat32View(view), shape === undefined ? undefined : { shape });
     } finally {
       view.release();
     }

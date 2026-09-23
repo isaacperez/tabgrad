@@ -143,6 +143,46 @@ for (const failPreparation of [false, true]) {
   });
 }
 
+test("Python contiguous ranks preserve scalar, nested and empty values through managed observation", {
+  timeout: 20_000,
+}, async () => {
+  const { attachPython } = await import("../../dist/python.js");
+  const interpreter = await getInterpreter();
+  const binding = await attachPython(interpreter);
+  try {
+    await binding.runPythonAsync(`
+import torch
+cases = [(2, (), 4.0), ([[1, 2], [3, 4]], (2, 2), [[2., 4.], [6., 8.]]),
+         ((([1, 2],), ([3, 4],)), (2, 1, 2), [[[2., 4.]], [[6., 8.]]]),
+         ([[], []], (2, 0), [[], []]), ([[[]]], (1, 1, 0), [[[]]])]
+for data, shape, expected in cases:
+    left = torch.tensor(data, dtype=torch.float32)
+    assert left.shape == shape
+    result = left + left
+    assert result.shape == shape
+    assert result.tolist() == expected
+    assert result.tolist() == expected
+    if shape:
+        assert result.tolist() is not result.tolist()
+    else:
+        assert type(result.tolist()) is float
+source = [[1., 2.], [3., 4.]]
+copied = torch.tensor(source, dtype=torch.float32)
+source[0][0] = 99
+assert copied.tolist() == [[1., 2.], [3., 4.]]
+returned = copied.tolist()
+returned[0][0] = 99
+assert copied.tolist() == [[1., 2.], [3., 4.]]
+assert (copied + copied).tolist() == [[2., 4.], [6., 8.]]
+`);
+  } finally {
+    await binding.close();
+    for (const name of ["torch", "cases", "data", "shape", "expected", "left", "result", "source", "copied", "returned"]) {
+      if (interpreter.globals.has(name)) interpreter.globals.delete(name);
+    }
+  }
+});
+
 test("Python ordinary observation returns independent oracle-backed lists without JSPI", {
   timeout: 20_000,
 }, async () => {
@@ -373,7 +413,7 @@ test("Python tensor creation, metadata and three lazy addition spellings match t
   const { attachPython } = await import("../../dist/python.js");
   const interpreter = await getInterpreter();
   const oracle = JSON.parse(await readFile(new URL("../fixtures/python-tensor-oracle.json", import.meta.url), "utf8"));
-  for (const fixture of oracle.cases) {
+  for (const fixture of [...oracle.cases, ...oracle.rankCases]) {
     const binding = await attachPython(interpreter);
     try {
       await binding.runPythonAsync(`import torch\n${fixture.source}`);
@@ -394,6 +434,11 @@ test("Python tensor creation, metadata and three lazy addition spellings match t
       const bits = new Uint32Array(values.buffer, values.byteOffset, values.length);
       assert.deepEqual(Array.from(bits, (value, index) => Number.isNaN(values[index]) ? "nan" : value),
         fixture.bits, fixture.name);
+      if ("values" in fixture) {
+        await binding.runPythonAsync(`import json\nobserved_json = json.dumps(result.tolist())`);
+        assert.deepEqual(JSON.parse(interpreter.globals.get("observed_json")), fixture.values);
+        interpreter.globals.delete("observed_json");
+      }
       for (const name of ["left", "right", "result"]) interpreter.globals.delete(name);
       assert.equal(session.diagnostics().liveTensorHandles, 0, fixture.name);
       assert.equal(session.diagnostics().liveTensorValues, 0, fixture.name);
@@ -456,6 +501,74 @@ for name, value in [('shape', (4,)), ('dtype', torch.float32), ('device', 'cpu')
   }
 });
 
+test("Python nested admission rejects malformed trees without importing partial tensors", {
+  timeout: 20_000,
+}, async () => {
+  const { attachPython } = await import("../../dist/python.js");
+  const interpreter = await getInterpreter();
+  const binding = await attachPython(interpreter);
+  try {
+    await binding.runPythonAsync(`
+import torch
+cycle = []
+cycle.append(cycle)
+indirect = [cycle]
+class NumericSubclass(int):
+    pass
+bad_inputs = [cycle, indirect, [[1], [2, 3]], [1, [2]], [[1], 2],
+              [[], [1]], [[], [[]]], [1, []], [[], 1],
+              {'x': 1}, [None], [[complex(1)]], [[NumericSubclass(1)]],
+              iter([1]), [[object()]]]
+for data in bad_inputs:
+    before = torch._runtime_session.diagnostics()
+    try:
+        torch.tensor(data, dtype=torch.float32)
+    except (TypeError, ValueError):
+        pass
+    else:
+        raise AssertionError('accepted malformed input')
+    after = torch._runtime_session.diagnostics()
+    assert after.liveTensorHandles == before.liveTensorHandles
+    assert after.liveTensorValues == before.liveTensorValues
+    assert after.liveOperationRecords == before.liveOperationRecords
+    assert after.hostToWasmCopies == before.hostToWasmCopies
+shared = [1, 2]
+tensor = torch.tensor([shared, shared], dtype=torch.float32)
+assert tensor.shape == (2, 2)
+assert tensor.tolist() == [[1., 2.], [1., 2.]]
+for left_data, right_data in [(1, [1]), ([[1, 2]], [1, 2]), ([], [[]])]:
+    left = torch.tensor(left_data, dtype=torch.float32)
+    right = torch.tensor(right_data, dtype=torch.float32)
+    for operation in (lambda: left + right, lambda: left.add(right), lambda: torch.add(left, right)):
+        try:
+            operation()
+        except RuntimeError:
+            pass
+        else:
+            raise AssertionError('accepted different full shapes')
+assert torch._runtime_session.diagnostics().kernelCalls == 0
+# Traverse deeper than Python's recursion limit, using only one numeric element.
+deep = 3
+for _ in range(1200):
+    deep = [deep]
+deep_tensor = torch.tensor(deep, dtype=torch.float32)
+assert deep_tensor.shape == (1,) * 1200
+observed = (deep_tensor + deep_tensor).tolist()
+for _ in range(1200):
+    assert type(observed) is list and len(observed) == 1
+    observed = observed[0]
+assert observed == 6.0
+`);
+  } finally {
+    await binding.close();
+    for (const name of ["torch", "cycle", "indirect", "NumericSubclass", "bad_inputs", "data",
+      "before", "after", "shared", "tensor", "left_data", "right_data", "left", "right",
+      "operation", "deep", "deep_tensor", "observed", "_"]) {
+      if (interpreter.globals.has(name)) interpreter.globals.delete(name);
+    }
+  }
+});
+
 test("Python tensor restrictions, reflected dispatch and input copying fail before invalid work", {
   timeout: 15_000,
 }, async () => {
@@ -479,8 +592,8 @@ assert left + Reflected() == 'reflected'
 assert left.__add__(1) is NotImplemented
 for expression in [
     'torch.tensor([1])',
-    'torch.tensor(1, dtype=torch.float32)',
-    'torch.tensor([[1]], dtype=torch.float32)',
+    'torch.tensor(object(), dtype=torch.float32)',
+    'torch.tensor([[object()]], dtype=torch.float32)',
     "torch.tensor([1], dtype='float32')",
     "torch.tensor([1], dtype=torch.float32, device='cuda')",
     'torch.tensor([1], dtype=torch.float32, device=EqualToAnything())',

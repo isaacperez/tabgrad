@@ -57,9 +57,16 @@ const pythonMeasurement = `
 import gc, sys, time, tracemalloc
 conversion_calls = {}
 def profile_conversion(frame, event, argument):
-    if event == 'c_call' and frame.f_code is __import__('torch').Tensor.tolist.__code__:
-        name = getattr(argument, '__name__', '')
-        conversion_calls[name] = conversion_calls.get(name, 0) + 1
+    if event != 'c_call':
+        return
+    name = getattr(argument, '__name__', '')
+    if name not in ('to_py', 'tolist'):
+        return
+    while frame is not None:
+        if frame.f_code is __import__('torch').Tensor.tolist.__code__:
+            conversion_calls[name] = conversion_calls.get(name, 0) + 1
+            return
+        frame = frame.f_back
 
 def measure_python(length, depth, trace=False):
     import torch

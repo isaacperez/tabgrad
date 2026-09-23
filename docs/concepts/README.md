@@ -12,6 +12,12 @@ difference between executing a language and executing tensor operations. It
 assumes programming experience, not familiarity with browser interpreters.
 The chapter leads into the integration architecture and its lifecycle flow.
 
+## Understand tensor structure
+
+[Tensor shape and contiguous values](tensor-shape.md) distinguishes dimensions,
+rank, element counts and numerical storage. It explains scalars, empty axes and
+why Python containers and flat JavaScript data can describe the same tensor.
+
 ## Questions this perspective answers
 
 Concept documentation answers questions such as:

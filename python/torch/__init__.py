@@ -3,18 +3,20 @@
 from __future__ import annotations
 
 from array import array
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from math import prod
 from operator import index
 from types import NotImplementedType
-from typing import SupportsIndex, cast, overload
+from typing import SupportsIndex, TypeAlias, cast, overload
 from weakref import finalize
 
 # JavaScript registers this module; its checked .pyi has no Python source file.
 import _tabgrad_runtime_bridge as _bridge  # pyright: ignore[reportMissingModuleSource]
-from pyodide.ffi import JsException
+from pyodide.ffi import JsException, to_js
 
 _runtime_session = _bridge.session
+
+TensorList: TypeAlias = float | list["TensorList"]
 
 
 class Size(tuple[int, ...]):
@@ -167,12 +169,10 @@ class Tensor:
             return NotImplemented
         return self.add(other)
 
-    def tolist(self) -> list[float]:
+    def tolist(self) -> TensorList:
         """Observe owned numerical values within the binding's managed script."""
         with _bridge.observe(self._handle).to_py() as values:
-            # Typeshed models memoryview lists as ints; this bridge returns
-            # Float32Array buffers, whose elements convert to Python floats.
-            return cast("list[float]", values.tolist())
+            return _nested_values(values, self.shape)
 
     @staticmethod
     def _from_handle(handle: _bridge.RuntimeTensor) -> Tensor:
@@ -187,17 +187,88 @@ class Tensor:
             raise
 
 
-def _input_buffer(data: object) -> array[float]:
-    if type(data) not in (list, tuple):
-        raise TypeError("Tabgrad tensor input must be a flat numeric list or tuple.")
-    # The outer container was checked; no element type is trusted by this cast.
-    items = cast("list[object] | tuple[object, ...]", data)
-    buffer = array("f")
+def _append_numeric_values(items: Iterable[object], buffer: array[float]) -> None:
+    """Convert a leaf row without per-element traversal or bridge bookkeeping."""
     for value in items:
         if not isinstance(value, (int, float)) or type(value) not in (int, float, bool):
             raise TypeError("Tabgrad tensor elements must be built-in real numbers.")
         buffer.append(value)
-    return buffer
+
+
+def _input_buffer(data: object) -> tuple[array[float], list[int]]:
+    """Normalize rectangular built-in containers without recursive traversal."""
+    buffer = array("f")
+    if type(data) not in (list, tuple):
+        _append_numeric_values((data,), buffer)
+        return buffer, []
+    shape: list[int] = []
+    frames: list[tuple[Iterator[object], int]] = []
+    active: set[int] = set()
+    terminal_depth: int | None = None
+    value, depth = data, 0
+    while True:
+        if type(value) in (list, tuple):
+            # Only the container type is trusted; each child is validated below.
+            items = cast("list[object] | tuple[object, ...]", value)
+            if id(items) in active:
+                raise ValueError("Tensor input must not contain a cycle.")
+            if terminal_depth is not None and depth >= terminal_depth:
+                raise TypeError("Tensor input must have uniform nesting depth.")
+            if depth == len(shape):
+                shape.append(len(items))
+            elif shape[depth] != len(items):
+                raise ValueError("Tensor input must be rectangular.")
+            if items and type(items[0]) in (list, tuple):
+                active.add(id(items))
+                children = iter(items)
+                frames.append((children, id(items)))
+                value, depth = next(children), depth + 1
+                continue
+            _append_numeric_values(items, buffer)
+            leaf_depth = depth + 1
+        else:
+            raise TypeError("Tensor input must have uniform nesting depth.")
+        if terminal_depth is None:
+            terminal_depth = leaf_depth
+        elif terminal_depth != leaf_depth:
+            raise TypeError("Tensor input must have uniform nesting depth.")
+        while frames:
+            children, identity = frames[-1]
+            try:
+                value, depth = next(children), len(frames)
+                break
+            except StopIteration:
+                active.remove(identity)
+                frames.pop()
+        else:
+            return buffer, shape
+
+
+def _nested_values(values: memoryview, shape: Size) -> TensorList:
+    """Build owned Python containers; only the current ancestor path is retained."""
+    if not shape:
+        return float(values[0])
+    if len(shape) == 1:
+        return cast("list[TensorList]", values.tolist())
+    result: list[TensorList] = []
+    frames: list[tuple[list[TensorList], int]] = [(result, 0)]
+    offset = 0
+    while frames:
+        target, depth = frames[-1]
+        if len(target) == shape[depth]:
+            frames.pop()
+        elif depth == len(shape) - 2:
+            width = shape[depth + 1]
+            with values[offset : offset + width] as row:
+                # The bridge exposes float32, although typeshed models integer
+                # memoryview elements. Conversion owns the resulting floats.
+                target.append(cast("list[TensorList]", row.tolist()))
+            offset += width
+        else:
+            child: list[TensorList] = []
+            target.append(child)
+            frames.append((child, depth + 1))
+    return result
 
 
 def tensor(
@@ -208,7 +279,7 @@ def tensor(
     requires_grad: bool = False,
     pin_memory: bool = False,
 ) -> Tensor:
-    """Copy a flat numeric list/tuple into a rank-one CPU float32 tensor."""
+    """Copy a numeric scalar or rectangular list/tuple into a CPU float32 tensor."""
     if dtype is not float32:
         raise RuntimeError("Tabgrad requires explicit dtype=torch.float32.")
     if not _is_cpu_device(device):
@@ -217,8 +288,9 @@ def tensor(
         raise TypeError("requires_grad and pin_memory must be bool.")
     if requires_grad or pin_memory:
         raise RuntimeError("Gradients and pinned memory are unsupported.")
+    buffer, shape = _input_buffer(data)
     # The module-level factory is the only caller outside the owning class.
-    return Tensor._from_handle(_bridge.tensorFromBuffer(_input_buffer(data)))  # pyright: ignore[reportPrivateUsage]
+    return Tensor._from_handle(_bridge.tensorFromBuffer(buffer, to_js(shape)))  # pyright: ignore[reportPrivateUsage]
 
 
 def add(

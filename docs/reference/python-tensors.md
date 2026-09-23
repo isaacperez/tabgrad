@@ -26,14 +26,19 @@ The accepted form is
 The explicit dtype argument is required by policy even though omission can be
 bound by Python: there is no silent inference of an integer or default dtype.
 
-- `data` must be a built-in flat list or tuple containing built-in `int`,
-  `float` or `bool` values. Empty input produces shape `(0,)`.
+- `data` must be a built-in `int`, `float` or `bool`, or a rectangular nested
+  structure of built-in lists/tuples containing those types. A numeric scalar
+  produces shape `()`. Empty input produces shape `(0,)`; `[[], []]` produces
+  `(2, 0)`. Nesting cannot imply dimensions after an empty sequence.
 - The only accepted dtype is the `torch.float32` object, not its string name.
 - The device may be the string `'cpu'` or a `torch.device('cpu')` descriptor.
 - Gradient and pinned-memory flags must be booleans and must be false.
 - Creation converts to float32 and owns a copy. Later input mutations cannot
   change the tensor. Integer overflow during conversion raises `OverflowError`.
-- Scalar input, nested input, custom numeric/container classes, other dtypes,
+- Ragged inputs, mixed numerical/container depth and cycles are rejected.
+  Reusing an acyclic child container is allowed and copies its values at each
+  occurrence. No partially admitted tensor survives an invalid input.
+- Custom numeric/container classes, other dtypes,
   indexed/non-CPU devices and additional keywords are outside this contract.
 
 Use `torch.tensor`, not `torch.Tensor(...)`. The latter constructor is rejected;
@@ -53,7 +58,7 @@ serve cached metadata.
 
 `torch.Size(iterable)` uses integer-index conversion, including Python booleans;
 `numel()` is the product of its dimensions, with the empty product equal to one.
-Constructing a `Size` does not create a tensor or admit a higher-rank layout.
+Constructing a `Size` does not create a tensor or validate a storage layout.
 `torch.dtype()` is not constructible. The device constructor accepts only a CPU
 string, not other device types, indices, context management or transfer requests.
 
@@ -69,7 +74,9 @@ operator = left + right
 
 `torch.add(input, other, *, alpha=1, out=None)` and
 `Tensor.add(other, *, alpha=1)` require two equal-shape CPU float32 tensors.
-There is no broadcasting, scalar addition, promotion or in-place result.
+There is no broadcasting, Python-number operand, promotion or in-place result.
+Two scalar tensors can be added; a scalar tensor and a one-element vector
+cannot. Every dimension must match, even for tensors with zero elements.
 The numeric `alpha` value must equal one and cannot be a boolean. Only the
 functional spelling accepts `out`, and only its `None` value is accepted.
 
@@ -85,12 +92,17 @@ support for scalar broadcasting. An unresolved operator raises Python's normal
 
 ## Observe numerical values
 
-`Tensor.tolist() -> list[float]` takes no arguments and returns an independent
-Python list of the rank-one tensor's float32 values. Empty tensors return `[]`.
+`Tensor.tolist()` takes no arguments and returns a Python float for a scalar,
+or independent nested Python lists with floating-point leaves for higher rank.
+Its return annotation is recursive: `float | list[TensorList]`, where
+`TensorList` denotes that same union. A vector returns a flat list.
+Empty dimensions preserve the outer structure: `(2, 0)` returns `[[], []]`,
+whereas `(0, 3)` returns `[]`. The tensor's `shape` remains authoritative when
+the returned structure cannot express trailing empty dimensions.
 The tensor must belong to this binding's session, and the call must occur inside
 its managed `runPythonAsync` entry. Ordinary nested functions and branches can
 use the returned list without an `await` or JSPI. There is no `tolist_async`
-extension. This does not add scalar `item()`, higher ranks or other operations.
+extension. This does not add scalar `item()` or other operations.
 
 ```python
 values = (left + right).tolist()
@@ -100,8 +112,8 @@ if values == [4.0, 6.0]:
 
 Observation demands the recorded computation through the same request owner
 used by JavaScript `Tensor.toArray()`. Repeated observation reuses a computed
-materialization but returns a fresh list; modifying one list cannot change
-the tensor or another list. Ready host values are copied directly by the
+materialization but creates independent returned containers; modifying a row
+cannot change the tensor, another row or a later observation. Ready host values are copied directly by the
 runtime, without uploading them to CPU memory solely to read them back.
 
 The [runtime observation component](../components/runtime-observation.md)
@@ -112,11 +124,15 @@ The host must not drive raw interpreter calls concurrently with that entry.
 
 ## Errors and resource ownership
 
-Invalid container/element forms, non-boolean flags, non-tensor addition operands,
+Invalid container/element forms, mixed nesting depth, non-boolean flags, non-tensor addition operands,
 unexpected keywords and non-integer `Size` elements raise `TypeError`.
 Unsupported dtype/device/gradient/pinned-memory/alpha/out choices raise
 `RuntimeError`. A shape mismatch also raises `RuntimeError`, chained from the
 runtime rejection; exact error wording is not a compatibility claim.
+Inconsistent sibling lengths and cyclic input raise `ValueError`. Rectangular
+input is an intentional Tabgrad requirement even where the pinned PyTorch
+oracle accepts an irregular input beginning with an empty sequence. This is
+not a promise to reproduce native treatment of every malformed container.
 
 Closed tensors/sessions, foreign-session handles and invalid runtime handles
 preserve `pyodide.ffi.JsException`. Its `js_error.code` distinguishes
@@ -145,7 +161,8 @@ keeping old Python references does not allow them to rebind to a fresh session.
 [`python-tensor-oracle.json`](../../js-tests/fixtures/python-tensor-oracle.json)
 names PyTorch 2.14.0's actual wheel revision and source tag, and Pyodide 314.0.6's
 source revision. Its maintained generator records finite/empty/float32-edge
-addition results, metadata and selected native error classes. Other rejection
+addition results, scalar and nested result structures, metadata and selected
+native error classes. Other rejection
 tests explicitly exercise Tabgrad-only limits; they must not be described as
 matching PyTorch's much larger supported surface.
 

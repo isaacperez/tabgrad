@@ -35,7 +35,7 @@ that was not tested, or an implementation that silently uses another backend.
 Tabgrad can establish its own browser integration behavior without claiming
 that the behavior implements a PyTorch interface. The direct contract in the
 [JavaScript tensor API](javascript-api.md)—session and tensor creation,
-one-dimensional CPU `float32` addition, asynchronous observation, diagnostics,
+equal-shape contiguous CPU `float32` addition, asynchronous observation, diagnostics,
 and explicit close—is such an interface. Its tests establish Tabgrad's
 JavaScript and WebAssembly behavior only. The names are not `torch` names, and
 the bounded example does not establish PyTorch signatures, promotion,

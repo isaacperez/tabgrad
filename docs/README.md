@@ -66,6 +66,7 @@ link to its primary source, but they must not create a competing version.
 | Python interpreter attachment, bridge ownership, and integration constraints | [`architecture/python-integration.md`](architecture/python-integration.md) |
 | Python observation mechanism, worker progress, deployment decision and alternatives | [`architecture/python-observation.md`](architecture/python-observation.md) |
 | Browser Python, interpreter and tensor-runtime distinctions | [`concepts/python-in-the-browser.md`](concepts/python-in-the-browser.md) |
+| Shape, rank, element count and contiguous-value meaning | [`concepts/tensor-shape.md`](concepts/tensor-shape.md) |
 | Collaboration through a managed Python session | [`flows/managed-python-session.md`](flows/managed-python-session.md) |
 | WebAssembly CPU kernel language, binary interface, modules, and memory ownership | [`architecture/webassembly-cpu-backend.md`](architecture/webassembly-cpu-backend.md) |
 | CPU intermediate reuse decision, semantic retention and physical last-use boundary | [`architecture/cpu-intermediate-reuse.md`](architecture/cpu-intermediate-reuse.md) |

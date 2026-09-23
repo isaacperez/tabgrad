@@ -1,5 +1,6 @@
 import { TabgradError } from "./errors.js";
 import type { ExecutableProgram, ProgramSlot } from "./executable-program.js";
+import { tensorElementCount } from "./tensor-shape.js";
 
 const ABI_VERSION = 1;
 const CAPABILITY_ADD_FLOAT32 = 1;
@@ -403,11 +404,12 @@ export class WebAssemblyCpuBackend {
           allocations.set(value.slot, binding.resident);
           continue;
         }
-        const byteLength = value.shape[0] * Float32Array.BYTES_PER_ELEMENT;
+        const length = tensorElementCount(value.shape);
+        const byteLength = length * Float32Array.BYTES_PER_ELEMENT;
         const allocation = context.allocator.allocate(byteLength);
         allocations.set(value.slot, allocation);
         if (binding?.hostData !== undefined) {
-          this.#floatView(context.memory, allocation, value.shape[0]).set(binding.hostData);
+          this.#floatView(context.memory, allocation, length).set(binding.hostData);
           this.#hostToWasmBytes += byteLength;
           this.#hostToWasmCopies += 1;
         } else if (value.source === "binding") {
@@ -422,8 +424,8 @@ export class WebAssemblyCpuBackend {
       for (const computation of program.computations) {
         const left = this.#requiredAllocation(allocations, computation.left);
         const right = this.#requiredAllocation(allocations, computation.right);
-        const length = program.values[computation.output]?.shape[0];
-        if (length === undefined) {
+        const value = program.values[computation.output];
+        if (value === undefined) {
           throw new TabgradError(
             "BACKEND_STATUS_ERROR",
             "An executable computation references a missing output value.",
@@ -435,6 +437,7 @@ export class WebAssemblyCpuBackend {
             },
           );
         }
+        const length = tensorElementCount(value.shape);
         // Reserve the output before retiring inputs: kernels require disjoint
         // output storage, including at the final use of an input.
         const output = context.allocator.allocate(length * Float32Array.BYTES_PER_ELEMENT);

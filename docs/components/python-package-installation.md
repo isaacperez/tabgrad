@@ -118,7 +118,11 @@ The registered object is a
 [`PythonRuntimeBridge`](../../src/python-runtime-bridge.ts), bound to that same
 session. Its `tensorFromBuffer` method is an internal transfer boundary, not a
 public tensor constructor or a second operation engine. It accepts a borrowed
-Python buffer proxy and returns the runtime's existing opaque tensor object.
+Python buffer proxy plus separate logical shape metadata and returns the
+runtime's existing opaque tensor object. The borrowed buffer is rank one even
+when the tensor has several dimensions: it transports a flat numerical region,
+not the Python input containers. The runtime validates the supplied logical
+shape against that region's element count.
 The [architecture's data-movement contract](../architecture/python-integration.md#move-bulk-data-only-where-the-user-imports-or-observes-it)
 explains why numerical data crosses here rather than during every operation.
 
@@ -135,10 +139,10 @@ sequenceDiagram
     participant B as Runtime bridge
     participant V as Borrowed buffer view
     participant R as Runtime session
-    P->>B: Import buffer
+    P->>B: Import flat buffer and logical shape
     B->>V: Acquire float32 view
     B->>B: Validate format and bounds
-    B->>R: Import bounded typed view
+    B->>R: Import bounded typed view and shape
     R->>R: Copy into owned host data
     R-->>B: Opaque tensor handle
     B->>V: Release in finally

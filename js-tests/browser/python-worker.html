@@ -80,6 +80,22 @@ print(result.tolist())
 assert session.diagnostics().kernelCalls == 1
 assert session.diagnostics().liveRequestLeases == 0
 `);
+        await client.runPythonAsync(`
+for input_data, expected_shape, expected in [
+    (2, (), 4.),
+    ([[1, 2], [3, 4]], (2, 2), [[2., 4.], [6., 8.]]),
+    ((([1, 2],), ([3, 4],)), (2, 1, 2), [[[2., 4.]], [[6., 8.]]]),
+    ([[], []], (2, 0), [[], []]),
+    ([[[]]], (1, 1, 0), [[[]]]),
+]:
+    rank_input = torch.tensor(input_data, dtype=torch.float32)
+    for rank_result in (rank_input + rank_input, rank_input.add(rank_input), torch.add(rank_input, rank_input)):
+        assert rank_result.shape == expected_shape
+        assert rank_result.tolist() == expected
+        assert rank_result.tolist() == expected
+    del rank_result, rank_input
+assert session.diagnostics().liveRequestLeases == 0
+`);
         try {
           await client.runPythonAsync("raise ValueError('controlled script failure')");
           throw new Error("Python failure was reported as success.");

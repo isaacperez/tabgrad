@@ -9,7 +9,7 @@ import {
 
 /** The admitted, acyclic value graph read by formation; no ownership is transferred. */
 export interface FormationValue<Value> {
-  readonly shape: readonly [number];
+  readonly shape: readonly number[];
   readonly dtype: "float32";
   readonly device: "cpu";
   readonly layout: "contiguous";

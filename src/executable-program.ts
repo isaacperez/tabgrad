@@ -10,7 +10,7 @@ export interface ProgramValue {
   readonly dtype: "float32";
   readonly device: "cpu";
   readonly layout: "contiguous";
-  readonly shape: readonly [number];
+  readonly shape: readonly number[];
   readonly source: "binding" | "computed";
   readonly provenance: ProgramProvenance;
 }
@@ -39,7 +39,7 @@ export class ExecutableProgram {
   ) {
     this.values = Object.freeze(values.map((value) => Object.freeze({
       ...value,
-      shape: Object.freeze([...value.shape]) as readonly [number],
+      shape: Object.freeze([...value.shape]),
       provenance: Object.freeze({ ...value.provenance }),
     })));
     const inputUseCounts = new Array<number>(values.length).fill(0);

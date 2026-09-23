@@ -13,6 +13,21 @@ boundary connects `ExecutableProgram`, `RuntimeSession` and
 allocations during one synchronous execution; it is not a second allocator,
 semantic reference counter or persistent program cache.
 
+## Allocate from element count, not rank
+
+Program slots carry the complete logical shape. The shared semantic shape
+helper determines its element count; the CPU backend turns that count into
+float32 byte lengths and its allocator enforces the physical address and memory
+bounds. A scalar has one element, and a zero anywhere in the shape means zero
+elements. The first dimension alone is never an allocation length.
+
+Contiguous elementwise work uses the same flat kernel interface at every rank.
+There is no per-row kernel dispatch, upload or readback. Rank contributes a
+metadata walk when lengths are derived, not a multiplier in the numerical
+loop. All allocation, reuse and rollback rules below apply equally to scalar,
+vector, multidimensional and empty values. Shape metadata remains on the
+logical value rather than being reconstructed from allocation size.
+
 ## Structural uses and current owners answer different questions
 
 An executable program numbers its values with logical slots. Its frozen

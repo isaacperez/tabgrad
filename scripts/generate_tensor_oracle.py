@@ -21,10 +21,21 @@ INPUTS = (
     ("empty", "[]", "()"),
     ("float32-edges", "[-0.0, 16777217, 1e-45, 1e40]", "[-0.0, 1, 1e-45, -1e40]"),
 )
+RANK_INPUTS = (
+    ("scalar", "2", "True"),
+    ("matrix", "[[1, 2], [3, 4]]", "((5, 6), (7, 8))"),
+    ("rank-three", "[[[1, 2]], [[3, 4]]]", "(((5, 6),), ((7, 8),))"),
+    ("singletons", "[[[2]]]", "(((3,),),)"),
+    ("nested-empty", "[[], []]", "((), ())"),
+    ("rank-three-empty", "[[[]]]", "(((),),)"),
+)
 OPERATIONS = ("torch.add(left, right)", "left.add(right)", "left + right")
 ERRORS = (
     "torch.tensor([1, 'x'], dtype=torch.float32)",
     "torch.tensor([1j], dtype=torch.float32)",
+    "torch.tensor([[1], [2, 3]], dtype=torch.float32)",
+    "torch.tensor([1, [2]], dtype=torch.float32)",
+    "torch.tensor([[1], 2], dtype=torch.float32)",
     "torch.tensor([10**1000], dtype=torch.float32)",
     "torch.add(left, right, alpha=True)",
     "torch.add(left, 'x')",
@@ -74,7 +85,8 @@ def generate() -> str:
     oracle.set_num_threads(1)
     oracle.set_num_interop_threads(1)
     cases: list[dict[str, object]] = []
-    for name, left, right in INPUTS:
+    rank_cases: list[dict[str, object]] = []
+    for name, left, right in (*INPUTS, *RANK_INPUTS):
         for operation in OPERATIONS:
             source = (
                 f"left = torch.tensor({left}, dtype=torch.float32, device='cpu')\n"
@@ -83,23 +95,26 @@ def generate() -> str:
             )
             namespace: dict[str, object] = {"torch": oracle}
             exec(source, namespace)
-            values: object = eval("result.tolist()", namespace)
+            values: object = eval("result.reshape(-1).tolist()", namespace)
             if not isinstance(values, list):
-                raise TypeError("Expected a rank-one float32 oracle result.")
+                raise TypeError("Expected flat float32 oracle values.")
             items = cast(list[object], values)
             bits: list[int | str] = []
             for value in items:
                 if not isinstance(value, float):
                     raise TypeError("Expected floating-point oracle values.")
                 bits.append(float32_bits(value))
-            cases.append(
-                {
-                    "name": f"{name}: {operation}",
-                    "source": source,
-                    "metadata": eval(METADATA, namespace),
-                    "bits": bits,
-                }
-            )
+            case: dict[str, object] = {
+                "name": f"{name}: {operation}",
+                "source": source,
+                "metadata": eval(METADATA, namespace),
+                "bits": bits,
+            }
+            if (name, left, right) in RANK_INPUTS:
+                case["values"] = eval("result.tolist()", namespace)
+                rank_cases.append(case)
+            else:
+                cases.append(case)
     errors: list[dict[str, str]] = []
     namespace = {"torch": oracle}
     exec(
@@ -124,6 +139,7 @@ def generate() -> str:
                 "metadataExpression": METADATA,
                 "comparison": "Exact float32 bits except NaN payload; exact metadata and error classes.",
                 "cases": cases,
+                "rankCases": rank_cases,
                 "errors": errors,
                 "metadataCases": [
                     {"expression": expression, "value": eval(expression, namespace)}
