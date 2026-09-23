@@ -258,6 +258,42 @@ not compress distinct decisions into an opaque expression or an interface that
 hides their costs. A short implementation that multiplies special cases is
 worse than a clear shared rule with explicit variations.
 
+### Keep specialization owned and extension costs explicit
+
+A bounded implementation can be durable without supporting every planned
+capability. During design preparation, distinguish a general invariant from a
+justified specialization and an accidental assumption. A specialization has a
+declared domain and an owner that enforces it; an accidental assumption lets a
+consumer rely on a narrower case than its shared contract justifies. Keep the
+restriction at its responsible boundary rather than making unrelated consumers
+reconstruct it. Repeated validation can still be necessary at independently
+untrusted boundaries; similar checks alone do not establish duplicated policy.
+
+For relevant variations established by accepted architecture, callers or scoped
+work, identify which responsibilities need additions, which existing contracts
+need modification, and which remain stable. Explain why each change is needed.
+Separate work inherent to a variant from repeated edits needed only to keep
+copies of the same knowledge aligned. The number of files touched is not a
+quality metric: distinct owners may legitimately change for distinct reasons.
+Known variation is not hypothetical merely because its implementation is
+deferred, but it does not justify implementing unsupported behavior or adding
+a framework without a present invariant to own.
+
+When a capability expands, trace the restrictions it invalidates through the
+affected producers and consumers, including types, validation, generated
+contracts, tests, documentation and examples. Search for their semantic forms,
+not just a literal name. Update or remove obsolete assumptions in the same
+change. Preserve valid specialization tests; shared-contract tests cover the
+relevant supported variants without requiring an exhaustive Cartesian product.
+A rejection test changes only with an intentional support change and must
+leave meaningful protection for the resulting boundary.
+
+Keep this assessment in the existing design and verification handoff, with
+concrete owners and evidence, not a permanent assumption inventory or a promise
+of zero refactoring. Apply it to affected work, not as a mandate for a
+repository-wide audit. Non-code changes use their content-specific consistency
+checks; they do not acquire hypothetical library extension requirements.
+
 ## Correct causes instead of symptoms
 
 A bug fix begins by reproducing the symptom when practical and stating the
