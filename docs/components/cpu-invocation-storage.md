@@ -37,14 +37,15 @@ twice contributes two occurrences. The count describes the selected program,
 not the whole session and not a physical execution schedule.
 
 The runtime knows the owners outside those selected input positions. Immediately
-before calling `execute`, it compares each semantic value's reference count with
-its program input-use count. More references mean that the slot must remain
+before calling `execute`, it compares each shared storage's aggregate reference
+count with its program storage-use count. More references mean that the storage must remain
 available beyond its internal uses. Open handles, outside pending consumers
 and accepted observation requests can each establish that obligation. The
 demanded result is protected by its observation reference even if its handle
 has closed.
 
-These booleans form the invocation's `retainedSlots` array. They are supplied
+These booleans occupy canonical storage slots in the invocation's
+`retainedSlots` array. They are supplied
 separately from the immutable program. Preparation can suspend and let handles
 close or requests enter the queue, so the runtime computes them after
 preparation, with no suspension between that computation and CPU execution.
@@ -59,7 +60,10 @@ for which values must survive.
 
 ## Physical storage follows actual kernel completion
 
-The backend first binds resident inputs and uploads host inputs. A resident
+The backend first binds resident inputs and uploads host inputs once per
+canonical storage slot. Logical aliases neither upload nor allocate payload.
+Numerical operands resolve their logical slot's `storageSlot`, preserving
+their separate shape metadata in the program. A resident
 allocation is borrowed from the runtime: even if its slot has no external
 retention obligation, execution cannot overwrite it. It may be the only
 recoverable source for a later attempt. Newly allocated host inputs and computed
@@ -68,7 +72,8 @@ outputs belong to this invocation until successful publication.
 For each computation, the backend allocates its output before invoking the
 kernel. This ordering preserves the raw ABI's requirement that the output not
 overlap its inputs. Only after the kernel returns successfully does execution
-retire the consumed input occurrences. When an invocation-owned, unretained
+retire the consumed physical input occurrences, aggregated across aliases.
+When an invocation-owned, unretained
 value has no remaining uses, its allocation is released and removed from the
 active map. The existing allocator can then satisfy another output from those
 bytes.

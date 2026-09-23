@@ -291,7 +291,7 @@ class InvocationStorage {
     for (let slot = 0; slot < program.values.length; slot += 1) {
       this.#remainingUses[slot] = retainedSlots[slot] || bindings.get(slot)?.resident !== undefined
         ? -1
-        : program.inputUseCounts[slot]!;
+        : program.storageUseCounts[slot]!;
     }
   }
 
@@ -397,7 +397,7 @@ export class WebAssemblyCpuBackend {
     const { allocations } = storage;
     try {
       for (const value of program.values) {
-        if (value.source === "computed") continue;
+        if (value.source !== "binding") continue;
         const binding = bindings.get(value.slot);
         if (binding?.resident !== undefined) {
           this.#validateAllocation(context, binding.resident);
@@ -422,8 +422,10 @@ export class WebAssemblyCpuBackend {
       }
 
       for (const computation of program.computations) {
-        const left = this.#requiredAllocation(allocations, computation.left);
-        const right = this.#requiredAllocation(allocations, computation.right);
+        const leftSlot = program.values[computation.left]!.storageSlot;
+        const rightSlot = program.values[computation.right]!.storageSlot;
+        const left = this.#requiredAllocation(allocations, leftSlot);
+        const right = this.#requiredAllocation(allocations, rightSlot);
         const value = program.values[computation.output];
         if (value === undefined) {
           throw new TabgradError(
@@ -478,8 +480,8 @@ export class WebAssemblyCpuBackend {
             },
           );
         }
-        storage.completeInputUse(computation.left);
-        storage.completeInputUse(computation.right);
+        storage.completeInputUse(leftSlot);
+        storage.completeInputUse(rightSlot);
       }
       return allocations;
     } catch (error) {

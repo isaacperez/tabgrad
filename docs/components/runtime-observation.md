@@ -127,7 +127,7 @@ does not equate logical publication with physical GPU drain.
 
 Request pins are distinct from the producer edges needed to compute a pending
 value. The [semantic lifetime owner](semantic-value-lifetimes.md) releases those
-edges after materialization or final value release, while preserving independently
+edges after materialization or final shared-storage release, while preserving independently
 owned values and causal metadata.
 
 Each returned array or Python list is an owned observation. Reading a resident

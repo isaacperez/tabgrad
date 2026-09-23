@@ -169,6 +169,25 @@ class Tensor:
             return NotImplemented
         return self.add(other)
 
+    def view(self, *shape: object) -> Tensor:
+        """Share contiguous storage with a shape, optionally inferring one -1."""
+        if not shape:
+            raise TypeError("view requires dimensions or one built-in tuple/list.")
+        dimensions = shape
+        if len(shape) == 1 and type(shape[0]) in (tuple, list):
+            dimensions = tuple(cast("tuple[object, ...] | list[object]", shape[0]))
+        if any(type(dimension) is not int for dimension in dimensions):
+            raise TypeError("view dimensions must be built-in integers.")
+        try:
+            return Tensor._from_handle(self._handle.view(to_js(dimensions)))
+        except JsException as error:
+            failure = cast("_bridge.RuntimeException", error)
+            if failure.js_error.code == "INVALID_SHAPE":
+                raise RuntimeError(
+                    "Invalid shape for contiguous tensor view."
+                ) from error
+            raise
+
     def tolist(self) -> TensorList:
         """Observe owned numerical values within the binding's managed script."""
         with _bridge.observe(self._handle).to_py() as values:

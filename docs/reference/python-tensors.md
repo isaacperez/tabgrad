@@ -12,6 +12,9 @@ owners behind these calls. This page covers creation, metadata, addition
 admission and ordinary CPU observation, not general PyTorch support.
 Release claims follow the [compatibility policy](../compatibility.md).
 
+Shape-only `Tensor.view` has its own [operation reference](tensor-view.md),
+covering syntax, inference, errors and storage sharing.
+
 ## Create a tensor
 
 ```python

@@ -88,6 +88,7 @@ link to its primary source, but they must not create a competing version.
 | Dependencies, licenses, and third-party code | [`dependencies.md`](dependencies.md) |
 | PyTorch compatibility and public API support | [`compatibility.md`](compatibility.md) |
 | Direct JavaScript API | [`javascript-api.md`](javascript-api.md) |
+| Contiguous shape-only view syntax, inference and limits | [`reference/tensor-view.md`](reference/tensor-view.md) |
 | Documentation structure and writing rules | [`documentation.md`](documentation.md) |
 | Technical documentation perspectives and placement | [`documentation.md`](documentation.md#navigate-technical-documentation-by-reader-question) |
 | Development stack, environment, and commands | [`development.md`](development.md) |

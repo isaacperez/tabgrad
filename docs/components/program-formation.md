@@ -18,7 +18,7 @@ not a second scheduler or a public tensor API.
 ## Inputs and the two parts of the result
 
 Formation borrows a demanded value and a materialization lookup. A
-materialization associates a logical value with host data or an opaque resident
+materialization associates shared logical storage with host data or an opaque resident
 backend allocation. The session owns those associations and the value graph;
 formation neither releases them nor copies tensor payloads. Operation admission
 has already validated the graph. It is acyclic and stable throughout this
@@ -39,6 +39,15 @@ program therefore does not keep the invocation's arrays, allocations or
 semantic graph. The accompanying maps do reference invocation state and must
 not become a persistent program cache.
 
+Each logical slot also names a canonical `storageSlot`. An alias retains its
+own shape and view provenance but points to the originating storage slot.
+Formation visits that origin once and emits any pending numerical producer
+once, regardless of the number of selected aliases. Alias slots have source
+`alias`, no payload binding and no numerical computation. The origin preserves
+the producer's original shape and provenance; reshaping its result does not
+rewrite the meaning of that producing call. Program format version 2 records
+this distinction explicitly.
+
 Each slot preserves the complete admitted shape, including scalar rank and
 dimensions after a zero. Formation does not infer dimensions from a payload or
 collapse a shape to its first dimension. The semantic helpers in
@@ -54,6 +63,17 @@ positions referring to the same slot. The runtime and backend share these
 structural facts; they do not include current owners. The
 [CPU storage contract](cpu-invocation-storage.md) explains how fresh runtime
 retention and actual kernel completion combine with those counts.
+
+The program separately aggregates numerical input occurrences into
+`storageUseCounts`. Logical uses still identify which shaped operand the
+computation consumes; storage uses identify the shared bytes that must survive
+those physical accesses. A metadata alias itself contributes no physical use.
+The CPU backend consumes the aggregate counts rather than retiring aliases
+independently. For whole contiguous views every alias covers its storage's full
+extent, so the flat addition kernel can use these associations directly.
+Non-contiguous execution would need access/layout facts on logical operands
+and backend support for them; it would not erase logical shapes or make the
+shared storage owner depend on an operation's axes.
 
 ## Follow dependencies without using the call stack
 

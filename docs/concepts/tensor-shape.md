@@ -87,6 +87,23 @@ has the required meaning; the backend then checks byte ranges and performs
 the numerical work. More general layouts or broadcasting require additional
 contracts and are not implied by support for higher rank.
 
+## Shared storage does not mean shared shape
+
+A **view** separates a tensor's shape from ownership of its numerical storage.
+Imagine six flat numbers with two handles: one describes a vector and the other
+describes two rows of three. A shape-only view changes how those numbers are
+grouped without changing their order or making another numerical region.
+Neither handle's shape changes when the other handle is created.
+
+Shared storage also separates handle lifetime from data lifetime. Closing the
+vector's handle cannot discard data still needed by the matrix's handle or a
+pending calculation that consumes it. The storage becomes disposable only
+when all those obligations end. Observing either handle can still return a
+copy owned by the caller; sharing inside the runtime does not make an ordinary
+returned list a mutable window into storage. This distinction explains both
+why views avoid a copy at creation and why observation may still copy numbers.
+Exact supported calls and limits belong in the [view reference](../reference/tensor-view.md).
+
 ## Language containers are an input and output convention
 
 Python nested lists express shape through their structure. Every sibling must

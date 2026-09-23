@@ -10,9 +10,9 @@ to calling the public tensor API.
 
 The [semantic architecture](../architecture/semantic-state.md) distinguishes a
 public tensor identity, a logical value and its physical storage. Here those
-roles are represented by a handle's `TensorState`, its `TensorValue`, and an
-entry in the session's `MaterializationTable`. A materialization is the stored
-numerical result associated with a value; its backend allocation has a separate
+roles are represented by a handle's `TensorState`, its immutable `TensorValue`
+metadata and a shared `StorageState`. The session's `MaterializationTable` keys
+host or resident data by storage identity. Its backend allocation has a separate
 release obligation.
 
 ## Who keeps a value alive?
@@ -24,8 +24,8 @@ its corresponding reference. Releasing a handle ends only that handle's
 ownership. The result of a lazy operation can therefore outlive its input
 handles without losing the inputs it needs to compute.
 
-An `OperationRecord` is an immutable description of an admitted call, including
-its input values and definition. A value's link to that producer is an owning
+An `OperationRecord` is an immutable description of admitted numerical work,
+including its input values and definition. Shared storage's link to that producer is an owning
 edge, not a permanent historical archive. The session removes the link when the
 producer is no longer needed for execution. Neither removing that edge nor
 releasing a handle changes the logical value's metadata or numerical meaning.
@@ -45,7 +45,8 @@ Dependency release first detaches the producer and then releases each input
 reference. This makes repeated release a no-op and keeps operation-record
 accounting aligned with the records still owned by values. The immutable record
 itself is not rewritten. When the final value reference disappears, the session
-also removes the value from its live set and releases its materialization.
+removes that value from its live set. Only the final shared-storage reference
+releases its materialization and pending producer inputs.
 
 This ordering matters even if an application retains a closed tensor handle.
 The handle can still reach its value object, but that object must not keep a
@@ -56,7 +57,7 @@ A pending graph can be much deeper than the JavaScript call stack. The session
 therefore follows final-owner release with an explicit worklist rather than
 recursive calls. Each entry means "release one owning reference", not "visit
 this value once". When another owner remains, traversal stops at that value;
-when the count reaches zero, the session removes its live state, releases any
+when the shared count reaches zero, the session releases any
 resident allocation, detaches its producer and schedules that producer's input
 references. Inputs are inserted in reverse order so that processing remains
 depth-first and left-to-right.
@@ -74,7 +75,7 @@ Final-handle release, session close and observation retirement use final-owner
 release; none needs a separate traversal policy or a graph-depth limit.
 
 The `liveOperationRecords` diagnostic counts producer records still owned by
-values, not all operations ever performed or all materialized result handles.
+storage records, not all operations ever performed or all materialized result handles.
 Successful materialization can reduce that count while result handles remain
 open. Diagnostics describe logical ownership; checking actual graph references
 is a separate requirement when verifying retention.
@@ -96,6 +97,23 @@ queue retirement and session drain; those pins protect accepted work even if
 its public handle closes before completion.
 
 ## Costs and extension boundary
+
+Every handle, numerical input occurrence and accepted observation owns a value
+reference and contributes one shared-storage reference. A shape-only alias adds
+one owner directly to `StorageState`; it has no numerical producer or owning
+edge to the preceding view. Closing a base therefore cannot destroy a sibling,
+and a long metadata chain need not retain its intermediate handles or shapes.
+Storage retains its original value descriptor to preserve the producing
+operation's shape and provenance during formation, even when that original
+value has no owners. This is one descriptor per live storage, not a retained
+history. The live-value diagnostic counts values with semantic owners.
+
+Shared producer dependencies detach once after successful publication, even
+when several aliases remain. No alias scan is needed to publish materialization
+or determine whether the last storage owner has disappeared. Mutation and
+saved-value semantics would add storage-version and saved ownership facts at
+these same semantic owners; physical allocation and completion remain backend
+responsibilities. The contiguous shape-only contract does not implement them.
 
 For a release that reaches `V` newly unowned values and `E` input references,
 semantic bookkeeping takes `O(V + E)` work. Each producer detaches once, and

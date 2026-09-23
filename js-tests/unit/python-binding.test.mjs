@@ -501,6 +501,52 @@ for name, value in [('shape', (4,)), ('dtype', torch.float32), ('device', 'cpu')
   }
 });
 
+test("Python view syntax, shape inference and observation match the pinned oracle", { timeout: 20_000 }, async () => {
+  const { attachPython } = await import("../../dist/python.js");
+  const interpreter = await getInterpreter();
+  const oracle = JSON.parse(await readFile(new URL("../fixtures/python-tensor-oracle.json", import.meta.url), "utf8"));
+  const binding = await attachPython(interpreter);
+  try {
+    for (const fixture of oracle.viewCases) {
+      await binding.runPythonAsync(`import torch\n${fixture.source}\nobserved = result.tolist()`);
+      const metadata = interpreter.runPython(oracle.metadataExpression);
+      const observed = interpreter.globals.get("observed");
+      try {
+        // Python None crosses as undefined; normalize the fixture's JSON null.
+        assert.deepEqual(JSON.parse(JSON.stringify(metadata.toJs())), fixture.metadata, fixture.name);
+        assert.deepEqual(observed?.toJs ? observed.toJs() : observed, fixture.values, fixture.name);
+      } finally { metadata.destroy(); observed?.destroy?.(); }
+    }
+    await binding.runPythonAsync(`
+import gc
+base = torch.tensor([1, 2, 3, 4, 5, 6], dtype=torch.float32)
+matrix = base.view(2, 3)
+del base
+gc.collect()
+result = matrix + matrix
+flat = result.view(-1)
+del result, matrix
+gc.collect()
+assert flat.tolist() == [2., 4., 6., 8., 10., 12.]
+assert not hasattr(flat, 'tolist_async')
+for expression in ['flat.view(torch.float32)', 'flat.view(range(6))', 'flat.view(shape=(6,))']:
+    try:
+        eval(expression)
+    except TypeError:
+        pass
+    else:
+        raise AssertionError(expression)
+del flat
+gc.collect()
+`);
+  } finally {
+    await binding.close();
+    for (const name of ["torch", "base", "result", "observed", "gc", "expression"]) {
+      if (interpreter.globals.has(name)) interpreter.globals.delete(name);
+    }
+  }
+});
+
 test("Python nested admission rejects malformed trees without importing partial tensors", {
   timeout: 20_000,
 }, async () => {

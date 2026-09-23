@@ -12,6 +12,9 @@ application's loading, entry, connection and cleanup contracts.
 Use [Python tensor creation, metadata, addition and observation](python-tensors.md) for the
 bounded Python call forms, metadata objects, errors and ownership obligations.
 
+Use [Contiguous tensor views](tensor-view.md) for Python and JavaScript shape
+syntax, inference, shared-storage lifetime, errors and operation limits.
+
 For contributor measurements, use
 [WebAssembly addition measurements](webassembly-addition-measurements.md) for
 the direct JavaScript path and resident CPU kernel, or

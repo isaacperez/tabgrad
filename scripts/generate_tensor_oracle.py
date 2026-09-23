@@ -31,6 +31,15 @@ RANK_INPUTS = (
 )
 OPERATIONS = ("torch.add(left, right)", "left.add(right)", "left + right")
 ERRORS = (
+    "left.view()",
+    "left.view(True)",
+    "left.view(2.0, 2)",
+    "left.view(None)",
+    "left.view(-2, 2)",
+    "left.view(-1, -1)",
+    "left.view(3, 2)",
+    "torch.tensor([], dtype=torch.float32).view(0, -1)",
+    "torch.tensor([], dtype=torch.float32).view(())",
     "torch.tensor([1, 'x'], dtype=torch.float32)",
     "torch.tensor([1j], dtype=torch.float32)",
     "torch.tensor([[1], [2, 3]], dtype=torch.float32)",
@@ -46,6 +55,17 @@ ERRORS = (
     "torch.tensor([], dtype=torch.float32, pin_memory=0)",
     "torch.Size([1.0])",
     "torch.dtype()",
+)
+VIEW_INPUTS = (
+    ("positional", "[1, 2, 3, 4, 5, 6]", "2, 3"),
+    ("tuple", "[1, 2, 3, 4]", "(2, 2)"),
+    ("list", "[1, 2, 3, 4]", "[2, 2]"),
+    ("inferred", "[1, 2, 3, 4, 5, 6]", "-1, 3"),
+    ("scalar", "[2]", "()"),
+    ("scalar-list", "2", "[]"),
+    ("singletons", "2", "1, -1, 1"),
+    ("empty", "[]", "2, 0, 3"),
+    ("empty-inferred", "[]", "-1, 2"),
 )
 METADATA_CASES = (
     "[repr(left.shape[:]), repr(left.shape + (3,)), repr(2 * left.shape), left.shape.numel()]",
@@ -86,6 +106,22 @@ def generate() -> str:
     oracle.set_num_interop_threads(1)
     cases: list[dict[str, object]] = []
     rank_cases: list[dict[str, object]] = []
+    view_cases: list[dict[str, object]] = []
+    for name, data, dimensions in VIEW_INPUTS:
+        source = (
+            f"base = torch.tensor({data}, dtype=torch.float32)\n"
+            f"result = base.view({dimensions})\n"
+        )
+        namespace: dict[str, object] = {"torch": oracle}
+        exec(source, namespace)
+        view_cases.append(
+            {
+                "name": name,
+                "source": source,
+                "metadata": eval(METADATA, namespace),
+                "values": eval("result.tolist()", namespace),
+            }
+        )
     for name, left, right in (*INPUTS, *RANK_INPUTS):
         for operation in OPERATIONS:
             source = (
@@ -140,6 +176,7 @@ def generate() -> str:
                 "comparison": "Exact float32 bits except NaN payload; exact metadata and error classes.",
                 "cases": cases,
                 "rankCases": rank_cases,
+                "viewCases": view_cases,
                 "errors": errors,
                 "metadataCases": [
                     {"expression": expression, "value": eval(expression, namespace)}
