@@ -3,7 +3,7 @@
 This document is the user reference for calling the Tabgrad tensor runtime
 directly from JavaScript. It describes a deliberately narrow but complete
 execution path: contiguous `float32` tensors on the CPU and
-out-of-place elementwise addition. A narrow contract is useful here because it
+out-of-place elementwise addition and shape-only shared-storage views. A narrow contract is useful here because it
 lets a reader see the complete lifecycle—admission, lazy recording, WebAssembly
 execution, observation, and release—without implying support for tensor
 features that have not been established by tests.
@@ -100,6 +100,11 @@ from `Tensor.prototype` or wrapping a tensor in a JavaScript `Proxy` does not
 forge a valid handle. Invalid handles fail with `INVALID_TENSOR` before backend
 loading. The result is out of place: it has independent logical storage.
 
+`tensor.view(shape)` returns a new handle sharing the original numerical
+storage, with independently owned shape metadata. The
+[view reference](reference/tensor-view.md) defines inference, errors, lifetime
+and the contiguous-only boundary.
+
 `tensor.toArray()` returns a Promise for an independent flat `Float32Array` in
 row-major order at every rank. Use `tensor.shape` to interpret its dimensions;
 empty readback does not discard trailing shape metadata. Ready
@@ -128,7 +133,8 @@ numerical storage system.
 An executable program belongs to the observation request that formed it. A
 resident materialization stores only its physical allocation, not the complete
 program that happened to produce or reuse it. Observing an already resident
-tensor forms a fresh one-value request program for readback. Consequently, a
+tensor forms a fresh binding program for readback, with an alias slot when it
+has a separate logical view identity. Consequently, a
 small live tensor cannot retain an arbitrarily large completed downstream graph
 or inherit that graph's diagnostic identity.
 
@@ -161,7 +167,7 @@ back to JavaScript arithmetic.
 
 `TabgradError` has a stable `code`, a human-readable `message`, and immutable
 `details`. Errors that can be determined from tensor metadata are thrown by
-`tensor()` or `add()` before any backend submission. Loading, ABI, memory, and
+`tensor()`, `add()` or `view()` before any backend submission. Loading, ABI, memory, and
 kernel errors reject the promise returned by `toArray()`.
 
 An asynchronous backend error records the `webassembly-cpu` backend and its

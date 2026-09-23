@@ -70,6 +70,153 @@ function assertReleasedAncestry(handles) {
   }
 }
 
+test("views share host, pending and resident storage with independent shapes and lifetimes", async () => {
+  const programs = [];
+  const session = createTestRuntimeSession({
+    manifestUrl: new URL("manifest.json", distributionUrl), forceVariant: "scalar",
+    onProgramFormed: (program) => programs.push(program),
+  });
+  try {
+    const base = session.tensor([1, 2, 3, 4, 5, 6]);
+    const matrix = base.view([2, 3]);
+    assert.deepEqual(base.shape, [6]);
+    assert.deepEqual(matrix.shape, [2, 3]);
+    assert.ok(Object.isFrozen(matrix.shape));
+    assert.equal(session.diagnostics().liveMaterializationRecords, 1);
+    assert.equal(session.diagnostics().kernelCalls, 0);
+    base.close();
+    assert.deepEqual([...await matrix.toArray()], [1, 2, 3, 4, 5, 6]);
+    const pending = matrix.add(matrix);
+    const flat = pending.view([6]);
+    const sibling = pending.view([3, 2]);
+    pending.close();
+    matrix.close();
+    assert.deepEqual([...await flat.toArray()], [2, 4, 6, 8, 10, 12]);
+    assert.equal(session.diagnostics().kernelCalls, 1);
+    assert.equal(session.diagnostics().hostToWasmCopies, 1);
+    assert.equal(session.diagnostics().liveAllocationBytes, 24);
+    assert.equal(session.diagnostics().liveOperationRecords, 0);
+    assert.equal(programs.at(-1).computations.length, 1);
+    flat.close();
+    const resident = sibling.view([1, 6]);
+    sibling.close();
+    assert.deepEqual([...await resident.toArray()], [2, 4, 6, 8, 10, 12]);
+    assert.equal(session.diagnostics().kernelCalls, 1);
+    assert.equal(session.diagnostics().hostToWasmCopies, 1);
+    resident.close();
+    assertNoLiveState(session);
+  } finally { await session.close(); }
+});
+
+test("view admission infers one dimension and rejects invalid shapes without owners or work", async () => {
+  const session = createRuntimeSession();
+  try {
+    for (const [data, shapes] of [
+      [[1], [[], [1, -1, 1]]],
+      [[1, 2, 3, 4, 5, 6], [[-1, 3], [1, 2, 3]]],
+      [[], [[-1, 2], [2, 0, 3], [0]]],
+    ]) {
+      const base = session.tensor(data);
+      for (const shape of shapes) {
+        const view = base.view(shape);
+        assert.equal(view.shape.reduce((a, b) => a * b, 1), data.length);
+        assert.deepEqual([...await view.toArray()], data);
+        view.close();
+      }
+      const before = session.diagnostics();
+      for (const shape of [undefined, null, 2, [true], [1.5], [-2], [-1, -1], [7], [Number.MAX_SAFE_INTEGER + 1]]) {
+        assert.throws(() => base.view(shape), { code: "INVALID_SHAPE" });
+      }
+      if (data.length === 0) assert.throws(() => base.view([0, -1]), { code: "INVALID_SHAPE" });
+      assert.deepEqual(session.diagnostics(), before);
+      base.close();
+    }
+    assertNoLiveState(session);
+  } finally { await session.close(); }
+});
+
+for (const variant of ["scalar", "simd128"]) {
+  test(`views preserve deep mixed chains, retained aliases and pending consumers (${variant})`, async () => {
+    const session = createTestRuntimeSession({ manifestUrl: new URL("manifest.json", distributionUrl), forceVariant: variant });
+    try {
+      let root = session.tensor([0]);
+      for (let index = 0; index < 8192; index += 1) {
+        const next = root.view(index % 2 ? [1] : [1, 1]);
+        root.close(); root = next;
+      }
+      assert.equal(session.diagnostics().liveTensorValues, 1);
+      assert.equal(session.diagnostics().liveOperationRecords, 0);
+      const increment = session.tensor([1]);
+      const retained = [];
+      let pending;
+      for (let index = 0; index < 256; index += 1) {
+        const next = root.add(increment);
+        root.close();
+        root = next.view([1]);
+        next.close();
+        if (index === 63) retained.push(root.view([]));
+        if (index === 127) pending = root.add(increment);
+      }
+      increment.close();
+      assert.deepEqual([...await root.toArray()], [256]);
+      assert.equal(session.diagnostics().kernelCalls, 256);
+      assert.equal(session.diagnostics().highWaterAllocationBytes, 20);
+      assert.deepEqual([...await retained[0].toArray()], [64]);
+      assert.deepEqual([...await pending.toArray()], [129]);
+      assert.equal(session.diagnostics().kernelCalls, 257);
+      root.close(); retained[0].close(); pending.close();
+      assertNoLiveState(session);
+    } finally { await session.close(); }
+  });
+}
+
+test("alias observations survive handle and session close while preparation is pending", async () => {
+  const gate = Promise.withResolvers();
+  const path = "/view-gated-manifest.json";
+  virtualResponses.set(path, { body: await readFile(join(distributionRoot, "manifest.json")), contentType: "application/json", waitFor: gate.promise });
+  const session = createTestRuntimeSession({ manifestUrl: new URL(path, distributionUrl), forceVariant: "scalar" });
+  const input = session.tensor([2]);
+  const result = input.add(input);
+  const alias = result.view([]);
+  const first = result.toArray();
+  const second = alias.toArray();
+  input.close(); result.close(); alias.close();
+  const closing = session.close();
+  gate.resolve();
+  try {
+    assert.deepEqual([...await first], [4]);
+    assert.deepEqual([...await second], [4]);
+    assert.equal(session.diagnostics().kernelCalls, 1);
+    await closing;
+    assertNoLiveState(session);
+  } finally { gate.resolve(); await session.close(); virtualResponses.delete(path); }
+});
+
+test("failed alias execution rolls back owned scratch and preserves borrowed shared storage", async () => {
+  const session = createTestRuntimeSession({ manifestUrl: installFixture("view-status", { kernelBehavior: "status", failureCall: 5 }), forceVariant: "scalar" });
+  try {
+    const input = session.tensor([2]);
+    const resident = input.add(input);
+    await resident.toArray(); input.close();
+    const alias = resident.view([]);
+    const sibling = resident.view([1]);
+    resident.close();
+    let root = alias;
+    for (let index = 0; index < 8; index += 1) {
+      const next = root.add(alias);
+      if (root !== alias) root.close();
+      root = next.view([]); next.close();
+    }
+    alias.close();
+    await assert.rejects(root.toArray(), { code: "BACKEND_STATUS_ERROR" });
+    assert.equal(session.diagnostics().liveAllocationBytes, 4);
+    assert.deepEqual([...await sibling.toArray()], [4]);
+    assert.deepEqual([...await root.toArray()], [36]);
+    root.close(); sibling.close();
+    assertNoLiveState(session);
+  } finally { await session.close(); }
+});
+
 function unsignedLeb128(value) {
   const bytes = [];
   do {
@@ -1189,9 +1336,9 @@ test("discards unreachable pure work without loading the backend", async () => {
 test("ExecutableProgram is immutable and contains only logical slots", () => {
   const program = new ExecutableProgram(
     [
-      { slot: 0, dtype: "float32", device: "cpu", layout: "contiguous", shape: [1], source: "binding", provenance: { operation: "tensor", source: "RuntimeSession.tensor" } },
-      { slot: 1, dtype: "float32", device: "cpu", layout: "contiguous", shape: [1], source: "binding", provenance: { operation: "tensor", source: "RuntimeSession.tensor" } },
-      { slot: 2, dtype: "float32", device: "cpu", layout: "contiguous", shape: [1], source: "computed", provenance: { operation: "add", source: "Tensor.add" } },
+      { slot: 0, storageSlot: 0, dtype: "float32", device: "cpu", layout: "contiguous", shape: [1], source: "binding", provenance: { operation: "tensor", source: "RuntimeSession.tensor" } },
+      { slot: 1, storageSlot: 1, dtype: "float32", device: "cpu", layout: "contiguous", shape: [1], source: "binding", provenance: { operation: "tensor", source: "RuntimeSession.tensor" } },
+      { slot: 2, storageSlot: 2, dtype: "float32", device: "cpu", layout: "contiguous", shape: [1], source: "computed", provenance: { operation: "add", source: "Tensor.add" } },
     ],
     [{ kind: "add-f32", left: 0, right: 1, output: 2, provenance: { operation: "add", source: "Tensor.add" } }],
     2,
@@ -1209,6 +1356,7 @@ test("ExecutableProgram is immutable and contains only logical slots", () => {
     "formatVersion",
     "inputUseCounts",
     "result",
+    "storageUseCounts",
     "values",
   ]);
   assert.doesNotMatch(JSON.stringify(program), /offset|pointer|module|Float32Array/);
@@ -1231,6 +1379,7 @@ test("lowering an admitted addition forms the inspected ExecutableProgram", asyn
   assert.deepEqual(observedProgram.values, [
     {
       slot: 0,
+      storageSlot: 0,
       dtype: "float32",
       device: "cpu",
       layout: "contiguous",
@@ -1240,6 +1389,7 @@ test("lowering an admitted addition forms the inspected ExecutableProgram", asyn
     },
     {
       slot: 1,
+      storageSlot: 1,
       dtype: "float32",
       device: "cpu",
       layout: "contiguous",
@@ -1249,6 +1399,7 @@ test("lowering an admitted addition forms the inspected ExecutableProgram", asyn
     },
     {
       slot: 2,
+      storageSlot: 2,
       dtype: "float32",
       device: "cpu",
       layout: "contiguous",
@@ -1490,6 +1641,7 @@ test("a retained input does not keep or inherit a completed downstream program",
     assert.deepEqual(context.program.values, [
       {
         slot: 0,
+        storageSlot: 0,
         dtype: "float32",
         device: "cpu",
         layout: "contiguous",

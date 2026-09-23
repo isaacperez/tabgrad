@@ -41,3 +41,33 @@ export function copyTensorShape(shape: unknown, dataLength: number): readonly nu
 export function equalTensorShapes(left: readonly number[], right: readonly number[]): boolean {
   return left.length === right.length && left.every((dimension, index) => dimension === right[index]);
 }
+
+/** Infer shape-only view dimensions without inspecting numerical elements. */
+export function inferViewShape(shape: unknown, elementCount: number): readonly number[] {
+  try {
+    if (!Array.isArray(shape)) throw invalidShape(elementCount);
+    const dimensions: number[] = [];
+    let inferred = -1;
+    for (const dimension of shape as readonly unknown[]) {
+      if (typeof dimension !== "number" || !Number.isSafeInteger(dimension) || dimension < -1) {
+        throw invalidShape(elementCount);
+      }
+      if (dimension === -1) {
+        if (inferred !== -1) throw invalidShape(elementCount);
+        inferred = dimensions.length;
+      }
+      dimensions.push(dimension);
+    }
+    if (inferred !== -1) {
+      dimensions[inferred] = 1;
+      const knownCount = tensorElementCount(dimensions);
+      if (knownCount === 0 || !Number.isSafeInteger(knownCount)
+        || elementCount % knownCount !== 0) throw invalidShape(elementCount);
+      dimensions[inferred] = elementCount / knownCount;
+    }
+    return copyTensorShape(dimensions, elementCount);
+  } catch (error) {
+    throw new TabgradError("INVALID_SHAPE", "View dimensions must preserve the element count with at most one unambiguous -1.",
+      { operation: "view", contract: "contiguous-view-shape", elementCount }, error);
+  }
+}

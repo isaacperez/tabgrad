@@ -9,6 +9,7 @@ import {
 
 /** The admitted, acyclic value graph read by formation; no ownership is transferred. */
 export interface FormationValue<Value> {
+  readonly storageValue: Value;
   readonly shape: readonly number[];
   readonly dtype: "float32";
   readonly device: "cpu";
@@ -46,7 +47,7 @@ function formationFrame<Value extends FormationValue<Value>>(
 ): FormationFrame<Value> {
   return {
     value,
-    producer: materialization?.kind === "resident" ? null : value.producer,
+    producer: value.storageValue !== value || materialization?.kind === "resident" ? null : value.producer,
     materialization,
     nextInput: 0,
   };
@@ -74,6 +75,10 @@ export function formExecutableProgram<Value extends FormationValue<Value>>(
   while (frames.length !== 0) {
     const frame = frames[frames.length - 1]!;
     const { value, producer, materialization } = frame;
+    if (value.storageValue !== value && !slots.has(value.storageValue)) {
+      frames.push(formationFrame(value.storageValue, materializations.get(value.storageValue)));
+      continue;
+    }
     if (producer !== null && frame.nextInput < producer.inputs.length) {
       const input = producer.inputs[frame.nextInput++]!;
       if (!slots.has(input)) {
@@ -84,18 +89,22 @@ export function formExecutableProgram<Value extends FormationValue<Value>>(
 
     // Every input has completed before its consumer receives a slot.
     const slot = values.length;
+    const storageSlot = value.storageValue === value ? slot : slots.get(value.storageValue)!;
     slots.set(value, slot);
     valuesBySlot.set(slot, value);
     values.push({
       slot,
+      storageSlot,
       dtype: value.dtype,
       device: value.device,
       layout: value.layout,
       shape: value.shape,
-      source: producer === null ? "binding" : "computed",
+      source: storageSlot !== slot ? "alias" : producer === null ? "binding" : "computed",
       provenance: value.provenance,
     });
-    if (materialization?.kind === "host") {
+    if (storageSlot !== slot) {
+      // Aliases retain their own metadata without owning another payload binding.
+    } else if (materialization?.kind === "host") {
       bindings.set(slot, { hostData: materialization.data });
     } else if (materialization?.kind === "resident") {
       bindings.set(slot, { resident: materialization.allocation });

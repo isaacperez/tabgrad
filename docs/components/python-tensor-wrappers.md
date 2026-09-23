@@ -30,7 +30,8 @@ Keeping the values does not require keeping the input Python objects alive.
 flowchart LR
     PY["Python result wrapper"] --> H["Opaque runtime handle"]
     H --> V["Result value"]
-    V --> O["Runtime addition record"]
+    V --> S["Shared logical storage"]
+    S --> O["Runtime addition record"]
     O --> A["Left input value"]
     O --> B["Right input value"]
 ```
@@ -40,6 +41,13 @@ are no Python input-wrapper arrows in this diagram. The runtime's resource
 owners decide when values, operations and materializations can be released.
 
 ## Import numbers once, pass handles to operations
+
+Shape-only views follow the same ownership rule: the wrapper normalizes
+positional dimensions or one built-in list/tuple, checks their Python types,
+and passes one compact JavaScript dimension array to the handle. Runtime
+admission owns inference, representability, count checks and shared storage.
+The new wrapper owns its returned handle without retaining the base wrapper
+or copying its data. See the [view reference](../reference/tensor-view.md).
 
 `torch.tensor` checks explicit options and normalizes the documented scalar or
 rectangular built-in containers into an `array('f')` plus dimension lengths.

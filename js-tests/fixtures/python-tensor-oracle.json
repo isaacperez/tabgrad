@@ -736,7 +736,270 @@
       ]
     }
   ],
+  "viewCases": [
+    {
+      "name": "positional",
+      "source": "base = torch.tensor([1, 2, 3, 4, 5, 6], dtype=torch.float32)\nresult = base.view(2, 3)\n",
+      "metadata": [
+        [
+          2,
+          3
+        ],
+        "torch.Size([2, 3])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ],
+      "values": [
+        [
+          1.0,
+          2.0,
+          3.0
+        ],
+        [
+          4.0,
+          5.0,
+          6.0
+        ]
+      ]
+    },
+    {
+      "name": "tuple",
+      "source": "base = torch.tensor([1, 2, 3, 4], dtype=torch.float32)\nresult = base.view((2, 2))\n",
+      "metadata": [
+        [
+          2,
+          2
+        ],
+        "torch.Size([2, 2])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ],
+      "values": [
+        [
+          1.0,
+          2.0
+        ],
+        [
+          3.0,
+          4.0
+        ]
+      ]
+    },
+    {
+      "name": "list",
+      "source": "base = torch.tensor([1, 2, 3, 4], dtype=torch.float32)\nresult = base.view([2, 2])\n",
+      "metadata": [
+        [
+          2,
+          2
+        ],
+        "torch.Size([2, 2])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ],
+      "values": [
+        [
+          1.0,
+          2.0
+        ],
+        [
+          3.0,
+          4.0
+        ]
+      ]
+    },
+    {
+      "name": "inferred",
+      "source": "base = torch.tensor([1, 2, 3, 4, 5, 6], dtype=torch.float32)\nresult = base.view(-1, 3)\n",
+      "metadata": [
+        [
+          2,
+          3
+        ],
+        "torch.Size([2, 3])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ],
+      "values": [
+        [
+          1.0,
+          2.0,
+          3.0
+        ],
+        [
+          4.0,
+          5.0,
+          6.0
+        ]
+      ]
+    },
+    {
+      "name": "scalar",
+      "source": "base = torch.tensor([2], dtype=torch.float32)\nresult = base.view(())\n",
+      "metadata": [
+        [],
+        "torch.Size([])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ],
+      "values": 2.0
+    },
+    {
+      "name": "scalar-list",
+      "source": "base = torch.tensor(2, dtype=torch.float32)\nresult = base.view([])\n",
+      "metadata": [
+        [],
+        "torch.Size([])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ],
+      "values": 2.0
+    },
+    {
+      "name": "singletons",
+      "source": "base = torch.tensor(2, dtype=torch.float32)\nresult = base.view(1, -1, 1)\n",
+      "metadata": [
+        [
+          1,
+          1,
+          1
+        ],
+        "torch.Size([1, 1, 1])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ],
+      "values": [
+        [
+          [
+            2.0
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "empty",
+      "source": "base = torch.tensor([], dtype=torch.float32)\nresult = base.view(2, 0, 3)\n",
+      "metadata": [
+        [
+          2,
+          0,
+          3
+        ],
+        "torch.Size([2, 0, 3])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ],
+      "values": [
+        [],
+        []
+      ]
+    },
+    {
+      "name": "empty-inferred",
+      "source": "base = torch.tensor([], dtype=torch.float32)\nresult = base.view(-1, 2)\n",
+      "metadata": [
+        [
+          0,
+          2
+        ],
+        "torch.Size([0, 2])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ],
+      "values": []
+    }
+  ],
   "errors": [
+    {
+      "expression": "left.view()",
+      "type": "TypeError"
+    },
+    {
+      "expression": "left.view(True)",
+      "type": "TypeError"
+    },
+    {
+      "expression": "left.view(2.0, 2)",
+      "type": "TypeError"
+    },
+    {
+      "expression": "left.view(None)",
+      "type": "TypeError"
+    },
+    {
+      "expression": "left.view(-2, 2)",
+      "type": "RuntimeError"
+    },
+    {
+      "expression": "left.view(-1, -1)",
+      "type": "RuntimeError"
+    },
+    {
+      "expression": "left.view(3, 2)",
+      "type": "RuntimeError"
+    },
+    {
+      "expression": "torch.tensor([], dtype=torch.float32).view(0, -1)",
+      "type": "RuntimeError"
+    },
+    {
+      "expression": "torch.tensor([], dtype=torch.float32).view(())",
+      "type": "RuntimeError"
+    },
     {
       "expression": "torch.tensor([1, 'x'], dtype=torch.float32)",
       "type": "TypeError"

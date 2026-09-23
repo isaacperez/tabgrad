@@ -71,6 +71,26 @@
         }
       }
 
+      async function checkViews(session) {
+        for (const shape of [[], [2, 3], [2, 0, 3]]) {
+          const length = shape.reduce((count, dimension) => count * dimension, 1);
+          const base = session.tensor(new Float32Array(length).fill(2));
+          const view = base.view(shape);
+          base.close();
+          const sum = view.add(view);
+          const flat = sum.view([-1]);
+          sum.close(); view.close();
+          const values = await flat.toArray();
+          if (values.length !== length || !values.every((value) => value === 4)) {
+            throw new Error("Shared view storage changed values.");
+          }
+          flat.close();
+          if (session.diagnostics().liveAllocationBytes !== 0 || session.diagnostics().liveTensorValues !== 0) {
+            throw new Error("View storage survived its final owner.");
+          }
+        }
+      }
+
       try {
         await reportPhase("application-started");
         const [{ createRuntimeSession }, { createTestRuntimeSession }] = await Promise.all([
@@ -94,6 +114,7 @@
         result.close();
         await checkIntermediateReuse(session);
         await checkContiguousShapes(session);
+        await checkViews(session);
         await session.close();
         await reportPhase("runtime-finished");
         await report({ ok: true, before, after, values });

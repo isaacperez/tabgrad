@@ -8,7 +8,7 @@ import {
   retainExecutionFailureContext,
 } from "./errors.js";
 import { ExecutionRequest, type QueuedExecutionRequest } from "./execution-request.js";
-import { copyTensorShape, equalTensorShapes, tensorElementCount } from "./tensor-shape.js";
+import { copyTensorShape, equalTensorShapes, inferViewShape, tensorElementCount } from "./tensor-shape.js";
 import {
   ExecutableProgram,
   type ProgramProvenance,
@@ -73,7 +73,7 @@ interface AdmittedOperation {
   readonly outputMetadata: TensorMetadata;
 }
 
-interface OperationDefinition {
+interface NumericalOperationDefinition {
   readonly name: "add";
   readonly provenanceSource: "Tensor.add";
   readonly loweredKind: "add-f32";
@@ -188,32 +188,41 @@ class TensorValue {
   readonly dtype: TensorDType;
   readonly device: TensorDevice;
   readonly layout: TensorLayout;
-  // The logical value and provenance stay fixed; this owning edge ends once
-  // execution no longer needs the producer's inputs.
-  producer: OperationRecord | null;
+  // Shape and provenance belong to this value; payload and producer ownership
+  // are shared by every whole-storage alias.
+  readonly storage: StorageState;
   readonly provenance: ProgramProvenance;
   references = 1;
 
-  constructor(metadata: TensorMetadata, producer: OperationRecord | null) {
+  constructor(metadata: TensorMetadata, producer: OperationRecord | null, storage?: StorageState) {
     this.shape = Object.freeze([...metadata.shape]);
     this.dtype = metadata.dtype;
     this.device = metadata.device;
     this.layout = metadata.layout;
-    this.producer = producer;
-    this.provenance = producer?.provenance ?? Object.freeze({
+    this.storage = storage ?? new StorageState(this, producer);
+    this.provenance = storage !== undefined ? Object.freeze({ operation: "view", source: "Tensor.view" }) : producer?.provenance ?? Object.freeze({
       operation: "tensor",
       source: "RuntimeSession.tensor",
     });
   }
+
+  get storageValue(): TensorValue { return this.storage.value; }
+  get producer(): OperationRecord | null { return this.storage.producer; }
+}
+
+/** Shared whole-storage lifetime; the origin descriptor preserves producer metadata. */
+class StorageState {
+  references = 1;
+  constructor(readonly value: TensorValue, public producer: OperationRecord | null) {}
 }
 
 class OperationRecord {
-  readonly definition: OperationDefinition;
+  readonly definition: NumericalOperationDefinition;
   readonly inputs: readonly [TensorValue, TensorValue];
   readonly provenance: ProgramProvenance;
 
   constructor(
-    definition: OperationDefinition,
+    definition: NumericalOperationDefinition,
     inputs: readonly [TensorValue, TensorValue],
   ) {
     this.definition = definition;
@@ -238,26 +247,26 @@ class TensorState {
 }
 
 class MaterializationTable {
-  readonly #entries = new Map<TensorValue, Materialization>();
+  readonly #entries = new Map<StorageState, Materialization>();
 
   get(value: TensorValue): Materialization | undefined {
-    return this.#entries.get(value);
+    return this.#entries.get(value.storage);
   }
 
   setHost(value: TensorValue, data: Float32Array): void {
-    this.#entries.set(value, { kind: "host", data });
+    this.#entries.set(value.storage, { kind: "host", data });
   }
 
   setResident(
     value: TensorValue,
     allocation: ResidentAllocation,
   ): void {
-    this.#entries.set(value, { kind: "resident", allocation });
+    this.#entries.set(value.storage, { kind: "resident", allocation });
   }
 
   delete(value: TensorValue): Materialization | undefined {
-    const entry = this.#entries.get(value);
-    this.#entries.delete(value);
+    const entry = this.#entries.get(value.storage);
+    this.#entries.delete(value.storage);
     return entry;
   }
 
@@ -303,6 +312,7 @@ interface RuntimeSessionAccess {
   readonly prepare: () => Promise<void>;
   readonly observeSynchronously: (state: TensorState) => Float32Array;
   readonly add: (left: TensorState, rightHandle: unknown) => Tensor;
+  readonly view: (source: TensorState, shape: unknown) => Tensor;
   readonly observe: (state: TensorState) => Promise<Float32Array>;
   readonly assertOpen: () => void;
   readonly releaseHandle: (state: TensorState) => void;
@@ -400,6 +410,12 @@ export class Tensor {
     return runtimeSessionAccess(state.session).add(state, right);
   }
 
+  /** Create an independently owned contiguous shape over the same storage. */
+  view(shape: readonly number[]): Tensor {
+    const state = requireTensorState(this);
+    return runtimeSessionAccess(state.session).view(state, shape);
+  }
+
   toArray(): Promise<Float32Array> {
     const state = requireTensorState(this);
     assertTensorOpen(state);
@@ -415,7 +431,7 @@ export class Tensor {
   }
 }
 
-class AddOperationDefinition implements OperationDefinition {
+class AddOperationDefinition implements NumericalOperationDefinition {
   readonly name = "add";
   readonly provenanceSource = "Tensor.add";
   readonly loweredKind = "add-f32";
@@ -517,7 +533,20 @@ class AddOperationDefinition implements OperationDefinition {
   }
 }
 
-const ADD_OPERATION: OperationDefinition = Object.freeze(new AddOperationDefinition());
+const ADD_OPERATION: NumericalOperationDefinition = Object.freeze(new AddOperationDefinition());
+
+/** Canonical metadata admission; a view introduces no numerical dependency. */
+class ViewOperationDefinition {
+  admit(source: TensorState, shape: unknown): TensorMetadata {
+    assertTensorOpen(source);
+    return {
+      shape: inferViewShape(shape, tensorElementCount(source.value.shape)),
+      dtype: source.value.dtype, device: source.value.device, layout: source.value.layout,
+    };
+  }
+}
+
+const VIEW_OPERATION = Object.freeze(new ViewOperationDefinition());
 
 export class RuntimeSession {
   #backend: WebAssemblyCpuBackend;
@@ -555,6 +584,7 @@ export class RuntimeSession {
       add: (left: TensorState, rightHandle: unknown) => (
         this.#add(left, rightHandle)
       ),
+      view: (source: TensorState, shape: unknown) => this.#view(source, shape),
       observe: (state: TensorState) => this.#observe(state),
       assertOpen: () => this.#assertOpen(),
       releaseHandle: (state: TensorState) => this.#releaseHandle(state),
@@ -614,6 +644,14 @@ export class RuntimeSession {
     const result = new TensorValue(admitted.outputMetadata, admitted.record);
     this.#registerValue(result);
     return this.#createHandle(result);
+  }
+
+  #view(source: TensorState, shape: unknown): Tensor {
+    const metadata = VIEW_OPERATION.admit(source, shape);
+    const value = new TensorValue(metadata, null, source.value.storage);
+    value.storage.references += 1;
+    this.#values.add(value);
+    return this.#createHandle(value);
   }
 
   #prepare(): Promise<void> {
@@ -745,6 +783,7 @@ export class RuntimeSession {
 
   #retainValue(value: TensorValue): void {
     value.references += 1;
+    value.storage.references += 1;
   }
 
   #releaseValue(value: TensorValue): void {
@@ -754,14 +793,15 @@ export class RuntimeSession {
     while (pending.length > 0) {
       const current = pending.pop()!;
       current.references -= 1;
-      if (current.references > 0) continue;
+      current.storage.references -= 1;
       if (current.references < 0) {
         throw new TabgradError(
           "BACKEND_STATUS_ERROR",
           "A tensor value was released more times than it was retained.",
         );
       }
-      this.#values.delete(current);
+      if (current.references === 0) this.#values.delete(current);
+      if (current.storage.references > 0) continue;
       const materialization = this.#materializations.delete(current);
       if (materialization?.kind === "resident") {
         this.#backend.release(materialization.allocation);
@@ -783,7 +823,7 @@ export class RuntimeSession {
     }
     // Sever the strong edge as well as its logical ownership. Keeping a
     // released record attached would retain its entire upstream object graph.
-    value.producer = null;
+    value.storage.producer = null;
     this.#operationRecords -= 1;
     return producer;
   }
@@ -806,7 +846,9 @@ export class RuntimeSession {
       // synchronous admission boundary, not in immutable program formation.
       const retainedSlots = new Array<boolean>(formed.program.values.length);
       for (const [slot, selectedValue] of formed.valuesBySlot) {
-        retainedSlots[slot] = selectedValue.references > formed.program.inputUseCounts[slot]!;
+        if (formed.program.values[slot]!.storageSlot === slot) {
+          retainedSlots[slot] = selectedValue.storage.references > formed.program.storageUseCounts[slot]!;
+        }
       }
       const allocations = this.#backend.execute(formed.program, formed.bindings, retainedSlots);
       for (const [slot, allocation] of allocations) {

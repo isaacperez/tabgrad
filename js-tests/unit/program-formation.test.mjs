@@ -4,6 +4,7 @@ import { formExecutableProgram } from "../../dist/program-formation.js";
 
 function input(length = 1) {
   return {
+    get storageValue() { return this; },
     shape: [length], dtype: "float32", device: "cpu", layout: "contiguous",
     producer: null,
     provenance: { operation: "tensor", source: "RuntimeSession.tensor" },
@@ -14,6 +15,7 @@ function add(left, right) {
   const provenance = { operation: "add", source: "Tensor.add" };
   return {
     ...input(left.shape[0]), provenance,
+    get storageValue() { return this; },
     producer: { definition: { loweredKind: "add-f32" }, inputs: [left, right], provenance },
   };
 }
@@ -99,7 +101,7 @@ test("formation snapshots immutable structure but leaves payloads and occurrence
     assert.ok(Object.isFrozen(value));
     assert.ok(Object.isFrozen(value.shape));
     assert.ok(Object.isFrozen(value.provenance));
-    assert.deepEqual(Object.keys(value).sort(), ["device", "dtype", "layout", "provenance", "shape", "slot", "source"]);
+    assert.deepEqual(Object.keys(value).sort(), ["device", "dtype", "layout", "provenance", "shape", "slot", "source", "storageSlot"]);
   }
   assert.ok(Object.isFrozen(formed.program.computations[0]));
   assert.ok(Object.isFrozen(formed.program.computations[0].provenance));
@@ -115,6 +117,26 @@ test("host-only formation produces a binding without computations", () => {
   assert.deepEqual(formed.program.computations, []);
   assert.deepEqual(formed.newlyComputed, []);
   assert.equal(formed.bindings.get(0).hostData, data);
+});
+
+test("alias slots preserve logical metadata and aggregate physical uses without computations", () => {
+  const base = input(6);
+  const alias = { ...base, shape: [2, 3], storageValue: base,
+    provenance: { operation: "view", source: "Tensor.view" } };
+  const sibling = { ...alias, shape: [3, 2] };
+  const first = add(alias, alias);
+  first.shape = [2, 3];
+  const formed = formExecutableProgram(first, new Map([[base, { kind: "host", data: new Float32Array(6) }]]));
+  assert.deepEqual(formed.program.values.map(({ shape }) => shape), [[6], [2, 3], [2, 3]]);
+  assert.deepEqual(formed.program.values.map(({ storageSlot }) => storageSlot), [0, 0, 2]);
+  assert.deepEqual(formed.program.inputUseCounts, [0, 2, 0]);
+  assert.deepEqual(formed.program.storageUseCounts, [2, 0, 0]);
+  assert.equal(formed.bindings.size, 1);
+  assert.equal(formed.program.computations.length, 1);
+  assert.equal(formed.program.values[1].provenance.operation, "view");
+  const resident = formExecutableProgram(sibling, new Map([[base, { kind: "resident", allocation: {} }]]));
+  assert.deepEqual(resident.program.values.map(({ shape }) => shape), [[6], [3, 2]]);
+  assert.equal(resident.program.computations.length, 0);
 });
 
 for (const topology of ["chain", "shared"]) {

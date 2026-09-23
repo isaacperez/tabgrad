@@ -58,6 +58,18 @@ real-interpreter tests. The fixture records exact build/source revisions,
 inputs, comparison rules and selected error classes. Tabgrad-only restrictions
 have separate assertions rather than being attributed to PyTorch.
 
+The [contiguous view reference](reference/tensor-view.md) defines the shape-only
+Python and JavaScript overloads. Native `viewCases` cover positional, tuple and
+list syntax, scalar and empty results, singleton dimensions and unambiguous
+inference. Selected invalid calls record native error categories. Real Pyodide
+tests compare metadata and nested values, exercise addition and wrapper cleanup,
+and reject excluded overloads. Direct runtime tests establish shared allocation,
+materialization, alias retention, reuse and rollback; numerical equality alone
+does not prove storage sharing. Browser fixtures exercise views through both
+the managed Python and direct JavaScript paths. These bounded cases exclude
+dtype reinterpretation, non-contiguous access, mutation and differentiation;
+Tabgrad's large-empty-shape representability policy is not attributed to PyTorch.
+
 Real Pyodide tests also consume those numerical fixtures through `tolist()` and
 check independent lists of Python floats, nested control flow, common demand
 with JavaScript, entry-context rejection and failure ownership. Browser
