@@ -488,8 +488,10 @@ Use the engineering criteria in [quality.md](quality.md#build-abstractions-from-
 and, for retained library code, the
 [production-slice rule](implementation-workflow.md#a-narrow-production-slice-is-still-production).
 The writer's handoff identifies affected owners, contracts, accepted design
-constraints and evidenced extension axes. The reviewer checks the source and
-its relevant producers and consumers rather than accepting that account or
+constraints and evidenced extension axes, applying the
+[specialization and extension-cost rule](quality.md#keep-specialization-owned-and-extension-costs-explicit).
+The reviewer checks the source and its relevant producers and consumers
+rather than accepting that account or
 inferring design quality from passing tests.
 
 Record a design and extensibility conclusion in the existing review report:
@@ -500,10 +502,18 @@ Record a design and extensibility conclusion in the existing review report:
   another component depend on implementation details.
 - For retained library code, trace representative variations established by
   accepted architecture, callers, the issue or directly related work. State
-  what would change and what would remain stable. Distinguish a deliberately
-  narrow capability from a supposedly shared contract tied to one operation,
+  what would be added, what would be modified and what would remain stable,
+  citing the responsible boundaries and why each change is needed. Separate
+  inherent variant work from repeated edits that keep the same knowledge
+  aligned; file counts alone prove neither good nor bad extensibility.
+  Distinguish a deliberately narrow capability from a supposedly shared
+  contract tied to one operation,
   backend, shape or consumer. If no relevant extension axis is evidenced,
-  explain that limitation rather than inventing a future feature.
+  explain that limitation rather than inventing a future feature. When a
+  capability expands, check the writer's trace of invalidated assumptions
+  through affected code, types, tests and documentation, including consumers
+  outside the textual diff. Preserve justified specialization rather than
+  requiring speculative generality or an unrelated retrospective cleanup.
 - Examine affected computational and memory growth, repeated dispatch,
   allocation, data movement and retention. Distinguish reasoned cost analysis
   from measured results; use [performance.md](performance.md) when a material

@@ -185,6 +185,25 @@ empty pages or a fixed number of documents. Record the chosen scope and primary
 location with the existing documentation handoff rather than introducing a
 separate planning artifact.
 
+### State the domain of a contract
+
+Distinguish a shared rule from the specialization used to implement or
+illustrate it. General explanations describe the invariant; a reference states
+the exact supported domain and behavior; a component chapter explains the
+local restriction when other contributors need it. Make the applicability
+clear where an otherwise general-looking statement could mislead. An example
+does not establish a universal rule, and an anticipated extension must not be
+documented as supported behavior.
+
+Keep each fact in its primary home and link consumers to it. Do not repeat a
+source-level annotation or implementation detail across prose merely because
+it exists; include it when it answers the reader's actual contract question.
+When support changes, follow the affected statements, summaries and examples
+alongside the code under the
+[extension-cost rule](quality.md#keep-specialization-owned-and-extension-costs-explicit).
+This keeps exact references truthful without turning general chapters into a
+history of restrictions or a catalogue of promised capabilities.
+
 ## Separate durable documentation from work tracking
 
 The root `README.md` and normative documents describe Tabgrad as a complete
