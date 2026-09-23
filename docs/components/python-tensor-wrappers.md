@@ -41,10 +41,24 @@ owners decide when values, operations and materializations can be released.
 
 ## Import numbers once, pass handles to operations
 
-`torch.tensor` checks the Python input and explicit options before constructing
-an `array('f')`. It accepts only the documented flat built-in containers and
-real numeric elements. The conversion is linear in the input length and
-creates a float32 buffer; it is not tensor arithmetic or a fallback kernel.
+`torch.tensor` checks explicit options and normalizes the documented scalar or
+rectangular built-in containers into an `array('f')` plus dimension lengths.
+The buffer is flat in row-major order regardless of the logical rank. See
+[tensor shape](../concepts/tensor-shape.md) for why rank and buffer length are
+different facts.
+
+Normalization uses an explicit traversal of the active ancestor path rather
+than recursive Python calls. Each depth has one expected dimension length;
+numerical leaves must occur at a consistent depth. The traversal tracks active
+container identities to reject a cycle without rejecting a finite child reused
+by two different rows. Its time depends on numerical leaves and container
+occurrences, and its auxiliary traversal state on rank. Empty containers still
+have traversal cost. Invalid input fails before the bridge imports any tensor.
+
+The resulting shape crosses as one JavaScript metadata array, separately from
+the numerical buffer. This is frontend syntax normalization, not a second
+semantic validator: the runtime admits the dimensions and checks their count
+against the owned payload. No bridge call is made for each numerical element.
 
 The [buffer bridge](python-package-installation.md#import-a-buffer-without-retaining-interpreter-memory)
 borrows that array synchronously, validates its bounded view, and asks the
@@ -71,10 +85,16 @@ then validates identity, session and lifetime and owns demand, execution and
 readback. There is no Python-side graph traversal or numerical fallback.
 
 The returned `Float32Array` owns its bytes. Pyodide's `to_py()` converts it to a
-Python memory view, whose `tolist()` constructs independent Python floats.
-The wrapper releases the temporary memory view through a context manager and
-retains only the caller's returned list. It does not cache either that list or
-the intermediate buffer. The narrow type cast in this method reflects that
+Python memory view. A scalar reads one float; a vector uses bulk `tolist()`;
+higher ranks build the outer containers with an explicit ancestor stack and
+convert contiguous leaf rows in bulk. Memoryview row slicing borrows the same
+buffer and does not perform another runtime readback. Traversal state grows
+with rank, while the returned floats and containers account for the result's
+actual size, including child lists in empty tensors.
+
+The wrapper releases temporary memory views through context managers and
+returns the owned number or lists to the caller. It does not cache them or
+retain the intermediate buffer. Narrow type casts reflect that
 typeshed describes a general memory view's list as integers, while this checked
 bridge returns float32 elements; real interpreter tests check the element type
 and independent copies.
@@ -95,8 +115,8 @@ The resulting objects are Python presentations: `Size` is an immutable integer
 tuple with its own representation and shape-preserving tuple operations;
 `float32` is the exposed `dtype` constant; and `device('cpu')` is an immutable
 CPU descriptor. Their bounded behavior is contrasted with the native oracle.
-These types do not enable higher-rank tensors, other data types or backend
-transfers merely because Python can construct a descriptor.
+Constructing these descriptors does not itself admit tensor data, enable
+another numerical type or perform a backend transfer.
 
 ## Release according to the actual owner
 

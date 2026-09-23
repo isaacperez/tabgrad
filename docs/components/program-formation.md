@@ -39,6 +39,15 @@ program therefore does not keep the invocation's arrays, allocations or
 semantic graph. The accompanying maps do reference invocation state and must
 not become a persistent program cache.
 
+Each slot preserves the complete admitted shape, including scalar rank and
+dimensions after a zero. Formation does not infer dimensions from a payload or
+collapse a shape to its first dimension. The semantic helpers in
+[`tensor-shape.ts`](../../src/tensor-shape.ts) own dimension validation, element
+counting and exact shape comparison. Runtime admission validates and copies
+external dimensions once; formation and the backend consume admitted metadata.
+The [shape concept](../concepts/tensor-shape.md) explains why equal payload sizes
+do not imply interchangeable shapes.
+
 `ExecutableProgram` also derives frozen `inputUseCounts` from its selected
 computations. Each input position contributes one use, including repeated
 positions referring to the same slot. The runtime and backend share these

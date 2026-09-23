@@ -2,7 +2,7 @@
 
 This document is the user reference for calling the Tabgrad tensor runtime
 directly from JavaScript. It describes a deliberately narrow but complete
-execution path: one-dimensional contiguous `float32` tensors on the CPU and
+execution path: contiguous `float32` tensors on the CPU and
 out-of-place elementwise addition. A narrow contract is useful here because it
 lets a reader see the complete lifecycle—admission, lazy recording, WebAssembly
 execution, observation, and release—without implying support for tensor
@@ -66,26 +66,43 @@ into a host `Float32Array`. Its default and supported metadata are:
 
 | Property | Supported value |
 | --- | --- |
-| Shape | One dimension whose length equals the input collection length |
+| Shape | Defaults to `[data.length]`; explicit scalar or multidimensional shape with the same element count |
 | Data type | `float32` |
 | Device | `cpu` |
 | Layout | `contiguous` |
 
-When supplied from JavaScript, `options.shape` must be an actual array with one
-non-negative safe-integer element equal to the copied data length. `null`, a
-number, an array-like object, a different rank, or a different length is an
-`INVALID_SHAPE` error. This runtime check is required even though TypeScript
-callers also receive a static `readonly number[]` type.
+When supplied, `options.shape` must be an actual array of non-negative safe
+integers. Their product must equal the copied data length. The empty shape `[]`
+describes one scalar element, not an empty tensor. Any zero dimension makes the
+count zero; all dimensions, including those after a zero, are still validated.
+For a nonempty shape the product must also be a safe integer. Shape validation
+does not promise that an arbitrarily large payload can be allocated.
+
+The runtime freezes an owned copy of the dimensions. Subsequent mutations of
+the caller's array cannot alter the tensor. `null`, non-array shapes, invalid
+dimensions and mismatched element counts fail with `INVALID_SHAPE`. Runtime
+validation remains necessary even with the static `readonly number[]` type.
+Data is always flat; nested JavaScript arrays are not accepted as tensor data.
+
+For example, `session.tensor([1, 2, 3, 4], { shape: [2, 2] })` describes two rows
+of two values. `session.tensor([2], { shape: [] })` describes a scalar, while
+`session.tensor([2])` describes a one-element vector. See
+[tensor shape](concepts/tensor-shape.md) for the distinction between structure
+and contiguous storage.
 
 `left.add(right)` validates both operands synchronously and returns a new
 tensor handle. It does not fetch, compile, instantiate, or call WebAssembly.
 The operands must be open, belong to the same session, and have equal shapes.
+Equal element counts alone are insufficient, including for zero-element shapes
+and scalar versus one-element vector. No broadcasting is performed.
 The runtime checks handle identity in its module-private registry: inheriting
 from `Tensor.prototype` or wrapping a tensor in a JavaScript `Proxy` does not
 forge a valid handle. Invalid handles fail with `INVALID_TENSOR` before backend
 loading. The result is out of place: it has independent logical storage.
 
-`tensor.toArray()` returns a Promise for an independent `Float32Array`. Ready
+`tensor.toArray()` returns a Promise for an independent flat `Float32Array` in
+row-major order at every rank. Use `tensor.shape` to interpret its dimensions;
+empty readback does not discard trailing shape metadata. Ready
 host data is copied directly; it is not uploaded to WebAssembly solely for
 readback. When computation is required, the runtime forms an immutable finite
 executable program for the demanded dependencies, prepares one WebAssembly
@@ -163,8 +180,8 @@ invocation's program or provenance.
 | --- | --- |
 | `CLOSED_SESSION`, `CLOSED_TENSOR` | An operation used an explicitly closed lifetime. |
 | `DIFFERENT_SESSION`, `INVALID_TENSOR` | Addition mixed sessions or received something other than a Tabgrad tensor handle. |
-| `INVALID_DATA`, `INVALID_SHAPE` | Input data or its one-dimensional shape is invalid. |
-| `SHAPE_MISMATCH` | Addition operands have unequal lengths. |
+| `INVALID_DATA`, `INVALID_SHAPE` | Input data or its contiguous shape is invalid. |
+| `SHAPE_MISMATCH` | Addition operands have different full shapes. |
 | `UNSUPPORTED_DTYPE`, `UNSUPPORTED_DEVICE`, `UNSUPPORTED_LAYOUT` | Metadata is outside the table above. |
 | `BACKEND_MANIFEST_INVALID`, `BACKEND_HASH_MISMATCH` | Distributed metadata or bytes fail validation. |
 | `BACKEND_ABI_MISMATCH`, `BACKEND_CAPABILITY_MISMATCH` | A module cannot satisfy the declared CPU contract. |

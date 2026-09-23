@@ -47,9 +47,9 @@ function assertNoLiveState(session) {
   );
 }
 
-function pendingReleaseChain(session, depth, repeatedInputs = false) {
-  const increment = session.tensor([1]);
-  let root = session.tensor([0]);
+function pendingReleaseChain(session, depth, repeatedInputs = false, shape = [1]) {
+  const increment = session.tensor([1], { shape });
+  let root = session.tensor([0], { shape });
   const closedHandles = [];
   for (let index = 0; index < depth; index += 1) {
     const next = root.add(repeatedInputs ? root : increment);
@@ -281,6 +281,54 @@ after(async () => {
   });
 });
 
+for (const variant of ["scalar", "simd128"]) {
+  test(`contiguous tensor ranks preserve shape and flat execution (${variant})`, async () => {
+    const programs = [];
+    const session = createTestRuntimeSession({
+      manifestUrl: new URL("manifest.json", distributionUrl),
+      forceVariant: variant,
+      onProgramFormed: (program) => programs.push(program),
+    });
+    try {
+      for (const dimensions of [[], [1], [2, 3], [2, 1, 3], [0], [2, 0], [0, 2, 3]]) {
+        const count = dimensions.reduce((product, dimension) => product * dimension, 1);
+        const data = Array.from({ length: count }, (_, index) => index + 1);
+        const shape = [...dimensions];
+        const left = session.tensor(data, { shape });
+        const right = session.tensor(data, { shape });
+        shape.push(99);
+        data.fill(99);
+        assert.deepEqual(left.shape, dimensions);
+        assert.ok(Object.isFrozen(left.shape));
+        assert.deepEqual(Array.from(await left.toArray()), Array.from({ length: count }, (_, i) => i + 1));
+        const before = session.diagnostics();
+        const sum = left.add(right);
+        assert.equal(session.diagnostics().kernelCalls, before.kernelCalls);
+        left.close();
+        right.close();
+        const [values, again] = await Promise.all([sum.toArray(), sum.toArray()]);
+        assert.notEqual(values, again);
+        assert.deepEqual(Array.from(values), Array.from({ length: count }, (_, i) => 2 * (i + 1)));
+        assert.deepEqual(again, values);
+        assert.deepEqual(sum.shape, dimensions);
+        assert.equal(session.diagnostics().kernelCalls, before.kernelCalls + 1);
+        assert.equal(session.diagnostics().hostToWasmBytes - before.hostToWasmBytes, count * 8);
+        const next = sum.add(sum);
+        sum.close();
+        assert.deepEqual(Array.from(await next.toArray()), Array.from(values, (value) => value * 2));
+        next.close();
+        assertNoLiveState(session);
+        for (const program of programs.splice(0)) {
+          assert.ok(program.values.every((value) => Object.isFrozen(value.shape)));
+          assert.ok(program.values.every((value) => JSON.stringify(value.shape) === JSON.stringify(dimensions)));
+        }
+      }
+    } finally {
+      await session.close();
+    }
+  });
+}
+
 test("records float32 addition lazily and materializes it on observation", async () => {
   requestCounts.clear();
   const session = createTestRuntimeSession({
@@ -483,7 +531,7 @@ test("rejects unsupported operations synchronously during admission", async () =
       && error.details.contract === "contiguous-layout",
   );
   assert.throws(
-    () => session.tensor([1, 2], { shape: [1, 2] }),
+    () => session.tensor([1, 2], { shape: [2, 2] }),
     (error) => error instanceof TabgradError && error.code === "INVALID_SHAPE",
   );
   assert.throws(
@@ -542,6 +590,59 @@ test("rejects prototype-forged and proxied tensor handles synchronously", async 
   }
 });
 
+test("contiguous shape validation preserves empty metadata and rejects all invalid dimensions", async () => {
+  const session = createRuntimeSession();
+  try {
+    for (const shape of [
+      [-1], [0.5], [NaN], [Infinity], [Number.MAX_SAFE_INTEGER + 1],
+      [0, -1], [0, 1.5], [0, NaN], [0, Infinity], [0, Number.MAX_SAFE_INTEGER + 1],
+      [Number.MAX_SAFE_INTEGER, 2], [2 ** 32, 2 ** 32], [undefined], ["0"],
+      new Uint32Array([0]), [], [1],
+    ]) {
+      assert.throws(() => session.tensor([], { shape }), { code: "INVALID_SHAPE" });
+      assertNoLiveState(session);
+    }
+    for (const shape of [[Number.MAX_SAFE_INTEGER, 2, 0], [0, Number.MAX_SAFE_INTEGER, 2]]) {
+      const tensor = session.tensor([], { shape });
+      assert.deepEqual(tensor.shape, shape);
+      assert.deepEqual(await tensor.toArray(), new Float32Array());
+      tensor.close();
+      assertNoLiveState(session);
+    }
+    assert.equal(session.diagnostics().backendLoads, 0);
+  } finally {
+    await session.close();
+  }
+});
+
+test("equal element counts never substitute for equal full shapes", async () => {
+  const session = createRuntimeSession();
+  const foreign = createRuntimeSession();
+  try {
+    for (const [data, leftShape, rightShape] of [
+      [[1], [], [1]], [[1, 2], [2], [1, 2]], [[], [0], [2, 0]],
+      [[], [0, 2], [0, 3]], [[1], [1, 1], [1]],
+    ]) {
+      const left = session.tensor(data, { shape: leftShape });
+      const right = session.tensor(data, { shape: rightShape });
+      const other = foreign.tensor(data, { shape: leftShape });
+      assert.throws(() => left.add(right), { code: "SHAPE_MISMATCH" });
+      assert.throws(() => left.add(other), { code: "DIFFERENT_SESSION" });
+      left.close();
+      assert.throws(() => left.add(right), { code: "CLOSED_TENSOR" });
+      right.close();
+      other.close();
+      assertNoLiveState(session);
+      assertNoLiveState(foreign);
+    }
+    assert.equal(session.diagnostics().kernelCalls, 0);
+    assert.equal(session.diagnostics().backendLoads, 0);
+  } finally {
+    await session.close();
+    await foreign.close();
+  }
+});
+
 test("rejects nonnumeric JavaScript tensor data instead of coercing it", async () => {
   const session = createRuntimeSession({
     manifestUrl: new URL("manifest.json", distributionUrl),
@@ -584,7 +685,7 @@ for (const [name, shape] of [
         (error) => error instanceof TabgradError
           && error.code === "INVALID_SHAPE"
           && error.details.operation === "tensor"
-          && error.details.contract === "one-dimensional-shape",
+          && error.details.contract === "contiguous-shape",
       );
       assert.equal(session.diagnostics().backendLoads, 0);
     } finally {
@@ -848,34 +949,37 @@ test("all retained intermediates remain independently observable", async () => {
   }
 });
 
-test("readback failure after scratch reuse does not repeat numerical work", async () => {
-  let failReadback = true;
-  const cause = new Error("readback fixture failure");
-  const session = createTestRuntimeSession({
-    manifestUrl: new URL("manifest.json", distributionUrl), forceVariant: "scalar",
-    beforeReadback() {
-      if (failReadback) throw cause;
-    },
-  });
-  const { root } = pendingReleaseChain(session, 16);
-  try {
-    await assert.rejects(root.toArray(), (error) => {
-      assert.equal(error.cause, cause);
-      assert.equal(getTestExecutionFailureContext(error).phase, "readback");
-      return true;
+for (const shape of [[1], [], [1, 1]]) {
+  test(`readback failure after scratch reuse preserves shape ${JSON.stringify(shape)}`, async () => {
+    let failReadback = true;
+    const cause = new Error("readback fixture failure");
+    const session = createTestRuntimeSession({
+      manifestUrl: new URL("manifest.json", distributionUrl), forceVariant: "scalar",
+      beforeReadback() {
+        if (failReadback) throw cause;
+      },
     });
-    assert.equal(session.diagnostics().highWaterAllocationBytes, 12);
-    assert.equal(session.diagnostics().liveAllocationBytes, 4);
-    assert.equal(session.diagnostics().liveOperationRecords, 0);
-    failReadback = false;
-    assert.deepEqual(Array.from(await root.toArray()), [16]);
-    assert.equal(session.diagnostics().kernelCalls, 16);
-    root.close();
-    assertNoLiveState(session);
-  } finally {
-    await session.close();
-  }
-});
+    const { root } = pendingReleaseChain(session, 16, false, shape);
+    try {
+      await assert.rejects(root.toArray(), (error) => {
+        assert.equal(error.cause, cause);
+        assert.equal(getTestExecutionFailureContext(error).phase, "readback");
+        return true;
+      });
+      assert.equal(session.diagnostics().highWaterAllocationBytes, 12);
+      assert.equal(session.diagnostics().liveAllocationBytes, 4);
+      assert.equal(session.diagnostics().liveOperationRecords, 0);
+      assert.deepEqual(root.shape, shape);
+      failReadback = false;
+      assert.deepEqual(Array.from(await root.toArray()), [16]);
+      assert.equal(session.diagnostics().kernelCalls, 16);
+      root.close();
+      assertNoLiveState(session);
+    } finally {
+      await session.close();
+    }
+  });
+}
 
 test("drains an accepted observation when the session closes", async () => {
   const session = createTestRuntimeSession({

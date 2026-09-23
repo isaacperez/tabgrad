@@ -4,6 +4,8 @@ from array import array
 from collections.abc import Sequence
 from typing import Protocol
 
+from pyodide.ffi import JsProxy
+
 class RuntimeTensor(Protocol):
     @property
     def shape(self) -> Sequence[int]: ...
@@ -26,6 +28,6 @@ class ObservedArray(Protocol):
     def to_py(self) -> memoryview: ...
 
 def observe(handle: RuntimeTensor) -> ObservedArray: ...
-def tensorFromBuffer(buffer: array[float]) -> RuntimeTensor: ...
+def tensorFromBuffer(buffer: array[float], shape: JsProxy) -> RuntimeTensor: ...
 
 session: object

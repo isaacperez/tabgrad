@@ -57,3 +57,26 @@ test("failure to acquire a view propagates unchanged and does not invent a relea
     await session.close();
   }
 });
+
+test("logical shape is independent of the borrowed flat buffer and rejection releases the loan", async () => {
+  const session = new RuntimeSession();
+  const bridge = new PythonRuntimeBridge(session);
+  try {
+    const good = bufferLoan();
+    const shape = [1, 2];
+    const handle = bridge.tensorFromBuffer(good, shape);
+    shape[0] = 99;
+    assert.deepEqual(handle.shape, [1, 2]);
+    assert.equal(good.releases, 1);
+    handle.close();
+    for (const shape of [[], [2, 2], [0, -1]]) {
+      const bad = bufferLoan();
+      assert.throws(() => bridge.tensorFromBuffer(bad, shape), { code: "INVALID_SHAPE" });
+      assert.equal(bad.releases, 1);
+      assert.equal(session.diagnostics().liveTensorHandles, 0);
+      assert.equal(session.diagnostics().liveTensorValues, 0);
+    }
+  } finally {
+    await session.close();
+  }
+});

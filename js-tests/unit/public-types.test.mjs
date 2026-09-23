@@ -69,6 +69,7 @@ test("the public declarations do not expose runtime-to-backend plumbing", async 
     new URL("../../dist/runtime.d.ts", import.meta.url),
     "utf8",
   );
+  assert.match(declarations, /get shape\(\): readonly number\[\]/);
 
   for (const internalName of [
     "BackendDiagnostics",

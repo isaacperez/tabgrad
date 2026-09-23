@@ -8,6 +8,7 @@ import {
   retainExecutionFailureContext,
 } from "./errors.js";
 import { ExecutionRequest, type QueuedExecutionRequest } from "./execution-request.js";
+import { copyTensorShape, equalTensorShapes, tensorElementCount } from "./tensor-shape.js";
 import {
   ExecutableProgram,
   type ProgramProvenance,
@@ -61,7 +62,7 @@ export interface RuntimeDiagnostics {
 }
 
 interface TensorMetadata {
-  readonly shape: readonly [number];
+  readonly shape: readonly number[];
   readonly dtype: TensorDType;
   readonly device: TensorDevice;
   readonly layout: TensorLayout;
@@ -132,45 +133,6 @@ function copyFloat32TensorData(data: unknown): Float32Array {
   }
 }
 
-function invalidTensorShape(dataLength: number, cause?: unknown): TabgradError {
-  return new TabgradError(
-    "INVALID_SHAPE",
-    "This runtime slice requires one dimension equal to the data length.",
-    {
-      operation: "tensor",
-      contract: "one-dimensional-shape",
-      dataLength,
-    },
-    cause,
-  );
-}
-
-function copyTensorShape(shape: unknown, dataLength: number): readonly [number] {
-  if (shape === undefined) {
-    return Object.freeze([dataLength]);
-  }
-  try {
-    if (!Array.isArray(shape) || shape.length !== 1) {
-      throw invalidTensorShape(dataLength);
-    }
-    const firstDimension: unknown = shape[0];
-    if (
-      typeof firstDimension !== "number"
-      || !Number.isSafeInteger(firstDimension)
-      || firstDimension < 0
-      || firstDimension !== dataLength
-    ) {
-      throw invalidTensorShape(dataLength);
-    }
-    return Object.freeze([firstDimension]);
-  } catch (error) {
-    if (error instanceof TabgradError) {
-      throw error;
-    }
-    throw invalidTensorShape(dataLength, error);
-  }
-}
-
 function retainProgramFailureContext(
   error: unknown,
   program: ExecutableProgram,
@@ -222,7 +184,7 @@ function retainProgramFailureContext(
 }
 
 class TensorValue {
-  readonly shape: readonly [number];
+  readonly shape: readonly number[];
   readonly dtype: TensorDType;
   readonly device: TensorDevice;
   readonly layout: TensorLayout;
@@ -233,7 +195,7 @@ class TensorValue {
   references = 1;
 
   constructor(metadata: TensorMetadata, producer: OperationRecord | null) {
-    this.shape = Object.freeze([...metadata.shape]) as readonly [number];
+    this.shape = Object.freeze([...metadata.shape]);
     this.dtype = metadata.dtype;
     this.device = metadata.device;
     this.layout = metadata.layout;
@@ -415,7 +377,7 @@ export class Tensor {
     constructTensorHandle = (state) => new Tensor(state, TENSOR_CONSTRUCTION_TOKEN);
   }
 
-  get shape(): readonly [number] {
+  get shape(): readonly number[] {
     const state = requireTensorState(this);
     assertTensorOpen(state);
     return state.value.shape;
@@ -526,10 +488,10 @@ class AddOperationDefinition implements OperationDefinition {
         },
       );
     }
-    if (left.value.shape[0] !== right.value.shape[0]) {
+    if (!equalTensorShapes(left.value.shape, right.value.shape)) {
       throw new TabgradError(
         "SHAPE_MISMATCH",
-        "Float32 addition requires equal one-dimensional shapes.",
+        "Float32 addition requires equal shapes.",
         {
           operation: this.name,
           contract: "equal-shape",
@@ -711,7 +673,7 @@ export class RuntimeSession {
       }
       try {
         this.#beforeReadback?.();
-        return this.#backend.read(materialization.allocation, value.shape[0]);
+        return this.#backend.read(materialization.allocation, tensorElementCount(value.shape));
       } catch (error) {
         throw retainProgramFailureContext(error, formed.program, "readback");
       }
