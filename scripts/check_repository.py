@@ -88,6 +88,7 @@ ARCHITECTURE_DOCUMENTS = {
     "docs/architecture/backend-execution.md",
     "docs/architecture/bounded-lazy-execution.md",
     "docs/architecture/central-decision.md",
+    "docs/architecture/computation-inspection.md",
     "docs/architecture/cpu-intermediate-reuse.md",
     "docs/architecture/execution-lifecycle.md",
     "docs/architecture/frontends-runtime-backends.md",
