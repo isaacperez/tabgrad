@@ -121,6 +121,14 @@ slots, captured-state resolutions, program-call boundaries, and new ordinary
 records. It must not rebuild internal forward and backward operations or copy
 every computation in an unchanged child program under a different name.
 
+Inspection respects this same boundary: retain a separately budgeted structural
+description and correlate fresh calls through compact invocation bindings.
+Expanding that description for a viewer is an explicit consumer cost, not
+mandatory work on each reusable hit. If the description is unavailable after
+eviction, inspection reports that limitation. A structural cache fingerprint
+does not bind the weights, inputs or output of a particular call and is not
+correctness evidence; see [Computation inspection](computation-inspection.md).
+
 ## Reuse is a capability, profitability is policy
 
 Direct program invocation is a semantic runtime capability on both backends.

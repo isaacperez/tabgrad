@@ -61,6 +61,14 @@ Metadata inference is not a numerical backend. It is semantic reasoning over
 small descriptions such as ranks, dimensions, strides, data types, and alias
 relationships.
 
+Canonical operation meaning and normalized metadata also supply arithmetic
+estimates without producing payloads. A cost rule states its counting convention
+and applicable domain; it must not introduce a second interpretation of the
+operation or turn unknown work into zero. Optional historical inspection
+captures call relationships here before metadata-only calls or reclaimed
+dependencies disappear. The estimation and capture boundaries are defined in
+[Inspecting computation and attributing costs](computation-inspection.md).
+
 ## Rich operations and later decomposition
 
 A public operation remains a canonical semantic operation at admission. It is

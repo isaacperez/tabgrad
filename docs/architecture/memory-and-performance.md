@@ -189,6 +189,15 @@ drains without changing semantics. Detailed tracing can be optional in
 production, but the ownership boundaries must not make these costs impossible to
 observe.
 
+[Inspecting computation and attributing costs](computation-inspection.md) defines
+the optional, bounded capture contract and the reporting distinctions. Semantic
+arithmetic estimates come from canonical operation metadata; physical accounting
+comes from allocation and execution owners. Logical tensor size, unique shared
+storage, reserved capacity and interval peaks are different quantities. Missing
+measurements remain unknown, and fused or shared costs need not have a unique
+per-operation allocation. Inspection retains detached metadata rather than
+pinning numerical resources, and its auxiliary indexes share its explicit budget.
+
 Inference, backward computation, optimizer updates, and token-by-token generation
 are distinct representative workloads. A narrow operation microbenchmark does
 not establish whole-model performance, and architecture evidence does not

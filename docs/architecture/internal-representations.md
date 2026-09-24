@@ -37,8 +37,9 @@ flowchart TD
 
 The questions are different:
 
-1. The incremental semantic graph asks, “What tensor operations did the host
-   program actually perform, and what do their values and effects mean?”
+1. The incremental semantic graph asks, “What do the retained tensor operations,
+   values and effects from executed host code mean?” It is not a complete history
+   of reclaimed calls.
 2. `ExecutableProgram` asks, “What finite work in the common executable
    vocabulary is required for these roots, and is its execution domain one
    compute backend or one explicit transfer route?”
@@ -151,6 +152,15 @@ stable operation names and source slots. Fresh occurrence identifiers and the
 mapping from this invocation to those slots belong to invocation state. A cache
 hit can therefore report the current call without retaining or impersonating an
 older semantic occurrence.
+
+Attribution across these levels is not restricted to one operation/source pair:
+decomposition and fusion require one-to-many and many-to-one relationships,
+while eliminated work may have no physical counterpart. Common passes preserve
+structural mappings; invocation state binds current occurrences and logical
+versions; the backend associates physical work with that structure. Repeated
+program slots or reused addresses do not establish cross-invocation identity.
+The detached capture and completeness rules are defined in
+[Computation inspection](computation-inspection.md#connect-descriptions-without-confusing-identities).
 
 Target profiling does not make the physical schedule common. It records only
 the backend-family and semantic capability facts needed to keep the shared
