@@ -160,9 +160,13 @@ Read the documents in this order when learning the architecture:
     [CPU intermediate memory reuse](cpu-intermediate-reuse.md) explains how
     common use analysis, runtime ownership and backend physical completion
     cooperate to reuse temporary storage without losing observable values.
-12. [Model integration boundary](model-integration.md) places model conversion,
+12. [Inspecting computation and attributing costs](computation-inspection.md)
+    explains how optional bounded capture supports graph inspection, how
+    semantic work relates to execution, and why estimates, measurements and
+    correctness evidence answer different questions.
+13. [Model integration boundary](model-integration.md) places model conversion,
     weights, tokenization, and preprocessing around the tensor runtime.
-13. [Central architecture decision](central-decision.md) records the alternatives,
+14. [Central architecture decision](central-decision.md) records the alternatives,
     evidence, consequences, and conditions that would justify reconsideration.
 
 ## How to interpret these documents

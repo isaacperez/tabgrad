@@ -190,6 +190,14 @@ Ordinary maps and objects are a valid initial physical representation behind
 stable identifiers. Compact arenas are a replaceable implementation
 optimization, not a separate architectural layer.
 
+Reclaimable dependencies are not a complete historical call log. Metadata-only
+views can preserve their final storage relationship without retaining every
+intermediate view occurrence. Historical inspection therefore captures detached
+call and version metadata while it exists, under the explicit scope and budget
+in [Inspecting computation](computation-inspection.md#capture-facts-before-their-lifetime-ends).
+That consumer does not extend semantic or payload lifetimes merely to keep a
+graph readable.
+
 ## Responsibility summary
 
 | Record | Owns | Deliberately excludes |

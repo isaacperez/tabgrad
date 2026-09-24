@@ -68,6 +68,14 @@ Large weights should move toward their final owner through the fewest practical
 copies. Streaming and segmentation belong to importer and backend policy, while
 the runtime preserves explicit device, data-type, and error semantics.
 
+Inspection and recomputation must identify the state actually bound to an
+invocation, not just a stable parameter name or reusable-program fingerprint.
+An input/output claim also declares whether preprocessing, conversion and
+persistent state are inside its scope. A tensor computation cannot establish
+correctness of excluded surrounding steps. These distinctions and the controlled
+recomputation baseline are explained in
+[Computation inspection](computation-inspection.md#identity-recomputation-and-correctness-are-different-guarantees).
+
 ## Tokenization and preprocessing
 
 A tokenizer converts text to token identifiers and converts generated identifiers

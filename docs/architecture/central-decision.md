@@ -10,6 +10,13 @@
 [research issue #52](https://github.com/isaacperez/tabgrad/issues/52), documented
 in [Ordinary Python observation](python-observation.md).
 
+**Inspection and attribution refinement:** accepted under
+[research issue #88](https://github.com/isaacperez/tabgrad/issues/88), documented
+in [Inspecting computation and attributing costs](computation-inspection.md).
+It preserves the central owners while requiring optional bounded metadata
+capture, cross-level attribution and explicit limits on cost and validation
+claims. It selects no computational proof system.
+
 This record explains why Tabgrad uses one effect-aware, incrementally lazy
 TypeScript semantic runtime with bounded demand regions and two private numerical
 backends. The other architecture chapters define the resulting contracts in
