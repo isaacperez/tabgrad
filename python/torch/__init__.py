@@ -169,6 +169,11 @@ class Tensor:
             return NotImplemented
         return self.add(other)
 
+    def sum(self) -> Tensor:
+        """Admit a total reduction, preserving deferred runtime ownership."""
+        source = _require_sum_input(self)
+        return Tensor._from_handle(source._handle.sum())
+
     def view(self, *shape: object) -> Tensor:
         """Share contiguous storage with a shape, optionally inferring one -1."""
         if not shape:
@@ -323,4 +328,16 @@ def add(
     return input.add(other, alpha=alpha)
 
 
-__all__ = ["Size", "Tensor", "add", "device", "dtype", "float32", "tensor"]
+def sum(input: object) -> Tensor:
+    """Reduce every element of one tensor; reduction options are unsupported."""
+    return _require_sum_input(input).sum()
+
+
+def _require_sum_input(value: object) -> Tensor:
+    """Validate functional arguments and explicitly unbound method receivers."""
+    if not isinstance(value, Tensor):
+        raise TypeError("Tabgrad sum requires a tensor.")
+    return value
+
+
+__all__ = ["Size", "Tensor", "add", "device", "dtype", "float32", "sum", "tensor"]

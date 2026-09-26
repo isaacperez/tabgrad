@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 import { loadPyodide } from "pyodide";
 import { RuntimeSession } from "../../dist/index.js";
 import { getTestExecutionFailureContext } from "../../dist/testing.js";
+import { assertSumFixture } from "./sum-oracle.mjs";
 
 let interpreterPromise;
 
@@ -23,6 +24,107 @@ function getInterpreter() {
   interpreterPromise ??= loadPyodide();
   return interpreterPromise;
 }
+
+test("Python total sum matches bounded native numerical fixtures through tolist", { timeout: 20_000 }, async () => {
+  const { attachPython } = await import("../../dist/python.js");
+  const interpreter = await getInterpreter();
+  const oracle = JSON.parse(await readFile(new URL("../fixtures/python-tensor-oracle.json", import.meta.url), "utf8"));
+  const binding = await attachPython(interpreter);
+  try {
+    for (const fixture of oracle.sumCases) {
+      for (const expression of ["source.sum()", "torch.sum(source)", "torch.sum(input=source)"]) {
+        await binding.runPythonAsync(`import torch\n${fixture.source}\nresult = ${expression}\nobserved_sum = result.tolist()`);
+        assertSumFixture(interpreter.globals.get("observed_sum"), fixture);
+        const metadata = interpreter.runPython(oracle.metadataExpression);
+        try { assert.deepEqual(JSON.parse(JSON.stringify(metadata.toJs())), fixture.metadata, fixture.name); }
+        finally { metadata.destroy(); }
+      }
+    }
+  } finally {
+    await binding.close();
+    for (const name of ["torch", "source", "result", "observed_sum"]) interpreter.globals.delete(name);
+  }
+});
+
+test("Python total sum returns a lazy scalar tensor through ordinary observation", { timeout: 20_000 }, async () => {
+  const { attachPython } = await import("../../dist/python.js");
+  const interpreter = await getInterpreter();
+  const binding = await attachPython(interpreter);
+  try {
+    await binding.runPythonAsync(`
+import torch
+def check_sum():
+    session = torch._runtime_session
+    for data, expected in [(3, 3.), ([5], 5.), ([[1, -2], [3, 4]], 6.), ([[], []], 0.)]:
+        source = torch.tensor(data, dtype=torch.float32)
+        before = session.diagnostics().kernelCalls
+        method = source.sum()
+        positional = torch.sum(source)
+        keyword = torch.sum(input=source)
+        assert session.diagnostics().kernelCalls == before
+        assert method.shape == torch.Size([])
+        assert method.dtype is torch.float32 and method.device == source.device
+        del source
+        assert method.tolist() == expected
+        assert method.tolist() == expected
+        assert positional.tolist() == expected and keyword.tolist() == expected
+        assert session.diagnostics().kernelCalls == before + 3
+        del method, positional, keyword
+    assert (torch.tensor([1, 2, 3, 4], dtype=torch.float32).view(2, 2).sum()
+            + torch.tensor(5, dtype=torch.float32)).sum().tolist() == 15.
+    assert session.diagnostics().liveTensorHandles == 0
+    assert session.diagnostics().liveTensorValues == 0
+    assert session.diagnostics().liveOperationRecords == 0
+    assert session.diagnostics().liveAllocationBytes == 0
+check_sum()
+`);
+  } finally {
+    await binding.close();
+    for (const name of ["torch", "check_sum"]) interpreter.globals.delete(name);
+  }
+});
+
+test("Python total sum rejects malformed calls and excluded options before dispatch", { timeout: 20_000 }, async () => {
+  const { attachPython } = await import("../../dist/python.js");
+  const interpreter = await getInterpreter();
+  const binding = await attachPython(interpreter);
+  try {
+    await binding.runPythonAsync(`
+import torch
+def check_sum_errors():
+    source = torch.tensor([1, 2], dtype=torch.float32)
+    expressions = ['torch.sum()', 'torch.sum(1)', 'torch.sum([1])',
+        'torch.Tensor.sum(None)', 'source.sum(0)', 'source.sum(dim=None)',
+        'source.sum(keepdim=False)', 'source.sum(dtype=None)', 'torch.sum(source, out=None)',
+        'torch.sum(source, dim=0)', 'torch.sum(source, dtype=torch.float32)',
+        'torch.sum(source, input=source)', 'torch.sum(source, unknown=True)']
+    before = torch._runtime_session.diagnostics()
+    for expression in expressions:
+        try:
+            eval(expression)
+        except TypeError:
+            pass
+        else:
+            raise AssertionError(expression)
+    after = torch._runtime_session.diagnostics()
+    assert after.kernelCalls == before.kernelCalls == 0
+    assert after.liveTensorHandles == before.liveTensorHandles == 1
+    assert after.liveOperationRecords == 0
+    source._handle.close()
+    from pyodide.ffi import JsException
+    try:
+        source.sum()
+    except JsException as error:
+        assert error.js_error.code == 'CLOSED_TENSOR'
+    else:
+        raise AssertionError('closed source accepted')
+check_sum_errors()
+`);
+  } finally {
+    await binding.close();
+    for (const name of ["torch", "check_sum_errors"]) interpreter.globals.delete(name);
+  }
+});
 
 async function countCpuCompilations(compile) {
   const modules = await Promise.all(compile.mock.calls.map((call) => call.result));

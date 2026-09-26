@@ -17,19 +17,19 @@ export interface ProgramValue {
   readonly provenance: ProgramProvenance;
 }
 
-export interface LoweredAddFloat32 {
-  readonly kind: "add-f32";
-  readonly left: ProgramSlot;
-  readonly right: ProgramSlot;
+export interface LoweredComputation {
+  readonly kind: "add-f32" | "sum-f32";
+  /** Ordered operand occurrences, including repeats; arity belongs to the operation. */
+  readonly inputs: readonly ProgramSlot[];
   readonly output: ProgramSlot;
   readonly provenance: ProgramProvenance;
 }
 
 export class ExecutableProgram {
-  readonly formatVersion = 2;
+  readonly formatVersion = 3;
   readonly domain = "webassembly-cpu";
   readonly values: readonly ProgramValue[];
-  readonly computations: readonly LoweredAddFloat32[];
+  readonly computations: readonly LoweredComputation[];
   /** Input occurrences per slot, independent of scheduling or invocation owners. */
   readonly inputUseCounts: readonly number[];
   /** Physical input occurrences aggregated across aliases of each storage slot. */
@@ -38,7 +38,7 @@ export class ExecutableProgram {
 
   constructor(
     values: readonly ProgramValue[],
-    computations: readonly LoweredAddFloat32[],
+    computations: readonly LoweredComputation[],
     result: ProgramSlot,
   ) {
     this.values = Object.freeze(values.map((value) => Object.freeze({
@@ -50,12 +50,13 @@ export class ExecutableProgram {
     const storageUseCounts = new Array<number>(values.length).fill(0);
     this.computations = Object.freeze(
       computations.map((computation) => {
-        inputUseCounts[computation.left]! += 1;
-        inputUseCounts[computation.right]! += 1;
-        storageUseCounts[values[computation.left]!.storageSlot]! += 1;
-        storageUseCounts[values[computation.right]!.storageSlot]! += 1;
+        for (const input of computation.inputs) {
+          inputUseCounts[input]! += 1;
+          storageUseCounts[values[input]!.storageSlot]! += 1;
+        }
         return Object.freeze({
           ...computation,
+          inputs: Object.freeze([...computation.inputs]),
           provenance: Object.freeze({ ...computation.provenance }),
         });
       }),

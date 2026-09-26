@@ -49,5 +49,5 @@ for (const variant of [
   if (result.status !== 0) {
     process.exit(result.status ?? 1);
   }
-  await copyFile(compiledModule, `${outputDirectory}/add-f32-${variant.id}.wasm`);
+  await copyFile(compiledModule, `${outputDirectory}/kernels-${variant.id}.wasm`);
 }

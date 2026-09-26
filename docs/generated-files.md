@@ -71,7 +71,7 @@ checks in the same change as a registered generated path.
 - **Inputs:** the prepared native environment and hashed oracle lock in [Development](development.md#prepare-python-integration-and-its-compatibility-oracle); PyTorch 2.14.0 build revision `08187d9e0fba026dc8217405802ab5381dc88d90`. The generator rejects another version/revision and bounds both thread pools to one. No NumPy is needed; its known initialization warning is retained.
 - **Commit policy:** committed so CI and browser contributors can consume native expectations without installing the platform-specific development oracle. No native package is distributed.
 - **Verification:** `.venv/bin/python scripts/generate_tensor_oracle.py --check` regenerates and compares exact bytes when the oracle is prepared; normal Node tests consume the fixture independently. Changes to cases or pins require regenerating and reviewing the fixture.
-- **Comparison:** exact float32 bits except NaN payloads; exact recorded metadata and Python exception classes. Tests consume the values both through runtime handles and ordinary Python `tolist()`. The latter also checks list ownership and Python float presentation; neither route extends the fixture's bounded operation coverage.
+- **Comparison:** exact float32 bits except NaN payloads for exact arithmetic cases; total reduction uses the finite-error and explicit overflow-classification policy in [Total tensor sum](reference/tensor-sum.md#compatibility-evidence-and-comparison-method). Recorded metadata and Python exception classes compare exactly. Tests consume values through runtime handles and ordinary Python `tolist()`. The latter also checks list ownership and Python float presentation; neither route extends the fixture's bounded operation coverage.
 - **License/review:** behavior observations only, no upstream source copied. Native oracle attribution remains in [Dependencies](dependencies.md).
 - **Cleanup:** generated fixture is intentionally committed; do not delete it as build cleanup. No intermediate output is created.
 
@@ -89,7 +89,7 @@ checks in the same change as a registered generated path.
 
 ### Browser distribution
 
-- **Paths:** `dist/index.js`, `dist/index.d.ts`, `dist/python.js`, `dist/python.d.ts`, their emitted internal JavaScript and declaration modules, `dist/manifest.json`, `dist/wasm/add-f32-{scalar,simd128}.wasm`, and the static source and manifest under `dist/python/`.
+- **Paths:** `dist/index.js`, `dist/index.d.ts`, `dist/python.js`, `dist/python.d.ts`, their emitted internal JavaScript and declaration modules, `dist/manifest.json`, `dist/wasm/kernels-{scalar,simd128}.wasm`, and the static source and manifest under `dist/python/`.
 - **Sources:** `src/**/*.ts`, `python/bootstrap.py`, `python/torch/__init__.py`, `crates/tabgrad-wasm-kernels/src/lib.rs`, the Cargo manifests and lock, `tsconfig.json`, `rust-toolchain.toml`, and the build scripts under `scripts/`.
 - **Generators:** TypeScript 6.0.3, Rust and Cargo 1.98.1, and the maintained Node.js build scripts.
 - **Command:** `npm run build` from the repository root.

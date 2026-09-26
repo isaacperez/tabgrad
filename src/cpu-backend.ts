@@ -4,6 +4,8 @@ import { tensorElementCount } from "./tensor-shape.js";
 
 const ABI_VERSION = 1;
 const CAPABILITY_ADD_FLOAT32 = 1;
+const CAPABILITY_SUM_FLOAT32 = 2;
+const REQUIRED_CAPABILITIES = CAPABILITY_ADD_FLOAT32 | CAPABILITY_SUM_FLOAT32;
 const WEBASSEMBLY_PAGE_BYTES = 65_536;
 const MAXIMUM_ADDRESS = 0xffff_ffff;
 
@@ -93,6 +95,7 @@ interface KernelExports extends WebAssembly.Exports {
     outputOffset: number,
     length: number,
   ) => number;
+  readonly tabgrad_sum_f32: (inputOffset: number, outputOffset: number, length: number) => number;
 }
 
 interface BackendContext {
@@ -422,10 +425,9 @@ export class WebAssemblyCpuBackend {
       }
 
       for (const computation of program.computations) {
-        const leftSlot = program.values[computation.left]!.storageSlot;
-        const rightSlot = program.values[computation.right]!.storageSlot;
-        const left = this.#requiredAllocation(allocations, leftSlot);
-        const right = this.#requiredAllocation(allocations, rightSlot);
+        const inputs = computation.inputs.map((slot) => this.#requiredAllocation(
+          allocations, program.values[slot]!.storageSlot,
+        ));
         const value = program.values[computation.output];
         if (value === undefined) {
           throw new TabgradError(
@@ -447,21 +449,28 @@ export class WebAssemblyCpuBackend {
         let status: number;
         try {
           this.#kernelCalls += 1;
-          status = context.exports.tabgrad_add_f32(
-            left.offset,
-            right.offset,
-            output.offset,
-            length,
-          );
+          switch (computation.kind) {
+            case "add-f32":
+              status = context.exports.tabgrad_add_f32(
+                inputs[0]!.offset, inputs[1]!.offset, output.offset, length,
+              );
+              break;
+            case "sum-f32":
+              status = context.exports.tabgrad_sum_f32(
+                inputs[0]!.offset, output.offset,
+                tensorElementCount(program.values[computation.inputs[0]!]!.shape),
+              );
+              break;
+          }
         } catch (error) {
           context.poisoned = true;
           throw new TabgradError(
             "BACKEND_TRAP",
-            "The WebAssembly addition kernel trapped.",
+            "The WebAssembly kernel trapped.",
             {
               backend: "webassembly-cpu",
               phase: "execution",
-              operation: "add-f32",
+              operation: computation.kind,
               programValueSlot: computation.output,
             },
             error,
@@ -470,18 +479,19 @@ export class WebAssemblyCpuBackend {
         if (status !== 0) {
           throw new TabgradError(
             "BACKEND_STATUS_ERROR",
-            "The WebAssembly addition kernel rejected its call.",
+            "The WebAssembly kernel rejected its call.",
             {
               backend: "webassembly-cpu",
               phase: "execution",
-              operation: "add-f32",
+              operation: computation.kind,
               programValueSlot: computation.output,
               status,
             },
           );
         }
-        storage.completeInputUse(leftSlot);
-        storage.completeInputUse(rightSlot);
+        for (const input of computation.inputs) {
+          storage.completeInputUse(program.values[input]!.storageSlot);
+        }
       }
       return allocations;
     } catch (error) {
@@ -637,10 +647,10 @@ export class WebAssemblyCpuBackend {
           },
         );
       }
-      if ((exports.tabgrad_capabilities() & CAPABILITY_ADD_FLOAT32) === 0) {
+      if ((exports.tabgrad_capabilities() & REQUIRED_CAPABILITIES) !== REQUIRED_CAPABILITIES) {
         throw new TabgradError(
           "BACKEND_CAPABILITY_MISMATCH",
-          "The WebAssembly module does not provide float32 addition.",
+          "The WebAssembly module does not provide the required numerical capabilities.",
           { backend: "webassembly-cpu", phase },
         );
       }
@@ -765,13 +775,14 @@ export class WebAssemblyCpuBackend {
     const memory = value.memory as Record<string, unknown> | undefined;
     const variants = value.variants;
     return value.schemaVersion === 1
-      && value.moduleVersion === 1
+      && value.moduleVersion === 2
       && value.abiVersion === ABI_VERSION
       && value.addressWidth === 32
       && value.sharedMemory === false
       && Array.isArray(value.capabilities)
-      && value.capabilities.length === 1
+      && value.capabilities.length === 2
       && value.capabilities[0] === "add-f32"
+      && value.capabilities[1] === "sum-f32"
       && Array.isArray(value.imports)
       && value.imports.length === 1
       && this.#isMemoryImport(value.imports[0])
@@ -847,6 +858,7 @@ export class WebAssemblyCpuBackend {
       "tabgrad_capabilities",
       "tabgrad_arena_base",
       "tabgrad_add_f32",
+      "tabgrad_sum_f32",
     ]) {
       if (typeof exports[name] !== "function") {
         throw new TabgradError(

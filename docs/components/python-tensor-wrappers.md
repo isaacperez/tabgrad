@@ -169,9 +169,11 @@ evidence that the attribute exists.
 The fixture generator runs pinned native PyTorch with one intra-operation and
 one inter-operation thread. Normal test runs consume its committed expectations
 without importing native PyTorch. Tests compare metadata and error classes,
-exact float32 bits except NaN payloads, lazy admission, copied input and handle
+operation-specific numerical expectations, lazy admission, copied input and handle
 lifetimes. The [generated-file register](../generated-files.md#python-tensor-oracle-fixtures)
 records reproduction and drift checks.
+Exact arithmetic fixtures compare float32 bits except NaN payloads; reduction
+comparisons follow the [sum reference](../reference/tensor-sum.md#compatibility-evidence-and-comparison-method).
 
 These observations do not measure total interpreter memory, count every proxy,
 or establish a throughput claim. Quantitative conversion, dispatch, demand and

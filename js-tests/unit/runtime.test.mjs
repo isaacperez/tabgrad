@@ -26,6 +26,63 @@ let distributionUrl;
 const requestCounts = new Map();
 const virtualResponses = new Map();
 
+for (const variant of ["scalar", "simd128"]) {
+  test(`total sum ${variant} uses the shared deferred runtime and scalar result geometry`, async () => {
+    const programs = [];
+    const session = createTestRuntimeSession({
+      manifestUrl: new URL("manifest.json", distributionUrl), forceVariant: variant,
+      onProgramFormed: (program) => programs.push(program),
+    });
+    try {
+      for (const [data, shape, expected] of [
+        [[7], [], 7], [[-3], [1], -3], [[1, -2, 3, 4, 5, -6], [2, 3], 5],
+        [[], [2, 0, 3], 0],
+      ]) {
+        const input = session.tensor(data, { shape });
+        const before = session.diagnostics();
+        const result = input.sum();
+        assert.deepEqual(result.shape, []);
+        assert.equal(result.dtype, "float32");
+        assert.equal(result.device, "cpu");
+        assert.equal(session.diagnostics().backendLoads, before.backendLoads);
+        assert.equal(session.diagnostics().kernelCalls, before.kernelCalls);
+        input.close();
+        assert.deepEqual([...await result.toArray()], [expected]);
+        assert.equal(programs.at(-1).computations[0].kind, "sum-f32");
+        assert.equal(programs.at(-1).computations[0].inputs.length, 1);
+        assert.deepEqual([...await result.toArray()], [expected]);
+        assert.equal(session.diagnostics().kernelCalls, before.kernelCalls + 1);
+        assert.equal(session.diagnostics().liveAllocationBytes, 4);
+        assert.equal(programs.at(-1).computations.length, 0, "resident observation cuts completed work");
+        result.close();
+        assertNoLiveState(session);
+      }
+    } finally { await session.close(); }
+  });
+}
+
+test("total sum rejects invalid receivers, options and closed state without work", async () => {
+  const session = createRuntimeSession();
+  const input = session.tensor([1, 2]);
+  const before = session.diagnostics();
+  for (const receiver of [null, {}, Object.create(Tensor.prototype), new Proxy(input, {})]) {
+    assert.throws(() => Tensor.prototype.sum.call(receiver), { code: "INVALID_TENSOR" });
+  }
+  for (const option of [undefined, null, 0, { dtype: "float32" }]) {
+    assert.throws(() => input.sum(option), TypeError);
+  }
+  assert.deepEqual(session.diagnostics(), before);
+  const pending = input.sum();
+  input.close();
+  assert.throws(() => input.sum(), { code: "CLOSED_TENSOR" });
+  pending.close();
+  assertNoLiveState(session);
+  assert.equal(session.diagnostics().kernelCalls, 0);
+  const live = session.tensor([1]);
+  await session.close();
+  assert.throws(() => live.sum(), { code: "CLOSED_TENSOR" });
+});
+
 function assertNoLiveState(session) {
   assert.deepEqual(
     {
@@ -68,6 +125,101 @@ function assertReleasedAncestry(handles) {
       values: 1, operations: 0, releasedValues: 1,
     });
   }
+}
+
+test("mixed add sum and view graphs preserve occurrence counts and storage owners", async () => {
+  const programs = [];
+  const session = createTestRuntimeSession({ manifestUrl: new URL("manifest.json", distributionUrl),
+    forceVariant: "scalar", onProgramFormed: (program) => programs.push(program) });
+  try {
+    for (let cycle = 0; cycle < 20; cycle += 1) {
+      const source = session.tensor([1, 2, 3, 4, 5, 6]);
+      const view = source.view([2, 3]);
+      const shared = view.add(view);
+      const alias = shared.view([6]);
+      const first = shared.sum();
+      const second = alias.sum();
+      const repeated = first.add(first);
+      const result = repeated.add(second);
+      source.close(); view.close(); shared.close(); alias.close();
+      first.close(); second.close(); repeated.close();
+      assert.deepEqual([...await result.toArray()], [126]);
+      const program = programs.at(-1);
+      assert.deepEqual(program.computations.map((c) => c.inputs.length), [2, 1, 2, 1, 2]);
+      for (const value of program.values) {
+        const occurrences = program.computations.flatMap((c) => c.inputs).filter((slot) => slot === value.slot).length;
+        assert.equal(program.inputUseCounts[value.slot], occurrences);
+      }
+      assert.equal(session.diagnostics().liveAllocationBytes, 4);
+      const residentAlias = result.view([1, 1]);
+      const reduction = residentAlias.sum();
+      result.close(); residentAlias.close();
+      const before = session.diagnostics();
+      assert.deepEqual([...await reduction.toArray()], [126]);
+      assert.equal(session.diagnostics().kernelCalls, before.kernelCalls + 1);
+      assert.equal(session.diagnostics().hostToWasmCopies, before.hostToWasmCopies);
+      assert.equal(programs.at(-1).computations.length, 1);
+      reduction.close();
+      assertNoLiveState(session);
+    }
+    const retained = session.tensor([1, 2, 3]);
+    const scalar = retained.sum();
+    assert.deepEqual([...await scalar.toArray()], [6]);
+    assert.deepEqual([...await retained.toArray()], [1, 2, 3], "observable input was not overwritten");
+    retained.close(); scalar.close();
+    assertNoLiveState(session);
+  } finally { await session.close(); }
+});
+
+test("deep abandoned and observed unary chains retain linear graph bookkeeping", async () => {
+  const session = createTestRuntimeSession({ manifestUrl: new URL("manifest.json", distributionUrl), forceVariant: "scalar" });
+  try {
+    for (const observe of [false, true]) {
+      let root = session.tensor([2]);
+      for (let index = 0; index < 2048; index += 1) {
+        const next = root.sum();
+        root.close(); root = next;
+      }
+      assert.equal(session.diagnostics().liveOperationRecords, 2048);
+      if (observe) {
+        assert.deepEqual([...await root.toArray()], [2]);
+        assert.equal(session.diagnostics().highWaterAllocationBytes, 8);
+      }
+      root.close();
+      assertNoLiveState(session);
+    }
+    assert.equal(session.diagnostics().kernelCalls, 2048);
+  } finally { await session.close(); }
+});
+
+for (const behavior of ["status", "trap"]) {
+  test(`sum ${behavior} preserves unrelated resident data and rolls back invocation allocations`, async () => {
+    const session = createTestRuntimeSession({ forceVariant: "scalar",
+      manifestUrl: installFixture(`sum-${behavior}`, { kernelBehavior: behavior, failureCall: 3 }) });
+    try {
+      const source = session.tensor([3]);
+      const resident = source.add(source);
+      assert.deepEqual([...await resident.toArray()], [6]);
+      source.close();
+      const first = resident.sum();
+      const failed = first.sum(); first.close();
+      await assert.rejects(failed.toArray(), (error) => {
+        assert.equal(error.code, behavior === "trap" ? "BACKEND_TRAP" : "BACKEND_STATUS_ERROR");
+        const context = getTestExecutionFailureContext(error);
+        assert.equal(context.operation, "sum");
+        assert.equal(context.provenance.source, "Tensor.sum");
+        return true;
+      });
+      assert.equal(session.diagnostics().kernelCalls, 3);
+      assert.equal(session.diagnostics().liveAllocationBytes, 4);
+      assert.equal(session.diagnostics().liveRequestLeases, 0);
+      assert.deepEqual([...await resident.toArray()], [6]);
+      if (behavior === "status") assert.deepEqual([...await failed.toArray()], [6]);
+      else await assert.rejects(failed.toArray(), { code: "BACKEND_TRAP" });
+      failed.close(); resident.close();
+      assertNoLiveState(session);
+    } finally { await session.close(); }
+  });
 }
 
 test("views share host, pending and resident storage with independent shapes and lifetimes", async () => {
@@ -256,17 +408,17 @@ function section(identifier, contents) {
 
 // A one-element arithmetic fixture that fails on exactly one selected call.
 // The failure is a real Wasm status/exception, not a thrown JavaScript probe.
-function scalarFaultKernel(behavior, failureCall) {
+function scalarFaultKernel(behavior, failureCall, operation = "add") {
   return [
     0x23, 0x00, 0x41, 0x01, 0x6a, 0x24, 0x00, // ++global call counter
     0x23, 0x00, 0x41, ...signedLeb128(failureCall), 0x46,
     0x04, 0x40, // if counter == failureCall
     ...(behavior === "trap" ? [0x00] : [0x41, 0x07, 0x0f]),
     0x0b,
-    0x20, 0x02, // output address
+    0x20, operation === "sum" ? 0x01 : 0x02, // output address
     0x20, 0x00, 0x2a, 0x02, 0x00, // load left f32
-    0x20, 0x01, 0x2a, 0x02, 0x00, // load right f32
-    0x92, 0x38, 0x02, 0x00, // add and store
+    ...(operation === "sum" ? [] : [0x20, 0x01, 0x2a, 0x02, 0x00, 0x92]),
+    0x38, 0x02, 0x00, // store one-element result
     0x41, 0x00, 0x0b,
   ];
 }
@@ -274,10 +426,11 @@ function scalarFaultKernel(behavior, failureCall) {
 function fixtureModule({
   abiVersion = 1,
   arenaBase = 1_048_576,
-  capabilities = 1,
+  capabilities = 3,
   kernelBehavior = "success",
   memoryImportName = "memory",
   omitKernelExport = false,
+  omitSumExport = false,
   failureCall,
 } = {}) {
   const functionType = (parameters, results) => [
@@ -289,9 +442,10 @@ function fixtureModule({
   ];
   const i32 = 0x7f;
   const types = section(1, [
-    0x02,
+    0x03,
     ...functionType([], [i32]),
     ...functionType([i32, i32, i32, i32], [i32]),
+    ...functionType([i32, i32, i32], [i32]),
   ]);
   const imports = section(2, [
     0x01,
@@ -302,12 +456,13 @@ function fixtureModule({
     ...unsignedLeb128(32),
     ...unsignedLeb128(1024),
   ]);
-  const functions = section(3, [0x04, 0x00, 0x00, 0x00, 0x01]);
+  const functions = section(3, [0x05, 0x00, 0x00, 0x00, 0x01, 0x02]);
   const exportedFunctions = [
     ["tabgrad_abi_version", 0],
     ["tabgrad_capabilities", 1],
     ["tabgrad_arena_base", 2],
     ...(omitKernelExport ? [] : [["tabgrad_add_f32", 3]]),
+    ...(omitSumExport ? [] : [["tabgrad_sum_f32", 4]]),
   ];
   const exports = section(7, [
     ...unsignedLeb128(exportedFunctions.length),
@@ -328,13 +483,17 @@ function fixtureModule({
     ? [0x00, 0x0b]
     : [0x41, ...signedLeb128(kernelBehavior === "status" ? 7 : 0), 0x0b];
   const kernelBody = [0x00, ...kernelInstructions];
+  const sumBody = [0x00, ...(failureCall === undefined
+    ? kernelInstructions : scalarFaultKernel(kernelBehavior, failureCall, "sum"))];
   const code = section(10, [
-    0x04,
+    0x05,
     ...constantBody(abiVersion),
     ...constantBody(capabilities),
     ...constantBody(arenaBase),
     ...unsignedLeb128(kernelBody.length),
     ...kernelBody,
+    ...unsignedLeb128(sumBody.length),
+    ...sumBody,
   ]);
   return Buffer.from([
     0x00, 0x61, 0x73, 0x6d,
@@ -362,11 +521,11 @@ function installFixture(name, moduleOptions = {}, manifestTransform = (value) =>
   });
   const manifest = manifestTransform({
     schemaVersion: 1,
-    moduleVersion: 1,
+    moduleVersion: 2,
     abiVersion: 1,
     addressWidth: 32,
     sharedMemory: false,
-    capabilities: ["add-f32"],
+    capabilities: ["add-f32", "sum-f32"],
     imports: [{ module: "env", name: "memory", kind: "memory" }],
     memory: { initialPages: 32, maximumPages: 1024, alignment: 16 },
     variants: [variant("scalar", []), variant("simd128", ["simd128"])],
@@ -543,8 +702,8 @@ test("records float32 addition lazily and materializes it on observation", async
     assert.ok(duration >= 0);
   }
   assert.equal(requestCounts.get("/manifest.json"), 1);
-  assert.equal(requestCounts.get("/wasm/add-f32-scalar.wasm"), 1);
-  assert.equal(requestCounts.get("/wasm/add-f32-simd128.wasm"), undefined);
+  assert.equal(requestCounts.get("/wasm/kernels-scalar.wasm"), 1);
+  assert.equal(requestCounts.get("/wasm/kernels-simd128.wasm"), undefined);
 
   left.close();
   right.close();
@@ -1340,7 +1499,7 @@ test("ExecutableProgram is immutable and contains only logical slots", () => {
       { slot: 1, storageSlot: 1, dtype: "float32", device: "cpu", layout: "contiguous", shape: [1], source: "binding", provenance: { operation: "tensor", source: "RuntimeSession.tensor" } },
       { slot: 2, storageSlot: 2, dtype: "float32", device: "cpu", layout: "contiguous", shape: [1], source: "computed", provenance: { operation: "add", source: "Tensor.add" } },
     ],
-    [{ kind: "add-f32", left: 0, right: 1, output: 2, provenance: { operation: "add", source: "Tensor.add" } }],
+    [{ kind: "add-f32", inputs: [0, 1], output: 2, provenance: { operation: "add", source: "Tensor.add" } }],
     2,
   );
 
@@ -1411,8 +1570,7 @@ test("lowering an admitted addition forms the inspected ExecutableProgram", asyn
   assert.deepEqual(observedProgram.computations, [
     {
       kind: "add-f32",
-      left: 0,
-      right: 1,
+      inputs: [0, 1],
       output: 2,
       provenance: { operation: "add", source: "Tensor.add" },
     },
@@ -1947,7 +2105,7 @@ test("executes a finite chain in dependency order and handles empty tensors", as
 });
 
 test("the raw ABI rejects invalid ranges and output aliasing", async () => {
-  const bytes = await readFile(join(distributionRoot, "wasm/add-f32-scalar.wasm"));
+  const bytes = await readFile(join(distributionRoot, "wasm/kernels-scalar.wasm"));
   const memory = new WebAssembly.Memory({ initial: 32, maximum: 1024 });
   const { instance } = await WebAssembly.instantiate(bytes, { env: { memory } });
   const arenaBase = instance.exports.tabgrad_arena_base() >>> 0;
@@ -1966,14 +2124,16 @@ test("the raw ABI rejects invalid ranges and output aliasing", async () => {
 });
 
 test("the build keeps SIMD instructions out of the scalar module", async () => {
-  const scalar = await readFile(join(distributionRoot, "wasm/add-f32-scalar.wasm"));
-  const simd = await readFile(join(distributionRoot, "wasm/add-f32-simd128.wasm"));
+  const scalar = await readFile(join(distributionRoot, "wasm/kernels-scalar.wasm"));
+  const simd = await readFile(join(distributionRoot, "wasm/kernels-simd128.wasm"));
 
   assert.equal(scalar.includes(0xfd), false);
   assert.equal(simd.includes(0xfd), true);
 });
 
 for (const failureCase of [
+  { name: "missing sum export", code: "BACKEND_ABI_MISMATCH", moduleOptions: { omitSumExport: true } },
+  { name: "missing sum capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: 1 } },
   {
     name: "incompatible ABI version",
     code: "BACKEND_ABI_MISMATCH",

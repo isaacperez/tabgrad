@@ -15,6 +15,9 @@ bounded Python call forms, metadata objects, errors and ownership obligations.
 Use [Contiguous tensor views](tensor-view.md) for Python and JavaScript shape
 syntax, inference, shared-storage lifetime, errors and operation limits.
 
+Use [Total tensor sum](tensor-sum.md) for reduction signatures, scalar results,
+floating-point accumulation, empty inputs, numerical comparison and CPU limits.
+
 For contributor measurements, use
 [WebAssembly addition measurements](webassembly-addition-measurements.md) for
 the direct JavaScript path and resident CPU kernel, or

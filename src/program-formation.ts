@@ -1,7 +1,7 @@
 import type { ProgramBinding, ResidentAllocation } from "./cpu-backend.js";
 import {
   ExecutableProgram,
-  type LoweredAddFloat32,
+  type LoweredComputation,
   type ProgramProvenance,
   type ProgramSlot,
   type ProgramValue,
@@ -16,8 +16,8 @@ export interface FormationValue<Value> {
   readonly layout: "contiguous";
   readonly provenance: ProgramProvenance;
   readonly producer: {
-    readonly definition: { readonly loweredKind: "add-f32" };
-    readonly inputs: readonly [Value, Value];
+    readonly definition: { readonly loweredKind: LoweredComputation["kind"] };
+    readonly inputs: readonly Value[];
     readonly provenance: ProgramProvenance;
   } | null;
 }
@@ -66,7 +66,7 @@ export function formExecutableProgram<Value extends FormationValue<Value>>(
 ): FormedProgram<Value> {
   const slots = new Map<Value, ProgramSlot>();
   const values: ProgramValue[] = [];
-  const computations: LoweredAddFloat32[] = [];
+  const computations: LoweredComputation[] = [];
   const bindings = new Map<ProgramSlot, ProgramBinding>();
   const valuesBySlot = new Map<ProgramSlot, Value>();
   const newlyComputed: Value[] = [];
@@ -112,8 +112,7 @@ export function formExecutableProgram<Value extends FormationValue<Value>>(
     if (producer !== null) {
       computations.push({
         kind: producer.definition.loweredKind,
-        left: slots.get(producer.inputs[0])!,
-        right: slots.get(producer.inputs[1])!,
+        inputs: producer.inputs.map((input) => slots.get(input)!),
         output: slot,
         provenance: producer.provenance,
       });

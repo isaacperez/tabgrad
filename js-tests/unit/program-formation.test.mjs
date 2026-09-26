@@ -21,7 +21,7 @@ function add(left, right) {
 }
 
 function slots(program) {
-  return program.computations.map(({ left, right, output }) => [left, right, output]);
+  return program.computations.map(({ inputs, output }) => [...inputs, output]);
 }
 
 test("formation preserves branch order, repeated inputs and shared ancestry once", () => {
@@ -104,6 +104,7 @@ test("formation snapshots immutable structure but leaves payloads and occurrence
     assert.deepEqual(Object.keys(value).sort(), ["device", "dtype", "layout", "provenance", "shape", "slot", "source", "storageSlot"]);
   }
   assert.ok(Object.isFrozen(formed.program.computations[0]));
+  assert.ok(Object.isFrozen(formed.program.computations[0].inputs));
   assert.ok(Object.isFrozen(formed.program.computations[0].provenance));
   assert.deepEqual(slots(formed.program), [[0, 0, 1]]);
 });
@@ -162,9 +163,8 @@ for (const topology of ["chain", "shared"]) {
     assert.equal(formed.program.computations.length, depth);
     assert.equal(formed.newlyComputed.length, depth);
     for (const computation of formed.program.computations) {
-      assert.ok(computation.left < computation.output);
-      assert.ok(computation.right < computation.output);
-      if (topology === "shared") assert.equal(computation.left, computation.right);
+      for (const input of computation.inputs) assert.ok(input < computation.output);
+      if (topology === "shared") assert.equal(computation.inputs[0], computation.inputs[1]);
     }
   });
 }

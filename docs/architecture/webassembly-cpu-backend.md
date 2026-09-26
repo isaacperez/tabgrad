@@ -250,12 +250,12 @@ conventions would make the hot numerical contract less explicit. A generated
 binding can be reconsidered only if it preserves the raw ABI, ownership, size,
 and call-overhead requirements with simpler total maintenance.
 
-## Version 1 manifest and addition ABI
+## Version 1 raw ABI and module capabilities
 
 The first concrete raw ABI profile gives the general boundary above an exact,
 small instance. The generated JSON manifest has schema version 1 and module
-version 1. It declares ABI version 1, 32-bit addresses, non-shared memory, the
-`add-f32` capability, one `env.memory` import, an initial 32-page memory, a
+version 2. It declares ABI version 1, 32-bit addresses, non-shared memory, the
+`add-f32` and `sum-f32` capabilities, one `env.memory` import, an initial 32-page memory, a
 maximum 1024-page memory, and 16-byte host-arena alignment. Each scalar or
 `simd128` variant records its relative path, byte length, required features, and
 SHA-256 digest.
@@ -270,14 +270,22 @@ memory, instantiates the compiled module, and validates these exports:
 | Export | Signature | Meaning |
 | --- | --- | --- |
 | `tabgrad_abi_version` | `() -> u32` | Returns `1` for this ABI profile. |
-| `tabgrad_capabilities` | `() -> u32` | Returns a bit set containing the `add-f32` capability. |
+| `tabgrad_capabilities` | `() -> u32` | Returns required capability bits: `add-f32` is 1 and `sum-f32` is 2. |
 | `tabgrad_arena_base` | `() -> u32` | Returns the first byte available to the host allocator. |
 | `tabgrad_add_f32` | `(left_offset, right_offset, output_offset, length) -> u32` | Adds two contiguous `float32` input ranges into a distinct output range. |
+| `tabgrad_sum_f32` | `(input_offset, output_offset, input_length) -> u32` | Reduces a contiguous input range to a distinct scalar output. |
 
-All offsets and the length are WebAssembly `i32` values interpreted as unsigned
-32-bit integers. The kernel checks four-byte alignment, checked byte ranges
-within the imported memory, and non-overlap between the output and either
-input. Input-to-input aliasing is legal. Status 0 means success; status 1 means
+Both `kernels-scalar.wasm` and `kernels-simd128.wasm` implement the complete
+module capability profile. The module version identifies that profile; the
+ABI version identifies the primitive calling convention. A stale add-only
+manifest or missing reduction capability/export is rejected during preparation,
+not discovered after starting a reduction. Sum's numerical, empty-range and
+cost contracts belong in its [operation reference](../reference/tensor-sum.md).
+
+All offsets and lengths are WebAssembly `i32` values interpreted as unsigned
+32-bit integers. Each kernel checks four-byte alignment, the byte ranges
+defined by its signature within the imported memory, and non-overlap between
+the output and nonempty inputs. Input-to-input aliasing is legal. Status 0 means success; status 1 means
 misalignment, status 2 means an out-of-bounds range, and status 3 means output
 overlap. A nonzero status becomes a structured adapter error. A trap quarantines
 the context because its physical state can no longer be assumed valid.
@@ -309,7 +317,7 @@ The [script binding component](../components/python-script-binding.md#prepare-cp
 explains admission, cached failure and the visible startup cost.
 
 The scalar and SIMD modules are compiled from the same Rust source with
-opposite fixed `simd128` target-feature settings. The SIMD kernel performs
+opposite fixed `simd128` target-feature settings. The SIMD addition kernel performs
 four-lane addition and handles its remaining zero to three elements with the
 scalar tail. Neither module allocates, owns tensor metadata, interprets an
 operation stream, or calls JavaScript per element.
