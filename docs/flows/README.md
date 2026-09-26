@@ -17,6 +17,10 @@ and cooperative cleanup. It starts by introducing the participants, and links
 to a conceptual introduction for readers unfamiliar with Pyodide. The sequence
 explains the design rather than serving as an installation tutorial.
 
+[From tracked computation to a functional gradient](functional-gradients.md)
+follows derivative admission, saved-value ownership, ordinary numerical
+execution and result cleanup across the frontends, runtime, history and CPU.
+
 ## Questions this perspective answers
 
 Flow documentation answers questions such as:

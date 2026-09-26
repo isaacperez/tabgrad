@@ -149,6 +149,10 @@ class Tensor:
             raise RuntimeError("Unsupported runtime device.")
         return _CPU_DEVICE
 
+    @property
+    def requires_grad(self) -> bool:
+        return self._handle.requiresGrad
+
     def add(self, other: object, *, alpha: object = 1) -> Tensor:
         if not isinstance(other, Tensor):
             raise TypeError("Tabgrad addition requires two tensors.")
@@ -330,11 +334,13 @@ def tensor(
         raise RuntimeError("Tabgrad supports only device='cpu'.")
     if type(requires_grad) is not bool or type(pin_memory) is not bool:
         raise TypeError("requires_grad and pin_memory must be bool.")
-    if requires_grad or pin_memory:
-        raise RuntimeError("Gradients and pinned memory are unsupported.")
+    if pin_memory:
+        raise RuntimeError("Pinned memory is unsupported.")
     buffer, shape = _input_buffer(data)
-    # The module-level factory is the only caller outside the owning class.
-    return Tensor._from_handle(_bridge.tensorFromBuffer(buffer, to_js(shape)))  # pyright: ignore[reportPrivateUsage]
+    # Creation and the sibling autograd frontend transfer owned bridge handles.
+    return Tensor._from_handle(  # pyright: ignore[reportPrivateUsage]
+        _bridge.tensorFromBuffer(buffer, to_js(shape), requires_grad)
+    )
 
 
 def add(
@@ -375,10 +381,14 @@ def _require_sum_input(value: object) -> Tensor:
     return value
 
 
+# The submodule consumes the initialized Tensor class.
+from . import autograd  # noqa: E402
+
 __all__ = [
     "Size",
     "Tensor",
     "add",
+    "autograd",
     "device",
     "dtype",
     "float32",

@@ -90,7 +90,7 @@ checks in the same change as a registered generated path.
 ### Browser distribution
 
 - **Paths:** `dist/index.js`, `dist/index.d.ts`, `dist/python.js`, `dist/python.d.ts`, their emitted internal JavaScript and declaration modules, `dist/manifest.json`, `dist/wasm/kernels-{scalar,simd128}.wasm`, and the static source and manifest under `dist/python/`.
-- **Sources:** `src/**/*.ts`, `python/bootstrap.py`, `python/torch/__init__.py`, `crates/tabgrad-wasm-kernels/src/lib.rs`, the Cargo manifests and lock, `tsconfig.json`, `rust-toolchain.toml`, and the build scripts under `scripts/`.
+- **Sources:** `src/**/*.ts`, `python/bootstrap.py`, `python/torch/__init__.py`, `python/torch/autograd.py`, `crates/tabgrad-wasm-kernels/src/lib.rs`, the Cargo manifests and lock, `tsconfig.json`, `rust-toolchain.toml`, and the build scripts under `scripts/`.
 - **Generators:** TypeScript 6.0.3, Rust and Cargo 1.98.1, and the maintained Node.js build scripts.
 - **Command:** `npm run build` from the repository root.
 - **Inputs:** the prepared environment in [Development environment and commands](development.md). The Rust build fixes release optimization, imported-memory bounds, and scalar or `simd128` target features. The manifest generator hashes the exact emitted module bytes with SHA-256.

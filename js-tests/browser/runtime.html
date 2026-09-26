@@ -136,6 +136,39 @@
           || session.diagnostics().liveOperationRecords !== 0) throw new Error("Multiplication retained resources.");
       }
 
+      async function checkFunctionalGradients(session) {
+        for (const shape of [[], [5], [2, 3], [2, 0, 3]]) {
+          const length = shape.reduce((count, dimension) => count * dimension, 1);
+          const input = session.tensor(new Float32Array(length).fill(2), { shape, requiresGrad: true });
+          const square = input.mul(input);
+          const sum = square.sum();
+          const factor = session.tensor([3], { shape: [] });
+          const loss = sum.mul(factor);
+          square.close(); sum.close(); factor.close();
+          await loss.toArray();
+          const before = session.diagnostics();
+          const [gradient, repeated] = session.grad(loss, [input, input]);
+          if (session.diagnostics().kernelCalls !== before.kernelCalls
+            || session.diagnostics().wasmToHostCopies !== before.wasmToHostCopies) {
+            throw new Error("Functional differentiation observed numerical data.");
+          }
+          input.close(); loss.close();
+          for (const result of [gradient, repeated]) {
+            const values = await result.toArray();
+            if (result.requiresGrad || values.length !== length || !values.every((value) => value === 12)
+              || JSON.stringify(result.shape) !== JSON.stringify(shape)) {
+              throw new Error("Functional gradients lost values, shape or first-order tracking.");
+            }
+            result.close();
+          }
+          const after = session.diagnostics();
+          if (after.liveDerivativeNodes !== 0 || after.liveSavedValues !== 0
+            || after.liveTensorValues !== 0 || after.liveAllocationBytes !== 0) {
+            throw new Error("Functional gradient cycle retained live state.");
+          }
+        }
+      }
+
       try {
         await reportPhase("application-started");
         const [{ createRuntimeSession }, { createTestRuntimeSession }] = await Promise.all([
@@ -162,6 +195,7 @@
         await checkViews(session);
         await checkTotalSum(session);
         await checkMultiplication(session);
+        await checkFunctionalGradients(session);
         await session.close();
         await reportPhase("runtime-finished");
         await report({ ok: true, before, after, values });

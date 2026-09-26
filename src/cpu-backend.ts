@@ -6,7 +6,8 @@ const ABI_VERSION = 1;
 const CAPABILITY_ADD_FLOAT32 = 1;
 const CAPABILITY_SUM_FLOAT32 = 2;
 const CAPABILITY_MUL_FLOAT32 = 4;
-const REQUIRED_CAPABILITIES = CAPABILITY_ADD_FLOAT32 | CAPABILITY_SUM_FLOAT32 | CAPABILITY_MUL_FLOAT32;
+const CAPABILITY_EXPAND_FLOAT32 = 8;
+const REQUIRED_CAPABILITIES = CAPABILITY_ADD_FLOAT32 | CAPABILITY_SUM_FLOAT32 | CAPABILITY_MUL_FLOAT32 | CAPABILITY_EXPAND_FLOAT32;
 const WEBASSEMBLY_PAGE_BYTES = 65_536;
 const MAXIMUM_ADDRESS = 0xffff_ffff;
 
@@ -97,6 +98,7 @@ interface KernelExports extends WebAssembly.Exports {
     length: number,
   ) => number;
   readonly tabgrad_sum_f32: (inputOffset: number, outputOffset: number, length: number) => number;
+  readonly tabgrad_expand_f32: (inputOffset: number, outputOffset: number, length: number) => number;
   readonly tabgrad_mul_f32: (leftOffset: number, rightOffset: number, outputOffset: number, length: number) => number;
 }
 
@@ -452,6 +454,9 @@ export class WebAssemblyCpuBackend {
         try {
           this.#kernelCalls += 1;
           switch (computation.kind) {
+            case "expand-f32":
+              status = context.exports.tabgrad_expand_f32(inputs[0]!.offset, output.offset, length);
+              break;
             case "add-f32":
               status = context.exports.tabgrad_add_f32(
                 inputs[0]!.offset, inputs[1]!.offset, output.offset, length,
@@ -782,15 +787,16 @@ export class WebAssemblyCpuBackend {
     const memory = value.memory as Record<string, unknown> | undefined;
     const variants = value.variants;
     return value.schemaVersion === 1
-      && value.moduleVersion === 3
+      && value.moduleVersion === 4
       && value.abiVersion === ABI_VERSION
       && value.addressWidth === 32
       && value.sharedMemory === false
       && Array.isArray(value.capabilities)
-      && value.capabilities.length === 3
+      && value.capabilities.length === 4
       && value.capabilities[0] === "add-f32"
       && value.capabilities[1] === "sum-f32"
       && value.capabilities[2] === "mul-f32"
+      && value.capabilities[3] === "expand-f32"
       && Array.isArray(value.imports)
       && value.imports.length === 1
       && this.#isMemoryImport(value.imports[0])
@@ -868,6 +874,7 @@ export class WebAssemblyCpuBackend {
       "tabgrad_add_f32",
       "tabgrad_sum_f32",
       "tabgrad_mul_f32",
+      "tabgrad_expand_f32",
     ]) {
       if (typeof exports[name] !== "function") {
         throw new TabgradError(

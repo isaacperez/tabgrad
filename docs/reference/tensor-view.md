@@ -44,6 +44,9 @@ It may refer to host data, pending computation or a resident CPU result.
 Creating it does not execute pending arithmetic, allocate numerical payload,
 upload data or read data back. Sibling and chained views refer directly to the
 same storage rather than retaining a history of intermediate view handles.
+When tracking is enabled, independent derivative edges preserve the input shape
+for [functional differentiation](functional-gradients.md); they do not save
+numerical payload or alter this storage relationship.
 
 Closing a JavaScript base handle does not invalidate a live view. Closing one
 view does not invalidate the base or its siblings. Python wrappers retain their
@@ -80,7 +83,7 @@ identifies the pinned native oracle and the distinction from release claims.
 
 This operation covers shape changes of whole contiguous CPU float32 storage.
 It does not provide dtype reinterpretation, reshape with copy fallback,
-`view_as`, transpose, slicing, offsets, arbitrary strides, mutation or autograd.
+`view_as`, transpose, slicing, offsets, arbitrary strides or mutation.
 There is no public storage-pointer interface.
 
 Admission costs are proportional to source and target rank, not payload size

@@ -1,6 +1,6 @@
 import { TabgradError } from "./errors.js";
 
-const SOURCE_PATHS = ["bootstrap.py", "torch/__init__.py"] as const;
+const SOURCE_PATHS = ["bootstrap.py", "torch/__init__.py", "torch/autograd.py"] as const;
 
 interface SourceDescriptor {
   readonly path: string;
@@ -12,6 +12,7 @@ interface SourceDescriptor {
 export interface PythonSources {
   readonly bootstrap: string;
   readonly package: string;
+  readonly autograd: string;
 }
 
 function parseManifest(value: unknown): SourceDescriptor[] {
@@ -57,7 +58,7 @@ export async function loadPythonSources(manifestUrl: URL): Promise<PythonSources
     const response = await fetchResponse(manifestUrl);
     const descriptors = parseManifest(await response.json());
     const sources = await Promise.all(descriptors.map((entry) => readSource(entry, manifestUrl)));
-    return { bootstrap: sources[0]!, package: sources[1]! };
+    return { bootstrap: sources[0]!, package: sources[1]!, autograd: sources[2]! };
   } catch (cause) {
     throw new TabgradError("PYTHON_ASSET_INVALID", "Python assets could not be validated.", {}, cause);
   }

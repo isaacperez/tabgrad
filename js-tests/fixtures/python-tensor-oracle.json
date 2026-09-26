@@ -3399,6 +3399,280 @@
       "bits": 0
     }
   ],
+  "gradientCases": [
+    {
+      "name": "branches-repeated-inputs",
+      "source": "x = torch.tensor([2., 3.], dtype=torch.float32, requires_grad=True)\ny = torch.tensor([5., 7.], dtype=torch.float32, requires_grad=True)\nloss = (x * y + x * x).sum()\nresults = torch.autograd.grad(loss, (x, y, x))",
+      "expected": [
+        [
+          [
+            2
+          ],
+          [
+            9.0,
+            13.0
+          ],
+          false
+        ],
+        [
+          [
+            2
+          ],
+          [
+            2.0,
+            3.0
+          ],
+          false
+        ],
+        [
+          [
+            2
+          ],
+          [
+            9.0,
+            13.0
+          ],
+          false
+        ]
+      ]
+    },
+    {
+      "name": "interior-sum",
+      "source": "x = torch.tensor([2., 3.], dtype=torch.float32, requires_grad=True)\nfactor = torch.tensor(3., dtype=torch.float32, requires_grad=True)\nresults = torch.autograd.grad(x.sum() * factor, [x, factor])",
+      "expected": [
+        [
+          [
+            2
+          ],
+          [
+            3.0,
+            3.0
+          ],
+          false
+        ],
+        [
+          [],
+          5.0,
+          false
+        ]
+      ]
+    },
+    {
+      "name": "intermediate-and-ancestor",
+      "source": "x = torch.tensor([2., 3.], dtype=torch.float32, requires_grad=True)\nintermediate = x * x\nresults = torch.autograd.grad(intermediate.sum(), (intermediate, x))",
+      "expected": [
+        [
+          [
+            2
+          ],
+          [
+            1.0,
+            1.0
+          ],
+          false
+        ],
+        [
+          [
+            2
+          ],
+          [
+            4.0,
+            6.0
+          ],
+          false
+        ]
+      ]
+    },
+    {
+      "name": "matrix-seed-view",
+      "source": "x = torch.tensor([2., 3.], dtype=torch.float32, requires_grad=True)\nview = x.view(1, 2)\nseed = torch.tensor([[2., 3.]], dtype=torch.float32)\nresults = torch.autograd.grad([view], x, [seed])",
+      "expected": [
+        [
+          [
+            2
+          ],
+          [
+            2.0,
+            3.0
+          ],
+          false
+        ]
+      ]
+    },
+    {
+      "name": "hidden-computed-factor",
+      "source": "x = torch.tensor([2., 3.], dtype=torch.float32, requires_grad=True)\nplain = torch.tensor([5., 7.], dtype=torch.float32)\nfactor = plain * plain\nloss = (x * factor).sum()\ndel plain, factor\nloss.tolist()\nresults = torch.autograd.grad(loss, x)",
+      "expected": [
+        [
+          [
+            2
+          ],
+          [
+            25.0,
+            49.0
+          ],
+          false
+        ]
+      ]
+    },
+    {
+      "name": "empty-input",
+      "source": "x = torch.tensor([[], []], dtype=torch.float32, requires_grad=True)\nresults = torch.autograd.grad((x * x).sum(), x)",
+      "expected": [
+        [
+          [
+            2,
+            0
+          ],
+          [
+            [],
+            []
+          ],
+          false
+        ]
+      ]
+    },
+    {
+      "name": "scalar",
+      "source": "x = torch.tensor(3., dtype=torch.float32, requires_grad=True)\nresults = torch.autograd.grad(x * x, x)",
+      "expected": [
+        [
+          [],
+          6.0,
+          false
+        ]
+      ]
+    },
+    {
+      "name": "singleton-rank",
+      "source": "x = torch.tensor([[[3.]]], dtype=torch.float32, requires_grad=True)\nresults = torch.autograd.grad(x * x, x)",
+      "expected": [
+        [
+          [
+            1,
+            1,
+            1
+          ],
+          [
+            [
+              [
+                6.0
+              ]
+            ]
+          ],
+          false
+        ]
+      ]
+    },
+    {
+      "name": "self-does-not-consume",
+      "source": "x = torch.tensor([2., 3.], dtype=torch.float32, requires_grad=True)\nsquare = x * x\nseed = torch.tensor([2., 3.], dtype=torch.float32)\nfirst = torch.autograd.grad(square, square, seed)\nresults = first + torch.autograd.grad(square, x, seed)",
+      "expected": [
+        [
+          [
+            2
+          ],
+          [
+            2.0,
+            3.0
+          ],
+          false
+        ],
+        [
+          [
+            2
+          ],
+          [
+            8.0,
+            18.0
+          ],
+          false
+        ]
+      ]
+    },
+    {
+      "name": "payload-free-repeated",
+      "source": "x = torch.tensor([2., 3.], dtype=torch.float32, requires_grad=True)\ny = (x + x).view(1, 2).sum()\nresults = torch.autograd.grad(y, x) + torch.autograd.grad(y, x)",
+      "expected": [
+        [
+          [
+            2
+          ],
+          [
+            2.0,
+            2.0
+          ],
+          false
+        ],
+        [
+          [
+            2
+          ],
+          [
+            2.0,
+            2.0
+          ],
+          false
+        ]
+      ]
+    },
+    {
+      "name": "consumed-irrelevant-ancestor",
+      "source": "x = torch.tensor([2., 3.], dtype=torch.float32, requires_grad=True)\nmiddle = x * x\nloss = middle.sum()\ntorch.autograd.grad(loss, x)\nresults = torch.autograd.grad(loss, middle)",
+      "expected": [
+        [
+          [
+            2
+          ],
+          [
+            1.0,
+            1.0
+          ],
+          false
+        ]
+      ]
+    },
+    {
+      "name": "empty-output-explicit-seed",
+      "source": "x = torch.tensor([], dtype=torch.float32, requires_grad=True)\nseed = torch.tensor([], dtype=torch.float32)\nresults = torch.autograd.grad(x * x, x, seed)",
+      "expected": [
+        [
+          [
+            0
+          ],
+          [],
+          false
+        ]
+      ]
+    }
+  ],
+  "gradientErrors": [
+    {
+      "source": "x = torch.tensor([2., 3.], dtype=torch.float32, requires_grad=True)\n",
+      "expression": "torch.autograd.grad(x * x, x)",
+      "type": "RuntimeError"
+    },
+    {
+      "source": "x = torch.tensor([2., 3.], dtype=torch.float32, requires_grad=True)\n",
+      "expression": "torch.autograd.grad(x.sum(), torch.tensor([2., 3.], dtype=torch.float32))",
+      "type": "RuntimeError"
+    },
+    {
+      "source": "x = torch.tensor([2., 3.], dtype=torch.float32, requires_grad=True)\n",
+      "expression": "torch.autograd.grad(x.sum(), torch.tensor([2., 3.], dtype=torch.float32, requires_grad=True))",
+      "type": "RuntimeError"
+    },
+    {
+      "source": "x = torch.tensor([2., 3.], dtype=torch.float32, requires_grad=True)\n",
+      "expression": "torch.autograd.grad(x * x, x, torch.tensor([[1., 1.]], dtype=torch.float32))",
+      "type": "RuntimeError"
+    },
+    {
+      "source": "x = torch.tensor([2., 3.], dtype=torch.float32, requires_grad=True)\nloss = (x * x).sum()\ntorch.autograd.grad(loss, x)\n",
+      "expression": "torch.autograd.grad(loss, x)",
+      "type": "RuntimeError"
+    }
+  ],
   "cases": [
     {
       "name": "finite: torch.add(left, right)",

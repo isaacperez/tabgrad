@@ -34,9 +34,10 @@ does not make the Python compatibility layer a second numerical engine: the
 private connection leads to the existing JavaScript runtime session, whose
 backend remains responsible for numerical execution.
 
-There are two maintained inputs with different jobs. `bootstrap.py` installs
+The maintained inputs have different jobs. `bootstrap.py` installs
 and removes interpreter resources. `torch/__init__.py` is the imported package
-initializer and captures its session from the private bridge. Package import
+initializer and captures its session from the private bridge. `torch/autograd.py`
+normalizes functional derivative calls through that same bridge. Package import
 does not establish PyTorch operation coverage. That requires the separate
 operation contracts and [compatibility evidence](../compatibility.md).
 
@@ -53,9 +54,11 @@ for hashing. No Node filesystem API is imported by the delivered loader.
 The loader requires the exact source set and supported protocol versions.
 Unexpected paths, duplicate or missing entries, malformed metadata, failed
 requests, incorrect byte lengths, mismatched hashes and invalid UTF-8 reject
-with `PYTHON_ASSET_INVALID`. Both sources must validate before the binding
+with `PYTHON_ASSET_INVALID`. All sources must validate before the binding
 creates a session or calls Python. A broken second asset therefore cannot
-leave the first one partly installed.
+leave another one partly installed. Installation owns both package modules and
+their exact importer-cache identities, including the package directory used
+to resolve the autograd submodule. Cleanup preserves host replacements.
 
 A hash detects different bytes relative to the supplied manifest. It is not a
 signature or an independent trust authority: replacing both source and its

@@ -17,8 +17,10 @@ release obligation.
 
 ## Who keeps a value alive?
 
-The session accounts for three execution owners: an open handle, an uncompleted
-producer that consumes the value, and an accepted observation request. An
+The session accounts for an open handle, an uncompleted producer that consumes
+the value, an accepted observation request and an independently saved derivative
+operand. A [history pin](derivative-history.md) protects the same logical value
+and storage while owning no physical allocation. An
 operation may consume the same input more than once; each input position owns
 its corresponding reference. Releasing a handle ends only that handle's
 ownership. The result of a lazy operation can therefore outlive its input
@@ -110,10 +112,11 @@ history. The live-value diagnostic counts values with semantic owners.
 
 Shared producer dependencies detach once after successful publication, even
 when several aliases remain. No alias scan is needed to publish materialization
-or determine whether the last storage owner has disappeared. Mutation and
-saved-value semantics would add storage-version and saved ownership facts at
-these same semantic owners; physical allocation and completion remain backend
-responsibilities. The contiguous shape-only contract does not implement them.
+or determine whether the last storage owner has disappeared. Saved derivative
+operands add references at these same semantic owners; physical allocation and
+completion remain backend responsibilities. Mutation would additionally require
+logical storage versions, which the contiguous shape-only contract does not
+implement.
 
 For a release that reaches `V` newly unowned values and `E` input references,
 semantic bookkeeping takes `O(V + E)` work. Each producer detaches once, and

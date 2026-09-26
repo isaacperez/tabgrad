@@ -45,9 +45,14 @@ and a Python or JavaScript number do not. The result owns distinct logical
 storage and never mutates either input or a live alias.
 
 Broadcasting, host-number operands, promotion, other dtypes or devices,
-non-contiguous layouts, gradients, in-place multiplication, output-buffer
+non-contiguous layouts, in-place multiplication, output-buffer
 mutation and `multiply` aliases are outside this contract. PyTorch supports
 many of these forms; their rejection is Tabgrad's intentional subset boundary.
+
+Tracked operands participate in [functional gradients](functional-gradients.md).
+Each tracked input's derivative saves the opposite operand, including when that
+operand does not track. Numerical saved values have an independent lifetime
+from the forward execution dependencies described below.
 
 ## Admission and resource ownership
 
