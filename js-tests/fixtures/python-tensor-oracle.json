@@ -6,6 +6,514 @@
   "pyodideSourceRevision": "8cec1b9bb8ead68c7c09b0a6443576bec7512268",
   "metadataExpression": "[list(result.shape), repr(result.shape), type(result.shape).__name__,\nrepr(result.dtype), isinstance(result.dtype, torch.dtype),\nrepr(result.device), str(result.device), result.device.type, result.device.index,\nisinstance(result.device, torch.device)]",
   "comparison": "Exact float32 bits except NaN payload; exact metadata and error classes.",
+  "mulOperations": [
+    "left * right",
+    "left.mul(right)",
+    "left.mul(other=right)",
+    "torch.mul(left, right)",
+    "torch.mul(left, other=right)",
+    "torch.mul(input=left, other=right)",
+    "torch.mul(left, right, out=None)"
+  ],
+  "mulCases": [
+    {
+      "name": "finite",
+      "source": "left = torch.tensor([1.25, -2.5, 3, True], dtype=torch.float32)\nright = torch.tensor((0.75, 2.5, -1, False), dtype=torch.float32)\n",
+      "leftBits": [
+        1067450368,
+        3223322624,
+        1077936128,
+        1065353216
+      ],
+      "rightBits": [
+        1061158912,
+        1075838976,
+        3212836864,
+        0
+      ],
+      "bits": [
+        1064304640,
+        3234332672,
+        3225419776,
+        0
+      ],
+      "metadata": [
+        [
+          4
+        ],
+        "torch.Size([4])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ]
+    },
+    {
+      "name": "empty",
+      "source": "left = torch.tensor([], dtype=torch.float32)\nright = torch.tensor((), dtype=torch.float32)\n",
+      "leftBits": [],
+      "rightBits": [],
+      "bits": [],
+      "metadata": [
+        [
+          0
+        ],
+        "torch.Size([0])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ]
+    },
+    {
+      "name": "float32-edges",
+      "source": "left = torch.tensor([-0.0, 16777217, 1e-45, 1e40], dtype=torch.float32)\nright = torch.tensor([-0.0, 1, 1e-45, -1e40], dtype=torch.float32)\n",
+      "leftBits": [
+        2147483648,
+        1266679808,
+        1,
+        2139095040
+      ],
+      "rightBits": [
+        2147483648,
+        1065353216,
+        1,
+        4286578688
+      ],
+      "bits": [
+        0,
+        1266679808,
+        0,
+        4286578688
+      ],
+      "metadata": [
+        [
+          4
+        ],
+        "torch.Size([4])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ]
+    },
+    {
+      "name": "scalar",
+      "source": "left = torch.tensor(2, dtype=torch.float32)\nright = torch.tensor(True, dtype=torch.float32)\n",
+      "leftBits": [
+        1073741824
+      ],
+      "rightBits": [
+        1065353216
+      ],
+      "bits": [
+        1073741824
+      ],
+      "metadata": [
+        [],
+        "torch.Size([])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ]
+    },
+    {
+      "name": "matrix",
+      "source": "left = torch.tensor([[1, 2], [3, 4]], dtype=torch.float32)\nright = torch.tensor(((5, 6), (7, 8)), dtype=torch.float32)\n",
+      "leftBits": [
+        1065353216,
+        1073741824,
+        1077936128,
+        1082130432
+      ],
+      "rightBits": [
+        1084227584,
+        1086324736,
+        1088421888,
+        1090519040
+      ],
+      "bits": [
+        1084227584,
+        1094713344,
+        1101529088,
+        1107296256
+      ],
+      "metadata": [
+        [
+          2,
+          2
+        ],
+        "torch.Size([2, 2])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ]
+    },
+    {
+      "name": "rank-three",
+      "source": "left = torch.tensor([[[1, 2]], [[3, 4]]], dtype=torch.float32)\nright = torch.tensor((((5, 6),), ((7, 8),)), dtype=torch.float32)\n",
+      "leftBits": [
+        1065353216,
+        1073741824,
+        1077936128,
+        1082130432
+      ],
+      "rightBits": [
+        1084227584,
+        1086324736,
+        1088421888,
+        1090519040
+      ],
+      "bits": [
+        1084227584,
+        1094713344,
+        1101529088,
+        1107296256
+      ],
+      "metadata": [
+        [
+          2,
+          1,
+          2
+        ],
+        "torch.Size([2, 1, 2])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ]
+    },
+    {
+      "name": "singletons",
+      "source": "left = torch.tensor([[[2]]], dtype=torch.float32)\nright = torch.tensor((((3,),),), dtype=torch.float32)\n",
+      "leftBits": [
+        1073741824
+      ],
+      "rightBits": [
+        1077936128
+      ],
+      "bits": [
+        1086324736
+      ],
+      "metadata": [
+        [
+          1,
+          1,
+          1
+        ],
+        "torch.Size([1, 1, 1])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ]
+    },
+    {
+      "name": "nested-empty",
+      "source": "left = torch.tensor([[], []], dtype=torch.float32)\nright = torch.tensor(((), ()), dtype=torch.float32)\n",
+      "leftBits": [],
+      "rightBits": [],
+      "bits": [],
+      "metadata": [
+        [
+          2,
+          0
+        ],
+        "torch.Size([2, 0])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ]
+    },
+    {
+      "name": "rank-three-empty",
+      "source": "left = torch.tensor([[[]]], dtype=torch.float32)\nright = torch.tensor((((),),), dtype=torch.float32)\n",
+      "leftBits": [],
+      "rightBits": [],
+      "bits": [],
+      "metadata": [
+        [
+          1,
+          1,
+          0
+        ],
+        "torch.Size([1, 1, 0])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ]
+    },
+    {
+      "name": "rounding",
+      "source": "left = torch.tensor([0.1, -3.1, 1e20, 1e-20, 7], dtype=torch.float32)\nright = torch.tensor([0.2, 0.7, 1e-10, -1e10, -3], dtype=torch.float32)\n",
+      "leftBits": [
+        1036831949,
+        3225839206,
+        1621981420,
+        507307272,
+        1088421888
+      ],
+      "rightBits": [
+        1045220557,
+        1060320051,
+        786163455,
+        3491037945,
+        3225419776
+      ],
+      "bits": [
+        1017370379,
+        3221938503,
+        1343554297,
+        2933647102,
+        3249012736
+      ],
+      "metadata": [
+        [
+          5
+        ],
+        "torch.Size([5])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ]
+    },
+    {
+      "name": "signed-zero",
+      "source": "left = torch.tensor([0., -0., 0., -0.], dtype=torch.float32)\nright = torch.tensor([2., 2., -2., -2.], dtype=torch.float32)\n",
+      "leftBits": [
+        0,
+        2147483648,
+        0,
+        2147483648
+      ],
+      "rightBits": [
+        1073741824,
+        1073741824,
+        3221225472,
+        3221225472
+      ],
+      "bits": [
+        0,
+        2147483648,
+        2147483648,
+        0
+      ],
+      "metadata": [
+        [
+          4
+        ],
+        "torch.Size([4])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ]
+    },
+    {
+      "name": "underflow",
+      "source": "left = torch.tensor([1e-45, -1e-45, 1.17549435e-38], dtype=torch.float32)\nright = torch.tensor([0.5, 0.5, 0.5], dtype=torch.float32)\n",
+      "leftBits": [
+        1,
+        2147483649,
+        8388608
+      ],
+      "rightBits": [
+        1056964608,
+        1056964608,
+        1056964608
+      ],
+      "bits": [
+        0,
+        2147483648,
+        4194304
+      ],
+      "metadata": [
+        [
+          3
+        ],
+        "torch.Size([3])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ]
+    },
+    {
+      "name": "overflow",
+      "source": "left = torch.tensor([float.fromhex('0x1.fffffep127')] * 2, dtype=torch.float32)\nright = torch.tensor([2., -2.], dtype=torch.float32)\n",
+      "leftBits": [
+        2139095039,
+        2139095039
+      ],
+      "rightBits": [
+        1073741824,
+        3221225472
+      ],
+      "bits": [
+        2139095040,
+        4286578688
+      ],
+      "metadata": [
+        [
+          2
+        ],
+        "torch.Size([2])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ]
+    },
+    {
+      "name": "separate-multiply-add",
+      "source": "left = torch.tensor([1. + 2.**-23] * 5, dtype=torch.float32)\nright = torch.tensor([1. - 2.**-23] * 5, dtype=torch.float32)\n",
+      "leftBits": [
+        1065353217,
+        1065353217,
+        1065353217,
+        1065353217,
+        1065353217
+      ],
+      "rightBits": [
+        1065353214,
+        1065353214,
+        1065353214,
+        1065353214,
+        1065353214
+      ],
+      "bits": [
+        1065353216,
+        1065353216,
+        1065353216,
+        1065353216,
+        1065353216
+      ],
+      "metadata": [
+        [
+          5
+        ],
+        "torch.Size([5])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ],
+      "addendBits": [
+        3212836864,
+        3212836864,
+        3212836864,
+        3212836864,
+        3212836864
+      ],
+      "multiplyAddBits": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "nonfinite",
+      "source": "left = torch.tensor([float('nan'), float('inf'), -float('inf'), 0., -0.], dtype=torch.float32)\nright = torch.tensor([1., -2., -3., float('inf'), float('inf')], dtype=torch.float32)\n",
+      "leftBits": [
+        "nan",
+        2139095040,
+        4286578688,
+        0,
+        2147483648
+      ],
+      "rightBits": [
+        1065353216,
+        3221225472,
+        3225419776,
+        2139095040,
+        2139095040
+      ],
+      "bits": [
+        "nan",
+        4286578688,
+        2139095040,
+        "nan",
+        "nan"
+      ],
+      "metadata": [
+        [
+          5
+        ],
+        "torch.Size([5])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ]
+    }
+  ],
   "sumComparison": "Exact simple cases; conditioning-aware absolute bounds for finite reassociation; explicit backend-dependent intermediate-overflow classifications. See docs/reference/tensor-sum.md.",
   "sumCases": [
     {
@@ -3849,6 +4357,46 @@
     }
   ],
   "errors": [
+    {
+      "expression": "torch.mul()",
+      "type": "TypeError"
+    },
+    {
+      "expression": "torch.mul(left)",
+      "type": "TypeError"
+    },
+    {
+      "expression": "torch.mul(left, right, left)",
+      "type": "TypeError"
+    },
+    {
+      "expression": "torch.mul(left, right, alpha=1)",
+      "type": "TypeError"
+    },
+    {
+      "expression": "torch.mul(left, other=right, input=left)",
+      "type": "TypeError"
+    },
+    {
+      "expression": "left.mul(right, out=None)",
+      "type": "TypeError"
+    },
+    {
+      "expression": "left.mul(right, other=right)",
+      "type": "TypeError"
+    },
+    {
+      "expression": "torch.Tensor.mul(None, left)",
+      "type": "TypeError"
+    },
+    {
+      "expression": "torch.mul(left, 'x')",
+      "type": "TypeError"
+    },
+    {
+      "expression": "torch.mul(left, torch.tensor([1, 2], dtype=torch.float32))",
+      "type": "RuntimeError"
+    },
     {
       "expression": "torch.sum()",
       "type": "TypeError"

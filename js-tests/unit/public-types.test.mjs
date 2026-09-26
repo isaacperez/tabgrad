@@ -49,6 +49,7 @@ test("the JavaScript package entry point exposes only the supported runtime surf
         "constructor",
         "device",
         "dtype",
+        "mul",
         "shape",
         "sum",
         "toArray",
@@ -74,6 +75,7 @@ test("the public declarations do not expose runtime-to-backend plumbing", async 
   assert.match(declarations, /get shape\(\): readonly number\[\]/);
   assert.match(declarations, /view\(shape: readonly number\[\]\): Tensor/);
   assert.match(declarations, /sum\(\): Tensor/);
+  assert.match(declarations, /mul\(right: Tensor\): Tensor/);
 
   for (const internalName of [
     "BackendDiagnostics",

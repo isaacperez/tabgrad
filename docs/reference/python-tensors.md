@@ -16,6 +16,9 @@ Shape-only `Tensor.view` has its own [operation reference](tensor-view.md),
 covering syntax, inference, errors and storage sharing.
 Total reduction has its own [sum reference](tensor-sum.md), covering
 `Tensor.sum()` and `torch.sum(input)`, scalar results and numerical limits.
+Elementwise products use `*`, `Tensor.mul(other)` or `torch.mul(input, other)`;
+the [multiplication reference](tensor-multiplication.md) owns their signatures,
+equal-shape domain and numerical limits.
 
 ## Create a tensor
 

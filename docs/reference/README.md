@@ -18,6 +18,9 @@ syntax, inference, shared-storage lifetime, errors and operation limits.
 Use [Total tensor sum](tensor-sum.md) for reduction signatures, scalar results,
 floating-point accumulation, empty inputs, numerical comparison and CPU limits.
 
+Use [Elementwise tensor multiplication](tensor-multiplication.md) for tensor
+product signatures, equal-shape inputs, numerical behavior and CPU limits.
+
 For contributor measurements, use
 [WebAssembly addition measurements](webassembly-addition-measurements.md) for
 the direct JavaScript path and resident CPU kernel, or

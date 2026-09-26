@@ -3,7 +3,8 @@
 This document is the user reference for calling the Tabgrad tensor runtime
 directly from JavaScript. It describes a deliberately narrow but complete
 execution path: contiguous `float32` tensors on the CPU and
-out-of-place elementwise addition, total sum and shape-only shared-storage views. A narrow contract is useful here because it
+out-of-place elementwise addition and multiplication, total sum and shape-only
+shared-storage views. A narrow contract is useful here because it
 lets a reader see the complete lifecycle—admission, lazy recording, WebAssembly
 execution, observation, and release—without implying support for tensor
 features that have not been established by tests.
@@ -15,6 +16,10 @@ Tabgrad does not define a separate numerical engine for each frontend.
 `Tensor.sum()` is documented in the [total sum reference](reference/tensor-sum.md).
 It takes no arguments and returns a deferred rank-zero tensor. That reference
 also explains empty input, floating-point accumulation and unsupported options.
+
+`Tensor.mul(right)` is documented in the
+[multiplication reference](reference/tensor-multiplication.md). It takes one
+equal-shape tensor and returns a deferred elementwise product.
 
 ## Browser delivery requires no developer toolchain
 
@@ -116,7 +121,7 @@ host data is copied directly; it is not uploaded to WebAssembly solely for
 readback. When computation is required, the runtime forms an immutable finite
 executable program for the demanded dependencies, prepares one WebAssembly
 module, copies host inputs into its linear memory and invokes the coarse
-addition kernel. Intermediate results remain resident in WebAssembly memory;
+numerical kernels. Intermediate results remain resident in WebAssembly memory;
 observing one result does not execute an unrelated pure operation.
 
 Local work with a ready backend may finish during `toArray()` itself, before
@@ -171,7 +176,7 @@ back to JavaScript arithmetic.
 
 `TabgradError` has a stable `code`, a human-readable `message`, and immutable
 `details`. Errors that can be determined from tensor metadata are thrown by
-`tensor()`, `add()` or `view()` before any backend submission. Loading, ABI, memory, and
+`tensor()`, `add()`, `mul()`, `sum()` or `view()` before any backend submission. Loading, ABI, memory, and
 kernel errors reject the promise returned by `toArray()`.
 
 An asynchronous backend error records the `webassembly-cpu` backend and its
@@ -189,9 +194,9 @@ invocation's program or provenance.
 | Code | Meaning |
 | --- | --- |
 | `CLOSED_SESSION`, `CLOSED_TENSOR` | An operation used an explicitly closed lifetime. |
-| `DIFFERENT_SESSION`, `INVALID_TENSOR` | Addition mixed sessions or received something other than a Tabgrad tensor handle. |
+| `DIFFERENT_SESSION`, `INVALID_TENSOR` | An operation mixed sessions or received something other than a Tabgrad tensor handle. |
 | `INVALID_DATA`, `INVALID_SHAPE` | Input data or its contiguous shape is invalid. |
-| `SHAPE_MISMATCH` | Addition operands have different full shapes. |
+| `SHAPE_MISMATCH` | Equal-shape binary operands have different full shapes. |
 | `UNSUPPORTED_DTYPE`, `UNSUPPORTED_DEVICE`, `UNSUPPORTED_LAYOUT` | Metadata is outside the table above. |
 | `BACKEND_MANIFEST_INVALID`, `BACKEND_HASH_MISMATCH` | Distributed metadata or bytes fail validation. |
 | `BACKEND_ABI_MISMATCH`, `BACKEND_CAPABILITY_MISMATCH` | A module cannot satisfy the declared CPU contract. |

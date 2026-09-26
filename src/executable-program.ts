@@ -18,7 +18,7 @@ export interface ProgramValue {
 }
 
 export interface LoweredComputation {
-  readonly kind: "add-f32" | "sum-f32";
+  readonly kind: "add-f32" | "mul-f32" | "sum-f32";
   /** Ordered operand occurrences, including repeats; arity belongs to the operation. */
   readonly inputs: readonly ProgramSlot[];
   readonly output: ProgramSlot;

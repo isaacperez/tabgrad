@@ -169,6 +169,26 @@ class Tensor:
             return NotImplemented
         return self.add(other)
 
+    def mul(self, other: object) -> Tensor:
+        """Admit an equal-shape tensor product without observing its payload."""
+        left = _require_mul_input(self)
+        right = _require_mul_input(other)
+        try:
+            return Tensor._from_handle(left._handle.mul(right._handle))
+        except JsException as error:
+            failure = cast("_bridge.RuntimeException", error)
+            if failure.js_error.code == "SHAPE_MISMATCH":
+                raise RuntimeError(
+                    "Tensor shapes must match for multiplication."
+                ) from error
+            raise
+
+    def __mul__(self, other: object) -> Tensor | NotImplementedType:
+        left = _require_mul_input(self)
+        if not isinstance(other, Tensor):
+            return NotImplemented
+        return left.mul(other)
+
     def sum(self) -> Tensor:
         """Admit a total reduction, preserving deferred runtime ownership."""
         source = _require_sum_input(self)
@@ -333,6 +353,21 @@ def sum(input: object) -> Tensor:
     return _require_sum_input(input).sum()
 
 
+def mul(input: object, other: object, *, out: object = None) -> Tensor:
+    """Multiply equal-shape tensors out of place; only out=None is supported."""
+    left = _require_mul_input(input)
+    if out is not None:
+        raise RuntimeError("Tabgrad multiplication requires out=None.")
+    return left.mul(other)
+
+
+def _require_mul_input(value: object) -> Tensor:
+    """Reject malformed wrappers before reaching the checked runtime handle."""
+    if not isinstance(value, Tensor) or not hasattr(value, "_handle"):
+        raise TypeError("Tabgrad multiplication requires two tensors.")
+    return value
+
+
 def _require_sum_input(value: object) -> Tensor:
     """Validate functional arguments and explicitly unbound method receivers."""
     if not isinstance(value, Tensor):
@@ -340,4 +375,14 @@ def _require_sum_input(value: object) -> Tensor:
     return value
 
 
-__all__ = ["Size", "Tensor", "add", "device", "dtype", "float32", "sum", "tensor"]
+__all__ = [
+    "Size",
+    "Tensor",
+    "add",
+    "device",
+    "dtype",
+    "float32",
+    "mul",
+    "sum",
+    "tensor",
+]

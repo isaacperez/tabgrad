@@ -70,7 +70,7 @@ computation consumes; storage uses identify the shared bytes that must survive
 those physical accesses. A metadata alias itself contributes no physical use.
 The CPU backend consumes the aggregate counts rather than retiring aliases
 independently. For whole contiguous views every alias covers its storage's full
-extent, so the flat addition kernel can use these associations directly.
+extent, so contiguous CPU kernels can use these associations directly.
 Non-contiguous execution would need access/layout facts on logical operands
 and backend support for them; it would not erase logical shapes or make the
 shared storage owner depend on an operation's axes.
