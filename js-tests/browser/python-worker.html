@@ -81,6 +81,12 @@ assert session.diagnostics().kernelCalls == 1
 assert session.diagnostics().liveRequestLeases == 0
 `);
         await client.runPythonAsync(`
+assert result.sum().tolist() == 10.
+assert torch.sum(input=result.view(1, 2)).tolist() == 10.
+assert torch.tensor([[], []], dtype=torch.float32).sum().tolist() == 0.
+assert torch.tensor(3, dtype=torch.float32).sum().tolist() == 3.
+`);
+        await client.runPythonAsync(`
 for input_data, expected_shape, expected in [
     (2, (), 4.),
     ([[1, 2], [3, 4]], (2, 2), [[2., 4.], [6., 8.]]),

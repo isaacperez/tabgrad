@@ -51,6 +51,14 @@ facts are not a disguised compatibility claim.
 
 ### Python tensor evidence
 
+The [total sum reference](reference/tensor-sum.md) defines unary total reduction
+and its numerical domain. Native `sumCases` record scalar metadata, input bits,
+ordinary finite results and explicit cancellation/overflow cases. CPU variants
+and Pyodide consume those fixtures with the stated comparison method; permitted
+overflow-order differences are recorded separately from ordinary error bounds.
+Lifecycle, mixed-graph and browser checks complement numerical comparisons.
+This evidence does not cover dimensional reductions, promotion or gradients.
+
 The [Python tensor reference](reference/python-tensors.md) defines the bounded
 creation, metadata, addition and ordinary observation contract. Its native expectations are generated
 from the pinned oracle by `scripts/generate_tensor_oracle.py` and consumed by

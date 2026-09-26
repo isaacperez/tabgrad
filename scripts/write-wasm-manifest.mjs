@@ -6,7 +6,7 @@ for (const descriptor of [
   { id: "scalar", requiredFeatures: [] },
   { id: "simd128", requiredFeatures: ["simd128"] },
 ]) {
-  const relativePath = `wasm/add-f32-${descriptor.id}.wasm`;
+  const relativePath = `wasm/kernels-${descriptor.id}.wasm`;
   const bytes = await readFile(new URL(`../dist/${relativePath}`, import.meta.url));
   variants.push({
     id: descriptor.id,
@@ -19,11 +19,11 @@ for (const descriptor of [
 
 const manifest = {
   schemaVersion: 1,
-  moduleVersion: 1,
+  moduleVersion: 2,
   abiVersion: 1,
   addressWidth: 32,
   sharedMemory: false,
-  capabilities: ["add-f32"],
+  capabilities: ["add-f32", "sum-f32"],
   imports: [{ module: "env", name: "memory", kind: "memory" }],
   memory: {
     initialPages: 32,

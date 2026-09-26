@@ -91,6 +91,25 @@
         }
       }
 
+      async function checkTotalSum(session) {
+        for (const shape of [[], [1], [2, 3], [2, 0, 3]]) {
+          const length = shape.reduce((count, dimension) => count * dimension, 1);
+          const input = session.tensor(new Float32Array(length).fill(2), { shape });
+          const doubled = input.add(input);
+          const flat = doubled.view([-1]);
+          const result = flat.sum();
+          input.close(); doubled.close(); flat.close();
+          const values = await result.toArray();
+          if (result.shape.length !== 0 || values.length !== 1 || values[0] !== 4 * length) {
+            throw new Error("Total reduction lost input or output geometry.");
+          }
+          result.close();
+          if (session.diagnostics().liveAllocationBytes !== 0 || session.diagnostics().liveTensorValues !== 0) {
+            throw new Error("Total reduction retained resources.");
+          }
+        }
+      }
+
       try {
         await reportPhase("application-started");
         const [{ createRuntimeSession }, { createTestRuntimeSession }] = await Promise.all([
@@ -115,6 +134,7 @@
         await checkIntermediateReuse(session);
         await checkContiguousShapes(session);
         await checkViews(session);
+        await checkTotalSum(session);
         await session.close();
         await reportPhase("runtime-finished");
         await report({ ok: true, before, after, values });

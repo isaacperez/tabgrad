@@ -3,7 +3,7 @@
 This document is the user reference for calling the Tabgrad tensor runtime
 directly from JavaScript. It describes a deliberately narrow but complete
 execution path: contiguous `float32` tensors on the CPU and
-out-of-place elementwise addition and shape-only shared-storage views. A narrow contract is useful here because it
+out-of-place elementwise addition, total sum and shape-only shared-storage views. A narrow contract is useful here because it
 lets a reader see the complete lifecycle—admission, lazy recording, WebAssembly
 execution, observation, and release—without implying support for tensor
 features that have not been established by tests.
@@ -11,6 +11,10 @@ features that have not been established by tests.
 Python does not sit between this API and the runtime. Any Python compatibility
 layer uses the same TypeScript semantic runtime as this JavaScript interface;
 Tabgrad does not define a separate numerical engine for each frontend.
+
+`Tensor.sum()` is documented in the [total sum reference](reference/tensor-sum.md).
+It takes no arguments and returns a deferred rank-zero tensor. That reference
+also explains empty input, floating-point accumulation and unsupported options.
 
 ## Browser delivery requires no developer toolchain
 

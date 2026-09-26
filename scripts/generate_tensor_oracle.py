@@ -30,7 +30,42 @@ RANK_INPUTS = (
     ("rank-three-empty", "[[[]]]", "(((),),)"),
 )
 OPERATIONS = ("torch.add(left, right)", "left.add(right)", "left + right")
+SUM_INPUTS = (
+    ("scalar", "3", "exact"),
+    ("singleton", "[-5]", "exact"),
+    ("matrix", "[[1, -2], [3, 4]]", "exact"),
+    ("empty", "[[], []]", "exact"),
+    ("negative-zero", "[-0.0, -0.0]", "exact"),
+    ("subnormal", "[1e-45, 1e-45, -1e-45]", "exact"),
+    ("cancellation", "[1e20, 1, -1e20, 1]", "bounded"),
+    ("mixed-magnitudes", "[1e-10, -2.25, 1e4, -1e4, 3.1]", "bounded"),
+    ("nan", "[1, float('nan'), 2]", "exact"),
+    ("positive-infinity", "[1, float('inf'), 2]", "exact"),
+    ("negative-infinity", "[1, -float('inf'), 2]", "exact"),
+    ("opposite-infinities", "[float('inf'), -float('inf')]", "exact"),
+    ("overflow", "[float.fromhex('0x1.fffffep127')] * 2", "overflow"),
+    (
+        "overflow-cancellation",
+        "[float.fromhex('0x1.fffffep127')] * 2 + [-float.fromhex('0x1.fffffep127')] * 2",
+        "overflow",
+    ),
+    (
+        "extreme-alternating",
+        "[float.fromhex('0x1.fffffep127'), -float.fromhex('0x1.fffffep127')] * 2",
+        "exact",
+    ),
+    *(
+        (f"tail-{n}", f"[(i % 11 - 5) * 0.1 for i in range({n})]", "bounded")
+        for n in (3, 4, 5, 127, 128, 129, 255, 256, 257, 1025)
+    ),
+)
 ERRORS = (
+    "torch.sum()",
+    "torch.sum(1)",
+    "torch.sum([1])",
+    "torch.Tensor.sum(None)",
+    "torch.sum(left, input=left)",
+    "torch.sum(left, unknown=True)",
     "left.view()",
     "left.view(True)",
     "left.view(2.0, 2)",
@@ -92,6 +127,40 @@ def float32_bits(value: float) -> int | str:
     if math.isnan(value):
         return "nan"
     return int(struct.unpack("<I", struct.pack("<f", value))[0])
+
+
+def sum_cases(oracle: _OracleModule) -> list[dict[str, object]]:
+    """Record native results and conditioning facts, not a second reduction engine."""
+    cases: list[dict[str, object]] = []
+    for name, data, comparison in SUM_INPUTS:
+        source = f"source = torch.tensor({data}, dtype=torch.float32)\n"
+        namespace: dict[str, object] = {"torch": oracle}
+        exec(source + "result = source.sum()", namespace)
+        raw: object = eval("source.reshape(-1).tolist()", namespace)
+        if not isinstance(raw, list):
+            raise TypeError("Expected float32 input values.")
+        values: list[float] = []
+        for item in cast(list[object], raw):
+            if not isinstance(item, float):
+                raise TypeError("Expected float32 input values.")
+            values.append(item)
+        result = eval("result.tolist()", namespace)
+        if not isinstance(result, float):
+            raise TypeError("Expected scalar float32 sum.")
+        case: dict[str, object] = {
+            "name": name,
+            "source": source,
+            "comparison": comparison,
+            "inputBits": [float32_bits(value) for value in values],
+            "shape": eval("list(source.shape)", namespace),
+            "metadata": eval(METADATA, namespace),
+            "bits": float32_bits(result),
+        }
+        if comparison == "bounded":
+            case["referenceSum"] = math.fsum(values)
+            case["absoluteSum"] = math.fsum(abs(value) for value in values)
+        cases.append(case)
+    return cases
 
 
 def generate() -> str:
@@ -174,6 +243,8 @@ def generate() -> str:
                 "pyodideSourceRevision": "8cec1b9bb8ead68c7c09b0a6443576bec7512268",
                 "metadataExpression": METADATA,
                 "comparison": "Exact float32 bits except NaN payload; exact metadata and error classes.",
+                "sumComparison": "Exact simple cases; conditioning-aware absolute bounds for finite reassociation; explicit backend-dependent intermediate-overflow classifications. See docs/reference/tensor-sum.md.",
+                "sumCases": sum_cases(oracle),
                 "cases": cases,
                 "rankCases": rank_cases,
                 "viewCases": view_cases,

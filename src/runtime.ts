@@ -74,15 +74,10 @@ interface AdmittedOperation {
 }
 
 interface NumericalOperationDefinition {
-  readonly name: "add";
-  readonly provenanceSource: "Tensor.add";
-  readonly loweredKind: "add-f32";
+  readonly name: "add" | "sum";
+  readonly provenanceSource: "Tensor.add" | "Tensor.sum";
+  readonly loweredKind: "add-f32" | "sum-f32";
   readonly pure: true;
-  admit(
-    session: RuntimeSession,
-    left: TensorState,
-    rightHandle: unknown,
-  ): AdmittedOperation;
 }
 
 function invalidTensorData(cause?: unknown): TabgradError {
@@ -218,15 +213,15 @@ class StorageState {
 
 class OperationRecord {
   readonly definition: NumericalOperationDefinition;
-  readonly inputs: readonly [TensorValue, TensorValue];
+  readonly inputs: readonly TensorValue[];
   readonly provenance: ProgramProvenance;
 
   constructor(
     definition: NumericalOperationDefinition,
-    inputs: readonly [TensorValue, TensorValue],
+    inputs: readonly TensorValue[],
   ) {
     this.definition = definition;
-    this.inputs = Object.freeze([...inputs]) as unknown as readonly [TensorValue, TensorValue];
+    this.inputs = Object.freeze([...inputs]);
     this.provenance = Object.freeze({
       operation: definition.name,
       source: definition.provenanceSource,
@@ -312,6 +307,7 @@ interface RuntimeSessionAccess {
   readonly prepare: () => Promise<void>;
   readonly observeSynchronously: (state: TensorState) => Float32Array;
   readonly add: (left: TensorState, rightHandle: unknown) => Tensor;
+  readonly sum: (source: TensorState) => Tensor;
   readonly view: (source: TensorState, shape: unknown) => Tensor;
   readonly observe: (state: TensorState) => Promise<Float32Array>;
   readonly assertOpen: () => void;
@@ -408,6 +404,15 @@ export class Tensor {
   add(right: Tensor): Tensor {
     const state = requireTensorState(this);
     return runtimeSessionAccess(state.session).add(state, right);
+  }
+
+  /** Reduce every input element to one rank-zero tensor without observing it. */
+  sum(): Tensor {
+    const state = requireTensorState(this);
+    if (arguments.length !== 0) {
+      throw new TypeError("Tensor.sum() accepts no arguments.");
+    }
+    return runtimeSessionAccess(state.session).sum(state);
   }
 
   /** Create an independently owned contiguous shape over the same storage. */
@@ -517,10 +522,10 @@ class AddOperationDefinition implements NumericalOperationDefinition {
       );
     }
 
-    const inputs = Object.freeze([
+    const inputs = [
       left.value,
       right.value,
-    ]) as unknown as readonly [TensorValue, TensorValue];
+    ];
     return Object.freeze({
       record: new OperationRecord(this, inputs),
       outputMetadata: Object.freeze({
@@ -533,7 +538,29 @@ class AddOperationDefinition implements NumericalOperationDefinition {
   }
 }
 
-const ADD_OPERATION: NumericalOperationDefinition = Object.freeze(new AddOperationDefinition());
+const ADD_OPERATION = Object.freeze(new AddOperationDefinition());
+
+class SumOperationDefinition implements NumericalOperationDefinition {
+  readonly name = "sum";
+  readonly provenanceSource = "Tensor.sum";
+  readonly loweredKind = "sum-f32";
+  readonly pure = true;
+
+  admit(source: TensorState): AdmittedOperation {
+    assertTensorOpen(source);
+    // Runtime tensor admission establishes the supported CPU float32 contiguous
+    // domain. Total reduction preserves that domain and changes only shape.
+    return Object.freeze({
+      record: new OperationRecord(this, [source.value]),
+      outputMetadata: Object.freeze({
+        shape: Object.freeze([]), dtype: source.value.dtype,
+        device: source.value.device, layout: source.value.layout,
+      }),
+    });
+  }
+}
+
+const SUM_OPERATION = Object.freeze(new SumOperationDefinition());
 
 /** Canonical metadata admission; a view introduces no numerical dependency. */
 class ViewOperationDefinition {
@@ -584,6 +611,7 @@ export class RuntimeSession {
       add: (left: TensorState, rightHandle: unknown) => (
         this.#add(left, rightHandle)
       ),
+      sum: (source: TensorState) => this.#recordOperation(SUM_OPERATION.admit(source)),
       view: (source: TensorState, shape: unknown) => this.#view(source, shape),
       observe: (state: TensorState) => this.#observe(state),
       assertOpen: () => this.#assertOpen(),
@@ -637,7 +665,10 @@ export class RuntimeSession {
 
   #add(left: TensorState, rightHandle: unknown): Tensor {
     this.#assertOpen();
-    const admitted = ADD_OPERATION.admit(this, left, rightHandle);
+    return this.#recordOperation(ADD_OPERATION.admit(this, left, rightHandle));
+  }
+
+  #recordOperation(admitted: AdmittedOperation): Tensor {
     for (const input of admitted.record.inputs) {
       this.#retainValue(input);
     }

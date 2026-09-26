@@ -14,6 +14,8 @@ Release claims follow the [compatibility policy](../compatibility.md).
 
 Shape-only `Tensor.view` has its own [operation reference](tensor-view.md),
 covering syntax, inference, errors and storage sharing.
+Total reduction has its own [sum reference](tensor-sum.md), covering
+`Tensor.sum()` and `torch.sum(input)`, scalar results and numerical limits.
 
 ## Create a tensor
 

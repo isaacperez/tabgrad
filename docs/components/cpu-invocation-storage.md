@@ -28,6 +28,11 @@ loop. All allocation, reuse and rollback rules below apply equally to scalar,
 vector, multidimensional and empty values. Shape metadata remains on the
 logical value rather than being reconstructed from allocation size.
 
+Input and output geometry are independent. Allocation always uses the value
+being allocated; a kernel's iteration range comes from the operand or operation
+that defines its work. Empty inputs do not imply an empty output. Dispatch must
+not skip a computation solely because an input has zero elements.
+
 ## Structural uses and current owners answer different questions
 
 An executable program numbers its values with logical slots. Its frozen
@@ -35,6 +40,13 @@ An executable program numbers its values with logical slots. Its frozen
 slot. Repeated arguments count separately: a computation using the same value
 twice contributes two occurrences. The count describes the selected program,
 not the whole session and not a physical execution schedule.
+
+Every numerical computation carries one ordered `inputs` list. Formation,
+logical use counts, physical storage-use counts and retirement enumerate this
+same list, including repeated slots. These owners do not infer operands from
+binary field names or a kernel's signature. Operation admission establishes
+arity and meaning; the backend's dispatch selects the corresponding physical
+call. Adding a numerical signature must not require another lifetime algorithm.
 
 The runtime knows the owners outside those selected input positions. Immediately
 before calling `execute`, it compares each shared storage's aggregate reference
