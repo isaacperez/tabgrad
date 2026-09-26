@@ -74,9 +74,9 @@ interface AdmittedOperation {
 }
 
 interface NumericalOperationDefinition {
-  readonly name: "add" | "sum";
-  readonly provenanceSource: "Tensor.add" | "Tensor.sum";
-  readonly loweredKind: "add-f32" | "sum-f32";
+  readonly name: "add" | "mul" | "sum";
+  readonly provenanceSource: "Tensor.add" | "Tensor.mul" | "Tensor.sum";
+  readonly loweredKind: "add-f32" | "mul-f32" | "sum-f32";
   readonly pure: true;
 }
 
@@ -306,7 +306,7 @@ interface InternalRuntimeSessionOptions extends RuntimeSessionOptions {
 interface RuntimeSessionAccess {
   readonly prepare: () => Promise<void>;
   readonly observeSynchronously: (state: TensorState) => Float32Array;
-  readonly add: (left: TensorState, rightHandle: unknown) => Tensor;
+  readonly binary: (definition: EqualShapeBinaryOperationDefinition, left: TensorState, rightHandle: unknown) => Tensor;
   readonly sum: (source: TensorState) => Tensor;
   readonly view: (source: TensorState, shape: unknown) => Tensor;
   readonly observe: (state: TensorState) => Promise<Float32Array>;
@@ -403,7 +403,16 @@ export class Tensor {
 
   add(right: Tensor): Tensor {
     const state = requireTensorState(this);
-    return runtimeSessionAccess(state.session).add(state, right);
+    return runtimeSessionAccess(state.session).binary(ADD_OPERATION, state, right);
+  }
+
+  /** Multiply corresponding elements of equal-shape tensors without observing them. */
+  mul(right: Tensor): Tensor {
+    const state = requireTensorState(this);
+    if (arguments.length !== 1) {
+      throw new TypeError("Tensor.mul() requires exactly one tensor argument.");
+    }
+    return runtimeSessionAccess(state.session).binary(MUL_OPERATION, state, right);
   }
 
   /** Reduce every input element to one rank-zero tensor without observing it. */
@@ -436,11 +445,15 @@ export class Tensor {
   }
 }
 
-class AddOperationDefinition implements NumericalOperationDefinition {
-  readonly name = "add";
-  readonly provenanceSource = "Tensor.add";
-  readonly loweredKind = "add-f32";
+class EqualShapeBinaryOperationDefinition implements NumericalOperationDefinition {
   readonly pure = true;
+
+  constructor(
+    readonly name: "add" | "mul",
+    readonly provenanceSource: "Tensor.add" | "Tensor.mul",
+    readonly loweredKind: "add-f32" | "mul-f32",
+    readonly description: "addition" | "multiplication",
+  ) {}
 
   admit(
     session: RuntimeSession,
@@ -451,14 +464,14 @@ class AddOperationDefinition implements NumericalOperationDefinition {
     if (right === null) {
       throw new TabgradError(
         "INVALID_TENSOR",
-        "Float32 addition requires another Tabgrad tensor handle.",
+        `Float32 ${this.description} requires another Tabgrad tensor handle.`,
         { operation: this.name, contract: "tensor-handle" },
       );
     }
     if (left.closed || right.closed) {
       throw new TabgradError(
         "CLOSED_TENSOR",
-        "Float32 addition requires open tensor handles.",
+        `Float32 ${this.description} requires open tensor handles.`,
         {
           operation: this.name,
           contract: "open-input",
@@ -469,14 +482,14 @@ class AddOperationDefinition implements NumericalOperationDefinition {
     if (left.session !== session || right.session !== session) {
       throw new TabgradError(
         "DIFFERENT_SESSION",
-        "Both addition inputs must belong to the same runtime session.",
+        `Both ${this.description} inputs must belong to the same runtime session.`,
         { operation: this.name, contract: "same-session" },
       );
     }
     if (left.value.dtype !== "float32" || right.value.dtype !== "float32") {
       throw new TabgradError(
         "UNSUPPORTED_DTYPE",
-        "Float32 addition requires float32 inputs.",
+        `Float32 ${this.description} requires float32 inputs.`,
         {
           operation: this.name,
           contract: "float32-inputs",
@@ -488,7 +501,7 @@ class AddOperationDefinition implements NumericalOperationDefinition {
     if (left.value.device !== "cpu" || right.value.device !== "cpu") {
       throw new TabgradError(
         "UNSUPPORTED_DEVICE",
-        "This addition definition supports only CPU inputs.",
+        `This ${this.description} definition supports only CPU inputs.`,
         {
           operation: this.name,
           contract: "cpu-inputs",
@@ -500,7 +513,7 @@ class AddOperationDefinition implements NumericalOperationDefinition {
     if (left.value.layout !== "contiguous" || right.value.layout !== "contiguous") {
       throw new TabgradError(
         "UNSUPPORTED_LAYOUT",
-        "This addition definition supports only contiguous inputs.",
+        `This ${this.description} definition supports only contiguous inputs.`,
         {
           operation: this.name,
           contract: "contiguous-inputs",
@@ -512,7 +525,7 @@ class AddOperationDefinition implements NumericalOperationDefinition {
     if (!equalTensorShapes(left.value.shape, right.value.shape)) {
       throw new TabgradError(
         "SHAPE_MISMATCH",
-        "Float32 addition requires equal shapes.",
+        `Float32 ${this.description} requires equal shapes.`,
         {
           operation: this.name,
           contract: "equal-shape",
@@ -538,7 +551,12 @@ class AddOperationDefinition implements NumericalOperationDefinition {
   }
 }
 
-const ADD_OPERATION = Object.freeze(new AddOperationDefinition());
+const ADD_OPERATION = Object.freeze(new EqualShapeBinaryOperationDefinition(
+  "add", "Tensor.add", "add-f32", "addition",
+));
+const MUL_OPERATION = Object.freeze(new EqualShapeBinaryOperationDefinition(
+  "mul", "Tensor.mul", "mul-f32", "multiplication",
+));
 
 class SumOperationDefinition implements NumericalOperationDefinition {
   readonly name = "sum";
@@ -608,8 +626,8 @@ export class RuntimeSession {
     RUNTIME_SESSION_ACCESS.set(this, Object.freeze({
       prepare: () => this.#prepare(),
       observeSynchronously: (state: TensorState) => this.#observeSynchronously(state),
-      add: (left: TensorState, rightHandle: unknown) => (
-        this.#add(left, rightHandle)
+      binary: (definition: EqualShapeBinaryOperationDefinition, left: TensorState, rightHandle: unknown) => (
+        this.#binary(definition, left, rightHandle)
       ),
       sum: (source: TensorState) => this.#recordOperation(SUM_OPERATION.admit(source)),
       view: (source: TensorState, shape: unknown) => this.#view(source, shape),
@@ -663,9 +681,9 @@ export class RuntimeSession {
     return this.#createHandle(value);
   }
 
-  #add(left: TensorState, rightHandle: unknown): Tensor {
+  #binary(definition: EqualShapeBinaryOperationDefinition, left: TensorState, rightHandle: unknown): Tensor {
     this.#assertOpen();
-    return this.#recordOperation(ADD_OPERATION.admit(this, left, rightHandle));
+    return this.#recordOperation(definition.admit(this, left, rightHandle));
   }
 
   #recordOperation(admitted: AdmittedOperation): Tensor {

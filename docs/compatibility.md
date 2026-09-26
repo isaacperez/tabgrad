@@ -35,7 +35,8 @@ that was not tested, or an implementation that silently uses another backend.
 Tabgrad can establish its own browser integration behavior without claiming
 that the behavior implements a PyTorch interface. The direct contract in the
 [JavaScript tensor API](javascript-api.md)—session and tensor creation,
-equal-shape contiguous CPU `float32` addition, asynchronous observation, diagnostics,
+equal-shape contiguous CPU `float32` addition and multiplication, total sum,
+asynchronous observation, diagnostics,
 and explicit close—is such an interface. Its tests establish Tabgrad's
 JavaScript and WebAssembly behavior only. The names are not `torch` names, and
 the bounded example does not establish PyTorch signatures, promotion,
@@ -50,6 +51,17 @@ facts are not a disguised compatibility claim.
 ## Required operation record
 
 ### Python tensor evidence
+
+The [multiplication reference](reference/tensor-multiplication.md) defines the
+tensor-only equal-shape product. Native `mulCases` and `mulOperations` record
+operand/result float32 bits, metadata and positional/keyword forms. Exact bit
+comparison excludes NaN payload identity; signed zero, subnormal/underflow,
+overflow, non-finite products and separate multiply-add rounding have dedicated
+cases. Raw scalar/SIMD and real Pyodide tests consume this evidence. Direct
+runtime and Chrome/Firefox tests exercise composition, aliases, cleanup and
+ordinary Python observation, including both CPU variants in interpreter workers
+with JSPI disabled. Broadcasting, host-number operands, mutation, promotion and
+gradients remain explicit subset exclusions rather than claimed PyTorch errors.
 
 The [total sum reference](reference/tensor-sum.md) defines unary total reduction
 and its numerical domain. Native `sumCases` record scalar metadata, input bits,

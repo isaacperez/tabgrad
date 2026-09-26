@@ -6,6 +6,7 @@ import { loadPyodide } from "pyodide";
 import { RuntimeSession } from "../../dist/index.js";
 import { getTestExecutionFailureContext } from "../../dist/testing.js";
 import { assertSumFixture } from "./sum-oracle.mjs";
+import { float32FromBits } from "./sum-oracle.mjs";
 
 let interpreterPromise;
 
@@ -24,6 +25,106 @@ function getInterpreter() {
   interpreterPromise ??= loadPyodide();
   return interpreterPromise;
 }
+
+test("Python multiplication admits tensor call forms and rejects unsupported operands", { timeout: 20_000 }, async () => {
+  const { attachPython } = await import("../../dist/python.js");
+  const interpreter = await getInterpreter();
+  const binding = await attachPython(interpreter);
+  try {
+    await binding.runPythonAsync(`
+import torch, gc
+def check_mul():
+    session = torch._runtime_session
+    x = torch.tensor([[2., -3.], [0., 4.]], dtype=torch.float32)
+    y = torch.tensor([[5., 2.], [7., -1.]], dtype=torch.float32)
+    before = session.diagnostics().kernelCalls
+    results = [x * y, x.mul(y), x.mul(other=y), torch.mul(x, y),
+               torch.mul(x, other=y), torch.mul(input=x, other=y, out=None)]
+    assert session.diagnostics().kernelCalls == before
+    for result in results:
+        assert result.shape == torch.Size([2, 2])
+        assert result.dtype is torch.float32 and result.device == x.device
+        assert result.tolist() == [[10., -6.], [0., -4.]]
+        assert result.tolist() == [[10., -6.], [0., -4.]]
+    assert x.mul(y).sum().tolist() == 0.
+    assert (x.view(4).mul(x.view(4)) + y.view(4)).sum().tolist() == 42.
+    assert torch.Tensor.__mul__(x, object()) is NotImplemented
+    malformed = ["torch.mul()", "torch.mul(x)", "torch.mul(x, y, x)",
+        "torch.mul(x, other=y, input=x)", "torch.mul(x, y, alpha=1)",
+        "x.mul()", "x.mul(y, out=None)", "x.mul(y, other=y)",
+        "torch.Tensor.mul(None, x)", "torch.Tensor.__mul__(None, x)",
+        "torch.Tensor.mul(object.__new__(torch.Tensor), x)",
+        "torch.mul(x, object.__new__(torch.Tensor))", "x.mul(2)",
+        "torch.mul(2, x)", "torch.mul(x, 2)", "x * 2", "2 * x"]
+    before = session.diagnostics()
+    for expression in malformed:
+        try:
+            eval(expression)
+        except TypeError:
+            pass
+        else:
+            raise AssertionError(expression)
+    for expression in ["torch.mul(x, y, out=x)", "x.mul(y.view(4))",
+                       "x.mul(torch.tensor([2.], dtype=torch.float32))"]:
+        try:
+            eval(expression)
+        except RuntimeError:
+            pass
+        else:
+            raise AssertionError(expression)
+    gc.collect()
+    assert session.diagnostics().kernelCalls == before.kernelCalls
+    assert session.diagnostics().liveOperationRecords == before.liveOperationRecords
+    assert session.diagnostics().liveTensorHandles == before.liveTensorHandles
+    from pyodide.ffi import JsException
+    y._handle.close()
+    try:
+        x.mul(y)
+    except JsException as error:
+        assert error.js_error.code == 'CLOSED_TENSOR'
+    else:
+        raise AssertionError('closed operand accepted')
+check_mul()
+gc.collect()
+assert torch._runtime_session.diagnostics().liveTensorHandles == 0
+assert torch._runtime_session.diagnostics().liveTensorValues == 0
+assert torch._runtime_session.diagnostics().liveOperationRecords == 0
+assert torch._runtime_session.diagnostics().liveAllocationBytes == 0
+`);
+  } finally {
+    await binding.close();
+    for (const name of ["torch", "gc", "check_mul"]) interpreter.globals.delete(name);
+  }
+});
+
+test("Python multiplication matches native bit fixtures and preserves separate multiply-add", { timeout: 20_000 }, async () => {
+  const { attachPython } = await import("../../dist/python.js");
+  const interpreter = await getInterpreter();
+  const oracle = JSON.parse(await readFile(new URL("../fixtures/python-tensor-oracle.json", import.meta.url), "utf8"));
+  const binding = await attachPython(interpreter);
+  try {
+    for (const fixture of oracle.mulCases) {
+      for (const expression of oracle.mulOperations) {
+        await binding.runPythonAsync(`import torch\n${fixture.source}\nresult = ${expression}\nobserved_mul = result.view(-1).tolist()`);
+        const observed = interpreter.globals.get("observed_mul");
+        const metadata = interpreter.runPython(oracle.metadataExpression);
+        try {
+          assert.deepEqual(observed.toJs(), fixture.bits.map(float32FromBits), fixture.name);
+          assert.deepEqual(JSON.parse(JSON.stringify(metadata.toJs())), fixture.metadata, fixture.name);
+        } finally { observed.destroy(); metadata.destroy(); }
+      }
+      if (fixture.multiplyAddBits !== undefined) {
+        await binding.runPythonAsync("observed_mul = (left * right + torch.tensor([-1.] * 5, dtype=torch.float32)).tolist()");
+        const observed = interpreter.globals.get("observed_mul");
+        try { assert.deepEqual(observed.toJs(), fixture.multiplyAddBits.map(float32FromBits)); }
+        finally { observed.destroy(); }
+      }
+    }
+  } finally {
+    await binding.close();
+    for (const name of ["torch", "left", "right", "result", "observed_mul"]) interpreter.globals.delete(name);
+  }
+});
 
 test("Python total sum matches bounded native numerical fixtures through tolist", { timeout: 20_000 }, async () => {
   const { attachPython } = await import("../../dist/python.js");

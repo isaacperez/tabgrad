@@ -27,6 +27,175 @@ const requestCounts = new Map();
 const virtualResponses = new Map();
 
 for (const variant of ["scalar", "simd128"]) {
+  test(`multiplication ${variant} preserves metadata, laziness and completed ownership`, async () => {
+    const programs = [];
+    const session = createTestRuntimeSession({
+      manifestUrl: new URL("manifest.json", distributionUrl), forceVariant: variant,
+      onProgramFormed: (program) => programs.push(program),
+    });
+    try {
+      for (const [leftData, rightData, shape, expected] of [
+        [[2], [-3], [], [-6]], [[2, -3, 0, 4], [5, 2, 7, -1], [2, 2], [10, -6, 0, -4]],
+        [[3], [4], [1, 1, 1], [12]], [[], [], [2, 0, 3], []],
+      ]) {
+        const left = session.tensor(leftData, { shape });
+        const right = session.tensor(rightData, { shape });
+        const before = session.diagnostics();
+        const result = left.mul(right);
+        assert.deepEqual(result.shape, shape);
+        assert.equal(result.dtype, "float32");
+        assert.equal(result.device, "cpu");
+        assert.equal(session.diagnostics().backendLoads, before.backendLoads);
+        assert.equal(session.diagnostics().kernelCalls, before.kernelCalls);
+        left.close(); right.close();
+        assert.deepEqual([...await result.toArray()], expected);
+        assert.equal(programs.at(-1).computations[0].kind, "mul-f32");
+        assert.equal(programs.at(-1).computations[0].inputs.length, 2);
+        assert.deepEqual([...await result.toArray()], expected);
+        assert.equal(session.diagnostics().kernelCalls, before.kernelCalls + 1);
+        result.close();
+        assertNoLiveState(session);
+      }
+    } finally { await session.close(); }
+  });
+}
+
+test("multiplication rejects malformed admission without retaining work", async () => {
+  const session = createRuntimeSession();
+  const other = createRuntimeSession();
+  const input = session.tensor([1, 2]);
+  const foreign = other.tensor([1, 2]);
+  const mismatch = session.tensor([1, 2], { shape: [1, 2] });
+  const broadcastable = session.tensor([1]);
+  const closed = session.tensor([1, 2]); closed.close();
+  const before = session.diagnostics();
+  for (const value of [null, {}, 2, Object.create(Tensor.prototype), new Proxy(input, {})]) {
+    assert.throws(() => Tensor.prototype.mul.call(value, input), { code: "INVALID_TENSOR" });
+    assert.throws(() => input.mul(value), { code: "INVALID_TENSOR" });
+  }
+  assert.throws(() => input.mul(), TypeError);
+  assert.throws(() => input.mul(input, undefined), TypeError);
+  assert.throws(() => input.mul(foreign), { code: "DIFFERENT_SESSION" });
+  for (const value of [mismatch, broadcastable]) assert.throws(() => input.mul(value), { code: "SHAPE_MISMATCH" });
+  assert.throws(() => input.mul(closed), { code: "CLOSED_TENSOR" });
+  assert.throws(() => closed.mul(input), { code: "CLOSED_TENSOR" });
+  assert.deepEqual(session.diagnostics(), before);
+  const abandoned = input.mul(input); abandoned.close();
+  input.close(); mismatch.close(); broadcastable.close();
+  assertNoLiveState(session);
+  const live = session.tensor([1]);
+  await session.close(); await other.close();
+  assert.throws(() => live.mul(live), { code: "CLOSED_SESSION" });
+});
+
+for (const variant of ["scalar", "simd128"]) {
+  test(`multiplication ${variant} composes host, pending, resident and sibling aliases`, async () => {
+    const programs = [];
+    const session = createTestRuntimeSession({ manifestUrl: new URL("manifest.json", distributionUrl),
+      forceVariant: variant, onProgramFormed: (program) => programs.push(program) });
+    try {
+      for (let cycle = 0; cycle < 20; cycle += 1) {
+        const input = session.tensor([1, 2, 3, 4]);
+        const left = input.view([2, 2]);
+        const right = input.view([2, 2]);
+        const product = left.mul(right);
+        const sibling = product.view([4]);
+        const doubled = product.add(product);
+        const total = doubled.sum();
+        const other = sibling.sum();
+        const result = total.mul(other);
+        input.close(); left.close(); right.close(); product.close(); doubled.close(); total.close(); other.close();
+        assert.deepEqual([...await result.toArray()], [1800]);
+        const program = programs.at(-1);
+        assert.deepEqual(program.computations.map((c) => c.kind), ["mul-f32", "add-f32", "sum-f32", "sum-f32", "mul-f32"]);
+        for (const value of program.values) {
+          assert.equal(program.inputUseCounts[value.slot], program.computations.flatMap((c) => c.inputs).filter((slot) => slot === value.slot).length);
+          if (value.slot === value.storageSlot) {
+            assert.equal(program.storageUseCounts[value.slot], program.computations.flatMap((c) => c.inputs)
+              .filter((slot) => program.values[slot].storageSlot === value.slot).length);
+          }
+        }
+        assert.deepEqual([...await sibling.toArray()], [1, 4, 9, 16]);
+        const before = session.diagnostics();
+        const residentProduct = sibling.mul(sibling);
+        sibling.close(); result.close();
+        assert.deepEqual([...await residentProduct.toArray()], [1, 16, 81, 256]);
+        assert.equal(session.diagnostics().hostToWasmCopies, before.hostToWasmCopies);
+        assert.equal(session.diagnostics().kernelCalls, before.kernelCalls + 1);
+        residentProduct.close(); assertNoLiveState(session);
+      }
+      const retained = session.tensor([2, 3]);
+      const product = retained.mul(retained);
+      assert.deepEqual([...await product.toArray()], [4, 9]);
+      assert.deepEqual([...await retained.toArray()], [2, 3], "inputs remain unchanged");
+      retained.close(); product.close(); assertNoLiveState(session);
+
+      const oracle = JSON.parse(await readFile(new URL("../fixtures/python-tensor-oracle.json", import.meta.url), "utf8"));
+      const fixture = oracle.mulCases.find((entry) => entry.name === "separate-multiply-add");
+      const left = session.tensor(new Float32Array(new Uint32Array(fixture.leftBits).buffer));
+      const right = session.tensor(new Float32Array(new Uint32Array(fixture.rightBits).buffer));
+      const addend = session.tensor(new Float32Array(new Uint32Array(fixture.addendBits).buffer));
+      const multiplied = left.mul(right);
+      const combined = multiplied.add(addend);
+      left.close(); right.close(); addend.close(); multiplied.close();
+      assert.deepEqual([...new Uint32Array((await combined.toArray()).buffer)], fixture.multiplyAddBits);
+      assert.deepEqual(programs.at(-1).computations.map((c) => c.kind), ["mul-f32", "add-f32"]);
+      combined.close(); assertNoLiveState(session);
+    } finally { await session.close(); }
+  });
+}
+
+test("multiplication deep repeated operands release abandoned and completed history", async () => {
+  const session = createTestRuntimeSession({ manifestUrl: new URL("manifest.json", distributionUrl), forceVariant: "scalar" });
+  for (const observe of [false, true]) {
+    let current = session.tensor([1]);
+    const handles = [current];
+    for (let i = 0; i < 1024; i += 1) {
+      const next = current.mul(current);
+      current.close(); current = next; handles.push(current);
+    }
+    if (observe) assert.deepEqual([...await current.toArray()], [1]);
+    current.close(); assertNoLiveState(session); assertReleasedAncestry(handles);
+  }
+  assert.equal(session.diagnostics().highWaterAllocationBytes, 8, "repeated operands need two rotating payloads");
+  const source = session.tensor([2]);
+  source.mul(source);
+  await session.close(); assertNoLiveState(session);
+});
+
+for (const behavior of ["status", "trap"]) {
+  test(`multiplication ${behavior} rolls back scratch and preserves unrelated resident data`, async () => {
+    const session = createTestRuntimeSession({ manifestUrl: installFixture(`mul-${behavior}`, {
+      kernelBehavior: behavior, failureCall: 5,
+    }), forceVariant: "scalar" });
+    try {
+      const host = session.tensor([2]);
+      const resident = host.add(host); host.close();
+      assert.deepEqual([...await resident.toArray()], [4]);
+      const first = resident.mul(resident);
+      const second = first.add(first); first.close();
+      const scalar = second.sum(); second.close();
+      const failed = scalar.mul(scalar); scalar.close();
+      await assert.rejects(failed.toArray(), (error) => {
+        assert.equal(error.code, behavior === "trap" ? "BACKEND_TRAP" : "BACKEND_STATUS_ERROR");
+        const context = getTestExecutionFailureContext(error);
+        assert.equal(context.operation, "mul");
+        assert.equal(context.provenance.source, "Tensor.mul");
+        assert.equal(error.details.operation, "mul-f32");
+        return true;
+      });
+      assert.equal(session.diagnostics().kernelCalls, 5, "failure must reach the second multiplication");
+      assert.equal(session.diagnostics().liveAllocationBytes, 4);
+      assert.equal(session.diagnostics().liveRequestLeases, 0);
+      assert.deepEqual([...await resident.toArray()], [4]);
+      if (behavior === "status") assert.deepEqual([...await failed.toArray()], [1024]);
+      else await assert.rejects(failed.toArray(), { code: "BACKEND_TRAP" });
+      failed.close(); resident.close(); assertNoLiveState(session);
+    } finally { await session.close(); }
+  });
+}
+
+for (const variant of ["scalar", "simd128"]) {
   test(`total sum ${variant} uses the shared deferred runtime and scalar result geometry`, async () => {
     const programs = [];
     const session = createTestRuntimeSession({
@@ -417,7 +586,7 @@ function scalarFaultKernel(behavior, failureCall, operation = "add") {
     0x0b,
     0x20, operation === "sum" ? 0x01 : 0x02, // output address
     0x20, 0x00, 0x2a, 0x02, 0x00, // load left f32
-    ...(operation === "sum" ? [] : [0x20, 0x01, 0x2a, 0x02, 0x00, 0x92]),
+    ...(operation === "sum" ? [] : [0x20, 0x01, 0x2a, 0x02, 0x00, operation === "mul" ? 0x94 : 0x92]),
     0x38, 0x02, 0x00, // store one-element result
     0x41, 0x00, 0x0b,
   ];
@@ -426,11 +595,12 @@ function scalarFaultKernel(behavior, failureCall, operation = "add") {
 function fixtureModule({
   abiVersion = 1,
   arenaBase = 1_048_576,
-  capabilities = 3,
+  capabilities = 7,
   kernelBehavior = "success",
   memoryImportName = "memory",
   omitKernelExport = false,
   omitSumExport = false,
+  omitMulExport = false,
   failureCall,
 } = {}) {
   const functionType = (parameters, results) => [
@@ -456,13 +626,14 @@ function fixtureModule({
     ...unsignedLeb128(32),
     ...unsignedLeb128(1024),
   ]);
-  const functions = section(3, [0x05, 0x00, 0x00, 0x00, 0x01, 0x02]);
+  const functions = section(3, [0x06, 0x00, 0x00, 0x00, 0x01, 0x02, 0x01]);
   const exportedFunctions = [
     ["tabgrad_abi_version", 0],
     ["tabgrad_capabilities", 1],
     ["tabgrad_arena_base", 2],
     ...(omitKernelExport ? [] : [["tabgrad_add_f32", 3]]),
     ...(omitSumExport ? [] : [["tabgrad_sum_f32", 4]]),
+    ...(omitMulExport ? [] : [["tabgrad_mul_f32", 5]]),
   ];
   const exports = section(7, [
     ...unsignedLeb128(exportedFunctions.length),
@@ -485,8 +656,10 @@ function fixtureModule({
   const kernelBody = [0x00, ...kernelInstructions];
   const sumBody = [0x00, ...(failureCall === undefined
     ? kernelInstructions : scalarFaultKernel(kernelBehavior, failureCall, "sum"))];
+  const mulBody = [0x00, ...(failureCall === undefined
+    ? kernelInstructions : scalarFaultKernel(kernelBehavior, failureCall, "mul"))];
   const code = section(10, [
-    0x05,
+    0x06,
     ...constantBody(abiVersion),
     ...constantBody(capabilities),
     ...constantBody(arenaBase),
@@ -494,6 +667,8 @@ function fixtureModule({
     ...kernelBody,
     ...unsignedLeb128(sumBody.length),
     ...sumBody,
+    ...unsignedLeb128(mulBody.length),
+    ...mulBody,
   ]);
   return Buffer.from([
     0x00, 0x61, 0x73, 0x6d,
@@ -521,11 +696,11 @@ function installFixture(name, moduleOptions = {}, manifestTransform = (value) =>
   });
   const manifest = manifestTransform({
     schemaVersion: 1,
-    moduleVersion: 2,
+    moduleVersion: 3,
     abiVersion: 1,
     addressWidth: 32,
     sharedMemory: false,
-    capabilities: ["add-f32", "sum-f32"],
+    capabilities: ["add-f32", "sum-f32", "mul-f32"],
     imports: [{ module: "env", name: "memory", kind: "memory" }],
     memory: { initialPages: 32, maximumPages: 1024, alignment: 16 },
     variants: [variant("scalar", []), variant("simd128", ["simd128"])],
@@ -2132,6 +2307,8 @@ test("the build keeps SIMD instructions out of the scalar module", async () => {
 });
 
 for (const failureCase of [
+  { name: "missing mul export", code: "BACKEND_ABI_MISMATCH", moduleOptions: { omitMulExport: true } },
+  { name: "missing mul capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: 3 } },
   { name: "missing sum export", code: "BACKEND_ABI_MISMATCH", moduleOptions: { omitSumExport: true } },
   { name: "missing sum capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: 1 } },
   {

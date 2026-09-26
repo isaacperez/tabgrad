@@ -82,6 +82,13 @@ assert session.diagnostics().liveRequestLeases == 0
 `);
         await client.runPythonAsync(`
 assert result.sum().tolist() == 10.
+assert (result * result).tolist() == [16., 36.]
+assert result.mul(other=result).sum().tolist() == 52.
+assert torch.mul(input=result, other=result, out=None).sum().tolist() == 52.
+assert torch.tensor(3, dtype=torch.float32).mul(torch.tensor(-2, dtype=torch.float32)).tolist() == -6.
+empty_mul = torch.tensor([[], []], dtype=torch.float32)
+assert (empty_mul * empty_mul).tolist() == [[], []]
+del empty_mul
 assert torch.sum(input=result.view(1, 2)).tolist() == 10.
 assert torch.tensor([[], []], dtype=torch.float32).sum().tolist() == 0.
 assert torch.tensor(3, dtype=torch.float32).sum().tolist() == 3.

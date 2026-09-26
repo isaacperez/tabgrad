@@ -71,6 +71,11 @@ assert matrix.tolist() == [[1., 2., 3.], [4., 5., 6.]]
 assert matrix.sum().shape == torch.Size([])
 assert matrix.sum().tolist() == 21.
 assert torch.sum(input=matrix + matrix).tolist() == 42.
+assert (matrix * matrix).tolist() == [[1., 4., 9.], [16., 25., 36.]]
+assert matrix.mul(other=matrix).sum().tolist() == 91.
+assert torch.mul(input=matrix, other=matrix, out=None).sum().tolist() == 91.
+assert torch.tensor(3, dtype=torch.float32).mul(torch.tensor(-2, dtype=torch.float32)).tolist() == -6.
+assert torch.mul(torch.tensor([[], []], dtype=torch.float32), torch.tensor([[], []], dtype=torch.float32)).tolist() == [[], []]
 assert torch.tensor([[], []], dtype=torch.float32).sum().tolist() == 0.
 assert torch.tensor(2, dtype=torch.float32).view([]).tolist() == 2.
 assert torch.tensor([], dtype=torch.float32).view(2, 0, 3).tolist() == [[], []]

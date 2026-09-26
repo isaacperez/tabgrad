@@ -9,6 +9,7 @@ const STATUS_OUTPUT_OVERLAP: u32 = 3;
 const ABI_VERSION: u32 = 1;
 const CAPABILITY_ADD_F32: u32 = 1;
 const CAPABILITY_SUM_F32: u32 = 2;
+const CAPABILITY_MUL_F32: u32 = 4;
 const FLOAT_ALIGNMENT: u32 = align_of::<f32>() as u32;
 
 unsafe extern "C" {
@@ -46,7 +47,7 @@ pub extern "C" fn tabgrad_abi_version() -> u32 {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn tabgrad_capabilities() -> u32 {
-    CAPABILITY_ADD_F32 | CAPABILITY_SUM_F32
+    CAPABILITY_ADD_F32 | CAPABILITY_SUM_F32 | CAPABILITY_MUL_F32
 }
 
 #[unsafe(no_mangle)]
@@ -54,8 +55,7 @@ pub extern "C" fn tabgrad_arena_base() -> u32 {
     arena_base()
 }
 
-#[unsafe(no_mangle)]
-pub extern "C" fn tabgrad_add_f32(
+fn validate_binary_ranges(
     left_offset: u32,
     right_offset: u32,
     output_offset: u32,
@@ -81,6 +81,20 @@ pub extern "C" fn tabgrad_add_f32(
     if overlaps(output_range, left_range) || overlaps(output_range, right_range) {
         return STATUS_OUTPUT_OVERLAP;
     }
+    STATUS_OK
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn tabgrad_add_f32(
+    left_offset: u32,
+    right_offset: u32,
+    output_offset: u32,
+    length: u32,
+) -> u32 {
+    let status = validate_binary_ranges(left_offset, right_offset, output_offset, length);
+    if status != STATUS_OK {
+        return status;
+    }
 
     // SAFETY: all three ranges were checked against linear memory above, each
     // address is aligned for f32, and the output does not overlap either input.
@@ -93,6 +107,73 @@ pub extern "C" fn tabgrad_add_f32(
         );
     }
     STATUS_OK
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn tabgrad_mul_f32(
+    left_offset: u32,
+    right_offset: u32,
+    output_offset: u32,
+    length: u32,
+) -> u32 {
+    let status = validate_binary_ranges(left_offset, right_offset, output_offset, length);
+    if status != STATUS_OK {
+        return status;
+    }
+    // SAFETY: validation establishes aligned readable inputs and a writable
+    // disjoint output. Repeated and overlapping inputs remain read-only.
+    unsafe {
+        mul_f32(
+            left_offset as *const f32,
+            right_offset as *const f32,
+            output_offset as *mut f32,
+            length as usize,
+        );
+    }
+    STATUS_OK
+}
+
+#[cfg(not(target_feature = "simd128"))]
+unsafe fn mul_f32(left: *const f32, right: *const f32, output: *mut f32, length: usize) {
+    for index in 0..length {
+        // SAFETY: the caller established valid ranges with a disjoint output.
+        unsafe {
+            output
+                .add(index)
+                .write(left.add(index).read() * right.add(index).read());
+        }
+    }
+}
+
+#[cfg(target_feature = "simd128")]
+unsafe fn mul_f32(left: *const f32, right: *const f32, output: *mut f32, length: usize) {
+    use core::arch::wasm32::{f32x4_mul, v128, v128_load, v128_store};
+
+    let vector_end = length - length % 4;
+    let mut index = 0;
+    while index < vector_end {
+        // SAFETY: four elements remain in validated ranges; vector accesses
+        // permit addresses that are not aligned to 16 bytes.
+        unsafe {
+            v128_store(
+                output.add(index).cast::<v128>(),
+                f32x4_mul(
+                    v128_load(left.add(index).cast::<v128>()),
+                    v128_load(right.add(index).cast::<v128>()),
+                ),
+            );
+        }
+        index += 4;
+    }
+    while index < length {
+        // SAFETY: index remains within the caller's validated ranges.
+        unsafe {
+            output
+                .add(index)
+                .write(left.add(index).read() * right.add(index).read());
+        }
+        index += 1;
+    }
 }
 
 #[cfg(not(target_feature = "simd128"))]

@@ -30,6 +30,29 @@ RANK_INPUTS = (
     ("rank-three-empty", "[[[]]]", "(((),),)"),
 )
 OPERATIONS = ("torch.add(left, right)", "left.add(right)", "left + right")
+MUL_OPERATIONS = (
+    "left * right",
+    "left.mul(right)",
+    "left.mul(other=right)",
+    "torch.mul(left, right)",
+    "torch.mul(left, other=right)",
+    "torch.mul(input=left, other=right)",
+    "torch.mul(left, right, out=None)",
+)
+MUL_INPUTS = (
+    *INPUTS,
+    *RANK_INPUTS,
+    ("rounding", "[0.1, -3.1, 1e20, 1e-20, 7]", "[0.2, 0.7, 1e-10, -1e10, -3]"),
+    ("signed-zero", "[0., -0., 0., -0.]", "[2., 2., -2., -2.]"),
+    ("underflow", "[1e-45, -1e-45, 1.17549435e-38]", "[0.5, 0.5, 0.5]"),
+    ("overflow", "[float.fromhex('0x1.fffffep127')] * 2", "[2., -2.]"),
+    ("separate-multiply-add", "[1. + 2.**-23] * 5", "[1. - 2.**-23] * 5"),
+    (
+        "nonfinite",
+        "[float('nan'), float('inf'), -float('inf'), 0., -0.]",
+        "[1., -2., -3., float('inf'), float('inf')]",
+    ),
+)
 SUM_INPUTS = (
     ("scalar", "3", "exact"),
     ("singleton", "[-5]", "exact"),
@@ -60,6 +83,16 @@ SUM_INPUTS = (
     ),
 )
 ERRORS = (
+    "torch.mul()",
+    "torch.mul(left)",
+    "torch.mul(left, right, left)",
+    "torch.mul(left, right, alpha=1)",
+    "torch.mul(left, other=right, input=left)",
+    "left.mul(right, out=None)",
+    "left.mul(right, other=right)",
+    "torch.Tensor.mul(None, left)",
+    "torch.mul(left, 'x')",
+    "torch.mul(left, torch.tensor([1, 2], dtype=torch.float32))",
     "torch.sum()",
     "torch.sum(1)",
     "torch.sum([1])",
@@ -127,6 +160,55 @@ def float32_bits(value: float) -> int | str:
     if math.isnan(value):
         return "nan"
     return int(struct.unpack("<I", struct.pack("<f", value))[0])
+
+
+def tensor_bits(expression: str, namespace: dict[str, object]) -> list[int | str]:
+    """Encode oracle tensor values while preserving signed zeros and rounding."""
+    raw: object = eval(f"{expression}.reshape(-1).tolist()", namespace)
+    if not isinstance(raw, list):
+        raise TypeError("Expected flat oracle tensor values.")
+    result: list[int | str] = []
+    for value in cast(list[object], raw):
+        if not isinstance(value, float):
+            raise TypeError("Expected float32 oracle values.")
+        result.append(float32_bits(value))
+    return result
+
+
+def mul_cases(oracle: _OracleModule) -> list[dict[str, object]]:
+    """Record products and the supported syntax using native tensor arithmetic."""
+    cases: list[dict[str, object]] = []
+    for name, left, right in MUL_INPUTS:
+        source = (
+            f"left = torch.tensor({left}, dtype=torch.float32)\n"
+            f"right = torch.tensor({right}, dtype=torch.float32)\n"
+        )
+        namespace: dict[str, object] = {"torch": oracle}
+        exec(source, namespace)
+        expected: list[int | str] = []
+        for expression in MUL_OPERATIONS:
+            exec(f"result = {expression}", namespace)
+            bits = tensor_bits("result", namespace)
+            if expression == MUL_OPERATIONS[0]:
+                expected = bits
+            elif bits != expected:
+                raise AssertionError(f"Multiplication syntax disagrees: {expression}")
+        cases.append(
+            {
+                "name": name,
+                "source": source,
+                "leftBits": tensor_bits("left", namespace),
+                "rightBits": tensor_bits("right", namespace),
+                "bits": expected,
+                "metadata": eval(METADATA, namespace),
+            }
+        )
+        if name == "separate-multiply-add":
+            exec("addend = torch.tensor([-1.] * 5, dtype=torch.float32)", namespace)
+            exec("combined = result + addend", namespace)
+            cases[-1]["addendBits"] = tensor_bits("addend", namespace)
+            cases[-1]["multiplyAddBits"] = tensor_bits("combined", namespace)
+    return cases
 
 
 def sum_cases(oracle: _OracleModule) -> list[dict[str, object]]:
@@ -261,6 +343,8 @@ def generate() -> str:
                 "pyodideSourceRevision": "8cec1b9bb8ead68c7c09b0a6443576bec7512268",
                 "metadataExpression": METADATA,
                 "comparison": "Exact float32 bits except NaN payload; exact metadata and error classes.",
+                "mulOperations": MUL_OPERATIONS,
+                "mulCases": mul_cases(oracle),
                 "sumComparison": "Exact simple cases; conditioning-aware absolute bounds for finite reassociation; explicit backend-dependent intermediate-overflow classifications. See docs/reference/tensor-sum.md.",
                 "sumCases": sum_cases(oracle),
                 "cases": cases,

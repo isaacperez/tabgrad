@@ -5,7 +5,8 @@ import { tensorElementCount } from "./tensor-shape.js";
 const ABI_VERSION = 1;
 const CAPABILITY_ADD_FLOAT32 = 1;
 const CAPABILITY_SUM_FLOAT32 = 2;
-const REQUIRED_CAPABILITIES = CAPABILITY_ADD_FLOAT32 | CAPABILITY_SUM_FLOAT32;
+const CAPABILITY_MUL_FLOAT32 = 4;
+const REQUIRED_CAPABILITIES = CAPABILITY_ADD_FLOAT32 | CAPABILITY_SUM_FLOAT32 | CAPABILITY_MUL_FLOAT32;
 const WEBASSEMBLY_PAGE_BYTES = 65_536;
 const MAXIMUM_ADDRESS = 0xffff_ffff;
 
@@ -96,6 +97,7 @@ interface KernelExports extends WebAssembly.Exports {
     length: number,
   ) => number;
   readonly tabgrad_sum_f32: (inputOffset: number, outputOffset: number, length: number) => number;
+  readonly tabgrad_mul_f32: (leftOffset: number, rightOffset: number, outputOffset: number, length: number) => number;
 }
 
 interface BackendContext {
@@ -461,6 +463,11 @@ export class WebAssemblyCpuBackend {
                 tensorElementCount(program.values[computation.inputs[0]!]!.shape),
               );
               break;
+            case "mul-f32":
+              status = context.exports.tabgrad_mul_f32(
+                inputs[0]!.offset, inputs[1]!.offset, output.offset, length,
+              );
+              break;
           }
         } catch (error) {
           context.poisoned = true;
@@ -775,14 +782,15 @@ export class WebAssemblyCpuBackend {
     const memory = value.memory as Record<string, unknown> | undefined;
     const variants = value.variants;
     return value.schemaVersion === 1
-      && value.moduleVersion === 2
+      && value.moduleVersion === 3
       && value.abiVersion === ABI_VERSION
       && value.addressWidth === 32
       && value.sharedMemory === false
       && Array.isArray(value.capabilities)
-      && value.capabilities.length === 2
+      && value.capabilities.length === 3
       && value.capabilities[0] === "add-f32"
       && value.capabilities[1] === "sum-f32"
+      && value.capabilities[2] === "mul-f32"
       && Array.isArray(value.imports)
       && value.imports.length === 1
       && this.#isMemoryImport(value.imports[0])
@@ -859,6 +867,7 @@ export class WebAssemblyCpuBackend {
       "tabgrad_arena_base",
       "tabgrad_add_f32",
       "tabgrad_sum_f32",
+      "tabgrad_mul_f32",
     ]) {
       if (typeof exports[name] !== "function") {
         throw new TabgradError(
