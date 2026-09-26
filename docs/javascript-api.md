@@ -4,7 +4,7 @@ This document is the user reference for calling the Tabgrad tensor runtime
 directly from JavaScript. It describes a deliberately narrow but complete
 execution path: contiguous `float32` tensors on the CPU and
 out-of-place elementwise addition and multiplication, total sum and shape-only
-shared-storage views. A narrow contract is useful here because it
+shared-storage views, with functional first-order gradients. A narrow contract is useful here because it
 lets a reader see the complete lifecycle—admission, lazy recording, WebAssembly
 execution, observation, and release—without implying support for tensor
 features that have not been established by tests.
@@ -20,6 +20,12 @@ also explains empty input, floating-point accumulation and unsupported options.
 `Tensor.mul(right)` is documented in the
 [multiplication reference](reference/tensor-multiplication.md). It takes one
 equal-shape tensor and returns a deferred elementwise product.
+
+`RuntimeSession.grad(output, inputs, gradient?)` is documented in the
+[functional gradient reference](reference/functional-gradients.md). It returns
+lazy untracked gradient handles, with independently closeable entries in input
+order. Creation accepts `requiresGrad: true`; read-only `Tensor.requiresGrad`
+reports tracking. Ordinary creation defaults to nontracking.
 
 ## Browser delivery requires no developer toolchain
 
@@ -79,6 +85,7 @@ into a host `Float32Array`. Its default and supported metadata are:
 | Data type | `float32` |
 | Device | `cpu` |
 | Layout | `contiguous` |
+| Gradient tracking | `requiresGrad` defaults to `false`; `true` enables functional gradients |
 
 When supplied, `options.shape` must be an actual array of non-negative safe
 integers. Their product must equal the copied data length. The empty shape `[]`
@@ -176,7 +183,7 @@ back to JavaScript arithmetic.
 
 `TabgradError` has a stable `code`, a human-readable `message`, and immutable
 `details`. Errors that can be determined from tensor metadata are thrown by
-`tensor()`, `add()`, `mul()`, `sum()` or `view()` before any backend submission. Loading, ABI, memory, and
+`tensor()`, `add()`, `mul()`, `sum()`, `view()` or `grad()` before any backend submission. Loading, ABI, memory, and
 kernel errors reject the promise returned by `toArray()`.
 
 An asynchronous backend error records the `webassembly-cpu` backend and its
@@ -196,7 +203,8 @@ invocation's program or provenance.
 | `CLOSED_SESSION`, `CLOSED_TENSOR` | An operation used an explicitly closed lifetime. |
 | `DIFFERENT_SESSION`, `INVALID_TENSOR` | An operation mixed sessions or received something other than a Tabgrad tensor handle. |
 | `INVALID_DATA`, `INVALID_SHAPE` | Input data or its contiguous shape is invalid. |
-| `SHAPE_MISMATCH` | Equal-shape binary operands have different full shapes. |
+| `SHAPE_MISMATCH` | Binary operand shapes or a gradient seed and output shape differ. |
+| `GRADIENT_NOT_TRACKED`, `UNUSED_INPUT`, `INVALID_GRADIENT`, `UNSUPPORTED_GRADIENT`, `CONSUMED_HISTORY` | A functional derivative request violates its [tracking, seed or history contract](reference/functional-gradients.md). |
 | `UNSUPPORTED_DTYPE`, `UNSUPPORTED_DEVICE`, `UNSUPPORTED_LAYOUT` | Metadata is outside the table above. |
 | `BACKEND_MANIFEST_INVALID`, `BACKEND_HASH_MISMATCH` | Distributed metadata or bytes fail validation. |
 | `BACKEND_ABI_MISMATCH`, `BACKEND_CAPABILITY_MISMATCH` | A module cannot satisfy the declared CPU contract. |
@@ -216,7 +224,9 @@ counts, live and high-water tensor payload and aligned allocation bytes, total
 WebAssembly memory, and separated manifest-fetch, module-fetch, integrity,
 compilation, and instantiation durations. It also reports the current number
 of public tensor handles, semantic tensor values, recorded operations,
-materialization records, and accepted observation requests. These semantic
+materialization records, accepted observation requests, owned derivative nodes
+and saved logical operand pins. `liveDerivativeNodes` includes tracked leaves;
+`liveSavedValues` counts pins rather than distinct buffers or bytes. These semantic
 counters make it possible to distinguish a retained computation from
 WebAssembly memory growth and to prove that explicit shutdown drains both
 layers. Reading diagnostics does not demand a tensor.

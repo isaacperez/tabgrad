@@ -24,6 +24,8 @@ fresh retention obligations, scratch reuse and failure rollback.
 Read [Semantic value lifetimes](semantic-value-lifetimes.md) for dependency
 ownership, completed producer reclamation and the distinction between keeping
 a result and keeping its calculation history.
+Read [Derivative history ownership](derivative-history.md) for independent
+derivative edges, required saved operands and their transfer to lazy gradients.
 
 Component documentation answers questions such as:
 

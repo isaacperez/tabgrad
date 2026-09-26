@@ -26,6 +26,226 @@ let distributionUrl;
 const requestCounts = new Map();
 const virtualResponses = new Map();
 
+for (const behavior of ["status", "trap"]) {
+  test(`functional gradient ${behavior} releases pending derivative ownership on failure and close`, async () => {
+    const session = createTestRuntimeSession({ manifestUrl: installFixture(`grad-${behavior}`, {
+      kernelBehavior: behavior,
+    }), forceVariant: "scalar" });
+    const x = session.tensor([2], { requiresGrad: true });
+    const square = x.mul(x);
+    const [gradient] = session.grad(square, [x]);
+    x.close(); square.close();
+    assert.equal(session.diagnostics().liveSavedValues, 0);
+    assert.equal(session.diagnostics().liveDerivativeNodes, 0);
+    const observation = gradient.toArray();
+    gradient.close();
+    const closing = session.close();
+    await assert.rejects(observation, { code: behavior === "trap" ? "BACKEND_TRAP" : "BACKEND_STATUS_ERROR" });
+    await closing;
+    assertNoLiveState(session);
+  });
+}
+
+test("functional gradient accepted observation survives immediate result and session close", async () => {
+  const session = createRuntimeSession({ manifestUrl: new URL("manifest.json", distributionUrl) });
+  const x = session.tensor([2, 3], { requiresGrad: true });
+  const square = x.mul(x);
+  const loss = square.sum(); square.close();
+  const [gradient] = session.grad(loss, [x]);
+  const observation = gradient.toArray();
+  gradient.close(); x.close(); loss.close();
+  const closing = session.close();
+  assert.deepEqual([...await observation], [4, 6]);
+  await closing;
+  assertNoLiveState(session);
+  assert.equal(session.diagnostics().liveDerivativeNodes, 0);
+});
+
+test("functional gradient admission is atomic and prunes irrelevant consumed ancestry", async () => {
+  const session = createRuntimeSession({ manifestUrl: new URL("manifest.json", distributionUrl) });
+  const other = createRuntimeSession();
+  try {
+    const x = session.tensor([2, 3], { requiresGrad: true });
+    const hidden = x.mul(x);
+    const y = hidden.sum();
+    const unused = session.tensor([1, 1], { requiresGrad: true });
+    const plain = session.tensor([1, 1]);
+    const foreign = other.tensor([1], { requiresGrad: true });
+    const closed = session.tensor([1], { requiresGrad: true }); closed.close();
+    const trackedSeed = session.tensor([1], { shape: [], requiresGrad: true });
+    const wrongSeed = session.tensor([1]);
+    const before = session.diagnostics();
+    for (const [operation, code] of [
+      [() => session.grad(y, [x, unused]), "UNUSED_INPUT"],
+      [() => session.grad(y, [plain]), "GRADIENT_NOT_TRACKED"],
+      [() => session.grad(plain, [x]), "GRADIENT_NOT_TRACKED"],
+      [() => session.grad(y, [foreign]), "DIFFERENT_SESSION"],
+      [() => session.grad(y, [closed]), "CLOSED_TENSOR"],
+      [() => session.grad(y, [x], trackedSeed), "UNSUPPORTED_GRADIENT"],
+      [() => session.grad(y, [x], wrongSeed), "SHAPE_MISMATCH"],
+      [() => session.grad(hidden, [x]), "INVALID_GRADIENT"],
+      [() => session.grad(y, [{}]), "INVALID_TENSOR"],
+    ]) {
+      assert.throws(operation, { code });
+      assert.deepEqual(session.diagnostics(), before);
+    }
+    for (const invalid of [[], null, x, [x, null]]) {
+      assert.throws(() => session.grad(y, invalid));
+      assert.deepEqual(session.diagnostics(), before);
+    }
+    const [self] = session.grad(y, [y]);
+    assert.deepEqual([...await self.toArray()], [1]); self.close();
+    const [dh, dx, dxAgain] = session.grad(y, [hidden, x, x]);
+    assert.deepEqual([...await dh.toArray()], [1, 1]);
+    assert.deepEqual([...await dx.toArray()], [4, 6]);
+    assert.deepEqual([...await dxAgain.toArray()], [4, 6]);
+    dh.close(); dx.close(); dxAgain.close();
+    const [intermediate] = session.grad(y, [hidden]);
+    assert.deepEqual([...await intermediate.toArray()], [1, 1]); intermediate.close();
+    assert.throws(() => session.grad(y, [x]), { code: "CONSUMED_HISTORY" });
+    const z = hidden.add(unused).sum();
+    const [du] = session.grad(z, [unused]);
+    assert.deepEqual([...await du.toArray()], [1, 1]); du.close();
+    for (const tensor of [x, hidden, y, unused, plain, trackedSeed, wrongSeed, z]) tensor.close();
+    // The temporary add was deliberately not retained by user code; session close owns it.
+  } finally { await session.close(); await other.close(); }
+  assertNoLiveState(session);
+  assert.equal(session.diagnostics().liveDerivativeNodes, 0);
+});
+
+test("functional histories save only required operands and survive hidden materialized activations", async () => {
+  const session = createRuntimeSession({ manifestUrl: new URL("manifest.json", distributionUrl) });
+  try {
+    const x = session.tensor([2, 3], { requiresGrad: true });
+    const plain = session.tensor([5, 7]);
+    const add = x.add(plain);
+    assert.equal(session.diagnostics().liveSavedValues, 0);
+    const factor = plain.mul(plain);
+    const product = add.mul(factor);
+    assert.equal(session.diagnostics().liveSavedValues, 1);
+    const loss = product.sum();
+    add.close(); plain.close(); factor.close(); product.close();
+    assert.deepEqual([...await loss.toArray()], [665]);
+    assert.equal(session.diagnostics().liveOperationRecords, 0);
+    const [dx] = session.grad(loss, [x]);
+    loss.close(); x.close();
+    assert.equal(session.diagnostics().liveSavedValues, 0);
+    assert.deepEqual([...await dx.toArray()], [25, 49]); dx.close();
+    assertNoLiveState(session);
+    for (let cycle = 0; cycle < 25; cycle += 1) {
+      const source = session.tensor([2], { requiresGrad: true });
+      const square = source.mul(source);
+      const [result] = session.grad(square, [source]);
+      source.close(); square.close();
+      if (cycle % 2 === 0) assert.deepEqual([...await result.toArray()], [4]);
+      result.close(); assertNoLiveState(session);
+      assert.equal(session.diagnostics().liveDerivativeNodes, 0);
+      assert.equal(session.diagnostics().liveSavedValues, 0);
+    }
+    const source = session.tensor([2], { requiresGrad: true });
+    let current = source.view([1]);
+    for (let depth = 0; depth < 12000; depth += 1) {
+      const next = current.view([1]); current.close(); current = next;
+    }
+    const [result] = session.grad(current, [source]);
+    current.close(); source.close();
+    assert.deepEqual([...await result.toArray()], [1]); result.close();
+    assertNoLiveState(session);
+    assert.equal(session.diagnostics().liveDerivativeNodes, 0);
+  } finally { await session.close(); }
+});
+
+test("payload-free histories can be reused without retaining input payload", async () => {
+  const session = createRuntimeSession({ manifestUrl: new URL("manifest.json", distributionUrl) });
+  try {
+    const x = session.tensor([2, 3], { requiresGrad: true });
+    const plain = session.tensor([5, 7]);
+    const addition = x.add(plain);
+    const view = addition.view([1, 2]);
+    const loss = view.sum();
+    plain.close(); addition.close(); view.close();
+    assert.deepEqual([...await loss.toArray()], [17]);
+    assert.equal(session.diagnostics().liveSavedValues, 0);
+    assert.equal(session.diagnostics().liveTensorValues, 2);
+    for (let repeat = 0; repeat < 3; repeat += 1) {
+      const [dx] = session.grad(loss, [x]);
+      assert.deepEqual([...await dx.toArray()], [1, 1]); dx.close();
+    }
+    loss.close(); x.close(); assertNoLiveState(session);
+  } finally { await session.close(); }
+});
+
+for (const variant of ["scalar", "simd128"]) {
+  test(`sum gradients ${variant} expand nonunit scalar derivatives including empty shapes`, async () => {
+    const programs = [];
+    const session = createTestRuntimeSession({
+      manifestUrl: new URL("manifest.json", distributionUrl), forceVariant: variant,
+      onProgramFormed: (program) => programs.push(program),
+    });
+    try {
+      for (const [data, shape] of [[[2, 3, 4, 5], [2, 2]], [[], [2, 0, 3]], [[2], []], [[2], [1, 1]]]) {
+        const x = session.tensor(data, { shape, requiresGrad: true });
+        const total = x.sum();
+        const factor = session.tensor([3], { shape: [] });
+        const loss = total.mul(factor);
+        assert.equal(total.requiresGrad, true);
+        total.close(); factor.close();
+        const [gradient] = session.grad(loss, [x]);
+        assert.equal(gradient.requiresGrad, false);
+        assert.deepEqual(gradient.shape, shape);
+        x.close(); loss.close();
+        assert.deepEqual([...await gradient.toArray()], data.map(() => 3));
+        assert.ok(programs.at(-1).computations.some((item) => item.kind === "expand-f32"));
+        gradient.close();
+        assertNoLiveState(session);
+        assert.equal(session.diagnostics().liveSavedValues, 0);
+        assert.equal(session.diagnostics().liveDerivativeNodes, 0);
+      }
+    } finally { await session.close(); }
+  });
+}
+
+for (const variant of ["scalar", "simd128"]) {
+  test(`functional gradients ${variant} compose branches, repeated operands and views lazily`, async () => {
+    const programs = [];
+    const session = createTestRuntimeSession({
+      manifestUrl: new URL("manifest.json", distributionUrl), forceVariant: variant,
+      onProgramFormed: (program) => programs.push(program),
+    });
+    try {
+      const x = session.tensor([2, 3], { requiresGrad: true });
+      const y = session.tensor([5, 7], { requiresGrad: true });
+      const xy = x.mul(y);
+      const xx = x.mul(x);
+      const combined = xy.add(xx);
+      const output = combined.view([1, 2]);
+      const seed = session.tensor([2, 3], { shape: [1, 2] });
+      assert.equal(x.requiresGrad, true);
+      assert.equal(seed.requiresGrad, false);
+      assert.equal(output.requiresGrad, true);
+      xy.close(); xx.close(); combined.close();
+      assert.deepEqual([...await output.toArray()], [14, 30]);
+      assert.equal(session.diagnostics().liveOperationRecords, 0);
+      const before = session.diagnostics();
+      const [dx, dy, repeated] = session.grad(output, [x, y, x], seed);
+      assert.equal(session.diagnostics().kernelCalls, before.kernelCalls);
+      assert.equal(session.diagnostics().wasmToHostCopies, before.wasmToHostCopies);
+      assert.equal(dx.requiresGrad, false);
+      assert.deepEqual(dx.shape, [2]);
+      assert.deepEqual([...await dx.toArray()], [18, 39]);
+      dx.close();
+      assert.deepEqual([...await repeated.toArray()], [18, 39]);
+      assert.deepEqual([...await dy.toArray()], [4, 9]);
+      assert.ok(programs.some((program) => program.computations.some((item) => item.kind === "add-f32")));
+      assert.throws(() => session.grad(output, [x], seed), { code: "CONSUMED_HISTORY" });
+      repeated.close(); dy.close(); output.close(); seed.close(); x.close(); y.close();
+      assertNoLiveState(session);
+      assert.equal(session.diagnostics().liveDerivativeNodes, 0);
+      assert.equal(session.diagnostics().liveSavedValues, 0);
+    } finally { await session.close(); }
+  });
+}
+
 for (const variant of ["scalar", "simd128"]) {
   test(`multiplication ${variant} preserves metadata, laziness and completed ownership`, async () => {
     const programs = [];
@@ -595,12 +815,13 @@ function scalarFaultKernel(behavior, failureCall, operation = "add") {
 function fixtureModule({
   abiVersion = 1,
   arenaBase = 1_048_576,
-  capabilities = 7,
+  capabilities = 15,
   kernelBehavior = "success",
   memoryImportName = "memory",
   omitKernelExport = false,
   omitSumExport = false,
   omitMulExport = false,
+  omitExpandExport = false,
   failureCall,
 } = {}) {
   const functionType = (parameters, results) => [
@@ -626,7 +847,7 @@ function fixtureModule({
     ...unsignedLeb128(32),
     ...unsignedLeb128(1024),
   ]);
-  const functions = section(3, [0x06, 0x00, 0x00, 0x00, 0x01, 0x02, 0x01]);
+  const functions = section(3, [0x07, 0x00, 0x00, 0x00, 0x01, 0x02, 0x01, 0x02]);
   const exportedFunctions = [
     ["tabgrad_abi_version", 0],
     ["tabgrad_capabilities", 1],
@@ -634,6 +855,7 @@ function fixtureModule({
     ...(omitKernelExport ? [] : [["tabgrad_add_f32", 3]]),
     ...(omitSumExport ? [] : [["tabgrad_sum_f32", 4]]),
     ...(omitMulExport ? [] : [["tabgrad_mul_f32", 5]]),
+    ...(omitExpandExport ? [] : [["tabgrad_expand_f32", 6]]),
   ];
   const exports = section(7, [
     ...unsignedLeb128(exportedFunctions.length),
@@ -659,7 +881,7 @@ function fixtureModule({
   const mulBody = [0x00, ...(failureCall === undefined
     ? kernelInstructions : scalarFaultKernel(kernelBehavior, failureCall, "mul"))];
   const code = section(10, [
-    0x06,
+    0x07,
     ...constantBody(abiVersion),
     ...constantBody(capabilities),
     ...constantBody(arenaBase),
@@ -669,6 +891,8 @@ function fixtureModule({
     ...sumBody,
     ...unsignedLeb128(mulBody.length),
     ...mulBody,
+    ...unsignedLeb128(sumBody.length),
+    ...sumBody,
   ]);
   return Buffer.from([
     0x00, 0x61, 0x73, 0x6d,
@@ -696,11 +920,11 @@ function installFixture(name, moduleOptions = {}, manifestTransform = (value) =>
   });
   const manifest = manifestTransform({
     schemaVersion: 1,
-    moduleVersion: 3,
+    moduleVersion: 4,
     abiVersion: 1,
     addressWidth: 32,
     sharedMemory: false,
-    capabilities: ["add-f32", "sum-f32", "mul-f32"],
+    capabilities: ["add-f32", "sum-f32", "mul-f32", "expand-f32"],
     imports: [{ module: "env", name: "memory", kind: "memory" }],
     memory: { initialPages: 32, maximumPages: 1024, alignment: 16 },
     variants: [variant("scalar", []), variant("simd128", ["simd128"])],
@@ -832,6 +1056,8 @@ test("records float32 addition lazily and materializes it on observation", async
     liveMaterializationRecords: 2,
     liveAllocationBytes: 0,
     liveOperationRecords: 1,
+    liveDerivativeNodes: 0,
+    liveSavedValues: 0,
     liveRequestLeases: 0,
     liveTensorHandles: 3,
     liveTensorValues: 3,
@@ -861,6 +1087,8 @@ test("records float32 addition lazily and materializes it on observation", async
     wasmToHostCopies: 1,
     kernelCalls: 1,
     liveMaterializationRecords: 3,
+    liveDerivativeNodes: 0,
+    liveSavedValues: 0,
     liveAllocationBytes: 36,
     liveOperationRecords: 0,
     liveRequestLeases: 0,
@@ -2307,6 +2535,8 @@ test("the build keeps SIMD instructions out of the scalar module", async () => {
 });
 
 for (const failureCase of [
+  { name: "missing expansion export", code: "BACKEND_ABI_MISMATCH", moduleOptions: { omitExpandExport: true } },
+  { name: "missing expansion capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: 7 } },
   { name: "missing mul export", code: "BACKEND_ABI_MISMATCH", moduleOptions: { omitMulExport: true } },
   { name: "missing mul capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: 3 } },
   { name: "missing sum export", code: "BACKEND_ABI_MISMATCH", moduleOptions: { omitSumExport: true } },

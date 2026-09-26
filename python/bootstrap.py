@@ -19,6 +19,8 @@ class _OwnedImportPath(str):
 
 
 def _reject_conflicts() -> None:
+    if "torch.autograd" in sys.modules or "torch.autograd" in jsfinder.jsproxies:
+        raise ImportError("Tabgrad cannot replace the existing module 'torch.autograd'")
     for name in ("torch", BRIDGE_NAME):
         if (
             name in sys.modules
@@ -46,6 +48,7 @@ class Installation:
         self.registration: object | None = None
         # Only identity is used; host finders need not inherit an importlib ABC.
         self.importer: object | None = None
+        self.package_importer: tuple[str, object] | None = None
 
     def _write_source(self, path: Path, content: bytes) -> None:
         # Claim the newly created identity before a write can partially fail.
@@ -57,7 +60,7 @@ class Installation:
         finally:
             self.files[-1] = (path, inode, path.read_bytes())
 
-    def install(self, source: str, bridge: object) -> None:
+    def install(self, source: str, autograd_source: str, bridge: object) -> None:
         """Reject conflicts before mutation and roll back partial installation."""
         _reject_conflicts()
         try:
@@ -69,6 +72,7 @@ class Installation:
             path = package / "__init__.py"
             content = source.encode("utf-8")
             self._write_source(path, content)
+            self._write_source(package / "autograd.py", autograd_source.encode("utf-8"))
             self.import_path = _OwnedImportPath(str(root))
             sys.path.insert(0, self.import_path)
             register_js_module(BRIDGE_NAME, bridge)
@@ -80,9 +84,17 @@ class Installation:
                 # the borrowed interpreter's filesystem during initial import.
                 sys.dont_write_bytecode = True
                 self.modules["torch"] = importlib.import_module("torch")
+                self.modules["torch.autograd"] = importlib.import_module(
+                    "torch.autograd"
+                )
             finally:
                 sys.dont_write_bytecode = previous_bytecode
                 self.importer = sys.path_importer_cache.get(self.import_path)
+                package_path = str(package)
+                self.package_importer = (
+                    package_path,
+                    sys.path_importer_cache.get(package_path),
+                )
         except BaseException as primary:
             try:
                 self.close()
@@ -108,6 +120,11 @@ class Installation:
             if sys.path_importer_cache.get(self.import_path) is self.importer:
                 sys.path_importer_cache.pop(self.import_path, None)
             self.import_path = None
+        if self.package_importer is not None:
+            package_path, importer = self.package_importer
+            if sys.path_importer_cache.get(package_path) is importer:
+                sys.path_importer_cache.pop(package_path, None)
+            self.package_importer = None
         for path, inode, content in self.files:
             try:
                 if _same_file(path, inode) and (

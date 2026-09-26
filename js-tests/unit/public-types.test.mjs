@@ -41,7 +41,7 @@ test("the JavaScript package entry point exposes only the supported runtime surf
     {
       exports: ["RuntimeSession", "TabgradError", "Tensor", "createRuntimeSession"],
       runtimeSessionConstructor: ["length", "name", "prototype"],
-      runtimeSessionPrototype: ["close", "constructor", "diagnostics", "tensor"],
+      runtimeSessionPrototype: ["close", "constructor", "diagnostics", "grad", "tensor"],
       tensorConstructor: ["length", "name", "prototype"],
       tensorPrototype: [
         "add",
@@ -50,6 +50,7 @@ test("the JavaScript package entry point exposes only the supported runtime surf
         "device",
         "dtype",
         "mul",
+        "requiresGrad",
         "shape",
         "sum",
         "toArray",
@@ -76,6 +77,8 @@ test("the public declarations do not expose runtime-to-backend plumbing", async 
   assert.match(declarations, /view\(shape: readonly number\[\]\): Tensor/);
   assert.match(declarations, /sum\(\): Tensor/);
   assert.match(declarations, /mul\(right: Tensor\): Tensor/);
+  assert.match(declarations, /get requiresGrad\(\): boolean/);
+  assert.match(declarations, /grad\(output: Tensor, inputs: readonly Tensor\[\], gradient\?: Tensor\): Tensor\[\]/);
 
   for (const internalName of [
     "BackendDiagnostics",

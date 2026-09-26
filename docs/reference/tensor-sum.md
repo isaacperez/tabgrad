@@ -41,9 +41,13 @@ input produces positive zero, not an empty tensor. A scalar input also creates
 a reduction result rather than returning the original handle.
 
 Dimension selection, `keepdim`, explicit `dtype`, `out`, promotion,
-non-contiguous inputs, differentiation and other devices are outside this
+non-contiguous inputs and other devices are outside this
 operation's contract. Even apparently redundant options such as `dtype=None`,
 `dim=None`, `keepdim=False` or `out=None` are rejected, not silently ignored.
+
+Tracked inputs participate in [functional gradients](functional-gradients.md).
+The derivative expands the incoming scalar to the input shape, including empty
+dimensions; an interior sum does not assume that incoming scalar equals one.
 
 ## Admission, observation and ownership
 

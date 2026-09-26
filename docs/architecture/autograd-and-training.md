@@ -63,6 +63,11 @@ flowchart TD
 History does not execute numerical loops. When a derivative is requested, its
 recipes admit fresh operations through the ordinary runtime path.
 
+The concrete [history owner](../components/derivative-history.md) explains
+independent edges and saved pins. The [functional derivative flow](../flows/functional-gradients.md)
+shows how they transfer to fresh ordinary execution, while the
+[API reference](../reference/functional-gradients.md) bounds supported calls.
+
 ## Vector-Jacobian and Jacobian-vector products
 
 The derivative of a tensor function can be described by a Jacobian matrix, but

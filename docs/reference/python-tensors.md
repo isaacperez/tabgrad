@@ -19,6 +19,8 @@ Total reduction has its own [sum reference](tensor-sum.md), covering
 Elementwise products use `*`, `Tensor.mul(other)` or `torch.mul(input, other)`;
 the [multiplication reference](tensor-multiplication.md) owns their signatures,
 equal-shape domain and numerical limits.
+The [functional gradient reference](functional-gradients.md) defines
+`torch.autograd.grad`, tracked creation and first-order result ownership.
 
 ## Create a tensor
 
@@ -40,7 +42,8 @@ bound by Python: there is no silent inference of an integer or default dtype.
   `(2, 0)`. Nesting cannot imply dimensions after an empty sequence.
 - The only accepted dtype is the `torch.float32` object, not its string name.
 - The device may be the string `'cpu'` or a `torch.device('cpu')` descriptor.
-- Gradient and pinned-memory flags must be booleans and must be false.
+- Gradient and pinned-memory flags must be booleans. `requires_grad=True`
+  enables tracking; `pin_memory` must remain false.
 - Creation converts to float32 and owns a copy. Later input mutations cannot
   change the tensor. Integer overflow during conversion raises `OverflowError`.
 - Ragged inputs, mixed numerical/container depth and cycles are rejected.
@@ -54,7 +57,7 @@ an opaque handle cannot be manufactured by a public constructor.
 
 ## Read metadata
 
-`tensor.shape`, `tensor.dtype` and `tensor.device` are read-only properties.
+`tensor.shape`, `tensor.dtype`, `tensor.device` and `tensor.requires_grad` are read-only properties.
 Their content comes from the runtime on each access; a closed handle cannot
 serve cached metadata.
 
@@ -63,6 +66,7 @@ serve cached metadata.
 | `shape` | `torch.Size`, an immutable integer tuple | Iteration, indexing, tuple equality/hash, representation, slicing, concatenation, repetition and `numel()` |
 | `dtype` | The `torch.float32` constant of type `torch.dtype` | Identity, representation, read-only `is_floating_point=True`, `is_complex=False`, `is_signed=True` |
 | `device` | A `torch.device('cpu')` object | Equality with CPU descriptors, hashing, representation, string form, read-only `type='cpu'` and `index=None` |
+| `requires_grad` | Python `bool` | Tracking propagates through supported operations; functional gradients return untracked tensors |
 
 `torch.Size(iterable)` uses integer-index conversion, including Python booleans;
 `numel()` is the product of its dimensions, with the empty product equal to one.
@@ -134,7 +138,7 @@ The host must not drive raw interpreter calls concurrently with that entry.
 
 Invalid container/element forms, mixed nesting depth, non-boolean flags, non-tensor addition operands,
 unexpected keywords and non-integer `Size` elements raise `TypeError`.
-Unsupported dtype/device/gradient/pinned-memory/alpha/out choices raise
+Unsupported dtype/device/pinned-memory/alpha/out choices raise
 `RuntimeError`. A shape mismatch also raises `RuntimeError`, chained from the
 runtime rejection; exact error wording is not a compatibility claim.
 Inconsistent sibling lengths and cyclic input raise `ValueError`. Rectangular

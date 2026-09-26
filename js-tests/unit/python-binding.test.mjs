@@ -26,6 +26,119 @@ function getInterpreter() {
   return interpreterPromise;
 }
 
+test("Python functional gradients normalize calls and preserve ordinary observation", { timeout: 20_000 }, async () => {
+  const { attachPython } = await import("../../dist/python.js");
+  const interpreter = await getInterpreter();
+  const binding = await attachPython(interpreter);
+  try {
+    await binding.runPythonAsync(`
+import torch, torch.autograd, gc
+def check_grad():
+    x = torch.tensor([2., 3.], dtype=torch.float32, requires_grad=True)
+    y = torch.tensor([5., 7.], dtype=torch.float32, requires_grad=True)
+    assert x.requires_grad and not torch.tensor(1., dtype=torch.float32).requires_grad
+    loss = (x * y + x * x).sum()
+    assert loss.requires_grad and loss.tolist() == 44.
+    before = torch._runtime_session.diagnostics().wasmToHostCopies
+    dx, dy, repeated = torch.autograd.grad((loss,), [x, y, x], (None,))
+    assert torch._runtime_session.diagnostics().wasmToHostCopies == before
+    assert isinstance((dx, dy), tuple)
+    assert dx.tolist() == [9., 13.] and dy.tolist() == [2., 3.]
+    assert repeated.tolist() == dx.tolist() and not dx.requires_grad
+    assert not hasattr(x, 'grad') and not hasattr(x, 'backward')
+    seed = torch.tensor([2., 3.], dtype=torch.float32)
+    v = x.view(2)
+    assert torch.autograd.grad(v, x, seed)[0].tolist() == [2., 3.]
+    assert torch.autograd.grad(outputs=v, inputs=x, grad_outputs=[seed],
+        retain_graph=False, create_graph=False, only_inputs=True, allow_unused=False,
+        is_grads_batched=False, materialize_grads=False)[0].tolist() == [2., 3.]
+    bad_calls = ["torch.autograd.grad(v, x)", "torch.autograd.grad(loss, x)",
+        "torch.autograd.grad(v, x, x)",
+        "torch.autograd.grad(v, x, torch.tensor(1., dtype=torch.float32))",
+        "torch.autograd.grad(v, x, seed, retain_graph=True)",
+        "torch.autograd.grad(v, x, seed, create_graph=True)",
+        "torch.autograd.grad(v, x, seed, allow_unused=True)",
+        "torch.autograd.grad(v, x, seed, only_inputs=False)",
+        "torch.autograd.grad(v, x, seed, is_grads_batched=True)",
+        "torch.autograd.grad(v, x, seed, materialize_grads=True)"]
+    for expression in bad_calls:
+        try: eval(expression)
+        except RuntimeError: pass
+        else: raise AssertionError(expression)
+    for expression in ["torch.autograd.grad(v, [])", "torch.autograd.grad([], x)",
+        "torch.autograd.grad([v, v], x)", "torch.autograd.grad(v, [x, None], seed)",
+        "torch.autograd.grad(v, x, [seed, seed])", "torch.autograd.grad(v, x, seed, create_graph=1)"]:
+        try: eval(expression)
+        except TypeError: pass
+        else: raise AssertionError(expression)
+    assert torch.autograd.grad(v, x, seed)[0].tolist() == [2., 3.]
+check_grad()
+gc.collect()
+assert torch._runtime_session.diagnostics().liveDerivativeNodes == 0
+assert torch._runtime_session.diagnostics().liveSavedValues == 0
+assert torch._runtime_session.diagnostics().liveTensorHandles == 0
+`);
+  } finally {
+    await binding.close();
+    assert.equal(interpreter.runPython("'torch.autograd' in __import__('sys').modules"), false);
+    interpreter.runPython("[globals().pop(name, None) for name in ('torch', 'gc', 'check_grad')]; None");
+  }
+});
+
+test("Python functional gradients match pinned native values, shapes, tracking and errors", { timeout: 20_000 }, async () => {
+  const oracle = JSON.parse(await readFile(new URL("../fixtures/python-tensor-oracle.json", import.meta.url), "utf8"));
+  const { attachPython } = await import("../../dist/python.js");
+  const interpreter = await getInterpreter();
+  const binding = await attachPython(interpreter);
+  try {
+    for (const fixture of oracle.gradientCases) {
+      await binding.runPythonAsync(`
+import torch, json, gc
+def check_native_gradient():
+${fixture.source.split("\n").map((line) => `    ${line}`).join("\n")}
+    actual = [[list(value.shape), value.tolist(), value.requires_grad] for value in results]
+    assert actual == json.loads(${JSON.stringify(JSON.stringify(fixture.expected))}), ${JSON.stringify(fixture.name)}
+check_native_gradient()
+gc.collect()
+assert torch._runtime_session.diagnostics().liveDerivativeNodes == 0
+assert torch._runtime_session.diagnostics().liveSavedValues == 0
+`);
+    }
+    for (const fixture of oracle.gradientErrors) {
+      await binding.runPythonAsync(`
+def check_native_gradient_error():
+${fixture.source.trimEnd().split("\n").map((line) => `    ${line}`).join("\n")}
+    try:
+        ${fixture.expression}
+    except ${fixture.type}:
+        pass
+    else:
+        raise AssertionError('native gradient error was not raised')
+check_native_gradient_error()
+gc.collect()
+assert torch._runtime_session.diagnostics().liveDerivativeNodes == 0
+`);
+    }
+  } finally {
+    await binding.close();
+    interpreter.runPython("[globals().pop(name, None) for name in ('torch', 'json', 'gc', 'check_native_gradient', 'check_native_gradient_error')]; None");
+  }
+});
+
+test("Python attachment preserves an existing autograd module", { timeout: 20_000 }, async () => {
+  const { attachPython } = await import("../../dist/python.js");
+  const interpreter = await getInterpreter();
+  interpreter.runPython("import sys, types; host_autograd = types.ModuleType('torch.autograd'); sys.modules['torch.autograd'] = host_autograd");
+  let binding;
+  try {
+    await assert.rejects(async () => { binding = await attachPython(interpreter); }, { code: "PYTHON_INSTALL_FAILED" });
+    assert.equal(interpreter.runPython("sys.modules.get('torch.autograd') is host_autograd"), true);
+  } finally {
+    await binding?.close();
+    interpreter.runPython("sys.modules.pop('torch.autograd', None); del host_autograd");
+  }
+});
+
 test("Python multiplication admits tensor call forms and rejects unsupported operands", { timeout: 20_000 }, async () => {
   const { attachPython } = await import("../../dist/python.js");
   const interpreter = await getInterpreter();
@@ -847,7 +960,7 @@ for expression in [
     "torch.tensor([1], dtype=torch.float32, device='cuda')",
     'torch.tensor([1], dtype=torch.float32, device=EqualToAnything())',
     'torch.device(EqualToAnything())',
-    'torch.tensor([1], dtype=torch.float32, requires_grad=True)',
+    'torch.tensor([1], dtype=torch.float32, requires_grad="yes")',
     'torch.tensor([1], dtype=torch.float32, pin_memory=True)',
     'torch.add(left, 1)',
     'torch.add(left, right, alpha=2)',
@@ -1395,6 +1508,7 @@ try:
     except ExceptionGroup as error:
         assert error.message == 'Python installation cleanup failed'
         assert [str(item) for item in error.exceptions] == [
+            'unlink completed with failure',
             'unlink completed with failure',
             'rmdir completed with failure',
             'rmdir completed with failure',

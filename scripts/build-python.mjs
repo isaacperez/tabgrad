@@ -4,7 +4,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 const output = new URL("../dist/python/", import.meta.url);
 await mkdir(new URL("torch/", output), { recursive: true });
 const files = [];
-for (const path of ["bootstrap.py", "torch/__init__.py"]) {
+for (const path of ["bootstrap.py", "torch/__init__.py", "torch/autograd.py"]) {
   const bytes = await readFile(new URL(`../python/${path}`, import.meta.url));
   await writeFile(new URL(path, output), bytes);
   files.push({

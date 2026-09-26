@@ -92,6 +92,7 @@ link to its primary source, but they must not create a competing version.
 | Contiguous shape-only view syntax, inference and limits | [`reference/tensor-view.md`](reference/tensor-view.md) |
 | Total tensor sum, accumulation and numerical limits | [`reference/tensor-sum.md`](reference/tensor-sum.md) |
 | Elementwise tensor multiplication, call forms and numerical limits | [`reference/tensor-multiplication.md`](reference/tensor-multiplication.md) |
+| Functional first-order gradients, tracked creation and history consumption | [`reference/functional-gradients.md`](reference/functional-gradients.md) |
 | Documentation structure and writing rules | [`documentation.md`](documentation.md) |
 | Technical documentation perspectives and placement | [`documentation.md`](documentation.md#navigate-technical-documentation-by-reader-question) |
 | Development stack, environment, and commands | [`development.md`](development.md) |

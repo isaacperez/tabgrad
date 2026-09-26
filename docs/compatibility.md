@@ -35,7 +35,7 @@ that was not tested, or an implementation that silently uses another backend.
 Tabgrad can establish its own browser integration behavior without claiming
 that the behavior implements a PyTorch interface. The direct contract in the
 [JavaScript tensor API](javascript-api.md)—session and tensor creation,
-equal-shape contiguous CPU `float32` addition and multiplication, total sum,
+equal-shape contiguous CPU `float32` addition and multiplication, total sum, functional gradients,
 asynchronous observation, diagnostics,
 and explicit close—is such an interface. Its tests establish Tabgrad's
 JavaScript and WebAssembly behavior only. The names are not `torch` names, and
@@ -61,7 +61,7 @@ cases. Raw scalar/SIMD and real Pyodide tests consume this evidence. Direct
 runtime and Chrome/Firefox tests exercise composition, aliases, cleanup and
 ordinary Python observation, including both CPU variants in interpreter workers
 with JSPI disabled. Broadcasting, host-number operands, mutation, promotion and
-gradients remain explicit subset exclusions rather than claimed PyTorch errors.
+higher-order gradients remain explicit subset exclusions rather than claimed PyTorch errors.
 
 The [total sum reference](reference/tensor-sum.md) defines unary total reduction
 and its numerical domain. Native `sumCases` record scalar metadata, input bits,
@@ -69,7 +69,8 @@ ordinary finite results and explicit cancellation/overflow cases. CPU variants
 and Pyodide consume those fixtures with the stated comparison method; permitted
 overflow-order differences are recorded separately from ordinary error bounds.
 Lifecycle, mixed-graph and browser checks complement numerical comparisons.
-This evidence does not cover dimensional reductions, promotion or gradients.
+This sum-specific evidence does not cover dimensional reductions or promotion.
+Functional derivative evidence is recorded separately below.
 
 The [Python tensor reference](reference/python-tensors.md) defines the bounded
 creation, metadata, addition and ordinary observation contract. Its native expectations are generated
@@ -87,8 +88,30 @@ and reject excluded overloads. Direct runtime tests establish shared allocation,
 materialization, alias retention, reuse and rollback; numerical equality alone
 does not prove storage sharing. Browser fixtures exercise views through both
 the managed Python and direct JavaScript paths. These bounded cases exclude
-dtype reinterpretation, non-contiguous access, mutation and differentiation;
+dtype reinterpretation, non-contiguous access and mutation;
 Tabgrad's large-empty-shape representability policy is not attributed to PyTorch.
+
+The [functional gradient reference](reference/functional-gradients.md) defines
+creation-time tracking and one-output first-order `torch.autograd.grad` through
+addition, multiplication, total sum and contiguous views. Native PyTorch 2.14.0
+`gradientCases` record exact small-number values, shapes and result tracking for
+branches, repeated inputs, leaves/intermediates, nonunit seeds, interior sums,
+empty dimensions, hidden computed operands and reusable payload-free history.
+`gradientErrors` record selected nontracking, disconnected-input, seed-shape,
+implicit-seed and consumed-history error categories. Real Pyodide consumes that
+same source and expected result data. The generator uses one intra-operation
+and one inter-operation thread; no NumPy or native runtime is distributed.
+
+Direct scalar/SIMD runtime and raw expansion tests additionally cover admission
+atomicity, saved pins, iterative deep traversal/release, dropped results, backend
+failure and shutdown. Browser fixtures exercise direct scalar/SIMD derivatives
+and managed Python observation with native and controlled-absent JSPI. Exact
+tested browser versions belong in verification evidence. Tracking seeds,
+retained/higher-order modes, persistent accumulation and unused-input modes are
+intentional subset exclusions tested as Tabgrad restrictions, not attributed
+to native rejection. Official references are
+[PyTorch 2.14 functional gradients](https://docs.pytorch.org/docs/2.14/generated/torch.autograd.grad.html)
+and [autograd mechanics](https://docs.pytorch.org/docs/2.14/notes/autograd.html).
 
 Real Pyodide tests also consume those numerical fixtures through `tolist()` and
 check independent lists of Python floats, nested control flow, common demand

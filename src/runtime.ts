@@ -8,6 +8,8 @@ import {
   retainExecutionFailureContext,
 } from "./errors.js";
 import { ExecutionRequest, type QueuedExecutionRequest } from "./execution-request.js";
+import { DerivativeHistory, type DerivativeNode, type DerivativeRecipe } from "./derivative-history.js";
+import { IDENTITY_DERIVATIVE, MUL_DERIVATIVE, SUM_DERIVATIVE } from "./derivative-recipes.js";
 import { copyTensorShape, equalTensorShapes, inferViewShape, tensorElementCount } from "./tensor-shape.js";
 import {
   ExecutableProgram,
@@ -28,6 +30,7 @@ export interface TensorOptions {
   readonly device?: TensorDevice;
   readonly layout?: TensorLayout;
   readonly shape?: readonly number[];
+  readonly requiresGrad?: boolean;
 }
 
 export interface RuntimeSessionOptions {
@@ -59,6 +62,8 @@ export interface RuntimeDiagnostics {
   readonly liveOperationRecords: number;
   readonly liveMaterializationRecords: number;
   readonly liveRequestLeases: number;
+  readonly liveDerivativeNodes: number;
+  readonly liveSavedValues: number;
 }
 
 interface TensorMetadata {
@@ -74,9 +79,9 @@ interface AdmittedOperation {
 }
 
 interface NumericalOperationDefinition {
-  readonly name: "add" | "mul" | "sum";
-  readonly provenanceSource: "Tensor.add" | "Tensor.mul" | "Tensor.sum";
-  readonly loweredKind: "add-f32" | "mul-f32" | "sum-f32";
+  readonly name: "add" | "mul" | "sum" | "expand";
+  readonly provenanceSource: "Tensor.add" | "Tensor.mul" | "Tensor.sum" | "DerivativeHistory.sum";
+  readonly loweredKind: "add-f32" | "mul-f32" | "sum-f32" | "expand-f32";
   readonly pure: true;
 }
 
@@ -235,7 +240,7 @@ class TensorState {
   readonly value: TensorValue;
   closed = false;
 
-  constructor(session: RuntimeSession, value: TensorValue) {
+  constructor(session: RuntimeSession, value: TensorValue, readonly history: DerivativeNode<TensorValue> | null) {
     this.session = session;
     this.value = value;
   }
@@ -401,6 +406,13 @@ export class Tensor {
     return state.value.device;
   }
 
+  /** Whether this value participates in first-order functional differentiation. */
+  get requiresGrad(): boolean {
+    const state = requireTensorState(this);
+    assertTensorOpen(state);
+    return state.history !== null;
+  }
+
   add(right: Tensor): Tensor {
     const state = requireTensorState(this);
     return runtimeSessionAccess(state.session).binary(ADD_OPERATION, state, right);
@@ -453,6 +465,7 @@ class EqualShapeBinaryOperationDefinition implements NumericalOperationDefinitio
     readonly provenanceSource: "Tensor.add" | "Tensor.mul",
     readonly loweredKind: "add-f32" | "mul-f32",
     readonly description: "addition" | "multiplication",
+    readonly derivative: DerivativeRecipe,
   ) {}
 
   admit(
@@ -552,13 +565,14 @@ class EqualShapeBinaryOperationDefinition implements NumericalOperationDefinitio
 }
 
 const ADD_OPERATION = Object.freeze(new EqualShapeBinaryOperationDefinition(
-  "add", "Tensor.add", "add-f32", "addition",
+  "add", "Tensor.add", "add-f32", "addition", IDENTITY_DERIVATIVE,
 ));
 const MUL_OPERATION = Object.freeze(new EqualShapeBinaryOperationDefinition(
-  "mul", "Tensor.mul", "mul-f32", "multiplication",
+  "mul", "Tensor.mul", "mul-f32", "multiplication", MUL_DERIVATIVE,
 ));
 
 class SumOperationDefinition implements NumericalOperationDefinition {
+  readonly derivative = SUM_DERIVATIVE;
   readonly name = "sum";
   readonly provenanceSource = "Tensor.sum";
   readonly loweredKind = "sum-f32";
@@ -580,8 +594,13 @@ class SumOperationDefinition implements NumericalOperationDefinition {
 
 const SUM_OPERATION = Object.freeze(new SumOperationDefinition());
 
+const EXPAND_OPERATION: NumericalOperationDefinition = Object.freeze({
+  name: "expand", provenanceSource: "DerivativeHistory.sum", loweredKind: "expand-f32", pure: true,
+});
+
 /** Canonical metadata admission; a view introduces no numerical dependency. */
 class ViewOperationDefinition {
+  readonly derivative = IDENTITY_DERIVATIVE;
   admit(source: TensorState, shape: unknown): TensorMetadata {
     assertTensorOpen(source);
     return {
@@ -595,6 +614,9 @@ const VIEW_OPERATION = Object.freeze(new ViewOperationDefinition());
 
 export class RuntimeSession {
   #backend: WebAssemblyCpuBackend;
+  readonly #history = new DerivativeHistory<TensorValue>(
+    (value) => this.#retainValue(value), (value) => this.#releaseValue(value),
+  );
   readonly #materializations = new MaterializationTable();
   readonly #states = new Set<TensorState>();
   readonly #values = new Set<TensorValue>();
@@ -629,7 +651,7 @@ export class RuntimeSession {
       binary: (definition: EqualShapeBinaryOperationDefinition, left: TensorState, rightHandle: unknown) => (
         this.#binary(definition, left, rightHandle)
       ),
-      sum: (source: TensorState) => this.#recordOperation(SUM_OPERATION.admit(source)),
+      sum: (source: TensorState) => this.#sum(source),
       view: (source: TensorState, shape: unknown) => this.#view(source, shape),
       observe: (state: TensorState) => this.#observe(state),
       assertOpen: () => this.#assertOpen(),
@@ -642,6 +664,9 @@ export class RuntimeSession {
 
   tensor(data: Iterable<number> | ArrayLike<number>, options: TensorOptions = {}): Tensor {
     this.#assertOpen();
+    if (options.requiresGrad !== undefined && typeof options.requiresGrad !== "boolean") {
+      throw new TypeError("requiresGrad must be a boolean.");
+    }
     if (options.dtype !== undefined && options.dtype !== "float32") {
       throw new TabgradError(
         "UNSUPPORTED_DTYPE",
@@ -678,21 +703,95 @@ export class RuntimeSession {
     }, null);
     this.#registerValue(value);
     this.#materializations.setHost(value, payload);
+    return this.#createHandle(value, options.requiresGrad === true ? this.#history.leaf(value.shape) : null);
+  }
+
+  /** Return lazy first-order gradients in input order, without persistent accumulation. */
+  grad(output: Tensor, inputs: readonly Tensor[], gradient?: Tensor): Tensor[] {
+    this.#assertOpen();
+    if (arguments.length < 2 || arguments.length > 3 || !Array.isArray(inputs) || inputs.length === 0) {
+      throw new TypeError("grad requires one output and a nonempty array of input tensors, plus an optional seed.");
+    }
+    const result = this.#gradientInput(output);
+    const requested = inputs.map((input: unknown) => this.#gradientInput(input));
+    if (result.history === null || requested.some((input) => input.history === null)) {
+      throw new TabgradError("GRADIENT_NOT_TRACKED", "Output and requested inputs must require gradients.");
+    }
+    const explicitSeed = gradient === undefined ? undefined : this.#gradientInput(gradient);
+    if (explicitSeed !== undefined) {
+      if (explicitSeed.history !== null) {
+        throw new TabgradError("UNSUPPORTED_GRADIENT", "The gradient seed must not require gradients.");
+      }
+      if (!equalTensorShapes(result.value.shape, explicitSeed.value.shape)) {
+        throw new TabgradError("SHAPE_MISMATCH", "The gradient seed must match the output shape.");
+      }
+    } else if (tensorElementCount(result.value.shape) !== 1) {
+      throw new TabgradError("INVALID_GRADIENT", "An implicit gradient requires an output with exactly one element.");
+    }
+    const plan = this.#history.plan(result.history, requested.map((input) => input.history!));
+    const seed = explicitSeed === undefined
+      ? this.tensor([1], { shape: result.value.shape }) : this.#borrowValue(explicitSeed.value);
+    try {
+      return this.#history.execute(plan, seed, {
+        borrow: (value) => this.#borrowValue(value),
+        add: (left, right) => left.add(right),
+        mul: (left, right) => left.mul(right),
+        view: (value, shape) => value.view(shape),
+        expand: (value, shape) => this.#expand(value, shape),
+        close: (value) => value.close(),
+      });
+    } finally { seed.close(); }
+  }
+
+  #gradientInput(handle: unknown): TensorState {
+    const state = requireTensorState(handle);
+    assertTensorOpen(state);
+    if (state.session !== this) {
+      throw new TabgradError("DIFFERENT_SESSION", "Gradient tensors must belong to this session.");
+    }
+    return state;
+  }
+
+  #borrowValue(value: TensorValue): Tensor {
+    this.#retainValue(value);
     return this.#createHandle(value);
+  }
+
+  #sum(source: TensorState): Tensor {
+    const admitted = SUM_OPERATION.admit(source);
+    const history = source.history === null ? null
+      : this.#history.record(admitted.outputMetadata.shape, SUM_OPERATION.derivative, [source.history], [source.value]);
+    return this.#recordOperation(admitted, history);
+  }
+
+  #expand(source: Tensor, shape: readonly number[]): Tensor {
+    const value = requireTensorState(source).value;
+    if (tensorElementCount(value.shape) !== 1) {
+      throw new TabgradError("INVALID_GRADIENT", "Scalar expansion requires a one-element input.");
+    }
+    return this.#recordOperation({
+      record: new OperationRecord(EXPAND_OPERATION, [value]),
+      outputMetadata: { shape, dtype: value.dtype, device: value.device, layout: value.layout },
+    });
   }
 
   #binary(definition: EqualShapeBinaryOperationDefinition, left: TensorState, rightHandle: unknown): Tensor {
     this.#assertOpen();
-    return this.#recordOperation(definition.admit(this, left, rightHandle));
+    const admitted = definition.admit(this, left, rightHandle);
+    const right = requireTensorState(rightHandle);
+    const history = left.history === null && right.history === null ? null
+      : this.#history.record(admitted.outputMetadata.shape, definition.derivative,
+        [left.history, right.history], [left.value, right.value]);
+    return this.#recordOperation(admitted, history);
   }
 
-  #recordOperation(admitted: AdmittedOperation): Tensor {
+  #recordOperation(admitted: AdmittedOperation, history: DerivativeNode<TensorValue> | null = null): Tensor {
     for (const input of admitted.record.inputs) {
       this.#retainValue(input);
     }
     const result = new TensorValue(admitted.outputMetadata, admitted.record);
     this.#registerValue(result);
-    return this.#createHandle(result);
+    return this.#createHandle(result, history);
   }
 
   #view(source: TensorState, shape: unknown): Tensor {
@@ -700,7 +799,9 @@ export class RuntimeSession {
     const value = new TensorValue(metadata, null, source.value.storage);
     value.storage.references += 1;
     this.#values.add(value);
-    return this.#createHandle(value);
+    const history = source.history === null ? null
+      : this.#history.record(value.shape, VIEW_OPERATION.derivative, [source.history], [source.value]);
+    return this.#createHandle(value, history);
   }
 
   #prepare(): Promise<void> {
@@ -772,6 +873,7 @@ export class RuntimeSession {
   diagnostics(): RuntimeDiagnostics {
     return Object.freeze({
       ...this.#backend.diagnostics(),
+      ...this.#history.diagnostics(),
       liveTensorHandles: this.#states.size,
       liveTensorValues: this.#values.size,
       liveOperationRecords: this.#operationRecords,
@@ -814,11 +916,12 @@ export class RuntimeSession {
 
   #releaseHandle(state: TensorState): void {
     this.#states.delete(state);
+    if (state.history !== null) this.#history.release(state.history);
     this.#releaseValue(state.value);
   }
 
-  #createHandle(value: TensorValue): Tensor {
-    const state = new TensorState(this, value);
+  #createHandle(value: TensorValue, history: DerivativeNode<TensorValue> | null = null): Tensor {
+    const state = new TensorState(this, value, history);
     this.#states.add(state);
     return createTensorHandle(state);
   }

@@ -1,5 +1,7 @@
 """Generate bounded Python tensor expectations using the installed native oracle."""
 
+from __future__ import annotations
+
 import argparse
 import importlib
 import json
@@ -141,6 +143,120 @@ METADATA_CASES = (
     "[torch.device('cpu') == left.device, left.device == 'cpu', left.dtype is torch.float32]",
     "[repr(torch.Size([True, -1])), torch.Size([]).numel()]",
 )
+
+GRAD_SETUP = "x = torch.tensor([2., 3.], dtype=torch.float32, requires_grad=True)\n"
+GRAD_CASES = (
+    (
+        "branches-repeated-inputs",
+        GRAD_SETUP
+        + "y = torch.tensor([5., 7.], dtype=torch.float32, requires_grad=True)\nloss = (x * y + x * x).sum()\nresults = torch.autograd.grad(loss, (x, y, x))",
+    ),
+    (
+        "interior-sum",
+        GRAD_SETUP
+        + "factor = torch.tensor(3., dtype=torch.float32, requires_grad=True)\nresults = torch.autograd.grad(x.sum() * factor, [x, factor])",
+    ),
+    (
+        "intermediate-and-ancestor",
+        GRAD_SETUP
+        + "intermediate = x * x\nresults = torch.autograd.grad(intermediate.sum(), (intermediate, x))",
+    ),
+    (
+        "matrix-seed-view",
+        GRAD_SETUP
+        + "view = x.view(1, 2)\nseed = torch.tensor([[2., 3.]], dtype=torch.float32)\nresults = torch.autograd.grad([view], x, [seed])",
+    ),
+    (
+        "hidden-computed-factor",
+        GRAD_SETUP
+        + "plain = torch.tensor([5., 7.], dtype=torch.float32)\nfactor = plain * plain\nloss = (x * factor).sum()\ndel plain, factor\nloss.tolist()\nresults = torch.autograd.grad(loss, x)",
+    ),
+    (
+        "empty-input",
+        "x = torch.tensor([[], []], dtype=torch.float32, requires_grad=True)\nresults = torch.autograd.grad((x * x).sum(), x)",
+    ),
+    (
+        "scalar",
+        "x = torch.tensor(3., dtype=torch.float32, requires_grad=True)\nresults = torch.autograd.grad(x * x, x)",
+    ),
+    (
+        "singleton-rank",
+        "x = torch.tensor([[[3.]]], dtype=torch.float32, requires_grad=True)\nresults = torch.autograd.grad(x * x, x)",
+    ),
+    (
+        "self-does-not-consume",
+        GRAD_SETUP
+        + "square = x * x\nseed = torch.tensor([2., 3.], dtype=torch.float32)\nfirst = torch.autograd.grad(square, square, seed)\nresults = first + torch.autograd.grad(square, x, seed)",
+    ),
+    (
+        "payload-free-repeated",
+        GRAD_SETUP
+        + "y = (x + x).view(1, 2).sum()\nresults = torch.autograd.grad(y, x) + torch.autograd.grad(y, x)",
+    ),
+    (
+        "consumed-irrelevant-ancestor",
+        GRAD_SETUP
+        + "middle = x * x\nloss = middle.sum()\ntorch.autograd.grad(loss, x)\nresults = torch.autograd.grad(loss, middle)",
+    ),
+    (
+        "empty-output-explicit-seed",
+        "x = torch.tensor([], dtype=torch.float32, requires_grad=True)\nseed = torch.tensor([], dtype=torch.float32)\nresults = torch.autograd.grad(x * x, x, seed)",
+    ),
+)
+GRAD_ERRORS = (
+    (GRAD_SETUP, "torch.autograd.grad(x * x, x)"),
+    (
+        GRAD_SETUP,
+        "torch.autograd.grad(x.sum(), torch.tensor([2., 3.], dtype=torch.float32))",
+    ),
+    (
+        GRAD_SETUP,
+        "torch.autograd.grad(x.sum(), torch.tensor([2., 3.], dtype=torch.float32, requires_grad=True))",
+    ),
+    (
+        GRAD_SETUP,
+        "torch.autograd.grad(x * x, x, torch.tensor([[1., 1.]], dtype=torch.float32))",
+    ),
+    (
+        GRAD_SETUP + "loss = (x * x).sum()\ntorch.autograd.grad(loss, x)\n",
+        "torch.autograd.grad(loss, x)",
+    ),
+)
+
+
+def gradient_cases(oracle: _OracleModule) -> list[dict[str, object]]:
+    """Record native functional results, shape and first-order tracking facts."""
+    cases: list[dict[str, object]] = []
+    for name, source in GRAD_CASES:
+        namespace: dict[str, object] = {"torch": oracle}
+        exec(source, namespace)
+        expected: object = eval(
+            "[[list(value.shape), value.tolist(), value.requires_grad] for value in results]",
+            namespace,
+        )
+        cases.append({"name": name, "source": source, "expected": expected})
+    return cases
+
+
+def gradient_errors(oracle: _OracleModule) -> list[dict[str, str]]:
+    """Record supported failure categories without asserting excluded modes."""
+    cases: list[dict[str, str]] = []
+    for source, expression in GRAD_ERRORS:
+        namespace: dict[str, object] = {"torch": oracle}
+        exec(source, namespace)
+        try:
+            eval(expression, namespace)
+        except Exception as error:
+            cases.append(
+                {
+                    "source": source,
+                    "expression": expression,
+                    "type": type(error).__name__,
+                }
+            )
+        else:
+            raise AssertionError(f"Expected gradient rejection: {expression}")
+    return cases
 
 
 class _VersionModule(Protocol):
@@ -347,6 +463,8 @@ def generate() -> str:
                 "mulCases": mul_cases(oracle),
                 "sumComparison": "Exact simple cases; conditioning-aware absolute bounds for finite reassociation; explicit backend-dependent intermediate-overflow classifications. See docs/reference/tensor-sum.md.",
                 "sumCases": sum_cases(oracle),
+                "gradientCases": gradient_cases(oracle),
+                "gradientErrors": gradient_errors(oracle),
                 "cases": cases,
                 "rankCases": rank_cases,
                 "viewCases": view_cases,
