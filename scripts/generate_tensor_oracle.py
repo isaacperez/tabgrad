@@ -132,8 +132,26 @@ def float32_bits(value: float) -> int | str:
 def sum_cases(oracle: _OracleModule) -> list[dict[str, object]]:
     """Record native results and conditioning facts, not a second reduction engine."""
     cases: list[dict[str, object]] = []
-    for name, data, comparison in SUM_INPUTS:
-        source = f"source = torch.tensor({data}, dtype=torch.float32)\n"
+    sources = [
+        (name, f"torch.tensor({data}, dtype=torch.float32)", comparison)
+        for name, data, comparison in SUM_INPUTS
+    ]
+    sources.extend(
+        (
+            (
+                "view-matrix",
+                "torch.tensor([1, -2, 3, 4, -5, 6], dtype=torch.float32).view(2, 3)",
+                "exact",
+            ),
+            (
+                "view-empty",
+                "torch.tensor([], dtype=torch.float32).view(2, 0, 3)",
+                "exact",
+            ),
+        )
+    )
+    for name, expression, comparison in sources:
+        source = f"source = {expression}\n"
         namespace: dict[str, object] = {"torch": oracle}
         exec(source + "result = source.sum()", namespace)
         raw: object = eval("source.reshape(-1).tolist()", namespace)

@@ -133,7 +133,7 @@ must still be writable. Status codes and error transport follow the
 [CPU ABI contract](../architecture/webassembly-cpu-backend.md#version-1-raw-abi-and-module-capabilities).
 
 Kernel work is linear in input elements. It creates no per-element runtime
-nodes and no input-sized scratch tensor. Balanced subdivision uses at most 25
+nodes and no input-sized scratch tensor. Balanced subdivision uses at most 26
 recursive subdivision levels for an unsigned 32-bit length, plus bounded leaf
 state in the module's private stack. Actual accepted lengths remain constrained
 by the backend memory limit. Output storage is four payload bytes, with the

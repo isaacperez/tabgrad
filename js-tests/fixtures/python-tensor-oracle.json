@@ -2835,6 +2835,60 @@
       "bits": 3211159141,
       "referenceSum": -0.9000000059604645,
       "absoluteSum": 279.90000416338444
+    },
+    {
+      "name": "view-matrix",
+      "source": "source = torch.tensor([1, -2, 3, 4, -5, 6], dtype=torch.float32).view(2, 3)\n",
+      "comparison": "exact",
+      "inputBits": [
+        1065353216,
+        3221225472,
+        1077936128,
+        1082130432,
+        3231711232,
+        1086324736
+      ],
+      "shape": [
+        2,
+        3
+      ],
+      "metadata": [
+        [],
+        "torch.Size([])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ],
+      "bits": 1088421888
+    },
+    {
+      "name": "view-empty",
+      "source": "source = torch.tensor([], dtype=torch.float32).view(2, 0, 3)\n",
+      "comparison": "exact",
+      "inputBits": [],
+      "shape": [
+        2,
+        0,
+        3
+      ],
+      "metadata": [
+        [],
+        "torch.Size([])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ],
+      "bits": 0
     }
   ],
   "cases": [

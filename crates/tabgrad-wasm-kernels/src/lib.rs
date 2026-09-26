@@ -134,7 +134,7 @@ pub extern "C" fn tabgrad_sum_f32(input_offset: u32, output_offset: u32, length:
 
 // Each leaf has at most 32 additions per lane. Balanced subdivision bounds
 // rounding depth and stack use independently of the tensor payload: at most
-// 25 subdivision frames for a u32 length, and no temporary tensor allocation.
+// 26 subdivision frames for a u32 length, and no temporary tensor allocation.
 const SUM_LEAF_ELEMENTS: usize = 128;
 
 unsafe fn sum_f32(input: *const f32, length: usize) -> f32 {
