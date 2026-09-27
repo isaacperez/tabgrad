@@ -143,6 +143,9 @@ Read the documents in this order when learning the architecture:
    them.
 6. [Backend execution](backend-execution.md) covers the shared backend contract
    and the deliberately different WebGPU and WebAssembly implementations.
+   [WebGPU float32 addition](webgpu-float32-addition.md) develops a bounded
+   numerical decision: rounding, exceptional values, implementation freedom
+   and the evidence behind the accepted cost tradeoff.
 7. [WebAssembly CPU backend](webassembly-cpu-backend.md) develops the CPU branch:
    Rust-authored kernels, prebuilt scalar and vector modules, the private binary
    interface, memory ownership, and optional worker constraints.

@@ -30,6 +30,13 @@ Use these statuses:
 Do not use `Supported` for proposed behavior, an unmerged change, a backend
 that was not tested, or an implementation that silently uses another backend.
 
+An accepted numerical design is a requirement, not release-support evidence.
+The [WebGPU float32 addition decision](architecture/webgpu-float32-addition.md)
+defines a bounded operation's rounding and exceptional-value contract. It does
+not establish an implemented WebGPU interface, qualify every browser or extend
+that numerical rule to unrelated operations. A release record must separately
+identify the implementation, environment and conformance evidence it claims.
+
 ## Direct JavaScript behavior without a PyTorch claim
 
 Tabgrad can establish its own browser integration behavior without claiming

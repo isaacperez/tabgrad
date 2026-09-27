@@ -130,6 +130,13 @@ legal. The backend decides whether and how it is profitable. A fusion cannot
 ignore an effect, alias hazard, data-type rule, derivative boundary, or required
 diagnostic merely because doing so would reduce dispatches.
 
+Numerical rules are also semantic constraints, not incidental properties of the
+selected hardware. Kernel selection and fusion must preserve the operation's
+declared rounding and exceptional-value behavior. The topic-specific
+[WebGPU float32 addition decision](webgpu-float32-addition.md) explains one such
+contract and why stronger guarantees can require additional backend work without
+introducing a separate runtime or fixing one permanent kernel algorithm.
+
 ## Physical memory and residency
 
 The backend owns allocation, pools, staging resources, and physical leases.
