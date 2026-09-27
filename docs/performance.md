@@ -18,6 +18,50 @@ shader compilation, Python-to-JavaScript calls, CPU or GPU memory, transfer
 volume, bundle size, or another observable cost. Do not combine unrelated
 metrics into an arbitrary score.
 
+## Establish measurement adequacy
+
+Before collecting measurements intended to support a performance conclusion or
+design recommendation, establish that the method can answer the stated
+question. Record this justification with the measurement plan; naming a
+representative workload or taking many samples is not sufficient by itself.
+
+- Identify the realistic operating conditions and the effect or bound that
+  would matter to the decision. Explain how the selected workloads and scales
+  preserve the computation, allocation, transfer, or retention cost at issue.
+- Define the observation boundary and demonstrate sufficient sensitivity to
+  that effect or bound, using relevant existing evidence or a bounded pilot.
+  Account for instrument resolution, variation, measurement overhead, and
+  fixed costs that could mask the behavior being studied. Apply this to memory
+  measurements as well as timing; distinguish counted allocations from
+  observed process or device memory.
+- For a growth claim, vary the relevant dimension across a justified range
+  that can expose the expected compute or memory regimes. Repeating one small
+  workload is not evidence of scaling. Repetition or batching may improve
+  sensitivity only when it preserves the relevant execution, cache, and
+  resource-lifetime behavior; it cannot replace representative workload scale.
+
+Keep correctness checks, calibration, and decision evidence distinct. Small
+inputs are useful for functional tests and can be representative for a
+small-workload latency question. A pilot may reveal that the proposed method
+is inadequate; its purpose is to establish sensitivity, not to justify the
+preferred outcome. Neither a minimum tensor size nor a full-model benchmark
+is required universally.
+
+If adequacy cannot be established, revise the workload, instrumentation, or
+method before proceeding to decision measurements, or report the performance
+question as unresolved. Stay within authorized time, concurrency, and memory
+limits. Do not silently increase resource use or shrink the workload until
+the relevant effect disappears; request a changed budget when necessary.
+
+Reassess adequacy if the collected results contradict the calibration or
+reveal a different cost regime. Evidence that cannot resolve a material effect
+must not support a dependent conclusion or recommendation, including claims
+of equivalence or negligible overhead. Conversely, a sufficiently sensitive
+method may support a bounded conclusion of no meaningful difference; finding
+a nonzero difference is not a requirement. Retain independently valid
+correctness observations, and limit every performance conclusion to the
+workloads, ranges, and sensitivity actually established.
+
 ## Compare equivalent states
 
 Compare the proposed change with its intended base using the same machine,
