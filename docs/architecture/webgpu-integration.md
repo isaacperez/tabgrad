@@ -122,7 +122,9 @@ engine.
 
 The host calls `await createWebGpuWorker()` outside the interpreter worker.
 This bounded helper creates and owns the packaged physical GPU worker and its
-device. It returns a **controller**: a host-held object with a single-use
+device. It resolves only when the device and its capability snapshot are ready;
+failure never exposes a half-ready connection. It returns a **controller**:
+a host-held object with a single-use
 `connection`, its `transferables`, and asynchronous `close()`. The connection
 is a library-issued bundle containing the transport endpoint, capability
 information and shared control needed by the binding. It is not a public
