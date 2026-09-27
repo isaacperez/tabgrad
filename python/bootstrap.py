@@ -5,6 +5,12 @@ import importlib.util
 import os
 import sys
 import tempfile
+from importlib.machinery import (
+    SOURCE_SUFFIXES,
+    FileFinder,
+    ModuleSpec,
+    SourceFileLoader,
+)
 from pathlib import Path
 from types import ModuleType
 
@@ -16,6 +22,45 @@ BRIDGE_NAME = "_tabgrad_runtime_bridge"
 
 class _OwnedImportPath(str):
     """Give a sys.path entry identity distinct from equal host strings."""
+
+
+class _OwnedSourceLoader(SourceFileLoader):
+    """Record module acquisition before its source can import children or fail."""
+
+    def __init__(
+        self, fullname: str, path: str, *, modules: dict[str, ModuleType]
+    ) -> None:
+        super().__init__(fullname, path)
+        self.modules: dict[str, ModuleType] | None = modules
+
+    def exec_module(self, module: ModuleType) -> None:
+        if self.modules is not None:
+            self.modules[self.name] = module
+            self.modules = None
+        super().exec_module(module)
+
+
+class _OwnedSourceFinder(FileFinder):
+    """Capture source-module identities only during synchronous installation."""
+
+    def __init__(self, path: Path, modules: dict[str, ModuleType]) -> None:
+        super().__init__(str(path), (SourceFileLoader, SOURCE_SUFFIXES))
+        self.modules: dict[str, ModuleType] | None = modules
+
+    def find_spec(
+        self, fullname: str, target: ModuleType | None = None
+    ) -> ModuleSpec | None:
+        spec = super().find_spec(fullname, target)
+        if (
+            self.modules is not None
+            and target is None
+            and spec is not None
+            and isinstance(spec.loader, SourceFileLoader)
+        ):
+            spec.loader = _OwnedSourceLoader(
+                fullname, spec.loader.path, modules=self.modules
+            )
+        return spec
 
 
 def _reject_conflicts() -> None:
@@ -60,6 +105,11 @@ class Installation:
         finally:
             self.files[-1] = (path, inode, path.read_bytes())
 
+    def _install_importer(self, path: Path) -> _OwnedSourceFinder:
+        importer = _OwnedSourceFinder(path, self.modules)
+        sys.path_importer_cache[str(path)] = importer
+        return importer
+
     def install(self, source: str, autograd_source: str, bridge: object) -> None:
         """Reject conflicts before mutation and roll back partial installation."""
         _reject_conflicts()
@@ -75,26 +125,24 @@ class Installation:
             self._write_source(package / "autograd.py", autograd_source.encode("utf-8"))
             self.import_path = _OwnedImportPath(str(root))
             sys.path.insert(0, self.import_path)
-            register_js_module(BRIDGE_NAME, bridge)
-            self.registration = jsfinder.jsproxies[BRIDGE_NAME]
-            self.modules[BRIDGE_NAME] = importlib.import_module(BRIDGE_NAME)
+            root_importer = self._install_importer(root)
+            self.importer = root_importer
+            package_importer = self._install_importer(package)
+            self.package_importer = (str(package), package_importer)
             previous_bytecode = sys.dont_write_bytecode
             try:
+                register_js_module(BRIDGE_NAME, bridge)
+                self.registration = jsfinder.jsproxies[BRIDGE_NAME]
+                self.modules[BRIDGE_NAME] = importlib.import_module(BRIDGE_NAME)
                 # Source is already verified. Do not leave an untracked cache in
                 # the borrowed interpreter's filesystem during initial import.
                 sys.dont_write_bytecode = True
-                self.modules["torch"] = importlib.import_module("torch")
-                self.modules["torch.autograd"] = importlib.import_module(
-                    "torch.autograd"
-                )
+                importlib.import_module("torch")
+                importlib.import_module("torch.autograd")
             finally:
+                root_importer.modules = None
+                package_importer.modules = None
                 sys.dont_write_bytecode = previous_bytecode
-                self.importer = sys.path_importer_cache.get(self.import_path)
-                package_path = str(package)
-                self.package_importer = (
-                    package_path,
-                    sys.path_importer_cache.get(package_path),
-                )
         except BaseException as primary:
             try:
                 self.close()

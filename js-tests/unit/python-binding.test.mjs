@@ -1294,18 +1294,23 @@ test("close preserves host replacements and retained modules keep the old closed
 import torch, sys, types
 old_torch = torch
 host_module = types.ModuleType('torch')
+host_child = types.ModuleType('torch.autograd')
+sys.modules['torch.autograd'] = host_child
+import importlib
+importlib.reload(host_child)
 sys.modules['torch'] = host_module
 `);
   interpreter.registerJsModule("_tabgrad_runtime_bridge", { hostOwned: true });
   await binding.close();
   try {
     assert.equal(interpreter.runPython("sys.modules['torch'] is host_module"), true);
+    assert.equal(interpreter.runPython("sys.modules['torch.autograd'] is host_child"), true);
     interpreter.runPython("sys.modules.pop('_tabgrad_runtime_bridge', None); None");
     assert.equal(interpreter.runPython("__import__('_tabgrad_runtime_bridge').hostOwned"), true);
     assert.throws(() => interpreter.runPython("old_torch._runtime_session.tensor([])"), /closed/i);
   } finally {
     interpreter.unregisterJsModule("_tabgrad_runtime_bridge");
-    interpreter.runPython("sys.modules.pop('_tabgrad_runtime_bridge', None); sys.modules.pop('torch'); None");
+    interpreter.runPython("sys.modules.pop('_tabgrad_runtime_bridge', None); sys.modules.pop('torch'); sys.modules.pop('torch.autograd', None); None");
   }
   const replacement = await attachPython(interpreter);
   try {
@@ -1350,6 +1355,97 @@ test("failed Python import rolls back files, paths, modules and the owned sessio
   const binding = await attachPython(interpreter);
   await binding.close();
 });
+
+for (const replaceChild of [false, true]) {
+  test(`failed parent import rolls back acquired children and preserves host state (replacement=${replaceChild})`, {
+    timeout: 15_000,
+  }, async (context) => {
+    const { attachPython } = await import("../../dist/python.js");
+    const interpreter = await getInterpreter();
+    interpreter.runPython(`
+import os, sys, types
+before_tmp = set(os.listdir('/tmp'))
+before_path = tuple(sys.path)
+host_unrelated = types.ModuleType('host_unrelated')
+host_child = types.ModuleType('torch.autograd')
+host_added = types.ModuleType('torch.host_added')
+host_finder = object()
+sys.modules['host_unrelated'] = host_unrelated
+`);
+    const originalSource = await readFile(new URL("../../dist/python/torch/__init__.py", import.meta.url), "utf8");
+    const source = `${originalSource}
+import sys, __main__
+assert 'torch.autograd' in sys.modules
+__main__.acquired_child = sys.modules['torch.autograd']
+# A matching name and even matching origin cannot prove acquisition.
+__main__.host_added.__file__ = autograd.__file__
+__main__.host_added.__spec__ = autograd.__spec__
+sys.modules['torch.host_added'] = __main__.host_added
+if ${replaceChild ? "True" : "False"}:
+    __main__.host_child.__file__ = autograd.__file__
+    __main__.host_child.__spec__ = autograd.__spec__
+    sys.modules['torch.autograd'] = __main__.host_child
+    import importlib
+    importlib.reload(__main__.host_child)
+    from pathlib import Path
+    __main__.replaced_import_paths = (str(Path(__file__).parent.parent), str(Path(__file__).parent))
+    for path in __main__.replaced_import_paths:
+        sys.path_importer_cache[path] = __main__.host_finder
+raise RuntimeError('injected failure after child import')
+`;
+    const bytes = Buffer.from(source);
+    const originalFetch = globalThis.fetch;
+    const replacement = context.mock.method(globalThis, "fetch", async (url) => {
+      if (String(url).endsWith("torch/__init__.py")) return new Response(bytes);
+      const response = await originalFetch(url);
+      if (!String(url).endsWith("manifest.json")) return response;
+      const manifest = await response.json();
+      const file = manifest.files.find((entry) => entry.path === "torch/__init__.py");
+      file.byteLength = bytes.length;
+      file.sha256 = createHash("sha256").update(bytes).digest("hex");
+      return Response.json(manifest);
+    });
+    const sessionClose = context.mock.method(RuntimeSession.prototype, "close");
+    try {
+      await assert.rejects(attachPython(interpreter), (error) => {
+        assert.equal(error.code, "PYTHON_INSTALL_FAILED");
+        assert.match(String(error.cause), /RuntimeError: injected failure after child import/);
+        return true;
+      });
+      replacement.mock.restore();
+      assert.equal(sessionClose.mock.callCount(), 1);
+      assert.equal(interpreter.runPython("sys.modules.get('torch.autograd') is not acquired_child"), true);
+      assert.equal(interpreter.runPython(replaceChild
+        ? "sys.modules.get('torch.autograd') is host_child"
+        : "'torch.autograd' not in sys.modules"), true);
+      assert.equal(interpreter.runPython("sys.modules.get('host_unrelated') is host_unrelated and sys.modules.get('torch.host_added') is host_added"), true);
+      assert.equal(interpreter.runPython("'torch' not in sys.modules and '_tabgrad_runtime_bridge' not in sys.modules"), true);
+      assert.equal(interpreter.runPython("set(os.listdir('/tmp')) == before_tmp and tuple(sys.path) == before_path"), true);
+      if (replaceChild) {
+        assert.equal(interpreter.runPython("all(sys.path_importer_cache.get(path) is host_finder for path in replaced_import_paths)"), true);
+      }
+      interpreter.runPython("sys.modules.pop('torch.autograd', None); None");
+      const binding = await attachPython(interpreter);
+      try {
+        await binding.runPythonAsync("import torch; assert callable(torch.autograd.grad)");
+      } finally {
+        await binding.close();
+      }
+      assert.equal(interpreter.runPython("'torch.autograd' not in sys.modules and 'torch' not in sys.modules"), true);
+    } finally {
+      replacement.mock.restore();
+      interpreter.runPython(`
+for name in ('torch.autograd', 'torch.host_added', 'host_unrelated'):
+    sys.modules.pop(name, None)
+del host_unrelated, host_child, host_added, acquired_child
+`);
+      if (replaceChild) {
+        interpreter.runPython("[sys.path_importer_cache.pop(path, None) for path in replaced_import_paths]; del replaced_import_paths");
+      }
+      interpreter.runPython("del host_finder");
+    }
+  });
+}
 
 test("cleanup preserves replaced files, equal host paths and importer-cache identities", {
   timeout: 15_000,

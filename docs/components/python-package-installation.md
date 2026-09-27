@@ -184,7 +184,7 @@ The installation therefore keeps a small ownership record:
 | Imported package and bridge | The exact module object remains in `sys.modules` |
 | JavaScript registration | The registration still contains the captured proxy object |
 | Import-search entry | The entry is the installation's distinct string object, not just an equal string |
-| Cached finder | The cache still contains the finder captured after package import |
+| Cached finder | The cache still contains the finder registered for the owned source directory |
 | Source file | Its filesystem identity and content still match the owned write |
 | Package and root directories | Their filesystem identities match and they are empty |
 
@@ -206,7 +206,21 @@ identity tests, not simply change the accepted version string.
 
 A partial installation rolls back the entries it acquired. File ownership is
 recorded before writing can fail, so a partially written source file remains
-eligible for cleanup. Initial import suppresses bytecode-cache writing only
+eligible for cleanup. For initial package import, the installation registers
+source finders for its root and package directories. Their loaders record each
+module object before executing its source. Python removes an unsuccessful
+parent import from `sys.modules`, but can retain a child whose import already
+succeeded; recording acquisition before execution lets rollback remove that
+child too. Cleanup checks the recorded object rather than inferring ownership
+from a module name or source location, so a host replacement survives even if
+it advertises the same origin. Reloading an existing module does not acquire
+its identity, including a host replacement reloaded during initialization.
+
+Module acquisition ends with the synchronous import, and the finders and
+loaders release their reference to the ownership record. Later host imports or
+reloads do not become installation-owned. Finder identities are recorded when
+registered, so replacing a finder during import does not transfer ownership of
+the replacement to cleanup. Initial import suppresses bytecode-cache writing only
 for that synchronous operation and restores the interpreter's previous setting.
 Bootstrap failure is reported as `PYTHON_INSTALL_FAILED`, retaining its Python
 cause. If rollback also fails, the Python exception group retains both errors.
