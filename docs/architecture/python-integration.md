@@ -316,8 +316,19 @@ remain tied to the old closed binding, not rebound to a new session.
 ## Decision, alternatives, and limits of the evidence
 
 The [attachment research record](https://github.com/isaacperez/tabgrad/issues/43#issuecomment-5600702674)
-compares its alternatives and preserves the method, sources, failed pilots,
-raw results, and independent challenge. The
+compares its alternatives and describes the method, reported observations,
+failed pilots, and independent challenge. Its original source and raw-result
+packages were withdrawn, as recorded in the
+[first](https://github.com/isaacperez/tabgrad/issues/43#issuecomment-5600700683)
+and [second archive notices](https://github.com/isaacperez/tabgrad/issues/43#issuecomment-5600701544).
+The surviving report is not a publicly reconstructible copy of those packages.
+This limits independent inspection of every package-dependent empirical claim,
+including functional and lifecycle results, not only performance. Withdrawal
+does not establish that the reported results were false or revalidate them;
+independent reasoning and later production evidence must be evaluated within
+their own scope.
+
+The
 [approval record](https://github.com/isaacperez/tabgrad/issues/43#issuecomment-5600895653)
 accepted that attachment contract. The
 [observation decision under #52](python-observation.md) supersedes its waiting
@@ -332,12 +343,13 @@ and deployment choices while retaining the ownership boundaries below:
 | Wrapper finalization plus session close rather than closing every expression temporary | Preserves ordinary Python use and escaping live values; cycle collection is not deterministic. |
 | One request lifecycle for ordinary Python and asynchronous JavaScript observation | Preserves shared semantics without mandatory JSPI or a second Python calling convention; the managed Python GPU profile requires independent backend progress, worker placement and isolation. |
 
-The probe exercised both object and numeric routes through real Tabgrad
+The report describes a probe of both object and numeric routes through real Tabgrad
 JavaScript and WebAssembly artifacts, using Pyodide 314.0.6 in Chrome
 153.0.8010.36 and Firefox 155.0. The intended compatibility oracle was PyTorch
-2.14.0, but the probe did not execute official PyTorch. Its successful cases
-support the interoperation mechanisms, not production API parity or performance
-superiority. Forced collection in repetition tests does not establish normal
+2.14.0, but the probe did not execute official PyTorch. The reported successful
+cases address the interoperation mechanisms, not production API parity or
+performance superiority, and retain the evidence-availability limit above.
+Forced collection in repetition tests does not establish normal
 collection cadence; interpreter heap size is not total browser memory. No
 absent-JSPI browser or general LLM workload was established by that evidence.
 

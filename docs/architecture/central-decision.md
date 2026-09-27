@@ -180,12 +180,23 @@ The decision integrates:
   covering flat composition, program calls, capability identity, cache keys,
   and invocation views.
 
-Experiments used bounded real WebAssembly and WebGPU work and separated
-correctness, lifecycle, memory, host-policy cost, preparation, dispatch, and
-observation where the question required it. The complete methods, raw evidence,
-failed or superseded attempts, and environment limitations remain in their
-individual issues and linked artifacts rather than in normative architecture
-prose.
+The investigation reports describe bounded real WebAssembly and WebGPU work,
+distinguishing correctness, lifecycle, memory, host-policy cost, preparation,
+dispatch, and observation where the question required it. Methods, reported
+results, failed or superseded attempts, and environment limitations are recorded
+in the individual issues and linked artifacts rather than repeated here.
+
+A surviving report does not imply that its original sources and raw observations
+remain publicly reconstructible. Original evidence packages for
+[#19](https://github.com/isaacperez/tabgrad/issues/19#issuecomment-5553711482),
+[#20](https://github.com/isaacperez/tabgrad/issues/20#issuecomment-5554294359), and
+[#21](https://github.com/isaacperez/tabgrad/issues/21#issuecomment-5557258135)
+were withdrawn. Their package-dependent empirical claims, including correctness
+and lifecycle observations as well as measurements, remain historical reports
+without publicly inspectable underlying evidence. Withdrawal neither disproves
+those reports nor validates them afresh. Accepted contracts, independently
+inspectable reasoning, and later production evidence retain their own scope;
+they are not substitutes for the unavailable experimental sources and data.
 
 The reusable-training experiment established that mixed semantic selections can
 be flattened correctly, but it did not prove the asymptotic cost of repeated
