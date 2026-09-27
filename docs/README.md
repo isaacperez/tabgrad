@@ -71,6 +71,7 @@ link to its primary source, but they must not create a competing version.
 | Collaboration through a managed Python session | [`flows/managed-python-session.md`](flows/managed-python-session.md) |
 | WebAssembly CPU kernel language, binary interface, modules, and memory ownership | [`architecture/webassembly-cpu-backend.md`](architecture/webassembly-cpu-backend.md) |
 | CPU intermediate reuse decision, semantic retention and physical last-use boundary | [`architecture/cpu-intermediate-reuse.md`](architecture/cpu-intermediate-reuse.md) |
+| WebGPU device selection, readiness, application setup and connection ownership | [`architecture/webgpu-integration.md`](architecture/webgpu-integration.md) |
 | WebGPU float32 addition numerical contract, alternatives and optimization constraints | [`architecture/webgpu-float32-addition.md`](architecture/webgpu-float32-addition.md) |
 | Contribution workflow | [`CONTRIBUTING.md`](../CONTRIBUTING.md) |
 | Repository map and content placement | [`repository-structure.md`](repository-structure.md) |

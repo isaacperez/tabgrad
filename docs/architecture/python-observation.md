@@ -113,6 +113,12 @@ placement is a real host requirement, separate from the isolation requirement
 explained below. The complete attachment and borrowed-interpreter contract
 remains in [Python integration](python-integration.md).
 
+The [WebGPU setup contract](webgpu-integration.md#managed-python-connects-to-a-separately-owned-gpu-worker)
+assigns physical worker creation and supervision to a bounded library helper.
+The host transfers its connection to the interpreter once and retains an
+independent controller. This supplies the integration around the waiting
+mechanism without making the application implement its own backend protocol.
+
 ## One completion path with two ways to observe it
 
 Shared waiting changes more than where a message travels. Accepted requests
