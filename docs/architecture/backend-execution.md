@@ -8,6 +8,13 @@ values across their two explicit endpoints. This is how the architecture shares
 meaning without forcing a graphics processor and a central processor into an
 artificial common implementation.
 
+Applications still need to select and prepare a usable backend context before
+its capabilities can govern work. [WebGPU integration](webgpu-integration.md)
+defines that device-readiness boundary and explains why direct JavaScript can
+await completion locally while ordinary managed Python needs an independently
+progressing physical GPU worker. Neither placement changes this common
+execution contract.
+
 ## The backend execution contract
 
 The **backend execution contract** is the agreement through which the runtime

@@ -25,6 +25,13 @@ contract through one application interaction. The
 methods can wait without native JSPI, and the resulting worker and hosting
 requirements.
 
+[WebGPU integration](webgpu-integration.md) connects these boundaries to the
+host: it defines explicit device selection and the library-owned GPU worker
+controller whose single-use connection is consumed by attachment. It also
+distinguishes graceful binding close from external revocation of GPU service.
+Those setup and failure contracts do not transfer ownership of Pyodide to
+Tabgrad or create a second semantic runtime.
+
 ## Separate three questions before choosing an owner
 
 First, who runs the Python program? Pyodide provides the interpreter that

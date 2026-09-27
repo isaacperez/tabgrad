@@ -143,6 +143,9 @@ Read the documents in this order when learning the architecture:
    them.
 6. [Backend execution](backend-execution.md) covers the shared backend contract
    and the deliberately different WebGPU and WebAssembly implementations.
+   [Selecting and integrating WebGPU](webgpu-integration.md) explains explicit
+   device identity, ready-session setup, direct JavaScript placement and the
+   owned GPU worker connection used by managed Python.
    [WebGPU float32 addition](webgpu-float32-addition.md) develops a bounded
    numerical decision: rounding, exceptional values, implementation freedom
    and the evidence behind the accepted cost tradeoff.

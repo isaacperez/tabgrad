@@ -103,6 +103,7 @@ ARCHITECTURE_DOCUMENTS = {
     "docs/architecture/semantic-state.md",
     "docs/architecture/webassembly-cpu-backend.md",
     "docs/architecture/webgpu-float32-addition.md",
+    "docs/architecture/webgpu-integration.md",
 }
 TIMELESS_DOCUMENTS = ARCHITECTURE_DOCUMENTS | {
     "AGENTS.md",
