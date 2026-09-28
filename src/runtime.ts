@@ -1,5 +1,4 @@
 import {
-  type ResidentAllocation,
   type WasmVariant,
   WebAssemblyCpuBackend,
 } from "./cpu-backend.js";
@@ -8,6 +7,11 @@ import {
   retainExecutionFailureContext,
 } from "./errors.js";
 import { ExecutionRequest, type QueuedExecutionRequest } from "./execution-request.js";
+import { ExecutionTicket, type ExecutionStep } from "./execution-ticket.js";
+import { acquireWebGpuDevice, assertWebGpuSetupActive } from "./webgpu-device.js";
+import type { ExecutionBackend, ResidentAllocation, TensorDevice } from "./backend.js";
+import { WebGpuBackend, type WebGpuDiagnostics } from "./webgpu-backend.js";
+export type { TensorDevice } from "./backend.js";
 import { DerivativeHistory, type DerivativeNode, type DerivativeRecipe } from "./derivative-history.js";
 import { IDENTITY_DERIVATIVE, MUL_DERIVATIVE, SUM_DERIVATIVE } from "./derivative-recipes.js";
 import { copyTensorShape, equalTensorShapes, inferViewShape, tensorElementCount } from "./tensor-shape.js";
@@ -22,7 +26,6 @@ import {
 } from "./program-formation.js";
 
 export type TensorDType = "float32";
-export type TensorDevice = "cpu";
 export type TensorLayout = "contiguous";
 
 export interface TensorOptions {
@@ -37,7 +40,13 @@ export interface RuntimeSessionOptions {
   readonly manifestUrl?: string | URL;
 }
 
+export interface WebGpuRuntimeSessionOptions extends RuntimeSessionOptions {
+  /** Cancels device acquisition only; close the returned session to end its lifetime. */
+  readonly setupAbortSignal?: AbortSignal;
+}
+
 export interface RuntimeDiagnostics {
+  readonly webgpu: WebGpuDiagnostics | null;
   readonly backendLoads: number;
   readonly hostToWasmBytes: number;
   readonly hostToWasmCopies: number;
@@ -148,13 +157,13 @@ function retainProgramFailureContext(
     ? new TabgradError(
       error.code,
       error.message,
-      { ...error.details, backend: "webassembly-cpu", phase },
+      { ...error.details, backend: program.domain, phase },
       error.cause ?? error,
     )
     : new TabgradError(
       "BACKEND_STATUS_ERROR",
-      "The WebAssembly CPU request failed.",
-      { backend: "webassembly-cpu", phase: fallbackPhase },
+      `The ${program.domain} request failed.`,
+      { backend: program.domain, phase: fallbackPhase },
       error,
     );
   const recordedProgramValueSlot = error instanceof TabgradError
@@ -178,7 +187,7 @@ function retainProgramFailureContext(
     provenance,
     program,
     executionDomain: program.domain,
-    backendEndpoints: ["webassembly-cpu"],
+    backendEndpoints: [program.domain],
     phase,
   });
 }
@@ -260,8 +269,9 @@ class MaterializationTable {
   setResident(
     value: TensorValue,
     allocation: ResidentAllocation,
+    backend: ExecutionBackend,
   ): void {
-    this.#entries.set(value.storage, { kind: "resident", allocation });
+    this.#entries.set(value.storage, { kind: "resident", allocation, backend });
   }
 
   delete(value: TensorValue): Materialization | undefined {
@@ -303,9 +313,11 @@ interface RuntimeSessionTestConfiguration {
 }
 
 const RUNTIME_SESSION_TEST_CONFIGURATION = Symbol("RuntimeSessionTestConfiguration");
+const RUNTIME_SESSION_GPU_BACKEND = Symbol("RuntimeSessionGpuBackend");
 
 interface InternalRuntimeSessionOptions extends RuntimeSessionOptions {
   readonly [RUNTIME_SESSION_TEST_CONFIGURATION]?: RuntimeSessionTestConfiguration;
+  readonly [RUNTIME_SESSION_GPU_BACKEND]?: WebGpuBackend;
 }
 
 interface RuntimeSessionAccess {
@@ -511,13 +523,14 @@ class EqualShapeBinaryOperationDefinition implements NumericalOperationDefinitio
         },
       );
     }
-    if (left.value.device !== "cpu" || right.value.device !== "cpu") {
+    if (left.value.device !== right.value.device) {
       throw new TabgradError(
         "UNSUPPORTED_DEVICE",
-        `This ${this.description} definition supports only CPU inputs.`,
+        `Both ${this.description} inputs must be on the same device.`,
         {
           operation: this.name,
-          contract: "cpu-inputs",
+          contract: "same-device",
+          device: "webgpu",
           leftDevice: left.value.device,
           rightDevice: right.value.device,
         },
@@ -580,8 +593,7 @@ class SumOperationDefinition implements NumericalOperationDefinition {
 
   admit(source: TensorState): AdmittedOperation {
     assertTensorOpen(source);
-    // Runtime tensor admission establishes the supported CPU float32 contiguous
-    // domain. Total reduction preserves that domain and changes only shape.
+    // Backend support is checked by the session before recording this result.
     return Object.freeze({
       record: new OperationRecord(this, [source.value]),
       outputMetadata: Object.freeze({
@@ -614,6 +626,7 @@ const VIEW_OPERATION = Object.freeze(new ViewOperationDefinition());
 
 export class RuntimeSession {
   #backend: WebAssemblyCpuBackend;
+  readonly #gpuBackend: WebGpuBackend | undefined;
   readonly #history = new DerivativeHistory<TensorValue>(
     (value) => this.#retainValue(value), (value) => this.#releaseValue(value),
   );
@@ -633,6 +646,7 @@ export class RuntimeSession {
   #beforeReadback: (() => void) | undefined;
 
   constructor(options: RuntimeSessionOptions = {}) {
+    this.#gpuBackend = (options as InternalRuntimeSessionOptions)[RUNTIME_SESSION_GPU_BACKEND];
     const testConfiguration = (options as InternalRuntimeSessionOptions)[
       RUNTIME_SESSION_TEST_CONFIGURATION
     ];
@@ -674,13 +688,9 @@ export class RuntimeSession {
         { operation: "tensor", contract: "float32-dtype", dtype: options.dtype },
       );
     }
-    if (options.device !== undefined && options.device !== "cpu") {
-      throw new TabgradError(
-        "UNSUPPORTED_DEVICE",
-        "This runtime slice supports only the CPU device.",
-        { operation: "tensor", contract: "cpu-device", device: options.device },
-      );
-    }
+    const device = options.device ?? "cpu";
+    const backend = this.#backendFor(device, "tensor");
+    if (options.requiresGrad === true) this.#requireGradients(backend, "tensor");
     if (options.layout !== undefined && options.layout !== "contiguous") {
       throw new TabgradError(
         "UNSUPPORTED_LAYOUT",
@@ -694,11 +704,17 @@ export class RuntimeSession {
     }
 
     const payload = copyFloat32TensorData(data);
+    if (device === "webgpu" && payload.byteLength > backend.capabilities.maximumTensorBytes) {
+      throw new TabgradError("RESOURCE_EXHAUSTED", "Tensor exceeds the selected device's buffer limit.", {
+        operation: "tensor", device, byteLength: payload.byteLength,
+        maximumTensorBytes: backend.capabilities.maximumTensorBytes,
+      });
+    }
     const shape = copyTensorShape(options.shape, payload.length);
     const value = new TensorValue({
       shape,
       dtype: "float32",
-      device: "cpu",
+      device,
       layout: "contiguous",
     }, null);
     this.#registerValue(value);
@@ -749,7 +765,36 @@ export class RuntimeSession {
     if (state.session !== this) {
       throw new TabgradError("DIFFERENT_SESSION", "Gradient tensors must belong to this session.");
     }
+    this.#requireGradients(this.#backendFor(state.value.device, "grad"), "grad");
     return state;
+  }
+
+  #backendFor(device: TensorDevice, operation: string): ExecutionBackend {
+    const backend = device === "cpu" ? this.#backend : device === "webgpu" ? this.#gpuBackend : undefined;
+    if (backend === undefined) {
+      throw new TabgradError("UNSUPPORTED_DEVICE", "The selected device is not enabled in this session.", {
+        operation, device, contract: "enabled-device",
+      });
+    }
+    backend.assertAvailable();
+    return backend;
+  }
+
+  #requireGradients(backend: ExecutionBackend, operation: string): void {
+    if (!backend.capabilities.gradients) {
+      throw new TabgradError("UNSUPPORTED_GRADIENT", "The selected backend does not support gradients.", {
+        operation, device: backend.capabilities.device,
+      });
+    }
+  }
+
+  #requireComputation(value: TensorValue, definition: NumericalOperationDefinition): void {
+    const backend = this.#backendFor(value.device, definition.name);
+    if (!backend.capabilities.computations.includes(definition.loweredKind)) {
+      throw new TabgradError("BACKEND_CAPABILITY_MISMATCH", "The selected backend does not support this operation.", {
+        operation: definition.name, source: definition.provenanceSource, device: value.device,
+      });
+    }
   }
 
   #borrowValue(value: TensorValue): Tensor {
@@ -758,6 +803,8 @@ export class RuntimeSession {
   }
 
   #sum(source: TensorState): Tensor {
+    assertTensorOpen(source);
+    this.#requireComputation(source.value, SUM_OPERATION);
     const admitted = SUM_OPERATION.admit(source);
     const history = source.history === null ? null
       : this.#history.record(admitted.outputMetadata.shape, SUM_OPERATION.derivative, [source.history], [source.value]);
@@ -778,6 +825,7 @@ export class RuntimeSession {
   #binary(definition: EqualShapeBinaryOperationDefinition, left: TensorState, rightHandle: unknown): Tensor {
     this.#assertOpen();
     const admitted = definition.admit(this, left, rightHandle);
+    this.#requireComputation(left.value, definition);
     const right = requireTensorState(rightHandle);
     const history = left.history === null && right.history === null ? null
       : this.#history.record(admitted.outputMetadata.shape, definition.derivative,
@@ -796,6 +844,7 @@ export class RuntimeSession {
 
   #view(source: TensorState, shape: unknown): Tensor {
     const metadata = VIEW_OPERATION.admit(source, shape);
+    this.#backendFor(source.value.device, "view");
     const value = new TensorValue(metadata, null, source.value.storage);
     value.storage.references += 1;
     this.#values.add(value);
@@ -812,35 +861,36 @@ export class RuntimeSession {
     return this.#preparation;
   }
 
-  *#prepareBackend(): Generator<Promise<void>, void, void> {
-    const preparation = this.#backend.prepare();
+  *#prepareBackend(backend: ExecutionBackend = this.#backend, program?: ExecutableProgram): Generator<Promise<void>, void, void> {
+    const preparation = backend.prepare(program);
     if (preparation !== undefined) yield preparation;
   }
 
   #observe(state: TensorState): Promise<Float32Array> {
     this.#assertOpen();
     this.#retainValue(state.value);
-    return this.#enqueue(this.#observation(state.value)).asPromise();
+    return this.#enqueue(this.#observation(state.value), () => this.#releaseValue(state.value)).asPromise();
   }
 
   #observeSynchronously(state: TensorState): Float32Array {
     this.#assertOpen();
     const host = this.#materializations.get(state.value)?.kind === "host";
-    if (this.#requestHead !== undefined || (!host && !this.#backend.ready)) {
+    if (state.value.device !== "cpu" || this.#requestHead !== undefined || (!host && !this.#backend.ready)) {
       throw new TabgradError(
         "SYNCHRONOUS_OBSERVATION_UNAVAILABLE",
         "Synchronous observation requires local readiness and no pending asynchronous predecessor.",
       );
     }
     this.#retainValue(state.value);
-    return this.#enqueue(this.#observation(state.value)).read();
+    return this.#enqueue(this.#observation(state.value), () => this.#releaseValue(state.value)).read();
   }
 
-  *#observation(value: TensorValue): Generator<Promise<void>, Float32Array, void> {
+  *#observation(value: TensorValue): Generator<ExecutionStep, Float32Array, void> {
+    const formed = this.#formProgram(value);
     try {
+      const backend = this.#backendFor(value.device, "observe");
       const host = this.#materializations.get(value);
-      if (host?.kind === "host") {
-        const formed = this.#formProgram(value);
+      if (host?.kind === "host" && value.device === "cpu") {
         try {
           this.#beforeReadback?.();
           return host.data.slice();
@@ -848,10 +898,9 @@ export class RuntimeSession {
           throw retainProgramFailureContext(error, formed.program, "readback");
         }
       }
-      const formed = this.#formProgram(value);
       try {
-        yield* this.#prepareBackend();
-        this.#materialize(value, formed);
+        yield* this.#prepareBackend(backend, formed.program);
+        yield* this.#materialize(value, formed, backend);
       } catch (error) {
         throw retainProgramFailureContext(error, formed.program, "execution");
       }
@@ -861,18 +910,19 @@ export class RuntimeSession {
       }
       try {
         this.#beforeReadback?.();
-        return this.#backend.read(materialization.allocation, tensorElementCount(value.shape));
+        return yield* awaitBackendResult(backend.read(materialization.allocation, tensorElementCount(value.shape)));
       } catch (error) {
         throw retainProgramFailureContext(error, formed.program, "readback");
       }
-    } finally {
-      this.#releaseValue(value);
+    } catch (error) {
+      throw retainProgramFailureContext(error, formed.program, "execution");
     }
   }
 
   diagnostics(): RuntimeDiagnostics {
     return Object.freeze({
       ...this.#backend.diagnostics(),
+      webgpu: this.#gpuBackend?.diagnostics() ?? null,
       ...this.#history.diagnostics(),
       liveTensorHandles: this.#states.size,
       liveTensorValues: this.#values.size,
@@ -901,11 +951,12 @@ export class RuntimeSession {
     await this.#drainRequests();
     for (const materialization of this.#materializations.values()) {
       if (materialization.kind === "resident") {
-        this.#backend.release(materialization.allocation);
+        materialization.backend.release(materialization.allocation);
       }
     }
     this.#materializations.clear();
     await this.#backend.close();
+    await this.#gpuBackend?.close();
   }
 
   #assertOpen(): void {
@@ -956,7 +1007,7 @@ export class RuntimeSession {
       if (current.storage.references > 0) continue;
       const materialization = this.#materializations.delete(current);
       if (materialization?.kind === "resident") {
-        this.#backend.release(materialization.allocation);
+        materialization.backend.release(materialization.allocation);
       }
       const producer = this.#detachProducer(current);
       if (producer !== null) {
@@ -988,7 +1039,7 @@ export class RuntimeSession {
     }
   }
 
-  #materialize(value: TensorValue, formed: FormedProgram<TensorValue>): void {
+  *#materialize(value: TensorValue, formed: FormedProgram<TensorValue>, backend: ExecutionBackend): Generator<ExecutionStep, void, void> {
     const existing = this.#materializations.get(value);
     if (existing?.kind === "resident") {
       return;
@@ -1002,14 +1053,14 @@ export class RuntimeSession {
           retainedSlots[slot] = selectedValue.storage.references > formed.program.storageUseCounts[slot]!;
         }
       }
-      const allocations = this.#backend.execute(formed.program, formed.bindings, retainedSlots);
+      const allocations = yield* awaitBackendResult(backend.execute(formed.program, formed.bindings, retainedSlots));
       for (const [slot, allocation] of allocations) {
         const boundValue = formed.valuesBySlot.get(slot);
         if (boundValue === undefined) {
           throw new TabgradError(
             "BACKEND_STATUS_ERROR",
             "The backend returned an allocation for an unknown program slot.",
-            { backend: "webassembly-cpu", phase: "execution", slot },
+            { backend: formed.program.domain, phase: "execution", slot },
           );
         }
         const existingMaterialization = this.#materializations.get(boundValue);
@@ -1019,7 +1070,7 @@ export class RuntimeSession {
               "BACKEND_STATUS_ERROR",
               "The backend replaced a live resident allocation.",
               {
-                backend: "webassembly-cpu",
+                backend: formed.program.domain,
                 phase: "execution",
                 slot,
               },
@@ -1027,7 +1078,7 @@ export class RuntimeSession {
           }
           continue;
         }
-        this.#materializations.setResident(boundValue, allocation);
+        this.#materializations.setResident(boundValue, allocation, backend);
       }
       for (const computedValue of formed.newlyComputed) {
         this.#releaseDependencies(computedValue);
@@ -1037,7 +1088,7 @@ export class RuntimeSession {
         throw new TabgradError(
           "BACKEND_STATUS_ERROR",
           "Execution completed without materializing the demanded result.",
-          { backend: "webassembly-cpu", phase: "execution" },
+          { backend: formed.program.domain, phase: "execution" },
         );
       }
     } catch (error) {
@@ -1051,11 +1102,19 @@ export class RuntimeSession {
     return formed;
   }
 
-  #enqueue<T>(steps: Generator<Promise<void>, T, void>): ExecutionRequest<T> {
+  #enqueue<T>(steps: Generator<ExecutionStep, T, void>, release?: () => void): ExecutionRequest<T> {
     const request = new ExecutionRequest(
       steps,
       () => this.#advanceRequests(),
-      () => this.#retireRequest(request),
+      () => this.#publishRequest(request),
+      () => {
+        release?.();
+        this.#requestLeases -= 1;
+        if (this.#requestLeases === 0) {
+          this.#drainCompletion?.resolve();
+          this.#drainCompletion = undefined;
+        }
+      },
     );
     this.#requestLeases += 1;
     if (this.#requestTail === undefined) this.#requestHead = request;
@@ -1079,19 +1138,16 @@ export class RuntimeSession {
     }
   }
 
-  #retireRequest(request: QueuedExecutionRequest): void {
+  #publishRequest(request: QueuedExecutionRequest): void {
     this.#requestHead = request.next;
     request.next = undefined;
-    this.#requestLeases -= 1;
     if (this.#requestHead === undefined) {
       this.#requestTail = undefined;
-      this.#drainCompletion?.resolve();
-      this.#drainCompletion = undefined;
     }
   }
 
   #drainRequests(): Promise<void> {
-    if (this.#requestHead === undefined) return Promise.resolve();
+    if (this.#requestLeases === 0) return Promise.resolve();
     if (this.#drainCompletion === undefined) {
       let resolve!: () => void;
       const promise = new Promise<void>((onDrained) => { resolve = onDrained; });
@@ -1103,6 +1159,32 @@ export class RuntimeSession {
 
 export function createRuntimeSession(options: RuntimeSessionOptions = {}): RuntimeSession {
   return new RuntimeSession(options);
+}
+
+/** Acquire a ready, session-owned WebGPU device while preserving the CPU default. */
+export async function createWebGpuRuntimeSession(
+  options: WebGpuRuntimeSessionOptions = {},
+): Promise<RuntimeSession> {
+  const device = await acquireWebGpuDevice(options.setupAbortSignal);
+  try {
+    const backend = new WebGpuBackend(device);
+    // Observe a loss already delivered with acquisition before publishing readiness.
+    await Promise.resolve();
+    assertWebGpuSetupActive(options.setupAbortSignal);
+    backend.assertAvailable();
+    return new RuntimeSession({ ...options, [RUNTIME_SESSION_GPU_BACKEND]: backend } as InternalRuntimeSessionOptions);
+  } catch (error) {
+    device.destroy();
+    throw error;
+  }
+}
+
+/** Yield only an actual suspension; prepared local CPU work remains synchronous. */
+function* awaitBackendResult<T>(result: T | ExecutionTicket<T>): Generator<ExecutionStep, T, void> {
+  if (!(result instanceof ExecutionTicket)) return result;
+  let resolved!: T;
+  yield new ExecutionTicket(result.result.then((value) => { resolved = value; }), result.drained);
+  return resolved;
 }
 
 /** @internal Prepare the owned backend before entering a synchronous frontend. */

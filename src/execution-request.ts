@@ -1,3 +1,5 @@
+import { ExecutionTicket, type ExecutionStep } from "./execution-ticket.js";
+
 /** One finite invocation's progression, distinct from its optional Promise observer. */
 export interface QueuedExecutionRequest {
   next: QueuedExecutionRequest | undefined;
@@ -19,25 +21,30 @@ interface Completion<T> {
  * Advance ordinary local steps immediately; yield only actual asynchronous work.
  * The session owns ordering and drain. No Promise is allocated for a completed
  * synchronous consumer, and a failure without an async observer cannot create
- * an unhandled rejection. Generator finalizers release the invocation's pins.
+ * an unhandled rejection. Logical publication advances the queue; physical
+ * retirement releases the invocation's pins only after all yielded tickets drain.
  */
 export class ExecutionRequest<T> implements QueuedExecutionRequest {
   next: QueuedExecutionRequest | undefined;
-  #steps: Generator<Promise<void>, T, void> | undefined;
+  #steps: Generator<ExecutionStep, T, void> | undefined;
+  #drains: Promise<void>[] | undefined;
   #waiting = false;
   #resumeFailure: { readonly error: unknown } | undefined;
   #outcome: Outcome<T> = { kind: "pending" };
   #completion: Completion<T> | undefined;
   readonly #advanceQueue: () => void;
   readonly #retire: () => void;
+  readonly #publish: () => void;
 
   constructor(
-    steps: Generator<Promise<void>, T, void>,
+    steps: Generator<ExecutionStep, T, void>,
     advanceQueue: () => void,
+    publish: () => void,
     retire: () => void,
   ) {
     this.#steps = steps;
     this.#advanceQueue = advanceQueue;
+    this.#publish = publish;
     this.#retire = retire;
   }
 
@@ -53,7 +60,13 @@ export class ExecutionRequest<T> implements QueuedExecutionRequest {
         this.#settle({ kind: "success", value: step.value });
       } else {
         this.#waiting = true;
-        step.value.then(
+        const pending = step.value;
+        if (pending instanceof ExecutionTicket) {
+          this.#drains ??= [];
+          this.#drains.push(pending.drained);
+        }
+        const result = pending instanceof ExecutionTicket ? pending.result : pending;
+        result.then(
           () => this.#resume(),
           (error: unknown) => this.#resume({ error }),
         );
@@ -72,7 +85,10 @@ export class ExecutionRequest<T> implements QueuedExecutionRequest {
   #settle(outcome: Exclude<Outcome<T>, { kind: "pending" }>): void {
     this.#outcome = outcome;
     this.#steps = undefined;
-    this.#retire();
+    this.#publish();
+    if (this.#drains === undefined) this.#retire();
+    else void Promise.all(this.#drains).then(this.#retire);
+    this.#drains = undefined;
     if (outcome.kind === "success") this.#completion?.resolve(outcome.value);
     else this.#completion?.reject(outcome.error);
     this.#completion = undefined;

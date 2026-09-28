@@ -1,8 +1,10 @@
 # Contiguous tensor views
 
-`Tensor.view` gives an existing contiguous CPU float32 value another shape
+`Tensor.view` gives an existing contiguous float32 value another shape
 without copying its numerical data. This reference covers the Python and
-JavaScript shape overloads. The [shape concept](../concepts/tensor-shape.md)
+JavaScript shape overloads. Python uses CPU; direct JavaScript also permits
+views of explicitly enabled [GPU values](webgpu-runtime.md).
+The [shape concept](../concepts/tensor-shape.md)
 explains why shape and storage are different; [semantic lifetimes](../components/semantic-value-lifetimes.md)
 explains how the runtime keeps their owners independent.
 
@@ -40,7 +42,7 @@ work. Frontends normalize syntax; the shared runtime validates and infers shape.
 ## Storage and observation
 
 A view preserves flat row-major element order and the entire storage extent.
-It may refer to host data, pending computation or a resident CPU result.
+It may refer to host data, pending computation or a resident backend result.
 Creating it does not execute pending arithmetic, allocate numerical payload,
 upload data or read data back. Sibling and chained views refer directly to the
 same storage rather than retaining a history of intermediate view handles.
@@ -81,7 +83,8 @@ identifies the pinned native oracle and the distinction from release claims.
 
 ## Limits and cost
 
-This operation covers shape changes of whole contiguous CPU float32 storage.
+This operation covers shape changes of whole contiguous float32 storage in
+the frontend/device domains stated above.
 It does not provide dtype reinterpretation, reshape with copy fallback,
 `view_as`, transpose, slicing, offsets, arbitrary strides or mutation.
 There is no public storage-pointer interface.
@@ -93,4 +96,5 @@ later demands reuse that materialization. Numerical copies made by ordinary
 observation remain proportional to payload size. Python nested output can
 also allocate containers for empty dimensions. Formation and physical reuse
 costs are governed by [program formation](../components/program-formation.md)
-and [CPU invocation storage](../components/cpu-invocation-storage.md).
+and the selected [CPU](../components/cpu-invocation-storage.md) or
+[GPU](../components/webgpu-backend.md) storage owner.

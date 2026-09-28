@@ -142,6 +142,13 @@ diagnostic profiles. The maintained
 metrics and limits. These local reports are not distributed or committed;
 inspect them for privacy before publishing any evidence derived from them.
 
+`npm run measure:webgpu -- pilot` and `npm run measure:webgpu -- measure`
+write timestamped `test-results/webgpu-*.json` reports under the same ignored
+directory. The [WebGPU measurement reference](reference/webgpu-measurements.md)
+defines their boundaries, limits and interpretation. They are disposable local
+evidence, not committed or distributed artifacts; publication requires the
+ordinary privacy review.
+
 ## Verify generated output
 
 Run the registered generator in a controlled environment and compare the

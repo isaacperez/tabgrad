@@ -3,6 +3,8 @@ export {
   RuntimeSession,
   Tensor,
   createRuntimeSession,
+  createWebGpuRuntimeSession,
+  type WebGpuRuntimeSessionOptions,
   type RuntimeSessionOptions,
   type RuntimeDiagnostics,
   type TensorDevice,

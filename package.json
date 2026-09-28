@@ -29,8 +29,11 @@
     "test:node": "npm run build && npm run test:unit",
     "test:browser": "node scripts/run-browser-tests.mjs",
     "test:browser:from-source": "npm run build && npm run test:browser",
+    "test:webgpu": "node scripts/run-webgpu-tests.mjs",
+    "test:webgpu:from-source": "npm run build && npm run test:webgpu",
     "test": "npm run test:node && npm run test:browser",
     "measure": "npm run build && node scripts/measure-runtime.mjs",
+    "measure:webgpu": "node scripts/measure-webgpu.mjs",
     "measure:python": "npm run build && node scripts/measure-python.mjs"
   },
   "devDependencies": {

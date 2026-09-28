@@ -39,7 +39,7 @@ test("the JavaScript package entry point exposes only the supported runtime surf
       tensorPrototype: Object.getOwnPropertyNames(Tensor.prototype).sort(),
     },
     {
-      exports: ["RuntimeSession", "TabgradError", "Tensor", "createRuntimeSession"],
+      exports: ["RuntimeSession", "TabgradError", "Tensor", "createRuntimeSession", "createWebGpuRuntimeSession"],
       runtimeSessionConstructor: ["length", "name", "prototype"],
       runtimeSessionPrototype: ["close", "constructor", "diagnostics", "grad", "tensor"],
       tensorConstructor: ["length", "name", "prototype"],

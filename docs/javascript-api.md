@@ -2,12 +2,15 @@
 
 This document is the user reference for calling the Tabgrad tensor runtime
 directly from JavaScript. It describes a deliberately narrow but complete
-execution path: contiguous `float32` tensors on the CPU and
+execution path: contiguous `float32` tensors on CPU with
 out-of-place elementwise addition and multiplication, total sum and shape-only
 shared-storage views, with functional first-order gradients. A narrow contract is useful here because it
 lets a reader see the complete lifecycle—admission, lazy recording, WebAssembly
 execution, observation, and release—without implying support for tensor
-features that have not been established by tests.
+features that have not been established by tests. An explicitly acquired
+[WebGPU session](reference/webgpu-runtime.md) also supports contiguous float32
+creation, addition, views and asynchronous observation through this same API.
+Its operation domain and physical limits are separate from CPU support.
 
 Python does not sit between this API and the runtime. Any Python compatibility
 layer uses the same TypeScript semantic runtime as this JavaScript interface;
@@ -47,9 +50,10 @@ documented in [Development environment and commands](development.md).
 
 ## Create, compute, observe, and release
 
-The public module exports `createRuntimeSession`, `RuntimeSession`, `Tensor`,
-and `TabgradError`. A session owns one WebAssembly CPU context and its linear
-memory. A tensor handle belongs to exactly one session.
+The public module exports `createRuntimeSession`, `createWebGpuRuntimeSession`,
+`RuntimeSession`, `Tensor`, and `TabgradError`. A session owns a WebAssembly CPU
+context and its linear memory; the GPU factory additionally acquires a
+session-owned GPU device. A tensor handle belongs to exactly one session.
 
 Those exported classes expose only the methods described in this reference.
 Backend dispatch, semantic-state access, and test instrumentation are kept in
@@ -83,9 +87,9 @@ into a host `Float32Array`. Its default and supported metadata are:
 | --- | --- |
 | Shape | Defaults to `[data.length]`; explicit scalar or multidimensional shape with the same element count |
 | Data type | `float32` |
-| Device | `cpu` |
+| Device | `cpu` by default; explicit `webgpu` in a GPU-enabled session |
 | Layout | `contiguous` |
-| Gradient tracking | `requiresGrad` defaults to `false`; `true` enables functional gradients |
+| Gradient tracking | `requiresGrad` defaults to `false`; `true` enables CPU functional gradients |
 
 When supplied, `options.shape` must be an actual array of non-negative safe
 integers. Their product must equal the copied data length. The empty shape `[]`
@@ -107,8 +111,8 @@ of two values. `session.tensor([2], { shape: [] })` describes a scalar, while
 and contiguous storage.
 
 `left.add(right)` validates both operands synchronously and returns a new
-tensor handle. It does not fetch, compile, instantiate, or call WebAssembly.
-The operands must be open, belong to the same session, and have equal shapes.
+tensor handle. It does not prepare or submit numerical backend work.
+The operands must be open, belong to the same session and device, and have equal shapes.
 Equal element counts alone are insufficient, including for zero-element shapes
 and scalar versus one-element vector. No broadcasting is performed.
 The runtime checks handle identity in its module-private registry: inheriting
@@ -124,12 +128,14 @@ and the contiguous-only boundary.
 `tensor.toArray()` returns a Promise for an independent flat `Float32Array` in
 row-major order at every rank. Use `tensor.shape` to interpret its dimensions;
 empty readback does not discard trailing shape metadata. Ready
-host data is copied directly; it is not uploaded to WebAssembly solely for
+CPU host data is copied directly; it is not uploaded to WebAssembly solely for
 readback. When computation is required, the runtime forms an immutable finite
 executable program for the demanded dependencies, prepares one WebAssembly
 module, copies host inputs into its linear memory and invokes the coarse
 numerical kernels. Intermediate results remain resident in WebAssembly memory;
-observing one result does not execute an unrelated pure operation.
+observing one result does not execute an unrelated pure operation. Explicit
+GPU values use the [GPU observation flow](flows/webgpu-observation.md), with
+device residency and staging readback rather than WebAssembly storage.
 
 Local work with a ready backend may finish during `toArray()` itself, before
 the returned Promise's callbacks run. Those callbacks retain ordinary
@@ -142,12 +148,12 @@ The executable program contains JavaScript metadata collections because the
 backend needs an ordered list of logical values and computations. It never
 contains tensor payloads in JavaScript arrays, backend memory offsets, pointers,
 or WebAssembly objects. The numerical data stays in the materialization table
-until CPU preparation binds it to WebAssembly allocations. This distinction
+until backend preparation binds it to physical allocations. This distinction
 keeps the program immutable and backend-facing without turning it into a second
 numerical storage system.
 
 An executable program belongs to the observation request that formed it. A
-resident materialization stores only its physical allocation, not the complete
+resident materialization stores its physical allocation and owning backend, not the complete
 program that happened to produce or reuse it. Observing an already resident
 tensor forms a fresh binding program for readback, with an alias slot when it
 has a separate logical view identity. Consequently, a
@@ -186,13 +192,14 @@ back to JavaScript arithmetic.
 `tensor()`, `add()`, `mul()`, `sum()`, `view()` or `grad()` before any backend submission. Loading, ABI, memory, and
 kernel errors reject the promise returned by `toArray()`.
 
-An asynchronous backend error records the `webassembly-cpu` backend and its
+An asynchronous backend error records its `webassembly-cpu` or `webgpu` domain and its
 specific failure phase in `details`. It also retains, as internal diagnostic
 context, the demanded immutable executable program, its declared domain, the
 causal operation and stable source provenance, and the applicable backend
-endpoint. When execution reaches a kernel, the context also identifies the
-causal output slot in that program, so a failure in an earlier computation of a
-chain is not misattributed to the demanded root. That program is not added to
+endpoint. A failure attributable to a particular kernel or encoding step also
+identifies its causal output slot. An aggregate device/error-scope failure
+without that information retains the demanded program and root context rather
+than guessing which physical instruction failed. That program is not added to
 the public tensor API. When the browser or WebAssembly engine supplies a native
 error, `cause` preserves it. Repeated observations of one cached preparation
 failure receive distinct error objects and therefore cannot acquire another
@@ -207,12 +214,12 @@ invocation's program or provenance.
 | `GRADIENT_NOT_TRACKED`, `UNUSED_INPUT`, `INVALID_GRADIENT`, `UNSUPPORTED_GRADIENT`, `CONSUMED_HISTORY` | A functional derivative request violates its [tracking, seed or history contract](reference/functional-gradients.md). |
 | `UNSUPPORTED_DTYPE`, `UNSUPPORTED_DEVICE`, `UNSUPPORTED_LAYOUT` | Metadata is outside the table above. |
 | `BACKEND_MANIFEST_INVALID`, `BACKEND_HASH_MISMATCH` | Distributed metadata or bytes fail validation. |
-| `BACKEND_ABI_MISMATCH`, `BACKEND_CAPABILITY_MISMATCH` | A module cannot satisfy the declared CPU contract. |
+| `BACKEND_ABI_MISMATCH`, `BACKEND_CAPABILITY_MISMATCH` | A backend cannot satisfy the declared ABI or computation contract. |
 | `BACKEND_LOAD_FAILED` | Fetch, parsing, compilation, or instantiation cannot initialize the context. |
 | `BACKEND_STATUS_ERROR`, `BACKEND_TRAP` | A kernel rejects its call or traps; a trapped context is quarantined. |
-| `RESOURCE_EXHAUSTED` | A request cannot fit the bounded 32-bit WebAssembly memory. |
+| `RESOURCE_EXHAUSTED` | A request exceeds its backend's allocation or execution extent. |
 
-Unsupported behavior is never silently moved to WebGPU or evaluated with a
+Unsupported behavior is never silently moved to another device or evaluated with a
 JavaScript numerical loop.
 
 ## Diagnostics and cost model
@@ -228,15 +235,18 @@ materialization records, accepted observation requests, owned derivative nodes
 and saved logical operand pins. `liveDerivativeNodes` includes tracked leaves;
 `liveSavedValues` counts pins rather than distinct buffers or bytes. These semantic
 counters make it possible to distinguish a retained computation from
-WebAssembly memory growth and to prove that explicit shutdown drains both
-layers. Reading diagnostics does not demand a tensor.
+WebAssembly memory growth and to check that explicit shutdown retires owned
+semantic resources. Reading diagnostics does not demand a tensor. The separate
+`webgpu` snapshot reports GPU ownership, queue checkpoints and unknown
+completion; see the [GPU diagnostics reference](reference/webgpu-runtime.md#inspect-the-gpu-resource-domain).
+Top-level backend counters retain their CPU meaning.
 
 Copy counters describe the named WebAssembly boundaries, not every host or
 Python allocation. A ready-host observation creates an owned host copy without
 incrementing upload or readback counters. An immediately completed local request
 has already released its request lease even if its Promise callback has not run.
 
-For an addition of two distinct length-`n` host inputs, the first observation
+For a CPU addition of two distinct length-`n` host inputs, the first observation
 uses one `4n`-byte import for each input, one `4n`-byte output allocation, one
 kernel call independent of `n`, and one `4n`-byte result readback. This appears
 as two host-to-WebAssembly copies and one WebAssembly-to-host copy. A later

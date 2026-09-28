@@ -340,8 +340,11 @@ checks do not depend on shell activation or an unprepared global interpreter.
 | Build and run Node.js tests | `npm run test:node` | Prepared Node.js and Rust environments; rebuilds `dist/` and runs the JavaScript integration and raw-ABI suite without launching a browser |
 | Run JavaScript integration tests only | `npm run test:unit` | An existing `dist/` build and permission to listen on a loopback port; does not rebuild source |
 | Run real-browser integration tests only | `npm run test:browser` | An existing `dist/` build, Chrome, Firefox, and a loopback port; launches one headless browser at a time |
+| Qualify direct JavaScript WebGPU execution | `npm run test:webgpu` | An existing `dist/` build, installed Chrome with an available WebGPU adapter, process-launch permission and a loopback port; `TABGRAD_BROWSER` can select another installed browser; unavailable GPU is a failure, not a silent skip |
+| Build and qualify WebGPU from source | `npm run test:webgpu:from-source` | Prepared build environment plus the WebGPU qualification requirements above; rebuilds `dist/` before testing |
 | Build and test one or both browsers from source | `npm run test:browser:from-source` | Prepared build environment, installed browsers, and a loopback port; rebuilds `dist/`, then honors `TABGRAD_BROWSER` or tests Chrome followed by Firefox when it is unset |
 | Measure bounded runtime and artifact costs | `npm run measure` | Prepared build and browser environments; rebuilds `dist/` and writes an ignored report under `test-results/` |
+| Calibrate or measure GPU resource growth | `npm run measure:webgpu -- pilot` or `npm run measure:webgpu -- measure` | A freshly built `dist/`, real WebGPU browser and loopback permission; the [measurement reference](reference/webgpu-measurements.md) defines adequacy, raw reports and resource caps |
 | Compare Python and direct JavaScript boundary costs | `npm run measure:python` | Prepared build and browser environments plus an isolated baseline distribution; rebuilds current `dist/` and writes timestamped ignored reports under `test-results/`; workloads, baseline variables and limits are defined in [the command reference](reference/python-boundary-measurements.md) |
 | Remove the browser distribution | `npm run clean` | Deletes only the ignored `dist/` directory |
 | Update the JavaScript lock after an authorized dependency change | `npm install --package-lock-only --ignore-scripts --no-audit --no-fund` | Node.js 22.12.0, npm 11.1.0, and registry access; rewrites only `package-lock.json` plus npm cache state |
@@ -404,10 +407,17 @@ TypeScript reads `tsconfig.json`. Cargo reads `Cargo.toml`, `Cargo.lock`, and
 `rust-toolchain.toml`. `npm run check` does not rewrite maintained source;
 developers may run `cargo fmt --all` explicitly when they intend to format Rust
 source. `npm test` builds the exact ignored distribution once, runs the Node.js
-suite, and then tests that same distribution in both real browsers. The two
+suite, and then tests that same distribution in both real browsers. The
 from-source commands intentionally rebuild so isolated continuous-integration
 jobs do not depend on an artifact produced elsewhere. No test installs or
 updates a dependency.
+
+`test:webgpu` is an additional real-device qualification command, not an
+implicit part of the CPU/Pyodide browser matrix. That matrix does not guarantee
+a usable hardware adapter. GPU changes need an explicit successful WebGPU
+run with its browser, operating system, adapter, features, limits and fallback
+status recorded. Node lifecycle doubles exercise controlled failures but do
+not replace this physical qualification.
 
 Delete `node_modules/`, `target/`, `dist/`, or `test-results/` only when their
 corresponding disposable local state must be rebuilt. Each path is ignored.

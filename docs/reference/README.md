@@ -6,6 +6,9 @@ accepted form and scope without following a complete design narrative.
 
 ## Questions this perspective answers
 
+Use [Direct JavaScript WebGPU runtime](webgpu-runtime.md) for ready-session
+acquisition, device selection, operation limits, lifecycle and GPU diagnostics.
+
 Use [Python host attachment and worker connection](python-host.md) for the
 application's loading, entry, connection and cleanup contracts.
 
@@ -29,6 +32,8 @@ For contributor measurements, use
 the direct JavaScript path and resident CPU kernel, or
 [Python tensor boundary measurements](python-boundary-measurements.md) for
 baseline configuration and equivalent JavaScript/Python workloads. These are
+complemented by [WebGPU resource measurements](webgpu-measurements.md), which
+separate setup, upload, resident execution, readback and retention. They are
 command references; the shared [performance policy](../performance.md) owns
 the rules for interpreting and preserving evidence.
 

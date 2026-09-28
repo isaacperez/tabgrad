@@ -45,8 +45,8 @@ Formation visits that origin once and emits any pending numerical producer
 once, regardless of the number of selected aliases. Alias slots have source
 `alias`, no payload binding and no numerical computation. The origin preserves
 the producer's original shape and provenance; reshaping its result does not
-rewrite the meaning of that producing call. Program format version 2 records
-this distinction explicitly.
+rewrite the meaning of that producing call. The program declares its selected
+execution domain; device buffers and backend instances remain outside it.
 
 Each slot preserves the complete admitted shape, including scalar rank and
 dimensions after a zero. Formation does not infer dimensions from a payload or
@@ -68,9 +68,9 @@ The program separately aggregates numerical input occurrences into
 `storageUseCounts`. Logical uses still identify which shaped operand the
 computation consumes; storage uses identify the shared bytes that must survive
 those physical accesses. A metadata alias itself contributes no physical use.
-The CPU backend consumes the aggregate counts rather than retiring aliases
+Each backend consumes the aggregate counts rather than retiring aliases
 independently. For whole contiguous views every alias covers its storage's full
-extent, so contiguous CPU kernels can use these associations directly.
+extent, so contiguous kernels can use these associations directly.
 Non-contiguous execution would need access/layout facts on logical operands
 and backend support for them; it would not erase logical shapes or make the
 shared storage owner depend on an operation's axes.

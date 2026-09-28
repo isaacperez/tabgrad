@@ -10,7 +10,7 @@ continuation while occupying the same interpreter thread.
 The solution is to distinguish doing the work from notifying a caller that
 the work is done. The runtime owns a finite execution request and advances it
 until it either has a terminal result or encounters genuinely asynchronous
-preparation. JavaScript can observe its completion through a Promise. A
+backend work. JavaScript can observe its completion through a Promise. A
 synchronous frontend can read its already completed outcome. These are two
 ways to consume one request, not two execution engines.
 
@@ -27,13 +27,14 @@ placing a request in its queue. That reference belongs to accepted work rather
 than to the user's handle: releasing the handle cannot erase an accepted
 calculation. The request selects the necessary finite program, establishes
 backend readiness when necessary, materializes its result and copies the
-observed bytes. A finalizer releases its reference on success or failure.
+observed bytes. Retirement releases its reference after physical obligations
+are accounted for, on success or failure.
 
 [Program formation](program-formation.md) owns the selected dependency traversal
 and returns executable structure separately from invocation bindings. It does
 not execute numerical work or change semantic ownership.
 
-Ready host data takes a shorter route inside this same owner. It already has
+Ready CPU host data takes a shorter route inside this same owner. It already has
 numerical storage, so the runtime copies that storage directly rather than
 uploading it into WebAssembly and immediately downloading it. Neither the
 Python wrapper nor the result consumer owns a competing data cache.
@@ -42,35 +43,44 @@ Python wrapper nor the result consumer owns a competing data cache.
 flowchart TD
     Admit[Validate and retain demanded value] --> Queue[Queue one execution request]
     Queue --> Advance[Advance its local steps]
-    Advance --> Need{Actual asynchronous preparation?}
-    Need -->|Yes| Wait[Retain request and yield preparation]
-    Wait --> Resume[Preparation success or failure resumes the same request]
+    Advance --> Need{Actual asynchronous backend work?}
+    Need -->|Yes| Wait[Retain request and yield result]
+    Wait --> Resume[Success or failure resumes the same request]
     Resume --> Advance
     Need -->|No| Finish[Complete local execution or publish failure]
-    Finish --> Retire[Release invocation pins and retire queue entry]
-    Retire --> JS[JavaScript observes the completion Promise]
-    Retire --> Python[Python reads the terminal outcome]
+    Finish --> Unlink[Unlink logical queue entry]
+    Unlink --> JS[JavaScript observes the completion Promise]
+    Unlink --> Python[Ready local Python consumer reads the outcome]
+    Unlink --> Drain[Join physical completion or accounted loss]
+    Drain --> Retire[Release invocation pins and request lease]
 ```
 
 The final arrows are alternative consumers, not two calculations. A failed
 preparation resumes the request by throwing into its suspended steps, so the
-same finalizer releases ownership even when numerical execution never starts.
+same retirement releases ownership even when numerical execution never starts.
 The session can then advance the next admitted request.
 
 ## The request owns state; the session owns ordering
 
 `ExecutionRequest` holds a pending, successful or failed outcome. Its local
 steps are represented by a JavaScript generator: advancing it executes
-ordinary synchronous code until it returns or yields a preparation Promise.
+ordinary synchronous code until it returns or yields asynchronous work.
 This generator is a private control-flow mechanism, not a tensor graph, a
 second operation representation or a scheduler in the CPU kernel module.
-Backend preparation owns the genuinely asynchronous operation being yielded.
+Preparation yields a Promise. Asynchronous execution/readback yields an
+`ExecutionTicket`: `result` resumes logical advancement, while `drained` joins
+physical cleanup or accounted terminal loss. Synchronous CPU results return
+directly, without allocating that ticket.
 
 The session has one linked queue with constant-time insertion and retirement.
 Only its head advances. A guard prevents recursive advancement while a local
-step is already running. Once preparation settles, its notification resumes
+step is already running. Once a yielded result settles, its notification resumes
 the same queue; it does not create another invocation. Completed entries are
-unlinked rather than accumulated as a history of observations.
+unlinked rather than accumulated as a history of observations. A logically
+finished request can still own a physical-drain lease. Its pins remain until
+all yielded tickets drain; removing the queue entry is not permission to
+release them. This lets unrelated CPU requests progress after a known GPU
+failure without sacrificing buffer protection.
 
 The request does not allocate a Promise merely because it exists. A synchronous
 consumer reads its terminal value or throws its terminal failure directly.
@@ -119,11 +129,12 @@ operation for that invocation. A pre-script preparation request has no tensor
 operation to name. These contexts remain request-scoped; a resident allocation
 does not retain a completed program merely because another tensor uses it.
 
-Session close stops admission, releases public handles and awaits queue drain
+Session close stops admission, releases public handles and awaits request drain
 before releasing backend resources. Drain is fulfilled when accepted requests
 have retired, including failed requests. The request caller owns its failure;
-close does not replay that failure as a cleanup error. This local CPU boundary
-does not equate logical publication with physical GPU drain.
+close does not replay that failure as a cleanup error. A failed GPU readback
+can publish before its copy and mapping finish; the backend's ticket retains
+those obligations. Queue emptiness alone does not complete session close.
 
 Request pins are distinct from the producer edges needed to compute a pending
 value. The [semantic lifetime owner](semantic-value-lifetimes.md) releases those
