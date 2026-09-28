@@ -1,3 +1,5 @@
+import type { TensorDevice } from "./backend.js";
+
 export type ProgramSlot = number;
 
 export interface ProgramProvenance {
@@ -10,7 +12,7 @@ export interface ProgramValue {
   /** Canonical virtual storage slot; contiguous aliases cover its entire payload. */
   readonly storageSlot: ProgramSlot;
   readonly dtype: "float32";
-  readonly device: "cpu";
+  readonly device: TensorDevice;
   readonly layout: "contiguous";
   readonly shape: readonly number[];
   readonly source: "binding" | "computed" | "alias";
@@ -26,8 +28,8 @@ export interface LoweredComputation {
 }
 
 export class ExecutableProgram {
-  readonly formatVersion = 4;
-  readonly domain = "webassembly-cpu";
+  readonly formatVersion = 5;
+  readonly domain: "webassembly-cpu" | "webgpu";
   readonly values: readonly ProgramValue[];
   readonly computations: readonly LoweredComputation[];
   /** Input occurrences per slot, independent of scheduling or invocation owners. */
@@ -41,6 +43,7 @@ export class ExecutableProgram {
     computations: readonly LoweredComputation[],
     result: ProgramSlot,
   ) {
+    this.domain = values[result]?.device === "webgpu" ? "webgpu" : "webassembly-cpu";
     this.values = Object.freeze(values.map((value) => Object.freeze({
       ...value,
       shape: Object.freeze([...value.shape]),

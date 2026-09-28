@@ -1,4 +1,4 @@
-import type { ProgramBinding, ResidentAllocation } from "./cpu-backend.js";
+import type { ExecutionBackend, ProgramBinding, ResidentAllocation, TensorDevice } from "./backend.js";
 import {
   ExecutableProgram,
   type LoweredComputation,
@@ -12,7 +12,7 @@ export interface FormationValue<Value> {
   readonly storageValue: Value;
   readonly shape: readonly number[];
   readonly dtype: "float32";
-  readonly device: "cpu";
+  readonly device: TensorDevice;
   readonly layout: "contiguous";
   readonly provenance: ProgramProvenance;
   readonly producer: {
@@ -24,7 +24,7 @@ export interface FormationValue<Value> {
 
 export type Materialization =
   | { readonly kind: "host"; readonly data: Float32Array }
-  | { readonly kind: "resident"; readonly allocation: ResidentAllocation };
+  | { readonly kind: "resident"; readonly allocation: ResidentAllocation; readonly backend: ExecutionBackend };
 
 /** Invocation associations stay separate from immutable, payload-free structure. */
 export interface FormedProgram<Value> {

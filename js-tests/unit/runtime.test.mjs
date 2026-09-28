@@ -1047,6 +1047,7 @@ test("records float32 addition lazily and materializes it on observation", async
   assert.deepEqual(result.shape, [3]);
   assert.equal(result.dtype, "float32");
   assert.deepEqual(session.diagnostics(), {
+    webgpu: null,
     backendLoads: 0,
     hostToWasmBytes: 0,
     hostToWasmCopies: 0,
@@ -1080,6 +1081,7 @@ test("records float32 addition lazily and materializes it on observation", async
   const afterObservation = session.diagnostics();
   const { timings, ...afterCounters } = afterObservation;
   assert.deepEqual(afterCounters, {
+    webgpu: null,
     backendLoads: 1,
     hostToWasmBytes: 24,
     hostToWasmCopies: 2,
@@ -1230,7 +1232,7 @@ test("rejects unsupported operations synchronously during admission", async () =
     (error) => error instanceof TabgradError
       && error.code === "UNSUPPORTED_DEVICE"
       && error.details.operation === "tensor"
-      && error.details.contract === "cpu-device",
+      && error.details.contract === "enabled-device",
   );
   assert.throws(
     () => session.tensor([1], { layout: "strided" }),

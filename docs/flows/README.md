@@ -21,6 +21,10 @@ explains the design rather than serving as an installation tutorial.
 follows derivative admission, saved-value ownership, ordinary numerical
 execution and result cleanup across the frontends, runtime, history and CPU.
 
+[From a GPU tensor to an observed host array](webgpu-observation.md) follows
+direct JavaScript demand, shared formation, device residency, readback and
+the distinction between logical failure and physical resource retirement.
+
 ## Questions this perspective answers
 
 Flow documentation answers questions such as:

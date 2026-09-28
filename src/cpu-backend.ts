@@ -1,4 +1,5 @@
 import { TabgradError } from "./errors.js";
+import type { BackendCapabilities, ExecutionBackend, ProgramBinding, ResidentAllocation } from "./backend.js";
 import type { ExecutableProgram, ProgramSlot } from "./executable-program.js";
 import { tensorElementCount } from "./tensor-shape.js";
 
@@ -46,17 +47,14 @@ export interface BackendDiagnostics {
   }>;
 }
 
-export interface ResidentAllocation {
-  readonly generation: number;
-  readonly offset: number;
-  readonly byteLength: number;
-  readonly reservedByteLength: number;
-  released: boolean;
-}
-
-export interface ProgramBinding {
-  readonly hostData?: Float32Array;
-  readonly resident?: ResidentAllocation;
+class CpuAllocation {
+  released = false;
+  constructor(
+    readonly generation: number,
+    readonly offset: number,
+    readonly byteLength: number,
+    readonly reservedByteLength: number,
+  ) {}
 }
 
 interface ManifestVariant {
@@ -158,7 +156,7 @@ class LinearMemoryAllocator {
     return this.#highWaterReservedBytes;
   }
 
-  allocate(byteLength: number): ResidentAllocation {
+  allocate(byteLength: number): CpuAllocation {
     const reservedByteLength = this.#align(byteLength);
     let offset: number | undefined;
     for (let index = 0; index < this.#freeSegments.length; index += 1) {
@@ -199,16 +197,10 @@ class LinearMemoryAllocator {
       this.#highWaterReservedBytes,
       this.#liveReservedBytes,
     );
-    return {
-      generation: this.#generation,
-      offset,
-      byteLength,
-      reservedByteLength,
-      released: false,
-    };
+    return new CpuAllocation(this.#generation, offset, byteLength, reservedByteLength);
   }
 
-  release(allocation: ResidentAllocation): void {
+  release(allocation: CpuAllocation): void {
     if (allocation.released) {
       return;
     }
@@ -280,7 +272,7 @@ class LinearMemoryAllocator {
  * external semantic owner. Only active allocations participate in rollback.
  */
 class InvocationStorage {
-  readonly allocations = new Map<ProgramSlot, ResidentAllocation>();
+  readonly allocations = new Map<ProgramSlot, CpuAllocation>();
   readonly #allocator: LinearMemoryAllocator;
   readonly #bindings: ReadonlyMap<ProgramSlot, ProgramBinding>;
   readonly #remainingUses: number[];
@@ -329,7 +321,11 @@ const SIMD_PROBE = new Uint8Array([
   0x0a, 0x08, 0x01, 0x06, 0x00, 0x41, 0x00, 0xfd, 0x0f, 0x0b,
 ]);
 
-export class WebAssemblyCpuBackend {
+export class WebAssemblyCpuBackend implements ExecutionBackend {
+  readonly capabilities: BackendCapabilities = Object.freeze({
+    device: "cpu", computations: Object.freeze(["add-f32", "mul-f32", "sum-f32", "expand-f32"] as const),
+    gradients: true, maximumTensorBytes: MAXIMUM_ADDRESS,
+  });
   readonly #manifestUrl: URL;
   readonly #forceVariant: WasmVariant | undefined;
   #contextPromise: Promise<BackendContext> | undefined;
@@ -523,7 +519,7 @@ export class WebAssemblyCpuBackend {
 
   release(allocation: ResidentAllocation): void {
     const context = this.#context;
-    if (context === undefined || allocation.released) {
+    if (context === undefined || (allocation instanceof CpuAllocation && allocation.released)) {
       return;
     }
     this.#validateAllocation(context, allocation);
@@ -535,6 +531,8 @@ export class WebAssemblyCpuBackend {
     this.#context = undefined;
     this.#contextPromise = undefined;
   }
+
+  assertAvailable(): void { this.#assertOpen(); }
 
   #assertOpen(): void {
     if (this.#closed) {
@@ -893,14 +891,14 @@ export class WebAssemblyCpuBackend {
 
   #floatView(
     memory: WebAssembly.Memory,
-    allocation: ResidentAllocation,
+    allocation: CpuAllocation,
     length: number,
   ): Float32Array {
     return new Float32Array(memory.buffer, allocation.offset, length);
   }
 
-  #validateAllocation(context: BackendContext, allocation: ResidentAllocation): void {
-    if (allocation.released || allocation.generation !== context.generation) {
+  #validateAllocation(context: BackendContext, allocation: ResidentAllocation): asserts allocation is CpuAllocation {
+    if (!(allocation instanceof CpuAllocation) || allocation.released || allocation.generation !== context.generation) {
       throw new TabgradError(
         "BACKEND_STATUS_ERROR",
         "A stale or released WebAssembly allocation was used.",
@@ -909,9 +907,9 @@ export class WebAssemblyCpuBackend {
   }
 
   #requiredAllocation(
-    allocations: ReadonlyMap<ProgramSlot, ResidentAllocation>,
+    allocations: ReadonlyMap<ProgramSlot, CpuAllocation>,
     slot: ProgramSlot,
-  ): ResidentAllocation {
+  ): CpuAllocation {
     const allocation = allocations.get(slot);
     if (allocation === undefined) {
       throw new TabgradError(

@@ -55,6 +55,15 @@ surface gives it a real PyTorch counterpart. Its precise support and browser
 limits belong in the JavaScript API reference; this document records why those
 facts are not a disguised compatibility claim.
 
+The [direct JavaScript WebGPU interface](reference/webgpu-runtime.md) likewise
+has its own device and operation domain. Its exact-integer numerical oracle,
+packaged real-device browser checks and controlled lifecycle tests answer
+different questions: numerical cases, physical integration and failure
+ownership respectively. A controlled device double does not qualify real GPU
+execution. Neither that interface nor a successful GPU browser run establishes
+Python GPU support. Release evidence must name the browser, operating system,
+adapter, enabled features and limits, and whether the adapter is a fallback.
+
 ## Required operation record
 
 ### Python tensor evidence

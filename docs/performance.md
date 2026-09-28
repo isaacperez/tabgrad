@@ -135,6 +135,9 @@ not interpret a public observation duration as an isolated kernel duration.
 - [Python tensor boundary measurements](reference/python-boundary-measurements.md)
   describes equivalent JavaScript/Python workloads, baseline setup, conversion
   and observation timings, and bounded resource diagnostics.
+- [WebGPU resource measurements](reference/webgpu-measurements.md) separates
+  setup, transfers, resident execution and retention, with a prerequisite pilot
+  and bounded device-owned allocation accounting.
 
 These references own their command-specific workloads and interpretation.
 They do not establish general performance guarantees. Keep each actual run's

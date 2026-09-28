@@ -21,6 +21,8 @@ Read [Program formation](program-formation.md) for selected dependency traversal
 logical slot ordering and the separation of executable structure from invocation bindings.
 Read [CPU invocation storage](cpu-invocation-storage.md) for shared use counts,
 fresh retention obligations, scratch reuse and failure rollback.
+Read [WebGPU physical execution](webgpu-backend.md) for device-owned buffers,
+ordered dispatch, staging readback and result/drain separation.
 Read [Semantic value lifetimes](semantic-value-lifetimes.md) for dependency
 ownership, completed producer reclamation and the distinction between keeping
 a result and keeping its calculation history.
