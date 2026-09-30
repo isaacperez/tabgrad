@@ -197,6 +197,29 @@ reported lifecycle phase, bounded request history without query data, process
 exit state, and bounded standard error. Profile-cleanup failures are reported
 without replacing the primary execution failure.
 
+Process termination and diagnostic capture have different lifetimes. The
+harness sends `SIGTERM` to the process it launched and joins its exit, allowing
+two seconds before escalating to `SIGKILL` and a further two seconds to confirm
+exit. Sending a signal is not proof of termination. A failed join remains a
+failure even if the page reported success or the local stderr channel closed.
+
+After the join attempt, the harness closes its stderr receiving handle and
+allows two seconds to confirm local handle closure. It retains at most 16,384
+stderr characters. `standardErrorTruncated` records that the size limit omitted
+text; `standardErrorClosedEarly` separately records that capture stopped before
+natural end-of-file. Failed runs include both flags in their diagnostics. A
+successful run whose capture ended without EOF prints an explicit `NOTE`, but
+does not print raw stderr or run access data. Such a run establishes its page
+result, process exit and local cleanup, not a complete auxiliary-service log.
+
+This distinction matters because a browser can start an updater or another
+auxiliary service that inherits stderr and outlives the disposable browser.
+The harness does not wait for or kill those services, change browser update
+settings, or infer full process-tree retirement from a stdio event. Browser
+fixtures remain responsible for the application and backend cleanup promised
+by their assertions before they report success; terminating a browser or
+closing a diagnostic stream does not prove device drain.
+
 ## Prepare Python integration and its compatibility oracle
 
 Pyodide and native Python serve different purposes. `npm ci` installs the

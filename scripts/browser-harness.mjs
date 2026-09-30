@@ -426,27 +426,29 @@ async function withTimeout(promise, milliseconds, description, kind) {
   }
 }
 
-async function terminateBrowser(child) {
-  if (child.exitCode !== null || child.signalCode !== null) {
+async function waitForBrowserExit(exited, milliseconds) {
+  let timeout;
+  try {
+    return await Promise.race([
+      exited.then(() => true),
+      new Promise((resolve) => { timeout = setTimeout(() => resolve(false), milliseconds); }),
+    ]);
+  } finally { clearTimeout(timeout); }
+}
+
+/** Join the launched process, not its descendants or inherited stdio writers. */
+export async function terminateBrowser(child) {
+  if (child.pid === undefined || child.exitCode !== null || child.signalCode !== null) {
     return;
   }
-  const exited = new Promise((resolve) => child.once("exit", resolve));
-  child.kill("SIGTERM");
-  let timeout;
-  const terminated = await Promise.race([
-    exited.then(() => true),
-    new Promise((resolve) => {
-      timeout = setTimeout(() => resolve(false), 2_000);
-    }),
-  ]);
-  clearTimeout(timeout);
-  if (!terminated) {
+  const exited = createDeferred();
+  child.once("exit", exited.resolve);
+  try {
+    child.kill("SIGTERM");
+    if (await waitForBrowserExit(exited.promise, 2_000)) return;
     child.kill("SIGKILL");
-    await Promise.race([
-      exited,
-      new Promise((resolve) => setTimeout(resolve, 2_000)),
-    ]);
-  }
+    await withTimeout(exited.promise, 2_000, "Browser process exit after SIGKILL", "browser-termination");
+  } finally { child.removeListener("exit", exited.resolve); }
 }
 
 function failureDiagnostics({
@@ -458,6 +460,7 @@ function failureDiagnostics({
   registration,
   standardError,
   standardErrorTruncated,
+  standardErrorClosedEarly,
   version,
   cleanupFailure,
   terminationFailure,
@@ -476,14 +479,29 @@ function failureDiagnostics({
     },
     standardError,
     standardErrorTruncated,
+    standardErrorClosedEarly,
     terminationFailure,
     ...registration.snapshot(),
   };
 }
 
-function redactBrowserOutput(output, url, token) {
+function redactBrowserOutput(output, url, token, captureIncomplete) {
   const redactedUrl = `${url.origin}${url.pathname}?[redacted-query]`;
-  return output.replaceAll(url.href, redactedUrl).replaceAll(token, "[redacted-token]");
+  const escapedPath = `${url.origin}${url.pathname}`.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  // Capture can end inside a URL or bare token; full-string replacement is insufficient.
+  const redacted = output.replace(new RegExp(`${escapedPath}\\?[^\\s"'<>]*`, "g"), redactedUrl)
+    .replaceAll(token, "[redacted-token]");
+  if (captureIncomplete) {
+    // Conservatively omit a cut suffix matching any prefix of this run's token.
+    for (let length = Math.min(token.length - 1, redacted.length); length > 0; length -= 1) {
+      if (redacted.endsWith(token.slice(0, length))) {
+        const marker = "[redacted-token-prefix]";
+        return redacted.slice(0, Math.min(redacted.length - length, maxStandardErrorCharacters - marker.length))
+          + marker;
+      }
+    }
+  }
+  return redacted.slice(0, maxStandardErrorCharacters);
 }
 
 export async function removeBrowserProfile(profile, removeDirectory = rm) {
@@ -545,7 +563,16 @@ export async function runBrowserPage({
 
   let standardError = "";
   let standardErrorTruncated = false;
+  let standardErrorError;
+  const diagnosticFailure = createDeferred();
+  diagnosticFailure.promise.catch(() => {});
   child.stderr.setEncoding("utf8");
+  child.stderr.on("error", (error) => {
+    standardErrorError = error;
+    diagnosticFailure.reject(new ClassifiedBrowserFailure(
+      "browser-diagnostics", "Browser standard error could not be read.", { cause: error },
+    ));
+  });
   child.stderr.on("data", (chunk) => {
     const remaining = maxStandardErrorCharacters - standardError.length;
     if (remaining > 0) {
@@ -560,13 +587,13 @@ export async function runBrowserPage({
   let primaryFailure;
   try {
     await withTimeout(
-      Promise.race([registration.navigation, prematureExit]),
+      Promise.race([registration.navigation, prematureExit, diagnosticFailure.promise]),
       navigationTimeoutMilliseconds,
       `${browser.name} navigation to ${page}`,
       "navigation-timeout",
     );
     result = await withTimeout(
-      Promise.race([registration.result, prematureExit]),
+      Promise.race([registration.result, prematureExit, diagnosticFailure.promise]),
       applicationTimeoutMilliseconds,
       `${browser.name} application in ${page}`,
       "application-timeout",
@@ -588,16 +615,33 @@ export async function runBrowserPage({
 
   registration.cancel();
   let terminationFailure;
+  let terminationError;
   try {
     await terminateBrowser(child);
+  } catch (error) {
+    terminationError = error;
+    terminationFailure = error instanceof Error ? error.message : String(error);
+  }
+
+  // EOF belongs to all writers, which may include installed-browser services.
+  // After joining our process, stop capture and join our own receiving handle.
+  const standardErrorClosedEarly = !child.stderr.readableEnded;
+  child.stderr.destroy();
+  try {
     await withTimeout(
       processClosed.promise,
       2_000,
-      `${browser.name} process stream closure`,
+      `${browser.name} local diagnostic handle closure`,
       "browser-termination",
     );
   } catch (error) {
-    terminationFailure = error instanceof Error ? error.message : String(error);
+    terminationError ??= error;
+    terminationFailure ??= error instanceof Error ? error.message : String(error);
+  }
+  if (standardErrorError !== undefined) {
+    primaryFailure ??= new ClassifiedBrowserFailure(
+      "browser-diagnostics", "Browser standard error could not be read.", { cause: standardErrorError },
+    );
   }
   let cleanupError;
   try {
@@ -620,7 +664,10 @@ export async function runBrowserPage({
       : cleanupError instanceof Error
         ? cleanupError.message
         : String(cleanupError);
-    const causes = [primaryFailure, cleanupError].filter((error) => error !== undefined);
+    const causes = [primaryFailure, terminationError, cleanupError].filter((error) => error !== undefined);
+    if (standardErrorError !== undefined && primaryFailure?.cause !== standardErrorError) {
+      causes.push(standardErrorError);
+    }
     const cause = causes.length > 1 ? new AggregateError(causes) : causes[0];
     const diagnostics = failureDiagnostics({
       browser,
@@ -630,8 +677,9 @@ export async function runBrowserPage({
       page,
       processState,
       registration,
-      standardError: redactBrowserOutput(standardError, url, token),
+      standardError: redactBrowserOutput(standardError, url, token, standardErrorClosedEarly || standardErrorTruncated),
       standardErrorTruncated,
+      standardErrorClosedEarly,
       terminationFailure: terminationFailure ?? null,
       version,
     });
@@ -639,6 +687,12 @@ export async function runBrowserPage({
       `${browser.name} ${page} failed during ${failure.kind}: ${failure.message}`,
       diagnostics,
       cause === undefined ? undefined : { cause },
+    );
+  }
+
+  if (standardErrorClosedEarly) {
+    process.stdout.write(
+      `NOTE ${browser.name} stderr capture ended without EOF; this does not establish descendant termination.\n`,
     );
   }
 
