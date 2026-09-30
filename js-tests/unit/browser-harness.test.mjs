@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { ChildProcess, spawn } from "node:child_process";
+import { EventEmitter } from "node:events";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
@@ -9,6 +11,7 @@ import {
   runBrowserPage,
   selectBrowserDefinitions,
   startBrowserServer,
+  terminateBrowser,
 } from "../../scripts/browser-harness.mjs";
 
 const fixturePrelude = `
@@ -80,6 +83,146 @@ function expectBrowserFailure(expectedKind, inspect = undefined) {
     return true;
   };
 }
+
+async function runInheritedStderrFixture(scenario) {
+  const child = spawn(process.execPath, [
+    fileURLToPath(new URL("../fixtures/inherited-browser-stderr.mjs", import.meta.url)),
+    "harness", scenario,
+  ], { stdio: ["ignore", "pipe", "pipe"] });
+  let output = "";
+  let errorOutput = "";
+  child.stdout.setEncoding("utf8").on("data", (chunk) => { output += chunk; });
+  child.stderr.setEncoding("utf8").on("data", (chunk) => { errorOutput += chunk; });
+  const deadline = setTimeout(() => child.kill("SIGKILL"), 15_000);
+  try {
+    const code = await new Promise((resolve, reject) => {
+      child.once("error", reject);
+      child.once("close", resolve);
+    });
+    assert.equal(code, 0, errorOutput);
+    const record = output.split("\n").find((line) => line.startsWith("OUTCOME "));
+    assert.notEqual(record, undefined, output);
+    return { output, outcome: JSON.parse(record.slice("OUTCOME ".length)) };
+  } finally { clearTimeout(deadline); }
+}
+
+class FixtureBrowserProcess extends EventEmitter {
+  pid = 1;
+  exitCode = null;
+  signalCode = null;
+  signals = [];
+  constructor(exitOnSignal) { super(); this.exitOnSignal = exitOnSignal; }
+  kill(signal) {
+    this.signals.push(signal);
+    if (signal === this.exitOnSignal) {
+      queueMicrotask(() => {
+        this.signalCode = signal;
+        this.emit("exit", null, signal);
+      });
+    }
+    return true;
+  }
+}
+
+test("browser termination joins ordinary exit and leaves no exit listener", async () => {
+  const child = new FixtureBrowserProcess("SIGTERM");
+  await terminateBrowser(child);
+  assert.deepEqual(child.signals, ["SIGTERM"]);
+  assert.equal(child.signalCode, "SIGTERM");
+  assert.equal(child.listenerCount("exit"), 0);
+});
+
+test("already exited and failed-to-spawn processes require no signal", async () => {
+  const exited = new FixtureBrowserProcess("SIGTERM");
+  exited.exitCode = 0;
+  await terminateBrowser(exited);
+  const unspawned = new FixtureBrowserProcess("SIGTERM");
+  unspawned.pid = undefined;
+  await terminateBrowser(unspawned);
+  assert.deepEqual(exited.signals, []);
+  assert.deepEqual(unspawned.signals, []);
+});
+
+test("termination escalates after an unjoined SIGTERM and joins actual SIGKILL exit", async () => {
+  const child = new FixtureBrowserProcess("SIGKILL");
+  const termination = terminateBrowser(child);
+  assert.deepEqual(child.signals, ["SIGTERM"]);
+  await termination;
+  assert.deepEqual(child.signals, ["SIGTERM", "SIGKILL"]);
+  assert.equal(child.signalCode, "SIGKILL");
+  assert.equal(child.listenerCount("exit"), 0);
+});
+
+test("sending SIGKILL is not evidence of process exit", async () => {
+  const child = new FixtureBrowserProcess(undefined);
+  await assert.rejects(terminateBrowser(child), /process exit after SIGKILL timed out/);
+  assert.deepEqual(child.signals, ["SIGTERM", "SIGKILL"]);
+  assert.equal(child.exitCode, null);
+  assert.equal(child.signalCode, null);
+  assert.equal(child.listenerCount("exit"), 0);
+});
+
+test("inherited stderr does not prevent successful harness completion or retain its runner", async () => {
+  const { output, outcome } = await runInheritedStderrFixture("success");
+  assert.deepEqual(outcome.result, { ok: true });
+  assert.match(output, /stderr capture ended without EOF/);
+  assert.equal(outcome.writerStillAlive, true);
+  assert.equal(outcome.writerJoined, true);
+  assert.equal(outcome.profileRemoved, true);
+});
+
+test("inherited stderr preserves the primary application failure and explicit capture cutoff", async () => {
+  const { outcome } = await runInheritedStderrFixture("failure");
+  assert.equal(outcome.failureKind, "application-result");
+  assert.equal(outcome.diagnostics.terminationFailure, null);
+  assert.equal(outcome.diagnostics.standardErrorClosedEarly, true);
+  assert.equal(outcome.diagnostics.standardErrorTruncated, false);
+  assert.match(outcome.diagnostics.standardError, /inherited stderr fixture/);
+  assert.equal(outcome.writerStillAlive, true);
+  assert.equal(outcome.writerJoined, true);
+  assert.equal(outcome.profileRemoved, true);
+});
+
+test("a failed stderr read remains a diagnostic failure rather than a successful process join", async (context) => {
+  const emit = ChildProcess.prototype.emit;
+  context.mock.method(ChildProcess.prototype, "emit", function (event, ...arguments_) {
+    const result = emit.call(this, event, ...arguments_);
+    if (event === "spawn") this.stderr.destroy(new Error("controlled stderr failure"));
+    return result;
+  });
+  await assert.rejects(
+    runFixtureBrowser("setInterval(() => {}, 1_000);"),
+    expectBrowserFailure("browser-diagnostics", (error) => {
+      assert.equal(error.diagnostics.terminationFailure, null);
+      assert.equal(error.diagnostics.cleanupFailure, null);
+      assert.equal(error.diagnostics.standardErrorClosedEarly, true);
+      assert.match(error.cause.cause.message, /controlled stderr failure/);
+    }),
+  );
+});
+
+test("a late stderr failure cannot replace a result-validation failure", async (context) => {
+  let browserProcess;
+  const emit = ChildProcess.prototype.emit;
+  context.mock.method(ChildProcess.prototype, "emit", function (event, ...arguments_) {
+    if (event === "spawn") browserProcess = this;
+    return emit.call(this, event, ...arguments_);
+  });
+  await assert.rejects(
+    runFixtureBrowser('await fetch(pageUrl); await post("/__result", { ok: true });', {
+      validateResult() {
+        browserProcess.stderr.destroy(new Error("late stderr failure"));
+        throw new Error("primary validation failure");
+      },
+    }),
+    expectBrowserFailure("application-result", (error) => {
+      assert.equal(error.diagnostics.terminationFailure, null);
+      assert(error.cause instanceof AggregateError);
+      assert.match(error.cause.errors[0].message, /primary validation failure/);
+      assert.match(error.cause.errors[1].message, /late stderr failure/);
+    }),
+  );
+});
 
 test("browser profile cleanup retries transient directory races", async () => {
   let observedPath;
@@ -295,6 +438,7 @@ process.exit(9);
       assert.equal(error.diagnostics.process.signal, null);
       assert.equal(error.diagnostics.standardError.length, 16_384);
       assert.equal(error.diagnostics.standardErrorTruncated, true);
+      assert.equal(error.diagnostics.standardErrorClosedEarly, false);
     }),
   );
 });
@@ -309,6 +453,34 @@ process.exit(8);
       assert.match(error.diagnostics.standardError, /\?\[redacted-query\]$/);
       assert.doesNotMatch(error.diagnostics.standardError, /token=/);
       assert.doesNotMatch(error.message, /token=/);
+    }),
+  );
+});
+
+test("an incomplete logged run URL cannot expose query data", async () => {
+  await assert.rejects(
+    runFixtureBrowser(`
+await new Promise((resolve) => process.stderr.write(pageUrl.href.slice(0, -10), resolve));
+process.exit(8);
+`),
+    expectBrowserFailure("browser-process", (error) => {
+      assert.match(error.diagnostics.standardError, /\?\[redacted-query\]$/);
+      assert.doesNotMatch(error.diagnostics.standardError, /token=/);
+    }),
+  );
+});
+
+test("size-limited capture redacts a partial bare run token", async () => {
+  let token;
+  await assert.rejects(
+    runFixtureBrowser(`
+await new Promise((resolve) => process.stderr.write("x".repeat(16_370) + token, resolve));
+process.exit(8);
+`, { onArguments(_profile, url) { token = new URL(url).searchParams.get("token"); } }),
+    expectBrowserFailure("browser-process", (error) => {
+      assert.equal(error.diagnostics.standardErrorTruncated, true);
+      assert.equal(error.diagnostics.standardError.includes(token.slice(0, 14)), false);
+      assert.match(error.diagnostics.standardError, /\[redacted-token-prefix\]$/);
     }),
   );
 });
