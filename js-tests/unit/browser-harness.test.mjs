@@ -271,7 +271,7 @@ await post("/__result", { ok: true, values: [5, 7, 9] });
   assert.deepEqual(result, { ok: true, values: [5, 7, 9] });
 });
 
-test("navigation timeout reports that the test page was never requested", async () => {
+test("navigation timeout reports no associated page admission", async () => {
   let browserStarts = 0;
   await assert.rejects(
     runFixtureBrowser("setInterval(() => {}, 1_000);", {
@@ -287,6 +287,57 @@ test("navigation timeout reports that the test page was never requested", async 
     }),
   );
   assert.equal(browserStarts, 1);
+});
+
+test("timeout snapshots distinguish failure-time state from final owned cleanup", async () => {
+  await assert.rejects(
+    runFixtureBrowser("setInterval(() => {}, 1_000);", { navigationTimeoutMilliseconds: 100 }),
+    expectBrowserFailure("navigation-timeout", (error) => {
+      const snapshot = error.diagnostics.timeoutSnapshot;
+      assert.notEqual(snapshot, undefined, "Missing pre-cleanup timeout snapshot");
+      assert.equal(snapshot.lastPhase, "browser-launched");
+      assert.equal(snapshot.process.spawnObserved, true);
+      assert.equal(snapshot.process.exitCode, null);
+      assert.equal(snapshot.process.signal, null);
+      assert.equal(snapshot.profile.state, "directory-present");
+      assert.deepEqual(snapshot.incomingRequests, []);
+      assert.equal(snapshot.incomingRequestsTruncated, false);
+      assert.equal(error.diagnostics.process.signal, "SIGTERM");
+      assert.equal(error.diagnostics.cleanupFailure, null);
+      assert.equal(JSON.stringify(snapshot).includes("tabgrad-browser-profile-"), false);
+    }),
+  );
+});
+
+test("unassociated incoming controls are visible without advancing the run", async () => {
+  const server = await startBrowserServer(["runtime.html"]);
+  const registration = server.register("active-fixture-token", "runtime.html");
+  registration.navigation.catch(() => {});
+  registration.result.catch(() => {});
+  try {
+    for (const suffix of ["", "?token=unknown-fixture-token&private=fixture-secret"]) {
+      const response = await fetch(`${server.origin}/__result${suffix}`, {
+        method: "POST", body: JSON.stringify({ ok: true, private: "fixture-body" }),
+      });
+      assert.equal(response.status, 404);
+    }
+    const snapshot = registration.snapshot();
+    assert.ok(Array.isArray(snapshot.incomingRequests), "Missing pre-association ingress records");
+    assert.deepEqual(snapshot.incomingRequests.map(({ resource, association, responseStatus }) =>
+      ({ resource, association, responseStatus })), [
+      { resource: "/__result", association: "missing-control-token", responseStatus: 404 },
+      { resource: "/__result", association: "unmatched-token", responseStatus: 404 },
+    ]);
+    assert.equal(snapshot.lastPhase, "browser-process-requested");
+    assert.deepEqual(snapshot.requests, []);
+    const serialized = JSON.stringify(snapshot.incomingRequests);
+    for (const omitted of ["active-fixture-token", "unknown-fixture-token", "fixture-secret", "fixture-body"]) {
+      assert.equal(serialized.includes(omitted), false);
+    }
+  } finally {
+    registration.cancel();
+    await server.close();
+  }
 });
 
 test("browser launch failure is distinct from navigation timeout", async () => {

@@ -197,6 +197,13 @@ reported lifecycle phase, bounded request history without query data, process
 exit state, and bounded standard error. Profile-cleanup failures are reported
 without replacing the primary execution failure.
 
+Use the [browser diagnostics reference](reference/browser-diagnostics.md) to
+interpret passive incoming traffic separately from associated requests, and
+failure-time observations separately from final cleanup. Its bounded records
+preserve missing, incomplete and unavailable evidence without changing token
+authority, deadlines or failure outcomes. They do not establish a browser root
+cause or make raw failure logs safe to publish.
+
 Process termination and diagnostic capture have different lifetimes. The
 harness sends `SIGTERM` to the process it launched and joins its exit, allowing
 two seconds before escalating to `SIGKILL` and a further two seconds to confirm
