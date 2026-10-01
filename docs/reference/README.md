@@ -37,6 +37,11 @@ separate setup, upload, resident execution, readback and retention. They are
 command references; the shared [performance policy](../performance.md) owns
 the rules for interpreting and preserving evidence.
 
+For contributor browser checks, use
+[Browser qualification diagnostics](browser-diagnostics.md) to interpret
+incoming traffic, registered progress, failure-time process/profile observations
+and final cleanup without overclaiming what a timeout proves.
+
 Reference documentation answers questions such as:
 
 - What exact name, signature, value, layout, or command applies?

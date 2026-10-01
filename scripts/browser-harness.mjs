@@ -5,6 +5,11 @@ import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { extname, isAbsolute, join, normalize, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  BrowserIngressDiagnostics,
+  captureBrowserTimeoutSnapshot,
+  maximumRecordedBrowserRequests as maxRecordedRequests,
+} from "./browser-run-diagnostics.mjs";
 
 const repositoryRoot = normalize(fileURLToPath(new URL("..", import.meta.url)));
 const distributionRoot = join(repositoryRoot, "dist");
@@ -15,7 +20,6 @@ const pyodideAssets = new Set([
   "pyodide-lock.json", "python_stdlib.zip",
 ]);
 
-const maxRecordedRequests = 64;
 const maxStandardErrorCharacters = 16_384;
 const reportedPhaseOrder = Object.freeze([
   "application-started",
@@ -217,11 +221,16 @@ export function browserVersion(executable) {
 
 export async function startBrowserServer(
   pageNames,
-  { crossOriginIsolation = false, assets = [], distributionDirectory = distributionRoot } = {},
+  { crossOriginIsolation = false, assets = [], distributionDirectory = distributionRoot, readAsset = readFile } = {},
 ) {
   const runs = new Map();
   const allowedPages = new Set(pageNames);
   const allowedAssets = new Set(assets);
+  const knownResources = new Set([
+    "/__phase", "/__result",
+    ...[...allowedPages].map(page => `/${page}`), ...[...allowedAssets].map(asset => `/${asset}`),
+    ...[...pyodideAssets].map(asset => `/pyodide/${asset}`),
+  ]);
   let activeToken;
   const isolationHeaders = crossOriginIsolation
     ? {
@@ -233,16 +242,25 @@ export async function startBrowserServer(
   const server = createServer(async (request, response) => {
     const requestUrl = new URL(request.url, "http://localhost");
     const pathname = requestUrl.pathname;
+    const observedRun = runs.get(activeToken);
+    const ingress = observedRun?.ingress;
+    const observation = ingress?.begin(request.method, pathname, response);
     const isControlRequest = pathname === "/__phase" || pathname === "/__result";
     const token = requestToken(requestUrl, activeToken, runs, !isControlRequest);
     const run = token === undefined ? undefined : runs.get(token);
+    const association = requestUrl.searchParams.has("token")
+      ? run === observedRun ? "matching-token" : "unmatched-token"
+      : isControlRequest ? "missing-control-token" : "active-fallback";
+    ingress?.associate(observation, association);
 
     if (pathname === "/__phase" && request.method === "POST") {
       if (run === undefined) {
+        ingress?.progress(observation, "control-rejected");
         response.writeHead(404).end();
         return;
       }
       try {
+        ingress?.progress(observation, "reading-body");
         const phase = JSON.parse(await readRequestBody(request)).phase;
         const previousIndex = reportedPhaseOrder.indexOf(run.lastPhase);
         const nextIndex = reportedPhaseOrder.indexOf(phase);
@@ -250,9 +268,11 @@ export async function startBrowserServer(
           throw new Error(`Invalid browser lifecycle phase ${JSON.stringify(phase)}.`);
         }
         markPhase(run, phase);
+        ingress?.progress(observation, "control-accepted");
         recordRequest(run, request, pathname, 204);
         response.writeHead(204, isolationHeaders).end();
       } catch (error) {
+        ingress?.progress(observation, "control-invalid");
         recordRequest(run, request, pathname, 400);
         rejectRun(
           run,
@@ -266,16 +286,20 @@ export async function startBrowserServer(
 
     if (pathname === "/__result" && request.method === "POST") {
       if (run === undefined) {
+        ingress?.progress(observation, "control-rejected");
         response.writeHead(404).end();
         return;
       }
       try {
+        ingress?.progress(observation, "reading-body");
         const result = JSON.parse(await readRequestBody(request));
         markPhase(run, "result-received");
+        ingress?.progress(observation, "control-accepted");
         recordRequest(run, request, pathname, 204);
         run.result.resolve(result);
         response.writeHead(204, isolationHeaders).end();
       } catch (error) {
+        ingress?.progress(observation, "control-invalid");
         recordRequest(run, request, pathname, 400);
         rejectRun(
           run,
@@ -294,6 +318,7 @@ export async function startBrowserServer(
     const sourceRoot = isPage || isFixtureAsset ? browserTestRoot : isPyodide ? pyodideRoot : distributionDirectory;
     const relativePath = isPyodide ? pathname.slice("/pyodide/".length) : requestedPage;
     if (isPyodide && !pyodideAssets.has(relativePath)) {
+      ingress?.progress(observation, "asset-rejected");
       recordRequest(run, request, pathname, 404);
       rejectRun(run, "asset-loading", `Unregistered Pyodide asset ${pathname}.`);
       response.writeHead(404).end();
@@ -306,6 +331,7 @@ export async function startBrowserServer(
       || pathFromRoot.startsWith(`..${sep}`)
       || isAbsolute(pathFromRoot)
     ) {
+      ingress?.progress(observation, "asset-rejected");
       recordRequest(run, request, pathname, 403);
       rejectRun(run, "asset-loading", `Browser request for ${pathname} was forbidden.`);
       response.writeHead(403).end();
@@ -313,7 +339,9 @@ export async function startBrowserServer(
     }
 
     try {
-      const body = await readFile(path);
+      ingress?.progress(observation, "reading-file");
+      const body = await readAsset(path);
+      ingress?.progress(observation, "file-served");
       recordRequest(run, request, pathname, 200);
       if (isPage && run !== undefined) {
         if (requestedPage !== run.page) {
@@ -329,6 +357,7 @@ export async function startBrowserServer(
         ...isolationHeaders,
       }).end(body);
     } catch {
+      ingress?.progress(observation, "file-failed");
       recordRequest(run, request, pathname, 404);
       if (isPage || isRequiredAsset(pathname)) {
         rejectRun(run, "asset-loading", `Required browser asset ${pathname} returned 404.`);
@@ -361,6 +390,7 @@ export async function startBrowserServer(
         result: createDeferred(),
         startedAt: performance.now(),
       };
+      run.ingress = new BrowserIngressDiagnostics(knownResources, run.startedAt);
       runs.set(token, run);
       activeToken = token;
       return {
@@ -376,6 +406,7 @@ export async function startBrowserServer(
             phases: [...run.phases],
             requests: [...run.requests],
             requestsTruncated: run.requestsTruncated,
+            ...run.ingress.snapshot(),
           };
         },
         cancel(reason = new Error("Browser run ended before receiving a result.")) {
@@ -383,6 +414,7 @@ export async function startBrowserServer(
             return;
           }
           runs.delete(token);
+          run.ingress.close();
           activeToken = undefined;
           run.navigation.reject(reason);
           run.result.reject(reason);
@@ -391,6 +423,7 @@ export async function startBrowserServer(
     },
     async close() {
       for (const [token, run] of runs) {
+        run.ingress.close();
         const error = new Error("Browser server closed before receiving a result.");
         run.navigation.reject(error);
         run.result.reject(error);
@@ -464,6 +497,7 @@ function failureDiagnostics({
   version,
   cleanupFailure,
   terminationFailure,
+  timeoutSnapshot,
 }) {
   return {
     browser: browser.name,
@@ -481,6 +515,7 @@ function failureDiagnostics({
     standardErrorTruncated,
     standardErrorClosedEarly,
     terminationFailure,
+    timeoutSnapshot,
     ...registration.snapshot(),
   };
 }
@@ -539,10 +574,13 @@ export async function runBrowserPage({
   const child = spawn(executable, browser.argumentsFor(profile, url.href), {
     stdio: ["ignore", "ignore", "pipe"],
   });
-  const processState = { error: null, exitCode: null, signal: null };
+  const processState = { error: null, exitCode: null, signal: null, spawnObserved: false };
   const processClosed = createDeferred();
   const prematureExit = new Promise((_, reject) => {
-    child.once("spawn", () => registration.markBrowserLaunched());
+    child.once("spawn", () => {
+      processState.spawnObserved = true;
+      registration.markBrowserLaunched();
+    });
     child.once("error", (error) => {
       processState.error = error.message;
       reject(new ClassifiedBrowserFailure("browser-process", error.message, { cause: error }));
@@ -613,6 +651,8 @@ export async function runBrowserPage({
     primaryFailure = classifyFailure(error, "browser-run");
   }
 
+  const timeoutSnapshot = primaryFailure?.kind === "navigation-timeout" || primaryFailure?.kind === "application-timeout"
+    ? await captureBrowserTimeoutSnapshot({ child, processState, registration, profile }) : undefined;
   registration.cancel();
   let terminationFailure;
   let terminationError;
@@ -681,6 +721,7 @@ export async function runBrowserPage({
       standardErrorTruncated,
       standardErrorClosedEarly,
       terminationFailure: terminationFailure ?? null,
+      timeoutSnapshot,
       version,
     });
     throw new BrowserRunError(
