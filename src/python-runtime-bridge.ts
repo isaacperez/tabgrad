@@ -1,5 +1,6 @@
 import { TabgradError } from "./errors.js";
 import { observeTensorSynchronously, type RuntimeSession, type Tensor } from "./runtime.js";
+import type { TensorDevice } from "./backend.js";
 
 /** Structural subset of Pyodide's borrowed buffer protocol; no interpreter owner. */
 interface PythonBuffer {
@@ -57,12 +58,12 @@ export class PythonRuntimeBridge {
     return this.session.grad(output, inputs, gradient === null ? undefined : gradient);
   }
 
-  tensorFromBuffer(buffer: PythonBuffer, shape?: readonly number[], requiresGrad = false): Tensor {
+  tensorFromBuffer(buffer: PythonBuffer, shape?: readonly number[], requiresGrad = false, device: TensorDevice = "cpu"): Tensor {
     const view = buffer.getBuffer("f32");
     try {
       // Runtime import performs the owned copy synchronously. Neither this view
       // nor the argument proxy may escape into deferred numerical execution.
-      return this.session.tensor(boundedFloat32View(view), { ...(shape === undefined ? {} : { shape }), requiresGrad });
+      return this.session.tensor(boundedFloat32View(view), { ...(shape === undefined ? {} : { shape }), requiresGrad, device });
     } finally {
       view.release();
     }

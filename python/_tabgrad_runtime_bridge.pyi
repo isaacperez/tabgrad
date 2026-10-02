@@ -34,7 +34,10 @@ class ObservedArray(Protocol):
 
 def observe(handle: RuntimeTensor) -> ObservedArray: ...
 def tensorFromBuffer(
-    buffer: array[float], shape: JsProxy, requiresGrad: bool = False
+    buffer: array[float],
+    shape: JsProxy,
+    requiresGrad: bool = False,
+    device: str = "cpu",
 ) -> RuntimeTensor: ...
 def grad(
     output: RuntimeTensor, inputs: JsProxy, gradient: RuntimeTensor | None

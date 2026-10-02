@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8"><title>Managed Python WebGPU integration</title></head>
+  <body>
+    <script type="module">
+      import { connectPythonWorker, createWebGpuWorker } from "/python.js";
+      const token = new URLSearchParams(location.search).get("token");
+      const lifetime = new AbortController();
+      let worker;
+      let controller;
+      const events = new Map();
+      function next(kind) { return new Promise((resolve, reject) => { events.set(kind, { resolve, reject }); }); }
+      function failed(error) {
+        lifetime.abort(error);
+        for (const event of events.values()) event.reject(error);
+        events.clear();
+      }
+      async function send(endpoint, value) {
+        const response = await fetch(`${endpoint}?token=${encodeURIComponent(token)}`, {
+          method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(value),
+        });
+        if (!response.ok) throw new Error(`Reporting failed: ${response.status}`);
+      }
+      try {
+        await send("/__phase", { phase: "application-started" });
+        controller = await createWebGpuWorker({ signal: lifetime.signal });
+        worker = new Worker("/python-webgpu.mjs", { type: "module" });
+        const channel = new MessageChannel();
+        const client = connectPythonWorker(channel.port1, lifetime.signal);
+        const ready = next("ready");
+        const finished = next("finished");
+        void finished.catch(() => undefined);
+        worker.addEventListener("error", (event) => failed(new Error(event.message)));
+        worker.addEventListener("message", ({ data }) => {
+          if (data.kind === "failure") { failed(new Error(data.message)); return; }
+          const event = events.get(data.kind);
+          events.delete(data.kind);
+          event?.resolve(data);
+        });
+        worker.postMessage({ port: channel.port2, webgpu: controller.connection, numericalCorpus: true }, [channel.port2, ...controller.transferables]);
+        const environment = await ready;
+        await send("/__phase", { phase: "assets-loaded" });
+        await send("/__phase", { phase: "runtime-started" });
+        await client.runPythonAsync(`
+import torch, gc
+session = torch._runtime_session
+gpu = torch.device('webgpu')
+assert gpu.type == 'webgpu' and gpu.index is None and str(gpu) == 'webgpu'
+assert gpu == torch.device('webgpu') and hash(gpu) == hash(torch.device('webgpu'))
+assert torch.tensor(3., dtype=torch.float32).device == torch.device('cpu')
+def check_gpu():
+    for data, expected_shape, expected in [
+        (2., (), 4.),
+        ([[1., 2.], [3., 4.]], (2, 2), [[2., 4.], [6., 8.]]),
+        ([[], []], (2, 0), [[], []]),
+    ]:
+        x = torch.tensor(data, dtype=torch.float32, device=gpu)
+        y = x + x
+        assert y.device == gpu and y.shape == expected_shape
+        assert y.tolist() == expected
+        assert y.tolist() == expected
+        assert session.diagnostics().liveRequestLeases == 0
+    x = torch.tensor([[1., 2.], [3., 4.]], dtype=torch.float32, device='webgpu')
+    branch = x + x
+    assert (branch + branch).view(4).tolist() == [4., 8., 12., 16.]
+    assert branch.tolist() == [[2., 4.], [6., 8.]]
+    cpu = torch.tensor([1., 2., 3., 4.], dtype=torch.float32)
+    assert (cpu + cpu).tolist() == [2., 4., 6., 8.]
+check_gpu()
+def check_numerical_transport():
+    import struct, _test_f32
+    def value(bits):
+        return struct.unpack('<f', struct.pack('<I', bits))[0]
+    left = _test_f32.left.to_py()
+    right = _test_f32.right.to_py()
+    for depth in [1, 8]:
+        current = torch.tensor([value(bits) for bits in left], dtype=torch.float32, device=gpu)
+        increment = torch.tensor([value(bits) for bits in right], dtype=torch.float32, device=gpu)
+        for step in range(depth):
+            current = current + increment
+        actual = [struct.unpack('<I', struct.pack('<f', number))[0] for number in current.tolist()]
+        expected = _test_f32.expected(depth).to_py()
+        assert len(actual) == len(expected)
+        for bits, reference in zip(actual, expected):
+            assert bits == reference or (bits & 0x7fffffff) > 0x7f800000 and (reference & 0x7fffffff) > 0x7f800000
+check_numerical_transport()
+def check_uninterrupted_observation():
+    import _test_gpu_observers
+    before = _test_gpu_observers.count()
+    x = torch.tensor([float(index % 32) for index in range(65536)], dtype=torch.float32, device=gpu)
+    y = x + x
+    for iteration in range(32):
+        values = y.tolist()
+        assert len(values) == 65536 and values[31] == 62. and values[-1] == 62.
+        assert session.diagnostics().liveRequestLeases == 0
+    assert _test_gpu_observers.count() == before
+check_uninterrupted_observation()
+gc.collect()
+assert session.diagnostics().liveRequestLeases == 0
+assert session.diagnostics().liveTensorHandles == 0
+assert session.diagnostics().webgpu.ownedBufferBytes == 0
+`);
+        await client.close();
+        const result = await finished;
+        if (result.diagnostics.webgpu.state !== "closed") throw new Error("Graceful GPU close was classified as loss.");
+        await controller.close();
+        await send("/__phase", { phase: "runtime-finished" });
+        await send("/__result", { ok: true, ...environment, diagnostics: result.diagnostics });
+      } catch (error) {
+        failed(error);
+        await controller?.close().catch(() => undefined);
+        await send("/__result", { ok: false, error: { message: String(error), stack: error?.stack } });
+      } finally { worker?.terminate(); }
+    </script>
+  </body>
+</html>

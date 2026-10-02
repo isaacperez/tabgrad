@@ -372,9 +372,12 @@ checks do not depend on shell activation or an unprepared global interpreter.
 | Run real-browser integration tests only | `npm run test:browser` | An existing `dist/` build, Chrome, Firefox, and a loopback port; launches one headless browser at a time |
 | Qualify direct JavaScript WebGPU execution | `npm run test:webgpu` | An existing `dist/` build, installed Chrome with an available WebGPU adapter, process-launch permission and a loopback port; `TABGRAD_BROWSER` can select another installed browser; unavailable GPU is a failure, not a silent skip |
 | Build and qualify WebGPU from source | `npm run test:webgpu:from-source` | Prepared build environment plus the WebGPU qualification requirements above; rebuilds `dist/` before testing |
+| Qualify managed Python WebGPU | `npm run test:python:webgpu` | Matching `dist/` and pinned Pyodide assets, an installed real-WebGPU browser, process and loopback permissions; isolated hosting and sequential profiles cover ordinary observation without JSPI, numerical transport, attachment and revocation |
+| Build and qualify managed Python WebGPU from source | `npm run test:python:webgpu:from-source` | Prepared build environment plus managed GPU qualification requirements; rebuilds all matching artifacts before testing |
 | Build and test one or both browsers from source | `npm run test:browser:from-source` | Prepared build environment, installed browsers, and a loopback port; rebuilds `dist/`, then honors `TABGRAD_BROWSER` or tests Chrome followed by Firefox when it is unset |
 | Measure bounded runtime and artifact costs | `npm run measure` | Prepared build and browser environments; rebuilds `dist/` and writes an ignored report under `test-results/` |
 | Calibrate or measure GPU resource growth | `npm run measure:webgpu -- pilot` or `npm run measure:webgpu -- measure` | A freshly built `dist/`, real WebGPU browser and loopback permission; the [measurement reference](reference/webgpu-measurements.md) defines adequacy, raw reports and resource caps |
+| Calibrate or compare managed Python and direct GPU boundaries | `npm run measure:python:webgpu -- pilot`, `measure` or `diagnose` | Fresh matching distribution and local Pyodide, one real-WebGPU browser and isolated loopback hosting; the [specific measurement reference](reference/python-webgpu-measurements.md) separates the adequacy gate, uninstrumented matrix and inclusive diagnostic, with counters and safety caps |
 | Compare Python and direct JavaScript boundary costs | `npm run measure:python` | Prepared build and browser environments plus an isolated baseline distribution; rebuilds current `dist/` and writes timestamped ignored reports under `test-results/`; workloads, baseline variables and limits are defined in [the command reference](reference/python-boundary-measurements.md) |
 | Remove the browser distribution | `npm run clean` | Deletes only the ignored `dist/` directory |
 | Update the JavaScript lock after an authorized dependency change | `npm install --package-lock-only --ignore-scripts --no-audit --no-fund` | Node.js 22.12.0, npm 11.1.0, and registry access; rewrites only `package-lock.json` plus npm cache state |
@@ -448,6 +451,20 @@ a usable hardware adapter. GPU changes need an explicit successful WebGPU
 run with its browser, operating system, adapter, features, limits and fallback
 status recorded. Node lifecycle doubles exercise controlled failures but do
 not replace this physical qualification.
+
+`test:python:webgpu` separately qualifies the interpreter-worker connection.
+It uses the same installed real-WebGPU browser selection as `test:webgpu`,
+serves locked local Pyodide under effective cross-origin isolation, and removes
+JSPI capabilities before loading it. Profiles run one at a time: ordinary
+Python output and the numerical corpus, revocation while a real producer
+acknowledgement is held by a test-only gate, and rejected attachment placement
+or retired connections. Additional profiles cover deliberate device destruction,
+worker failure and host-reported interpreter termination. The gate follows
+actual queue completion and delays acknowledgement, not real GPU arithmetic.
+The tests distinguish wakeup, joined cleanup and unknown physical completion.
+Small correctness cases and the bounded 65,536-element
+repetition check establish contracts, not quantitative speed, heap or VRAM
+growth. No interpreter, package or browser is downloaded by this command.
 
 Delete `node_modules/`, `target/`, `dist/`, or `test-results/` only when their
 corresponding disposable local state must be rebuilt. Each path is ignored.

@@ -2,10 +2,13 @@ import { TabgradError } from "./errors.js";
 import { loadPythonSources, type PythonSources } from "./python-assets.js";
 import { PythonInstallation } from "./python-installation.js";
 import { PythonRuntimeBridge } from "./python-runtime-bridge.js";
-import { createRuntimeSession, prepareRuntimeSession, type RuntimeSession } from "./runtime.js";
+import { createRuntimeSession, createConnectedRuntimeSession, prepareRuntimeSession, type RuntimeSession } from "./runtime.js";
+import { ConnectedWebGpuBackend, consumeWebGpuConnection, retireFailedGpuAttachment } from "./webgpu-connected-backend.js";
+import type { WebGpuConnection, WebGpuConnectionData } from "./webgpu-connection.js";
 
 export { connectPythonWorker, servePythonWorker } from "./python-worker.js";
 export { PythonWorkerError } from "./python-worker-errors.js";
+export { createWebGpuWorker, type WebGpuWorkerController, type WebGpuWorkerOptions, type WebGpuConnection } from "./webgpu-worker-controller.js";
 
 /** The dictionary-proxy methods consumed when running bootstrap code in isolation. */
 export interface PythonNamespace {
@@ -47,6 +50,7 @@ const ATTACHED_INTERPRETERS = new WeakSet<PythonInterpreter>();
 /** Host-controlled location for the matching static Python artifact set. */
 export interface PythonBindingOptions {
   readonly manifestUrl?: URL;
+  readonly webgpu?: WebGpuConnection;
 }
 
 class InterpreterBinding implements PythonBinding {
@@ -57,9 +61,10 @@ class InterpreterBinding implements PythonBinding {
   #closing: Promise<void> | undefined;
   #running: Promise<void> | undefined;
 
-  constructor(interpreter: PythonInterpreter) {
+  constructor(interpreter: PythonInterpreter, connection?: WebGpuConnectionData) {
     this.#interpreter = interpreter;
-    this.#session = createRuntimeSession();
+    this.#session = connection === undefined ? createRuntimeSession()
+      : createConnectedRuntimeSession(new ConnectedWebGpuBackend(connection));
     this.#bridge = new PythonRuntimeBridge(this.#session);
     Object.freeze(this.#bridge);
   }
@@ -136,6 +141,20 @@ export async function attachPython(
   interpreter: PythonInterpreter,
   options: PythonBindingOptions = {},
 ): Promise<PythonBinding> {
+  const connection = options.webgpu === undefined ? undefined : consumeWebGpuConnection(options.webgpu);
+  try {
+    return await attachClaimedInterpreter(interpreter, options, connection);
+  } catch (error) {
+    if (connection !== undefined) retireFailedGpuAttachment(connection);
+    throw error;
+  }
+}
+
+async function attachClaimedInterpreter(
+  interpreter: PythonInterpreter,
+  options: PythonBindingOptions,
+  connection: WebGpuConnectionData | undefined,
+): Promise<PythonBinding> {
   if (
     typeof interpreter !== "object" || interpreter === null
     || interpreter.version !== "314.0.6"
@@ -158,7 +177,7 @@ export async function attachPython(
     const sources = await loadPythonSources(
       options.manifestUrl ?? new URL("./python/manifest.json", import.meta.url),
     );
-    binding = new InterpreterBinding(interpreter);
+    binding = new InterpreterBinding(interpreter, connection);
     binding.install(sources);
     return binding;
   } catch (error) {

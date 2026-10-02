@@ -10,7 +10,7 @@ import { ExecutionRequest, type QueuedExecutionRequest } from "./execution-reque
 import { ExecutionTicket, type ExecutionStep } from "./execution-ticket.js";
 import { acquireWebGpuDevice, assertWebGpuSetupActive } from "./webgpu-device.js";
 import type { ExecutionBackend, ResidentAllocation, TensorDevice } from "./backend.js";
-import { WebGpuBackend, type WebGpuDiagnostics } from "./webgpu-backend.js";
+import { WebGpuBackend, type WebGpuDiagnostics, type WebGpuExecutionBackend } from "./webgpu-backend.js";
 export type { TensorDevice } from "./backend.js";
 import { DerivativeHistory, type DerivativeNode, type DerivativeRecipe } from "./derivative-history.js";
 import { IDENTITY_DERIVATIVE, MUL_DERIVATIVE, SUM_DERIVATIVE } from "./derivative-recipes.js";
@@ -317,7 +317,7 @@ const RUNTIME_SESSION_GPU_BACKEND = Symbol("RuntimeSessionGpuBackend");
 
 interface InternalRuntimeSessionOptions extends RuntimeSessionOptions {
   readonly [RUNTIME_SESSION_TEST_CONFIGURATION]?: RuntimeSessionTestConfiguration;
-  readonly [RUNTIME_SESSION_GPU_BACKEND]?: WebGpuBackend;
+  readonly [RUNTIME_SESSION_GPU_BACKEND]?: WebGpuExecutionBackend;
 }
 
 interface RuntimeSessionAccess {
@@ -626,7 +626,7 @@ const VIEW_OPERATION = Object.freeze(new ViewOperationDefinition());
 
 export class RuntimeSession {
   #backend: WebAssemblyCpuBackend;
-  readonly #gpuBackend: WebGpuBackend | undefined;
+  readonly #gpuBackend: WebGpuExecutionBackend | undefined;
   readonly #history = new DerivativeHistory<TensorValue>(
     (value) => this.#retainValue(value), (value) => this.#releaseValue(value),
   );
@@ -861,7 +861,7 @@ export class RuntimeSession {
     return this.#preparation;
   }
 
-  *#prepareBackend(backend: ExecutionBackend = this.#backend, program?: ExecutableProgram): Generator<Promise<void>, void, void> {
+  *#prepareBackend(backend: ExecutionBackend = this.#backend, program?: ExecutableProgram): Generator<ExecutionStep, void, unknown> {
     const preparation = backend.prepare(program);
     if (preparation !== undefined) yield preparation;
   }
@@ -875,7 +875,8 @@ export class RuntimeSession {
   #observeSynchronously(state: TensorState): Float32Array {
     this.#assertOpen();
     const host = this.#materializations.get(state.value)?.kind === "host";
-    if (state.value.device !== "cpu" || this.#requestHead !== undefined || (!host && !this.#backend.ready)) {
+    const backend = this.#backendFor(state.value.device, "observe");
+    if (!backend.synchronousObservation || this.#requestHead !== undefined || (!host && !backend.ready)) {
       throw new TabgradError(
         "SYNCHRONOUS_OBSERVATION_UNAVAILABLE",
         "Synchronous observation requires local readiness and no pending asynchronous predecessor.",
@@ -885,7 +886,7 @@ export class RuntimeSession {
     return this.#enqueue(this.#observation(state.value), () => this.#releaseValue(state.value)).read();
   }
 
-  *#observation(value: TensorValue): Generator<ExecutionStep, Float32Array, void> {
+  *#observation(value: TensorValue): Generator<ExecutionStep, Float32Array, unknown> {
     const formed = this.#formProgram(value);
     try {
       const backend = this.#backendFor(value.device, "observe");
@@ -1039,7 +1040,7 @@ export class RuntimeSession {
     }
   }
 
-  *#materialize(value: TensorValue, formed: FormedProgram<TensorValue>, backend: ExecutionBackend): Generator<ExecutionStep, void, void> {
+  *#materialize(value: TensorValue, formed: FormedProgram<TensorValue>, backend: ExecutionBackend): Generator<ExecutionStep, void, unknown> {
     const existing = this.#materializations.get(value);
     if (existing?.kind === "resident") {
       return;
@@ -1102,7 +1103,7 @@ export class RuntimeSession {
     return formed;
   }
 
-  #enqueue<T>(steps: Generator<ExecutionStep, T, void>, release?: () => void): ExecutionRequest<T> {
+  #enqueue<T>(steps: Generator<ExecutionStep, T, unknown>, release?: () => void): ExecutionRequest<T> {
     const request = new ExecutionRequest(
       steps,
       () => this.#advanceRequests(),
@@ -1180,16 +1181,19 @@ export async function createWebGpuRuntimeSession(
 }
 
 /** Yield only an actual suspension; prepared local CPU work remains synchronous. */
-function* awaitBackendResult<T>(result: T | ExecutionTicket<T>): Generator<ExecutionStep, T, void> {
+function* awaitBackendResult<T>(result: T | ExecutionTicket<T>): Generator<ExecutionStep, T, unknown> {
   if (!(result instanceof ExecutionTicket)) return result;
-  let resolved!: T;
-  yield new ExecutionTicket(result.result.then((value) => { resolved = value; }), result.drained);
-  return resolved;
+  return (yield result) as T;
 }
 
 /** @internal Prepare the owned backend before entering a synchronous frontend. */
 export function prepareRuntimeSession(session: RuntimeSession): Promise<void> {
   return runtimeSessionAccess(session).prepare();
+}
+
+/** @internal Attach a library-owned physical connection, not a public backend SPI. */
+export function createConnectedRuntimeSession(backend: WebGpuExecutionBackend): RuntimeSession {
+  return new RuntimeSession({ [RUNTIME_SESSION_GPU_BACKEND]: backend } as InternalRuntimeSessionOptions);
 }
 
 /** @internal Observe an opaque handle through its owning session's common request path. */

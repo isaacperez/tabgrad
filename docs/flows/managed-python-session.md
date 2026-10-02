@@ -49,6 +49,12 @@ follows this transport, including why a lost connection cannot count as a
 successful close. The [host reference](../reference/python-host.md) supplies
 the exact application wiring.
 
+GPU setup is a separate ownership path: the host retains the controller from
+`createWebGpuWorker` and transfers its single-use connection into
+`attachPython`. The [managed GPU connection](../components/webgpu-worker-connection.md)
+explains that physical transport and supervision. The script connection above
+does not become a GPU command stream or take over device ownership.
+
 Keep one application situation in mind. An application retains a Python setting used
 by several interactions. For one interaction it wants to create two small
 vectors, add them, inspect the result, and release the tensor session. The

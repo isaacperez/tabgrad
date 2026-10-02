@@ -86,42 +86,52 @@ float32 = object.__new__(dtype)
 
 
 class device:
-    """CPU device descriptor; other devices and indexed devices are unsupported."""
+    """Unindexed execution device; WebGPU is an explicit Tabgrad extension."""
 
-    __slots__ = ()
+    __slots__ = ("_type",)
+    _type: str
 
     def __init__(self, type: object) -> None:
         if not isinstance(type, str):
             raise TypeError("device type must be a string.")
-        if type != "cpu":
-            raise RuntimeError("Tabgrad supports only device='cpu'.")
+        if type not in ("cpu", "webgpu"):
+            raise RuntimeError("Tabgrad supports unindexed 'cpu' and 'webgpu' devices.")
+        object.__setattr__(self, "_type", type)
+
+    def __setattr__(self, name: str, value: object) -> None:
+        raise AttributeError("Device descriptors are immutable.")
 
     @property
     def type(self) -> str:
-        return "cpu"
+        return self._type
 
     @property
     def index(self) -> None:
         return None
 
     def __str__(self) -> str:
-        return "cpu"
+        return self.type
 
     def __repr__(self) -> str:
-        return "device(type='cpu')"
+        return f"device(type='{self.type}')"
 
     def __eq__(self, other: object) -> bool:
-        return isinstance(other, device)
+        return isinstance(other, device) and self.type == other.type
 
     def __hash__(self) -> int:
         return hash((self.type, self.index))
 
 
 _CPU_DEVICE = device("cpu")
+_WEBGPU_DEVICE = device("webgpu")
 
 
-def _is_cpu_device(value: object) -> bool:
-    return (type(value) is str and value == "cpu") or type(value) is device
+def _device_name(value: object) -> str:
+    if type(value) is str and value in ("cpu", "webgpu"):
+        return value
+    if type(value) is device:
+        return value.type
+    raise RuntimeError("Tabgrad requires an unindexed 'cpu' or 'webgpu' device.")
 
 
 class Tensor:
@@ -145,9 +155,12 @@ class Tensor:
 
     @property
     def device(self) -> device:
-        if self._handle.device != "cpu":
-            raise RuntimeError("Unsupported runtime device.")
-        return _CPU_DEVICE
+        name = self._handle.device
+        if name == "cpu":
+            return _CPU_DEVICE
+        if name == "webgpu":
+            return _WEBGPU_DEVICE
+        raise RuntimeError("Unsupported runtime device.")
 
     @property
     def requires_grad(self) -> bool:
@@ -327,11 +340,10 @@ def tensor(
     requires_grad: bool = False,
     pin_memory: bool = False,
 ) -> Tensor:
-    """Copy a numeric scalar or rectangular list/tuple into a CPU float32 tensor."""
+    """Copy a numeric scalar or rectangular list/tuple into a float32 tensor."""
     if dtype is not float32:
         raise RuntimeError("Tabgrad requires explicit dtype=torch.float32.")
-    if not _is_cpu_device(device):
-        raise RuntimeError("Tabgrad supports only device='cpu'.")
+    selected_device = _device_name(device)
     if type(requires_grad) is not bool or type(pin_memory) is not bool:
         raise TypeError("requires_grad and pin_memory must be bool.")
     if pin_memory:
@@ -339,7 +351,7 @@ def tensor(
     buffer, shape = _input_buffer(data)
     # Creation and the sibling autograd frontend transfer owned bridge handles.
     return Tensor._from_handle(  # pyright: ignore[reportPrivateUsage]
-        _bridge.tensorFromBuffer(buffer, to_js(shape), requires_grad)
+        _bridge.tensorFromBuffer(buffer, to_js(shape), requires_grad, selected_device)
     )
 
 

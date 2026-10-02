@@ -322,6 +322,7 @@ const SIMD_PROBE = new Uint8Array([
 ]);
 
 export class WebAssemblyCpuBackend implements ExecutionBackend {
+  readonly synchronousObservation = true;
   readonly capabilities: BackendCapabilities = Object.freeze({
     device: "cpu", computations: Object.freeze(["add-f32", "mul-f32", "sum-f32", "expand-f32"] as const),
     gradients: true, maximumTensorBytes: MAXIMUM_ADDRESS,

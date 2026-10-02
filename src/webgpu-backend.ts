@@ -25,6 +25,11 @@ export interface WebGpuDiagnostics {
   readonly kernelCalls: number;
 }
 
+/** Private physical owner contract shared by local and connected placement. */
+export interface WebGpuExecutionBackend extends ExecutionBackend {
+  diagnostics(): WebGpuDiagnostics;
+}
+
 class GpuAllocation {
   released = false;
   constructor(readonly buffer: GPUBuffer, readonly byteLength: number) {}
@@ -44,7 +49,8 @@ interface GpuReadback {
 }
 
 /** Owns the acquired device, its private buffers, pipelines and physical completion. */
-export class WebGpuBackend implements ExecutionBackend {
+export class WebGpuBackend implements WebGpuExecutionBackend {
+  readonly synchronousObservation = false;
   readonly capabilities: BackendCapabilities;
   readonly #device: GPUDevice;
   readonly #identities = new WeakSet<object>();

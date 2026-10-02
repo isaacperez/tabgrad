@@ -67,10 +67,19 @@ steps are represented by a JavaScript generator: advancing it executes
 ordinary synchronous code until it returns or yields asynchronous work.
 This generator is a private control-flow mechanism, not a tensor graph, a
 second operation representation or a scheduler in the CPU kernel module.
-Preparation yields a Promise. Asynchronous execution/readback yields an
+Local asynchronous preparation yields a Promise. Independent physical
+preparation can instead belong to a shared execution ticket. Asynchronous execution/readback yields an
 `ExecutionTicket`: `result` resumes logical advancement, while `drained` joins
 physical cleanup or accounted terminal loss. Synchronous CPU results return
 directly, without allocating that ticket.
+
+A ticket may also provide authoritative synchronous result and drain access.
+For managed WebGPU, this is the shared-state boundary described by the
+[GPU connection](webgpu-worker-connection.md). Reading it can park the
+interpreter while the producer progresses independently. Both Promise
+notification and shared consumption resume the same generator with its result
+or error. A delayed notification cannot resume a step that has already been
+consumed, or accidentally resume a later step.
 
 The session has one linked queue with constant-time insertion and retirement.
 Only its head advances. A guard prevents recursive advancement while a local
@@ -89,6 +98,14 @@ normal JavaScript Promise scheduling even if local execution already finished.
 A failure consumed synchronously therefore creates no unobserved rejected
 Promise. Public JavaScript handle/admission errors retain their synchronous
 validation timing; failures of accepted execution reject its Promise.
+
+Result and drain Promise observers are lazy for shared work. Ordinary Python
+does not subscribe merely to support a second, unused notification route.
+When shared failure precedes drain, authoritative drain callbacks release
+request pins at connection progress checkpoints without waiting for a local
+Promise reaction. This matters when Python catches the failure and continues
+inside one entry: the request must retain live physical obligations, but must
+not accumulate already-drained failures until the interpreter yields.
 
 ## Preparation and managed Python context
 
@@ -116,8 +133,8 @@ not end its ownership. This relies on the cooperating-host and joined-task
 contract, not on inspecting every Python coroutine or securing private bridge
 methods against a hostile interpreter.
 
-Before synchronous runtime admission, local readiness and queue ownership must
-permit immediate completion. An unsupported context is rejected before adding
+Before synchronous runtime admission, backend observation capability and queue
+ownership must permit completion without local asynchronous callbacks. An unsupported context is rejected before adding
 a request or executing a kernel. Such rejection must not enqueue work and then
 abandon its resources when a synchronous caller cannot wait. The exact errors
 are listed in the [Python reference](../reference/python-tensors.md).

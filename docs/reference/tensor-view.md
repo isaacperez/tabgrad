@@ -2,8 +2,10 @@
 
 `Tensor.view` gives an existing contiguous float32 value another shape
 without copying its numerical data. This reference covers the Python and
-JavaScript shape overloads. Python uses CPU; direct JavaScript also permits
-views of explicitly enabled [GPU values](webgpu-runtime.md).
+JavaScript shape overloads. Python and direct JavaScript permit views of CPU
+values and explicitly enabled GPU values. Python uses the
+[managed connection](python-host.md), while JavaScript can acquire a
+[direct GPU session](webgpu-runtime.md).
 The [shape concept](../concepts/tensor-shape.md)
 explains why shape and storage are different; [semantic lifetimes](../components/semantic-value-lifetimes.md)
 explains how the runtime keeps their owners independent.

@@ -70,6 +70,16 @@ include implementation and test-access modules without promising them as
 supported application interfaces. Do not infer supported behavior from a
 filename; consult the API and [compatibility record](compatibility.md).
 
+[`src/python.ts`](../src/python.ts) selects the separate static `python.js`
+browser entry. It includes interpreter attachment, script connection and
+managed GPU setup without making Pyodide part of the direct root import.
+[`src/webgpu-worker.ts`](../src/webgpu-worker.ts) is the packaged physical-worker
+entry, emitted alongside its matching JavaScript modules by the same build.
+It owns backend execution, not interpreter bootstrap or tensor semantics.
+The [host reference](reference/python-host.md) defines how applications use
+these matching static artifacts; private connection modules are not package
+extension interfaces.
+
 ### Why there are two test roots
 
 The roots correspond to different execution environments and configured

@@ -23,8 +23,9 @@ export interface BackendCapabilities {
 export interface ExecutionBackend {
   readonly capabilities: BackendCapabilities;
   readonly ready: boolean;
+  readonly synchronousObservation: boolean;
   assertAvailable(): void;
-  prepare(program?: ExecutableProgram): Promise<void> | undefined;
+  prepare(program?: ExecutableProgram): Promise<void> | ExecutionTicket<void> | undefined;
   execute(program: ExecutableProgram, bindings: ReadonlyMap<ProgramSlot, ProgramBinding>, retainedSlots: readonly boolean[]):
     ReadonlyMap<ProgramSlot, ResidentAllocation> | ExecutionTicket<ReadonlyMap<ProgramSlot, ResidentAllocation>>;
   read(allocation: ResidentAllocation, length: number): Float32Array | ExecutionTicket<Float32Array>;

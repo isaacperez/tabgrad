@@ -37,6 +37,10 @@ separate setup, upload, resident execution, readback and retention. They are
 command references; the shared [performance policy](../performance.md) owns
 the rules for interpreting and preserving evidence.
 
+[Managed Python and direct JavaScript GPU boundary measurements](python-webgpu-measurements.md)
+adds the shared-connection comparison, with representative payload/depth
+variation and explicit limits on what its wall clocks and owned counters mean.
+
 For contributor browser checks, use
 [Browser qualification diagnostics](browser-diagnostics.md) to interpret
 incoming traffic, registered progress, failure-time process/profile observations

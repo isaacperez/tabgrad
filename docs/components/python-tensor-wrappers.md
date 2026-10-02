@@ -121,8 +121,12 @@ earlier. The properties cannot be assigned through the Python tensor API.
 
 The resulting objects are Python presentations: `Size` is an immutable integer
 tuple with its own representation and shape-preserving tuple operations;
-`float32` is the exposed `dtype` constant; and `device('cpu')` is an immutable
-CPU descriptor. Their bounded behavior is contrasted with the native oracle.
+`float32` is the exposed `dtype` constant; and `device` is an immutable
+descriptor for the supported unindexed device names. CPU remains the default;
+`webgpu` selects the explicitly attached backend and is a Tabgrad extension,
+not an upstream PyTorch device. The exact domain is in the
+[tensor reference](../reference/python-tensors.md). CPU descriptor behavior is
+contrasted with the native oracle.
 Constructing these descriptors does not itself admit tensor data, enable
 another numerical type or perform a backend transfer.
 
