@@ -75,13 +75,20 @@ function executionDevice({ completion = () => Promise.resolve(), finishError, ma
   mapping = () => Promise.resolve(), scopeError = () => null, bindGroupError } = {}) {
   const acquired = device();
   const buffers = [];
+  const shaderSources = [];
+  const dispatches = [];
+  const bindingGroups = [];
   let scopes = 0;
   let submitted = 0;
   return Object.assign(acquired, {
     buffers,
-    createShaderModule() { return {}; },
+    shaderSources, dispatches, bindingGroups,
+    createShaderModule({ code }) { shaderSources.push(code); return {}; },
     async createComputePipelineAsync() { return { getBindGroupLayout() { return {}; } }; },
-    createBindGroup() { if (bindGroupError !== undefined) throw bindGroupError; return {}; },
+    createBindGroup({ entries }) {
+      if (bindGroupError !== undefined) throw bindGroupError;
+      bindingGroups.push(entries); return {};
+    },
     pushErrorScope() { scopes += 1; },
     popErrorScope() { scopes -= 1; return Promise.resolve(scopes === 0 ? scopeError(submitted) : null); },
     createBuffer({ size }) {
@@ -96,7 +103,8 @@ function executionDevice({ completion = () => Promise.resolve(), finishError, ma
     createCommandEncoder() {
       const copies = [];
       return {
-        beginComputePass() { return { setPipeline() {}, setBindGroup() {}, dispatchWorkgroups() {}, end() {} }; },
+        beginComputePass() { return { setPipeline() {}, setBindGroup() {},
+          dispatchWorkgroups(count) { dispatches.push(count); }, end() {} }; },
         copyBufferToBuffer(source, sourceOffset, destination, destinationOffset, bytes) {
           copies.push(() => new Uint8Array(destination.data, destinationOffset, bytes).set(new Uint8Array(source.data, sourceOffset, bytes)));
         },
@@ -115,6 +123,31 @@ async function flushContinuations() {
   // A macrotask boundary observes settled promise chains without a timing assumption.
   await new Promise((resolve) => setImmediate(resolve));
 }
+
+test("addition launch preserves width, bindings and empty/full/partial dispatch boundaries", async (context) => {
+  for (const [length, expected] of [[0, []], [1, [1]], [63, [1]], [64, [1]],
+    [65, [2]], [127, [2]], [128, [2]], [129, [3]]]) {
+    const acquired = executionDevice();
+    installGpu(context, { requestAdapter: async () => ({ requestDevice: async () => acquired }) });
+    const session = await tabgrad.createWebGpuRuntimeSession();
+    try {
+      const input = session.tensor(new Float32Array(length), { device: "webgpu" });
+      const output = input.add(input);
+      assert.equal((await output.toArray()).length, length);
+      assert.deepEqual(acquired.dispatches, expected, `dispatch coverage for ${length} elements`);
+      assert.equal(acquired.shaderSources.length, 1);
+      assert.match(acquired.shaderSources[0], /@compute @workgroup_size\(64\)/);
+      assert.equal(acquired.bindingGroups.length, expected.length);
+      for (const entries of acquired.bindingGroups) {
+        assert.deepEqual(entries.map(({ binding }) => binding), [0, 1, 2]);
+        assert.equal(entries[0].resource.buffer, entries[1].resource.buffer);
+        assert.notEqual(entries[0].resource.buffer, entries[2].resource.buffer);
+      }
+      input.close(); output.close();
+    } finally { await session.close(); }
+    assert.ok(acquired.buffers.every((buffer) => buffer.destroyed));
+  }
+});
 
 test("ready GPU factory fails explicitly when WebGPU is unavailable", async (context) => {
   assert.equal(typeof tabgrad.createWebGpuRuntimeSession, "function");

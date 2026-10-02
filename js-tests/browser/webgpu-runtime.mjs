@@ -40,6 +40,23 @@ async function exercise(session) {
     check(again !== result && again.every((value) => value === 4), "Observation must return independent data");
     flat.close();
   }
+  // Execute every lane around full and partial workgroup boundaries. Distinct
+  // values make an omitted tail or an incorrectly indexed lane visible.
+  for (const length of [63, 64, 65, 127, 128, 129]) {
+    const leftData = Float32Array.from({ length }, (_, index) => index + 1);
+    const rightData = Float32Array.from({ length }, (_, index) => -(index % 7));
+    const left = session.tensor(leftData, { device: "webgpu" });
+    const right = session.tensor(rightData, { device: "webgpu" });
+    const output = left.add(right);
+    left.close(); right.close();
+    const actual = await output.toArray();
+    check(actual.length === length, `Launch-boundary readback truncated at ${length}`);
+    for (let index = 0; index < length; index += 1) {
+      check(actual[index] === leftData[index] + rightData[index],
+        `Launch-boundary mismatch at length ${length}, element ${index}`);
+    }
+    output.close();
+  }
   const increment = session.tensor([1, 2, 3], { device: "webgpu" });
   let root = session.tensor([0, 0, 0], { device: "webgpu" });
   for (let index = 0; index < 32; index += 1) {

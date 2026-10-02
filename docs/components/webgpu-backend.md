@@ -55,6 +55,35 @@ must not treat that retention as disposable scratch.
 
 ## Pipeline and readback lifetimes
 
+### Addition kernel launch geometry
+
+A workgroup is the set of shader invocations launched together. The addition
+kernel processes one element per invocation along a single dimension, so its
+launch width connects two physical facts: how many elements one group can
+cover, and how many groups the host must dispatch for a given output. That
+knowledge belongs to the kernel, not to tensor semantics or device acquisition.
+
+[`webgpu-addition.ts`](../../src/webgpu-addition.ts) owns
+`WEBGPU_ADDITION_WORKGROUP_SIZE`, with width 64. Shader construction uses that
+same value in its `@workgroup_size` declaration. The backend imports it for
+both the dispatch-related capacity bound and the ceiling division that computes
+the number of groups. There is no second host declaration to keep aligned.
+
+For a nonempty output of `n` elements, dispatch uses `ceil(n / 64)` groups. The
+shader's output-length guard prevents surplus invocations in the final partial
+group from accessing an element outside the output. Empty outputs encode no
+compute pass. Capacity admission also takes the minimum of the device's buffer,
+storage-binding and dispatch extents; sharing launch width does not remove any
+of those limits.
+
+The three storage bindings and unsigned binary32 arithmetic remain numerical
+kernel responsibilities. Another computation may own different geometry; this
+addition-specific constant is not a runtime-wide launch policy or a kernel
+registry. Changing its value would still require device-limit, dispatch and
+numerical qualification, not just changing a shared declaration.
+
+### Preparation and observation
+
 The acquired device is ready before the factory returns, but a compute pipeline
 is prepared only when numerical execution first needs it. Preparation is shared
 within that backend owner. The numerical implementation and its precision
