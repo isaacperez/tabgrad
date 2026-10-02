@@ -3,10 +3,10 @@ import { after, before, mock, test } from "node:test";
 import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { loadPyodide } from "pyodide";
-import { RuntimeSession } from "../../dist/index.js";
-import { getTestExecutionFailureContext } from "../../dist/testing.js";
-import { assertSumFixture } from "./sum-oracle.mjs";
-import { float32FromBits } from "./sum-oracle.mjs";
+import { RuntimeSession } from "../../../dist/index.js";
+import { getTestExecutionFailureContext } from "../../../dist/testing.js";
+import { assertSumFixture } from "../../fixtures/sum-oracle.mjs";
+import { float32FromBits } from "../../fixtures/sum-oracle.mjs";
 
 let interpreterPromise;
 
@@ -28,9 +28,9 @@ function getInterpreter() {
 
 for (const custom of [false, true]) {
   test(`attachment resolves ${custom ? "custom" : "default"} Python manifest and relative sources`, async (context) => {
-    const { attachPython } = await import("../../dist/python.js");
+    const { attachPython } = await import("../../../dist/python.js");
     const interpreter = await getInterpreter();
-    const artifactBase = new URL("../../dist/python/", import.meta.url);
+    const artifactBase = new URL("../../../dist/python/", import.meta.url);
     const manifestUrl = custom
       ? new URL("https://assets.example.invalid/custom/python.json?release=matching")
       : new URL("manifest.json", artifactBase);
@@ -58,7 +58,7 @@ for (const custom of [false, true]) {
 }
 
 test("Python functional gradients normalize calls and preserve ordinary observation", { timeout: 20_000 }, async () => {
-  const { attachPython } = await import("../../dist/python.js");
+  const { attachPython } = await import("../../../dist/python.js");
   const interpreter = await getInterpreter();
   const binding = await attachPython(interpreter);
   try {
@@ -117,8 +117,8 @@ assert torch._runtime_session.diagnostics().liveTensorHandles == 0
 });
 
 test("Python functional gradients match pinned native values, shapes, tracking and errors", { timeout: 20_000 }, async () => {
-  const oracle = JSON.parse(await readFile(new URL("../fixtures/python-tensor-oracle.json", import.meta.url), "utf8"));
-  const { attachPython } = await import("../../dist/python.js");
+  const oracle = JSON.parse(await readFile(new URL("../../fixtures/python-tensor-oracle.json", import.meta.url), "utf8"));
+  const { attachPython } = await import("../../../dist/python.js");
   const interpreter = await getInterpreter();
   const binding = await attachPython(interpreter);
   try {
@@ -157,7 +157,7 @@ assert torch._runtime_session.diagnostics().liveDerivativeNodes == 0
 });
 
 test("Python attachment preserves an existing autograd module", { timeout: 20_000 }, async () => {
-  const { attachPython } = await import("../../dist/python.js");
+  const { attachPython } = await import("../../../dist/python.js");
   const interpreter = await getInterpreter();
   interpreter.runPython("import sys, types; host_autograd = types.ModuleType('torch.autograd'); sys.modules['torch.autograd'] = host_autograd");
   let binding;
@@ -171,7 +171,7 @@ test("Python attachment preserves an existing autograd module", { timeout: 20_00
 });
 
 test("Python multiplication admits tensor call forms and rejects unsupported operands", { timeout: 20_000 }, async () => {
-  const { attachPython } = await import("../../dist/python.js");
+  const { attachPython } = await import("../../../dist/python.js");
   const interpreter = await getInterpreter();
   const binding = await attachPython(interpreter);
   try {
@@ -242,9 +242,9 @@ assert torch._runtime_session.diagnostics().liveAllocationBytes == 0
 });
 
 test("Python multiplication matches native bit fixtures and preserves separate multiply-add", { timeout: 20_000 }, async () => {
-  const { attachPython } = await import("../../dist/python.js");
+  const { attachPython } = await import("../../../dist/python.js");
   const interpreter = await getInterpreter();
-  const oracle = JSON.parse(await readFile(new URL("../fixtures/python-tensor-oracle.json", import.meta.url), "utf8"));
+  const oracle = JSON.parse(await readFile(new URL("../../fixtures/python-tensor-oracle.json", import.meta.url), "utf8"));
   const binding = await attachPython(interpreter);
   try {
     for (const fixture of oracle.mulCases) {
@@ -271,9 +271,9 @@ test("Python multiplication matches native bit fixtures and preserves separate m
 });
 
 test("Python total sum matches bounded native numerical fixtures through tolist", { timeout: 20_000 }, async () => {
-  const { attachPython } = await import("../../dist/python.js");
+  const { attachPython } = await import("../../../dist/python.js");
   const interpreter = await getInterpreter();
-  const oracle = JSON.parse(await readFile(new URL("../fixtures/python-tensor-oracle.json", import.meta.url), "utf8"));
+  const oracle = JSON.parse(await readFile(new URL("../../fixtures/python-tensor-oracle.json", import.meta.url), "utf8"));
   const binding = await attachPython(interpreter);
   try {
     for (const fixture of oracle.sumCases) {
@@ -292,7 +292,7 @@ test("Python total sum matches bounded native numerical fixtures through tolist"
 });
 
 test("Python total sum returns a lazy scalar tensor through ordinary observation", { timeout: 20_000 }, async () => {
-  const { attachPython } = await import("../../dist/python.js");
+  const { attachPython } = await import("../../../dist/python.js");
   const interpreter = await getInterpreter();
   const binding = await attachPython(interpreter);
   try {
@@ -330,7 +330,7 @@ check_sum()
 });
 
 test("Python total sum rejects malformed calls and excluded options before dispatch", { timeout: 20_000 }, async () => {
-  const { attachPython } = await import("../../dist/python.js");
+  const { attachPython } = await import("../../../dist/python.js");
   const interpreter = await getInterpreter();
   const binding = await attachPython(interpreter);
   try {
@@ -392,7 +392,7 @@ else:
 test("managed Python prepares CPU once before the first statement without demanding tensors", {
   timeout: 20_000,
 }, async (context) => {
-  const { attachPython } = await import("../../dist/python.js");
+  const { attachPython } = await import("../../../dist/python.js");
   const interpreter = await getInterpreter();
   const compile = context.mock.method(WebAssembly, "compile");
   const binding = await attachPython(interpreter);
@@ -432,7 +432,7 @@ for (const failPreparation of [false, true]) {
   test(`CPU preparation ${failPreparation ? "failure" : "success"} owns admission and close ordering`, {
     timeout: 20_000,
   }, async (context) => {
-    const { attachPython } = await import("../../dist/python.js");
+    const { attachPython } = await import("../../../dist/python.js");
     const interpreter = await getInterpreter();
     const binding = await attachPython(interpreter);
     const session = interpreter.runPython("__import__('torch')._runtime_session");
@@ -440,7 +440,7 @@ for (const failPreparation of [false, true]) {
     const gate = Promise.withResolvers();
     const preparationFailure = new Error("controlled CPU preparation failure");
     const originalFetch = globalThis.fetch;
-    const manifestUrl = new URL("../../dist/manifest.json", import.meta.url).href;
+    const manifestUrl = new URL("../../../dist/manifest.json", import.meta.url).href;
     context.mock.method(globalThis, "fetch", async (url) => {
       if (String(url) === manifestUrl) {
         entered.resolve();
@@ -493,7 +493,7 @@ for (const failPreparation of [false, true]) {
 test("Python contiguous ranks preserve scalar, nested and empty values through managed observation", {
   timeout: 20_000,
 }, async () => {
-  const { attachPython } = await import("../../dist/python.js");
+  const { attachPython } = await import("../../../dist/python.js");
   const interpreter = await getInterpreter();
   const binding = await attachPython(interpreter);
   try {
@@ -533,10 +533,10 @@ assert (copied + copied).tolist() == [[2., 4.], [6., 8.]]
 test("Python ordinary observation returns independent oracle-backed lists without JSPI", {
   timeout: 20_000,
 }, async () => {
-  const { attachPython } = await import("../../dist/python.js");
+  const { attachPython } = await import("../../../dist/python.js");
   const interpreter = await getInterpreter();
   assert.equal(WebAssembly.Suspending, undefined, "This Node test must establish native JSPI absence.");
-  const oracle = JSON.parse(await readFile(new URL("../fixtures/python-tensor-oracle.json", import.meta.url), "utf8"));
+  const oracle = JSON.parse(await readFile(new URL("../../fixtures/python-tensor-oracle.json", import.meta.url), "utf8"));
   const binding = await attachPython(interpreter);
   try {
     for (const fixture of oracle.cases) {
@@ -570,7 +570,7 @@ assert torch._runtime_session.diagnostics().liveRequestLeases == 0
 test("ordinary Python observation shares completed requests with JavaScript and nested control flow", {
   timeout: 20_000,
 }, async () => {
-  const { attachPython } = await import("../../dist/python.js");
+  const { attachPython } = await import("../../../dist/python.js");
   const interpreter = await getInterpreter();
   const binding = await attachPython(interpreter);
   const observations = [];
@@ -617,7 +617,7 @@ assert not hasattr(result, 'tolist_async')
 test("Python synchronous observation rejects an unsupported entry before demand even for host data", {
   timeout: 15_000,
 }, async () => {
-  const { attachPython } = await import("../../dist/python.js");
+  const { attachPython } = await import("../../../dist/python.js");
   const interpreter = await getInterpreter();
   const binding = await attachPython(interpreter);
   try {
@@ -643,7 +643,7 @@ deferred_value = value + value
 test("ordinary observation preserves native kernel failure and invocation provenance", {
   timeout: 20_000,
 }, async (context) => {
-  const { attachPython } = await import("../../dist/python.js");
+  const { attachPython } = await import("../../../dist/python.js");
   const interpreter = await getInterpreter();
   const originalInstantiate = WebAssembly.instantiate.bind(WebAssembly);
   const cause = new WebAssembly.RuntimeError("controlled kernel trap");
@@ -690,7 +690,7 @@ assert torch._runtime_session.diagnostics().liveAllocationBytes == 0
 test("script-result cleanup keeps ordinary observation inside its managed entry", {
   timeout: 20_000,
 }, async () => {
-  const { attachPython } = await import("../../dist/python.js");
+  const { attachPython } = await import("../../../dist/python.js");
   const interpreter = await getInterpreter();
   const binding = await attachPython(interpreter);
   try {
@@ -720,7 +720,7 @@ ObservationOnCleanup()
 test("ordinary observation validates foreign, forged and closed runtime handles", {
   timeout: 20_000,
 }, async () => {
-  const { attachPython } = await import("../../dist/python.js");
+  const { attachPython } = await import("../../../dist/python.js");
   const interpreter = await getInterpreter();
   const foreignSession = new RuntimeSession();
   const foreign = foreignSession.tensor([7]);
@@ -757,9 +757,9 @@ assert observation_bridge.session.diagnostics().kernelCalls == 0
 test("Python tensor creation, metadata and three lazy addition spellings match the pinned oracle", {
   timeout: 20_000,
 }, async () => {
-  const { attachPython } = await import("../../dist/python.js");
+  const { attachPython } = await import("../../../dist/python.js");
   const interpreter = await getInterpreter();
-  const oracle = JSON.parse(await readFile(new URL("../fixtures/python-tensor-oracle.json", import.meta.url), "utf8"));
+  const oracle = JSON.parse(await readFile(new URL("../../fixtures/python-tensor-oracle.json", import.meta.url), "utf8"));
   for (const fixture of [...oracle.cases, ...oracle.rankCases]) {
     const binding = await attachPython(interpreter);
     try {
@@ -801,9 +801,9 @@ test("Python tensor creation, metadata and three lazy addition spellings match t
 test("Python metadata behavior and semantic error classes match bounded native fixtures", {
   timeout: 15_000,
 }, async () => {
-  const { attachPython } = await import("../../dist/python.js");
+  const { attachPython } = await import("../../../dist/python.js");
   const interpreter = await getInterpreter();
-  const oracle = JSON.parse(await readFile(new URL("../fixtures/python-tensor-oracle.json", import.meta.url), "utf8"));
+  const oracle = JSON.parse(await readFile(new URL("../../fixtures/python-tensor-oracle.json", import.meta.url), "utf8"));
   const binding = await attachPython(interpreter);
   try {
     await binding.runPythonAsync(`import torch\n${oracle.cases[0].source}`);
@@ -849,9 +849,9 @@ for name, value in [('shape', (4,)), ('dtype', torch.float32), ('device', 'cpu')
 });
 
 test("Python view syntax, shape inference and observation match the pinned oracle", { timeout: 20_000 }, async () => {
-  const { attachPython } = await import("../../dist/python.js");
+  const { attachPython } = await import("../../../dist/python.js");
   const interpreter = await getInterpreter();
-  const oracle = JSON.parse(await readFile(new URL("../fixtures/python-tensor-oracle.json", import.meta.url), "utf8"));
+  const oracle = JSON.parse(await readFile(new URL("../../fixtures/python-tensor-oracle.json", import.meta.url), "utf8"));
   const binding = await attachPython(interpreter);
   try {
     for (const fixture of oracle.viewCases) {
@@ -897,7 +897,7 @@ gc.collect()
 test("Python nested admission rejects malformed trees without importing partial tensors", {
   timeout: 20_000,
 }, async () => {
-  const { attachPython } = await import("../../dist/python.js");
+  const { attachPython } = await import("../../../dist/python.js");
   const interpreter = await getInterpreter();
   const binding = await attachPython(interpreter);
   try {
@@ -965,7 +965,7 @@ assert observed == 6.0
 test("Python tensor restrictions, reflected dispatch and input copying fail before invalid work", {
   timeout: 15_000,
 }, async () => {
-  const { attachPython } = await import("../../dist/python.js");
+  const { attachPython } = await import("../../../dist/python.js");
   const interpreter = await getInterpreter();
   const binding = await attachPython(interpreter);
   try {
@@ -1020,7 +1020,7 @@ assert torch._runtime_session.diagnostics().kernelCalls == 0
 test("Python wrappers release temporaries, cycles, failed construction and retained tracebacks", {
   timeout: 15_000,
 }, async () => {
-  const { attachPython } = await import("../../dist/python.js");
+  const { attachPython } = await import("../../../dist/python.js");
   const interpreter = await getInterpreter();
   const binding = await attachPython(interpreter);
   try {
@@ -1073,7 +1073,7 @@ assert torch._runtime_session.diagnostics().liveTensorHandles == 0
 test("Python wrappers keep runtime handle validation and old-session identity", {
   timeout: 15_000,
 }, async () => {
-  const { attachPython } = await import("../../dist/python.js");
+  const { attachPython } = await import("../../../dist/python.js");
   const interpreter = await getInterpreter();
   const external = new RuntimeSession();
   const foreignHandle = external.tensor([1]);
@@ -1139,7 +1139,7 @@ del left, foreign, fake, old_factory, old_torch
 test("Python buffer import owns only the bounded float32 input and releases its loan", {
   timeout: 15_000,
 }, async () => {
-  const { attachPython } = await import("../../dist/python.js");
+  const { attachPython } = await import("../../../dist/python.js");
   const interpreter = await getInterpreter();
   const binding = await attachPython(interpreter);
   let tensor;
@@ -1155,7 +1155,7 @@ source[1] = 500
 source.append(77)  # A retained buffer export would forbid resizing.
 `);
     tensor = interpreter.globals.get("handle");
-    assert.ok(tensor instanceof (await import("../../dist/index.js")).Tensor);
+    assert.ok(tensor instanceof (await import("../../../dist/index.js")).Tensor);
     assert.deepEqual(tensor.shape, [2]);
     assert.deepEqual(await tensor.toArray(), new Float32Array([1.25, -2.5]));
     await binding.runPythonAsync(`
@@ -1181,7 +1181,7 @@ empty.append(1)
 test("Python buffer import rejects unsupported views and closed sessions without retaining exports", {
   timeout: 15_000,
 }, async () => {
-  const { attachPython } = await import("../../dist/python.js");
+  const { attachPython } = await import("../../../dist/python.js");
   const interpreter = await getInterpreter();
   const binding = await attachPython(interpreter);
   try {
@@ -1235,7 +1235,7 @@ source.append(6)
 test("attachment imports built static Python source without polluting host globals", {
   timeout: 15_000,
 }, async () => {
-  const { attachPython } = await import("../../dist/python.js");
+  const { attachPython } = await import("../../../dist/python.js");
   const interpreter = await getInterpreter();
   const globalsBefore = interpreter.runPython("tuple(globals())");
   const binding = await attachPython(interpreter);
@@ -1261,7 +1261,7 @@ assert torch._runtime_session is not None
 test("attachment rejects unavailable, incompatible and corrupt artifacts before interpreter mutation", {
   timeout: 15_000,
 }, async (context) => {
-  const { attachPython } = await import("../../dist/python.js");
+  const { attachPython } = await import("../../../dist/python.js");
   const interpreter = await getInterpreter();
   const originalFetch = globalThis.fetch;
   for (const failure of ["missing", "version", "hash", "path"]) {
@@ -1290,7 +1290,7 @@ test("attachment rejects unavailable, incompatible and corrupt artifacts before 
 test("attachment refuses cached modules and unimported JavaScript registrations", {
   timeout: 15_000,
 }, async () => {
-  const { attachPython } = await import("../../dist/python.js");
+  const { attachPython } = await import("../../../dist/python.js");
   const interpreter = await getInterpreter();
   for (const name of ["torch", "_tabgrad_runtime_bridge"]) {
     interpreter.registerJsModule(name, { hostOwned: true });
@@ -1318,7 +1318,7 @@ test("attachment refuses cached modules and unimported JavaScript registrations"
 test("close preserves host replacements and retained modules keep the old closed session", {
   timeout: 15_000,
 }, async () => {
-  const { attachPython } = await import("../../dist/python.js");
+  const { attachPython } = await import("../../../dist/python.js");
   const interpreter = await getInterpreter();
   const binding = await attachPython(interpreter);
   await binding.runPythonAsync(`
@@ -1354,7 +1354,7 @@ sys.modules['torch'] = host_module
 test("failed Python import rolls back files, paths, modules and the owned session", {
   timeout: 15_000,
 }, async (context) => {
-  const { attachPython } = await import("../../dist/python.js");
+  const { attachPython } = await import("../../../dist/python.js");
   const interpreter = await getInterpreter();
   interpreter.runPython("import os, sys; before_tmp = set(os.listdir('/tmp')); before_path = tuple(sys.path)");
   const source = "from _tabgrad_runtime_bridge import session\nraise RuntimeError('injected import failure')\n";
@@ -1391,7 +1391,7 @@ for (const replaceChild of [false, true]) {
   test(`failed parent import rolls back acquired children and preserves host state (replacement=${replaceChild})`, {
     timeout: 15_000,
   }, async (context) => {
-    const { attachPython } = await import("../../dist/python.js");
+    const { attachPython } = await import("../../../dist/python.js");
     const interpreter = await getInterpreter();
     interpreter.runPython(`
 import os, sys, types
@@ -1403,7 +1403,7 @@ host_added = types.ModuleType('torch.host_added')
 host_finder = object()
 sys.modules['host_unrelated'] = host_unrelated
 `);
-    const originalSource = await readFile(new URL("../../dist/python/torch/__init__.py", import.meta.url), "utf8");
+    const originalSource = await readFile(new URL("../../../dist/python/torch/__init__.py", import.meta.url), "utf8");
     const source = `${originalSource}
 import sys, __main__
 assert 'torch.autograd' in sys.modules
@@ -1481,7 +1481,7 @@ del host_unrelated, host_child, host_added, acquired_child
 test("cleanup preserves replaced files, equal host paths and importer-cache identities", {
   timeout: 15_000,
 }, async () => {
-  const { attachPython } = await import("../../dist/python.js");
+  const { attachPython } = await import("../../../dist/python.js");
   const interpreter = await getInterpreter();
   const binding = await attachPython(interpreter);
   await binding.runPythonAsync(`
@@ -1514,7 +1514,7 @@ owned_root.rmdir()
 test("rollback also owns a file when writing fails after creating it", {
   timeout: 15_000,
 }, async () => {
-  const { attachPython } = await import("../../dist/python.js");
+  const { attachPython } = await import("../../../dist/python.js");
   const interpreter = await getInterpreter();
   interpreter.runPython(`
 import os
@@ -1537,7 +1537,7 @@ Path.write_bytes = failing_write
 test("installed Python packages conflict before any Tabgrad filesystem mutation", {
   timeout: 15_000,
 }, async () => {
-  const { attachPython } = await import("../../dist/python.js");
+  const { attachPython } = await import("../../../dist/python.js");
   const interpreter = await getInterpreter();
   interpreter.runPython(`
 import tempfile, sys, os
@@ -1564,7 +1564,7 @@ host_root.rmdir()
 test("Python rollback preserves both the primary failure and its cleanup failure", {
   timeout: 15_000,
 }, async () => {
-  const { attachPython } = await import("../../dist/python.js");
+  const { attachPython } = await import("../../../dist/python.js");
   const interpreter = await getInterpreter();
   for (const primaryType of ["ValueError", "KeyboardInterrupt"]) {
     interpreter.runPython(`
@@ -1606,7 +1606,7 @@ Path.unlink = failing_unlink
 test("Python cleanup aggregates filesystem failures and continues releasing owned entries", {
   timeout: 15_000,
 }, async (context) => {
-  const { attachPython } = await import("../../dist/python.js");
+  const { attachPython } = await import("../../../dist/python.js");
   const interpreter = await getInterpreter();
   const run = interpreter.runPython;
   let namespace;
@@ -1660,7 +1660,7 @@ _installation.close()
 test("repeated attachments release bootstrap proxies and filesystem/import bookkeeping", {
   timeout: 15_000,
 }, async (context) => {
-  const { attachPython } = await import("../../dist/python.js");
+  const { attachPython } = await import("../../../dist/python.js");
   const interpreter = await getInterpreter();
   const originalRun = interpreter.runPython;
   const destructions = [];
@@ -1683,7 +1683,7 @@ test("repeated attachments release bootstrap proxies and filesystem/import bookk
 test("close releases the installation object without waiting for cyclic garbage collection", {
   timeout: 15_000,
 }, async (context) => {
-  const { attachPython } = await import("../../dist/python.js");
+  const { attachPython } = await import("../../../dist/python.js");
   const interpreter = await getInterpreter();
   const run = interpreter.runPython;
   let namespace;
@@ -1708,7 +1708,7 @@ test("close releases the installation object without waiting for cyclic garbage 
 test("close reports session and installation failures without losing either error", {
   timeout: 15_000,
 }, async (context) => {
-  const { attachPython } = await import("../../dist/python.js");
+  const { attachPython } = await import("../../../dist/python.js");
   const interpreter = await getInterpreter();
   const binding = await attachPython(interpreter);
   const sessionFailure = new Error("injected session close failure");
@@ -1735,7 +1735,7 @@ for (const shadow of ["0", "lambda: shadowed_host_namespace"]) {
   test(`attachment owns its namespace when host dict is ${shadow}`, {
     timeout: 15_000,
   }, async () => {
-    const { attachPython } = await import("../../dist/python.js");
+    const { attachPython } = await import("../../../dist/python.js");
     const interpreter = await getInterpreter();
     interpreter.runPython(`
 shadowed_host_namespace = {'sentinel': 42}
@@ -1762,7 +1762,7 @@ shadowed_dict = dict
 test("managed Python scripts preserve host globals and close leaves the interpreter usable", {
   timeout: 15_000,
 }, async (context) => {
-  const { attachPython } = await import("../../dist/python.js");
+  const { attachPython } = await import("../../../dist/python.js");
   const interpreter = await getInterpreter();
   const sessionClose = context.mock.method(RuntimeSession.prototype, "close");
   interpreter.runPython("host_value = 40");
@@ -1785,7 +1785,7 @@ test("managed Python scripts preserve host globals and close leaves the interpre
 test("a managed script releases the owned proxy of an unexported Python result", {
   timeout: 15_000,
 }, async () => {
-  const { attachPython } = await import("../../dist/python.js");
+  const { attachPython } = await import("../../../dist/python.js");
   const interpreter = await getInterpreter();
   const binding = await attachPython(interpreter);
   try {
@@ -1806,7 +1806,7 @@ script_result
 test("close waits for the accepted Python script before closing its session", {
   timeout: 15_000,
 }, async (context) => {
-  const { attachPython } = await import("../../dist/python.js");
+  const { attachPython } = await import("../../../dist/python.js");
   const interpreter = await getInterpreter();
   const entered = Promise.withResolvers();
   const gate = Promise.withResolvers();
@@ -1844,7 +1844,7 @@ finished_before_close = True
 test("managed entry rejects overlap and recovers after a Python exception", {
   timeout: 15_000,
 }, async () => {
-  const { attachPython } = await import("../../dist/python.js");
+  const { attachPython } = await import("../../../dist/python.js");
   const interpreter = await getInterpreter();
   interpreter.runPython("overlap_entered = False");
   const binding = await attachPython(interpreter);
@@ -1866,7 +1866,7 @@ test("managed entry rejects overlap and recovers after a Python exception", {
 test("attachment is exclusive until close and old bindings never become active again", {
   timeout: 15_000,
 }, async () => {
-  const { attachPython } = await import("../../dist/python.js");
+  const { attachPython } = await import("../../../dist/python.js");
   const interpreter = await getInterpreter();
   const pending = attachPython(interpreter);
   try {
@@ -1894,7 +1894,7 @@ test("attachment is exclusive until close and old bindings never become active a
 });
 
 test("attachment rejects unsupported Pyodide before creating a runtime session", async (context) => {
-  const { attachPython } = await import("../../dist/python.js");
+  const { attachPython } = await import("../../../dist/python.js");
   const sessionClose = context.mock.method(RuntimeSession.prototype, "close");
   for (const invalid of [null, undefined, 42, { version: "0.0.0" }, { version: "314.0.6" }]) {
     await assert.rejects(attachPython(invalid).then(async (unexpected) => {
@@ -1907,7 +1907,7 @@ test("attachment rejects unsupported Pyodide before creating a runtime session",
 test("close drains a failing accepted script without taking its error from the caller", {
   timeout: 15_000,
 }, async (context) => {
-  const { attachPython } = await import("../../dist/python.js");
+  const { attachPython } = await import("../../../dist/python.js");
   const interpreter = await getInterpreter();
   const sessionClose = context.mock.method(RuntimeSession.prototype, "close");
   const binding = await attachPython(interpreter);
@@ -1924,7 +1924,7 @@ test("close drains a failing accepted script without taking its error from the c
 test("managed results do not destroy a host-owned JavaScript object", {
   timeout: 15_000,
 }, async () => {
-  const { attachPython } = await import("../../dist/python.js");
+  const { attachPython } = await import("../../../dist/python.js");
   const interpreter = await getInterpreter();
   let destructions = 0;
   const value = { destroy() { destructions += 1; } };

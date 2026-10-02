@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { isRecord } from "../../dist/shared/object-shape.js";
+import { isRecord } from "../../../dist/shared/object-shape.js";
 
 test("object shape accepts non-array objects without requiring a plain prototype", () => {
   class Diagnostic { message = "failure"; }

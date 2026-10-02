@@ -305,7 +305,7 @@ their own allocations. Likewise, a short script and a long numerical workload
 have very different execution costs even though they use the same admission
 path. Quantitative claims require [separate measurements](../performance.md).
 
-[`python-binding.test.mjs`](../../js-tests/unit/python-binding.test.mjs) checks
+[`python-binding.test.mjs`](../../js-tests/unit/python/python-binding.test.mjs) checks
 these ownership and admission rules with the pinned interpreter, including an
 ordinary weak-reference check without forced collection. The
 [browser lifecycle check](../../js-tests/browser/python-lifecycle.html) loads

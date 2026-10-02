@@ -4,7 +4,7 @@ import { test } from "node:test";
 
 for (const variant of ["scalar", "simd128"]) {
   test(`scalar expansion ${variant} validates ranges and fills tails and empty outputs`, async () => {
-    const bytes = await readFile(new URL(`../../dist/wasm/kernels-${variant}.wasm`, import.meta.url));
+    const bytes = await readFile(new URL(`../../../dist/wasm/kernels-${variant}.wasm`, import.meta.url));
     const memory = new WebAssembly.Memory({ initial: 32, maximum: 1024 });
     const { instance } = await WebAssembly.instantiate(bytes, { env: { memory } });
     const { tabgrad_expand_f32: expand, tabgrad_arena_base: arena } = instance.exports;

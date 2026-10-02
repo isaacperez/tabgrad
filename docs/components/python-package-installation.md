@@ -261,7 +261,7 @@ its entries. These are lifecycle costs, not constant-time claims about an
 arbitrarily large host environment. Close also compares owned file contents,
 deliberately spending linear work to preserve host edits.
 
-The [Node integration cases](../../js-tests/unit/python-binding.test.mjs)
+The [Node integration cases](../../js-tests/unit/python/python-binding.test.mjs)
 exercise real built source, integrity failures, conflicts, rollback, replacement
 identities, retained closed sessions and repeated attachment bookkeeping.
 The [browser lifecycle page](../../js-tests/browser/python-lifecycle.html)

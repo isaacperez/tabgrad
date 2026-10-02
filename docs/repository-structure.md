@@ -151,10 +151,28 @@ discovery paths. `scripts/run_tests.py` discovers Python `test_*.py` files in
 `tests/`. Those tests protect repository tooling. They do not execute the
 browser tensor runtime merely because they are written in Python.
 
-The Node command in `package.json` discovers `js-tests/unit/*.test.mjs`.
-Despite the `unit` directory name, these files include runtime integration,
-WebAssembly boundary, public-type and harness checks. The word is a location
-label, not a guarantee that every test isolates a single function.
+The Node command in `package.json` uses the quoted recursive pattern
+`"js-tests/unit/**/*.test.mjs"`, with two test workers. Node resolves that pattern,
+not the shell, so maintained cases in nested subject groups are discovered by
+the same command. Despite the `unit` directory name, these files include
+integration and artifact checks; the word is a location label, not a guarantee
+that every test isolates a single function.
+
+Within that environment, `runtime/` owns public tensor/session behavior,
+program formation, runtime requests and emitted public declarations. `cpu/`
+owns numerical WebAssembly kernel and raw ABI/artifact checks. Raw artifact
+cases have their own setup rather than borrowing a runtime integration server.
+`python/` owns interpreter bindings and worker connections; `webgpu/` owns GPU
+execution and transport boundaries. `tooling/` owns contributor harness,
+measurement-control, source-identity and CI-selection behavior. `shared/` owns
+neutral contracts actually shared by production components, not miscellaneous
+helpers. Keep cohesive integration files together so placement does not
+multiply their interpreter or session fixtures.
+
+Reusable numerical assertions and recorded oracle data live in
+`js-tests/fixtures/`. They support their CPU and Python consumers without being
+admitted as test entry files; helper modules do not use the `.test.mjs` suffix.
+
 `js-tests/browser/` holds HTML entry pages loaded by the browser harness,
 including pages for bounded measurements. The runner and loopback server
 support live in `scripts/` so test pages can focus on what they exercise.

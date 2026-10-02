@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { classifyValidationPaths, selectValidationScope } from "../../scripts/validation-scope.mjs";
+import { classifyValidationPaths, selectValidationScope } from "../../../scripts/validation-scope.mjs";
 
 test("prose and native tooling tests retain consistency without unrelated runtime or browser work", () => {
   const scope = classifyValidationPaths([
@@ -118,7 +118,7 @@ test("CLI publishes categorical outputs and distinguishes non-applicability from
   const repo = await repositoryFixture(context);
   await repo.write("docs/change.md");
   const head = repo.commit();
-  const command = fileURLToPath(new URL("../../scripts/validation-scope.mjs", import.meta.url));
+  const command = fileURLToPath(new URL("../../../scripts/validation-scope.mjs", import.meta.url));
   const output = join(repo.root, "outputs");
   const env = { ...process.env, GITHUB_OUTPUT: output, TABGRAD_VALIDATION_EVENT: "pull_request", TABGRAD_VALIDATION_BASE: repo.base, TABGRAD_VALIDATION_HEAD: head };
   const decision = spawnSync(process.execPath, [command], { cwd: repo.root, env, encoding: "utf8", timeout: 5000 });

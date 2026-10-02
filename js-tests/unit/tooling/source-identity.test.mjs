@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { fingerprintTypeScriptSources } from "../../scripts/source-identity.mjs";
+import { fingerprintTypeScriptSources } from "../../../scripts/source-identity.mjs";
 
 /**
  * Make one test-owned tree; preserve input creation order and clean it on exit.
@@ -140,7 +140,7 @@ for (const kind of ["file", "directory", "dangling", "cycle", "excluded-extensio
 for (const name of ["measure-webgpu.mjs", "measure-python-webgpu.mjs"]) {
   for (const args of [[], ["invalid-mode"]]) {
     test(`${name} rejects ${args.length === 0 ? "missing" : "invalid"} mode before browser or measurement work`, () => {
-      const command = fileURLToPath(new URL(`../../scripts/${name}`, import.meta.url));
+      const command = fileURLToPath(new URL(`../../../scripts/${name}`, import.meta.url));
       const result = spawnSync(process.execPath, [command, ...args], { encoding: "utf8", timeout: 5000 });
       assert.equal(result.error, undefined);
       assert.equal(result.status, 1);

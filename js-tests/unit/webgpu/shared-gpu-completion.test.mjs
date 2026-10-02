@@ -3,10 +3,10 @@ import { once } from "node:events";
 import { createHook } from "node:async_hooks";
 import { test } from "node:test";
 import { Worker } from "node:worker_threads";
-import { TabgradError } from "../../dist/shared/errors.js";
-import { ExecutionRequest } from "../../dist/runtime/execution-request.js";
-import { GPU_CONTROL_LENGTH, retireGpuConnection } from "../../dist/backends/webgpu/webgpu-connection.js";
-import { SharedGpuCompletion, publishSharedGpuFailure, publishSharedGpuSuccess, publishSharedGpuDrain } from "../../dist/backends/webgpu/webgpu-shared-completion.js";
+import { TabgradError } from "../../../dist/shared/errors.js";
+import { ExecutionRequest } from "../../../dist/runtime/execution-request.js";
+import { GPU_CONTROL_LENGTH, retireGpuConnection } from "../../../dist/backends/webgpu/webgpu-connection.js";
+import { SharedGpuCompletion, publishSharedGpuFailure, publishSharedGpuSuccess, publishSharedGpuDrain } from "../../../dist/backends/webgpu/webgpu-shared-completion.js";
 
 function completion(control, bytes = 4) {
   let retired = 0;
@@ -40,7 +40,7 @@ test("a real independent worker advances a parked request and delayed callbacks 
       });
       parentPort.postMessage('ready');
     });
-  `, { eval: true, workerData: { module: new URL("../../dist/backends/webgpu/webgpu-shared-completion.js", import.meta.url).href,
+  `, { eval: true, workerData: { module: new URL("../../../dist/backends/webgpu/webgpu-shared-completion.js", import.meta.url).href,
     buffer: shared.buffer, control: control.buffer } });
   let published = 0;
   let requestRetired = 0;

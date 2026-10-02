@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ExecutionProbe } from "../browser/execution-probe.mjs";
+import { ExecutionProbe } from "../../browser/execution-probe.mjs";
 
 test("diagnostic spans preserve receiver, results, errors and inclusive nesting", () => {
   let now = 0;
