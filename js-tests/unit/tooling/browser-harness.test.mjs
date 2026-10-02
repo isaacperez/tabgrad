@@ -14,6 +14,99 @@ import {
   terminateBrowser,
 } from "../../../scripts/browser-harness.mjs";
 
+function registerPolicyFixture(server, token) {
+  const registration = server.register(token, "runtime/runtime.html");
+  // Controlled policy checks may reject either promise without page navigation.
+  registration.navigation.catch(() => {});
+  registration.result.catch(() => {});
+  return registration;
+}
+
+test("server registration enforces one active interval and resets after cancellation", async () => {
+  const server = await startBrowserServer(["runtime/runtime.html"]);
+  let registration;
+  try {
+    registration = registerPolicyFixture(server, "first-policy-token");
+    assert.throws(() => server.register("second-policy-token", "runtime/runtime.html"), /one active browser run/);
+    registration.cancel();
+    registration = registerPolicyFixture(server, "second-policy-token");
+    const response = await fetch(`${server.origin}/runtime/runtime.html`);
+    assert.equal(response.status, 200);
+    await registration.navigation;
+    assert.equal(registration.snapshot().lastPhase, "page-requested");
+    registration.cancel();
+    registration = registerPolicyFixture(server, "third-policy-token");
+    assert.equal(registration.snapshot().lastPhase, "browser-process-requested");
+  } finally {
+    registration?.cancel();
+    await server.close();
+  }
+});
+
+test("server control rejection preserves phase ordering and settles both run promises", async () => {
+  const server = await startBrowserServer(["runtime/runtime.html"], { crossOriginIsolation: true });
+  const scenarios = [
+    { endpoint: "/__phase", body: "{", kind: "phase-reporting" },
+    { endpoint: "/__phase", body: JSON.stringify({ phase: "unknown-phase" }), kind: "phase-reporting" },
+    { endpoint: "/__phase", previous: "application-started", body: JSON.stringify({ phase: "application-started" }), kind: "phase-reporting" },
+    { endpoint: "/__phase", previous: "runtime-started", body: JSON.stringify({ phase: "assets-loaded" }), kind: "phase-reporting" },
+    { endpoint: "/__result", body: "{", kind: "result-reporting" },
+  ];
+  let registration;
+  try {
+    for (const [index, scenario] of scenarios.entries()) {
+      const token = `control-policy-token-${index}`;
+      registration = registerPolicyFixture(server, token);
+      if (scenario.previous !== undefined) {
+        // Existing policy permits skipping earlier phases, but not regression.
+        const accepted = await fetch(`${server.origin}/__phase?token=${token}`, {
+          method: "POST", body: JSON.stringify({ phase: scenario.previous }),
+        });
+        assert.equal(accepted.status, 204);
+      }
+      const response = await fetch(`${server.origin}${scenario.endpoint}?token=${token}`, {
+        method: "POST", body: scenario.body,
+      });
+      assert.equal(response.status, 400);
+      assert.equal(response.headers.get("cross-origin-embedder-policy"), "require-corp");
+      const hasExpectedKind = error => error.kind === scenario.kind;
+      await assert.rejects(registration.navigation, hasExpectedKind);
+      await assert.rejects(registration.result, hasExpectedKind);
+      const snapshot = registration.snapshot();
+      assert.equal(snapshot.lastPhase, scenario.previous ?? "browser-process-requested");
+      assert.equal(snapshot.requests.at(-1).status, 400);
+      assert.equal(snapshot.incomingRequests.at(-1).stage, "control-invalid");
+      registration.cancel();
+    }
+  } finally {
+    registration?.cancel();
+    await server.close();
+  }
+});
+
+test("server asset responses retain isolation headers and the Pyodide allowlist", async () => {
+  for (const isolated of [false, true]) {
+    const server = await startBrowserServer(["runtime/runtime.html"], { crossOriginIsolation: isolated });
+    try {
+      for (const path of ["/runtime/runtime.html", "/pyodide/pyodide.mjs"]) {
+        const response = await fetch(server.origin + path);
+        assert.equal(response.status, 200);
+        assert.equal(response.headers.get("cache-control"), "no-store");
+        assert.equal(response.headers.get("cross-origin-opener-policy"), isolated ? "same-origin" : null);
+        assert.equal(response.headers.get("cross-origin-embedder-policy"), isolated ? "require-corp" : null);
+        assert.equal(response.headers.get("cross-origin-resource-policy"), isolated ? "same-origin" : null);
+        assert.match(response.headers.get("content-type"), path.endsWith(".html") ? /text\/html/ : /javascript/);
+        await response.arrayBuffer();
+      }
+      const denied = await fetch(`${server.origin}/pyodide/package.json`);
+      assert.equal(denied.status, 404);
+      // Existing rejected-asset branches do not publish the success headers.
+      assert.equal(denied.headers.get("cache-control"), null);
+      assert.equal(denied.headers.get("cross-origin-embedder-policy"), null);
+    } finally { await server.close(); }
+  }
+});
+
 const fixturePrelude = `
 const pageUrl = new URL(process.argv[1]);
 const token = pageUrl.searchParams.get("token");

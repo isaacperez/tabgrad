@@ -13,6 +13,29 @@ navigating; a request can reach the server with an invalid token; an admitted
 page request can be waiting on a file read. The records below preserve those
 distinctions without changing the check's admission or success criteria.
 
+## Keep request policy separate from server lifetime
+
+The shared harness has two different responsibilities. `startBrowserServer`
+creates the loopback server, registers its allowed pages/assets and active run,
+and provides cancellation and closure. The named module-scope
+`handleBrowserRequest` owner applies the existing control, asset and diagnostic
+policies to each incoming request. Both use one per-server context: the run map,
+current token, registrations, isolation headers, distribution root and asset
+reader. There is no second token or terminal-state authority.
+
+The request owner resolves its associated run and diagnostic interval before
+awaiting a request body or asset read. The facade can subsequently cancel that
+interval and register another, but a delayed completion does not thereby gain
+the new run's identity. Fixed repository fixture/Pyodide roots and their
+allowlist remain module-owned. Moving this policy into a named function does
+not change its response statuses, phase ordering, containment or header rules.
+
+`BrowserIngressDiagnostics` observes these decisions; it does not authenticate
+traffic or settle navigation/results. `runBrowserPage` separately owns the
+ordered browser-process and disposable-profile lifecycle. Contributors can
+therefore inspect request admission independently of process cleanup without
+introducing another server, router or protocol.
+
 ## Read a failure in boundary order
 
 First inspect `failureKind` and the reported lifecycle phase. Navigation has a
