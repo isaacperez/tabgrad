@@ -219,6 +219,144 @@ export function browserVersion(executable) {
   return `${result.stdout}${result.stderr}`.trim();
 }
 
+/**
+ * Apply the registered server's control, asset and diagnostic request policy.
+ *
+ * The facade owns registration/cancellation/close and mutates this per-server
+ * context's active token. Resolve the request's interval before asynchronous
+ * body/file work so later registrations cannot become its admission owner.
+ * Diagnostics remain passive; only the existing control and asset rules settle
+ * navigation/results. Repository fixture and Pyodide roots are module-owned.
+ */
+async function handleBrowserRequest(request, response, requestPolicy) {
+  const { runs, activeToken, allowedPages, allowedAssets, isolationHeaders,
+    distributionDirectory, readAsset } = requestPolicy;
+  const requestUrl = new URL(request.url, "http://localhost");
+  const pathname = requestUrl.pathname;
+  const observedRun = runs.get(activeToken);
+  const ingress = observedRun?.ingress;
+  const observation = ingress?.begin(request.method, pathname, response);
+  const isControlRequest = pathname === "/__phase" || pathname === "/__result";
+  const token = requestToken(requestUrl, activeToken, runs, !isControlRequest);
+  const run = token === undefined ? undefined : runs.get(token);
+  const association = requestUrl.searchParams.has("token")
+    ? run === observedRun ? "matching-token" : "unmatched-token"
+    : isControlRequest ? "missing-control-token" : "active-fallback";
+  ingress?.associate(observation, association);
+
+  if (pathname === "/__phase" && request.method === "POST") {
+    if (run === undefined) {
+      ingress?.progress(observation, "control-rejected");
+      response.writeHead(404).end();
+      return;
+    }
+    try {
+      ingress?.progress(observation, "reading-body");
+      const phase = JSON.parse(await readRequestBody(request)).phase;
+      const previousIndex = reportedPhaseOrder.indexOf(run.lastPhase);
+      const nextIndex = reportedPhaseOrder.indexOf(phase);
+      if (nextIndex < 0 || nextIndex <= previousIndex) {
+        throw new Error(`Invalid browser lifecycle phase ${JSON.stringify(phase)}.`);
+      }
+      markPhase(run, phase);
+      ingress?.progress(observation, "control-accepted");
+      recordRequest(run, request, pathname, 204);
+      response.writeHead(204, isolationHeaders).end();
+    } catch (error) {
+      ingress?.progress(observation, "control-invalid");
+      recordRequest(run, request, pathname, 400);
+      rejectRun(
+        run,
+        "phase-reporting",
+        error instanceof Error ? error.message : String(error),
+      );
+      response.writeHead(400, isolationHeaders).end();
+    }
+    return;
+  }
+
+  if (pathname === "/__result" && request.method === "POST") {
+    if (run === undefined) {
+      ingress?.progress(observation, "control-rejected");
+      response.writeHead(404).end();
+      return;
+    }
+    try {
+      ingress?.progress(observation, "reading-body");
+      const result = JSON.parse(await readRequestBody(request));
+      markPhase(run, "result-received");
+      ingress?.progress(observation, "control-accepted");
+      recordRequest(run, request, pathname, 204);
+      run.result.resolve(result);
+      response.writeHead(204, isolationHeaders).end();
+    } catch (error) {
+      ingress?.progress(observation, "control-invalid");
+      recordRequest(run, request, pathname, 400);
+      rejectRun(
+        run,
+        "result-reporting",
+        error instanceof Error ? error.message : String(error),
+      );
+      response.writeHead(400, isolationHeaders).end();
+    }
+    return;
+  }
+
+  const requestedPage = pathname.replace(/^\/+/, "");
+  const isPage = allowedPages.has(requestedPage);
+  const isFixtureAsset = allowedAssets.has(requestedPage);
+  const isPyodide = pathname.startsWith("/pyodide/");
+  const sourceRoot = isPage || isFixtureAsset ? browserTestRoot : isPyodide ? pyodideRoot : distributionDirectory;
+  const relativePath = isPyodide ? pathname.slice("/pyodide/".length) : requestedPage;
+  if (isPyodide && !pyodideAssets.has(relativePath)) {
+    ingress?.progress(observation, "asset-rejected");
+    recordRequest(run, request, pathname, 404);
+    rejectRun(run, "asset-loading", `Unregistered Pyodide asset ${pathname}.`);
+    response.writeHead(404).end();
+    return;
+  }
+  const path = normalize(join(sourceRoot, relativePath));
+  const pathFromRoot = relative(sourceRoot, path);
+  if (
+    pathFromRoot === ".."
+    || pathFromRoot.startsWith(`..${sep}`)
+    || isAbsolute(pathFromRoot)
+  ) {
+    ingress?.progress(observation, "asset-rejected");
+    recordRequest(run, request, pathname, 403);
+    rejectRun(run, "asset-loading", `Browser request for ${pathname} was forbidden.`);
+    response.writeHead(403).end();
+    return;
+  }
+
+  try {
+    ingress?.progress(observation, "reading-file");
+    const body = await readAsset(path);
+    ingress?.progress(observation, "file-served");
+    recordRequest(run, request, pathname, 200);
+    if (isPage && run !== undefined) {
+      if (requestedPage !== run.page) {
+        rejectRun(run, "navigation", `Browser requested unexpected page ${requestedPage}.`);
+      } else {
+        markPhase(run, "page-requested");
+        run.navigation.resolve();
+      }
+    }
+    response.writeHead(200, {
+      "cache-control": "no-store",
+      "content-type": contentTypeFor(path),
+      ...isolationHeaders,
+    }).end(body);
+  } catch {
+    ingress?.progress(observation, "file-failed");
+    recordRequest(run, request, pathname, 404);
+    if (isPage || isRequiredAsset(pathname)) {
+      rejectRun(run, "asset-loading", `Required browser asset ${pathname} returned 404.`);
+    }
+    response.writeHead(404).end();
+  }
+}
+
 export async function startBrowserServer(
   pageNames,
   { crossOriginIsolation = false, assets = [], distributionDirectory = distributionRoot, readAsset = readFile } = {},
@@ -231,7 +369,6 @@ export async function startBrowserServer(
     ...[...allowedPages].map(page => `/${page}`), ...[...allowedAssets].map(asset => `/${asset}`),
     ...[...pyodideAssets].map(asset => `/pyodide/${asset}`),
   ]);
-  let activeToken;
   const isolationHeaders = crossOriginIsolation
     ? {
         "cross-origin-embedder-policy": "require-corp",
@@ -239,132 +376,12 @@ export async function startBrowserServer(
         "cross-origin-resource-policy": "same-origin",
       }
     : {};
-  const server = createServer(async (request, response) => {
-    const requestUrl = new URL(request.url, "http://localhost");
-    const pathname = requestUrl.pathname;
-    const observedRun = runs.get(activeToken);
-    const ingress = observedRun?.ingress;
-    const observation = ingress?.begin(request.method, pathname, response);
-    const isControlRequest = pathname === "/__phase" || pathname === "/__result";
-    const token = requestToken(requestUrl, activeToken, runs, !isControlRequest);
-    const run = token === undefined ? undefined : runs.get(token);
-    const association = requestUrl.searchParams.has("token")
-      ? run === observedRun ? "matching-token" : "unmatched-token"
-      : isControlRequest ? "missing-control-token" : "active-fallback";
-    ingress?.associate(observation, association);
-
-    if (pathname === "/__phase" && request.method === "POST") {
-      if (run === undefined) {
-        ingress?.progress(observation, "control-rejected");
-        response.writeHead(404).end();
-        return;
-      }
-      try {
-        ingress?.progress(observation, "reading-body");
-        const phase = JSON.parse(await readRequestBody(request)).phase;
-        const previousIndex = reportedPhaseOrder.indexOf(run.lastPhase);
-        const nextIndex = reportedPhaseOrder.indexOf(phase);
-        if (nextIndex < 0 || nextIndex <= previousIndex) {
-          throw new Error(`Invalid browser lifecycle phase ${JSON.stringify(phase)}.`);
-        }
-        markPhase(run, phase);
-        ingress?.progress(observation, "control-accepted");
-        recordRequest(run, request, pathname, 204);
-        response.writeHead(204, isolationHeaders).end();
-      } catch (error) {
-        ingress?.progress(observation, "control-invalid");
-        recordRequest(run, request, pathname, 400);
-        rejectRun(
-          run,
-          "phase-reporting",
-          error instanceof Error ? error.message : String(error),
-        );
-        response.writeHead(400, isolationHeaders).end();
-      }
-      return;
-    }
-
-    if (pathname === "/__result" && request.method === "POST") {
-      if (run === undefined) {
-        ingress?.progress(observation, "control-rejected");
-        response.writeHead(404).end();
-        return;
-      }
-      try {
-        ingress?.progress(observation, "reading-body");
-        const result = JSON.parse(await readRequestBody(request));
-        markPhase(run, "result-received");
-        ingress?.progress(observation, "control-accepted");
-        recordRequest(run, request, pathname, 204);
-        run.result.resolve(result);
-        response.writeHead(204, isolationHeaders).end();
-      } catch (error) {
-        ingress?.progress(observation, "control-invalid");
-        recordRequest(run, request, pathname, 400);
-        rejectRun(
-          run,
-          "result-reporting",
-          error instanceof Error ? error.message : String(error),
-        );
-        response.writeHead(400, isolationHeaders).end();
-      }
-      return;
-    }
-
-    const requestedPage = pathname.replace(/^\/+/, "");
-    const isPage = allowedPages.has(requestedPage);
-    const isFixtureAsset = allowedAssets.has(requestedPage);
-    const isPyodide = pathname.startsWith("/pyodide/");
-    const sourceRoot = isPage || isFixtureAsset ? browserTestRoot : isPyodide ? pyodideRoot : distributionDirectory;
-    const relativePath = isPyodide ? pathname.slice("/pyodide/".length) : requestedPage;
-    if (isPyodide && !pyodideAssets.has(relativePath)) {
-      ingress?.progress(observation, "asset-rejected");
-      recordRequest(run, request, pathname, 404);
-      rejectRun(run, "asset-loading", `Unregistered Pyodide asset ${pathname}.`);
-      response.writeHead(404).end();
-      return;
-    }
-    const path = normalize(join(sourceRoot, relativePath));
-    const pathFromRoot = relative(sourceRoot, path);
-    if (
-      pathFromRoot === ".."
-      || pathFromRoot.startsWith(`..${sep}`)
-      || isAbsolute(pathFromRoot)
-    ) {
-      ingress?.progress(observation, "asset-rejected");
-      recordRequest(run, request, pathname, 403);
-      rejectRun(run, "asset-loading", `Browser request for ${pathname} was forbidden.`);
-      response.writeHead(403).end();
-      return;
-    }
-
-    try {
-      ingress?.progress(observation, "reading-file");
-      const body = await readAsset(path);
-      ingress?.progress(observation, "file-served");
-      recordRequest(run, request, pathname, 200);
-      if (isPage && run !== undefined) {
-        if (requestedPage !== run.page) {
-          rejectRun(run, "navigation", `Browser requested unexpected page ${requestedPage}.`);
-        } else {
-          markPhase(run, "page-requested");
-          run.navigation.resolve();
-        }
-      }
-      response.writeHead(200, {
-        "cache-control": "no-store",
-        "content-type": contentTypeFor(path),
-        ...isolationHeaders,
-      }).end(body);
-    } catch {
-      ingress?.progress(observation, "file-failed");
-      recordRequest(run, request, pathname, 404);
-      if (isPage || isRequiredAsset(pathname)) {
-        rejectRun(run, "asset-loading", `Required browser asset ${pathname} returned 404.`);
-      }
-      response.writeHead(404).end();
-    }
-  });
+  const requestPolicy = {
+    runs, activeToken: undefined, allowedPages, allowedAssets,
+    isolationHeaders, distributionDirectory, readAsset,
+  };
+  const server = createServer((request, response) =>
+    handleBrowserRequest(request, response, requestPolicy));
   await new Promise((resolve, reject) => {
     const handleError = (error) => reject(error);
     server.once("error", handleError);
@@ -377,7 +394,7 @@ export async function startBrowserServer(
   return {
     origin: `http://127.0.0.1:${address.port}`,
     register(token, page) {
-      if (activeToken !== undefined) {
+      if (requestPolicy.activeToken !== undefined) {
         throw new Error("The browser harness supports one active browser run at a time.");
       }
       const run = {
@@ -392,7 +409,7 @@ export async function startBrowserServer(
       };
       run.ingress = new BrowserIngressDiagnostics(knownResources, run.startedAt);
       runs.set(token, run);
-      activeToken = token;
+      requestPolicy.activeToken = token;
       return {
         navigation: run.navigation.promise,
         result: run.result.promise,
@@ -415,7 +432,7 @@ export async function startBrowserServer(
           }
           runs.delete(token);
           run.ingress.close();
-          activeToken = undefined;
+          requestPolicy.activeToken = undefined;
           run.navigation.reject(reason);
           run.result.reject(reason);
         },
@@ -429,7 +446,7 @@ export async function startBrowserServer(
         run.result.reject(error);
         runs.delete(token);
       }
-      activeToken = undefined;
+      requestPolicy.activeToken = undefined;
       await new Promise((resolve, reject) => {
         server.close((error) => error ? reject(error) : resolve());
       });
