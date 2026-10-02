@@ -277,6 +277,7 @@ root-file count as a reason for a cosmetic move.
 | `package.json`, `package-lock.json` | JavaScript package definition, scripts and dependency constraints, paired with npm's exact resolution |
 | `Cargo.toml`, `Cargo.lock` | Rust workspace membership and shared build profile, paired with Cargo's resolution; each crate has its own manifest |
 | `requirements-dev.lock` | Hash-locked Python repository-tool dependencies used by the prepared development environment |
+| `requirements-oracle.in`, `requirements-oracle.lock` | Direct dependency input and exact hashed resolution for the contributor-only native compatibility oracle, separate from ordinary repository tooling; see [setup](development.md#prepare-python-integration-and-its-compatibility-oracle), the [dependency record](dependencies.md#python-integration-and-oracle-dependencies) and [generation and commit roles](generated-files.md#python-compatibility-oracle-lock) |
 | `tsconfig.json`, `pyrightconfig.json`, `rust-toolchain.toml`, `.node-version`, `ruff.toml` | TypeScript compilation, Python type checking, Rust toolchain selection, Node version selection and Python formatting/lint configuration |
 | `.editorconfig`, `.gitattributes`, `.gitignore` | Editor text conventions, Git text/binary handling, and exclusions for local state |
 
