@@ -8,6 +8,14 @@ import * as tabgrad from "../../dist/index.js";
 
 const { RuntimeSession, Tensor } = tabgrad;
 
+test("the static Python entry selects only the supported runtime exports", async () => {
+  const python = await import("../../dist/python.js");
+  assert.deepEqual(Object.keys(python).sort(), [
+    "PythonWorkerError", "attachPython", "connectPythonWorker",
+    "createWebGpuWorker", "servePythonWorker",
+  ]);
+});
+
 test("Python binding declarations typecheck without stripped internal or Node-only types", () => {
   const program = ts.createProgram({
     rootNames: [fileURLToPath(new URL("../../dist/python.d.ts", import.meta.url))],
