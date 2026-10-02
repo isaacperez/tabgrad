@@ -153,6 +153,15 @@ close does not replay that failure as a cleanup error. A failed GPU readback
 can publish before its copy and mapping finish; the backend's ticket retains
 those obligations. Queue emptiness alone does not complete session close.
 
+Retiring a request must finish its lease accounting even if releasing its value
+pin fails. The session retains that otherwise-undelivered cleanup error for its
+close Promise. The request's published host value or execution failure remains
+authoritative; a cleanup exception cannot publish it a second time, replace it
+or prevent another queued request from advancing. A cleanup error before close
+and one arriving during drain use the same session-owned error collection, so
+their attempt order is preserved. Healthy request retirement creates no error
+collection. See the [public cleanup error convention](../javascript-api.md#create-compute-observe-and-release).
+
 Request pins are distinct from the producer edges needed to compute a pending
 value. The [semantic lifetime owner](semantic-value-lifetimes.md) releases those
 edges after materialization or final shared-storage release, while preserving independently

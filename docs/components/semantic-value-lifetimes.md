@@ -76,6 +76,23 @@ materializations are installed before completed input edges are released.
 Final-handle release, session close and observation retirement use final-owner
 release; none needs a separate traversal policy or a graph-depth limit.
 
+Physical release is fallible, but an exception must not abandon independent
+logical responsibilities. Each retirement walk records release failures while
+finishing the remaining input occurrences. A handle also retires its ordinary
+value even if releasing its derivative history fails. Completed-program cleanup
+detaches every completed producer and attempts its input releases before
+reporting failures; it does not leave later completed edges attached merely
+because an earlier allocation release failed. Saved history pins follow the
+same rule in their [own owner](derivative-history.md).
+
+The association is removed before its backend release attempt. Logical
+bookkeeping therefore cannot be used to retry that same allocation or claim
+that physical release succeeded. Errors remain observable under the
+[public close contract](../javascript-api.md#create-compute-observe-and-release);
+the backend still owns physical accounting and its terminal close. This rule
+does not authorize continuing numerical execution through invalid backend state
+or suppressing a reference-count invariant violation.
+
 The `liveOperationRecords` diagnostic counts producer records still owned by
 storage records, not all operations ever performed or all materialized result handles.
 Successful materialization can reduce that count while result handles remain
@@ -90,6 +107,12 @@ still has the computation it needs. Closing the final owner releases them.
 A readback failure occurs after materialization, so it does not restore the
 already released producer history. A later observation can copy the resident
 result without rerunning the producer.
+
+A cleanup error after successful materialization is different from a failed
+kernel: the published resident associations remain, and completed producers
+stay detached. That observation reports the cleanup error with its invocation
+context rather than pretending numerical execution never completed. It does
+not rebuild already retired edges or automatically retry physical cleanup.
 
 Causal provenance is stored separately from owning edges. An observation error
 can retain its immutable executable program and operation information without

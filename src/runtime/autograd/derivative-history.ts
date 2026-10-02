@@ -1,4 +1,4 @@
-import { TabgradError } from "../../shared/errors.js";
+import { TabgradError, throwCleanupFailures } from "../../shared/errors.js";
 
 /** A canonical operation supplies its saved-operand selection and local VJP. */
 export interface DerivativeRecipe {
@@ -48,6 +48,18 @@ function releaseTemporary<Value, Gradient>(
   if (owned.delete(gradient)) operations.close(gradient);
 }
 
+/** Attempt independent handle retirement without losing an earlier failure. */
+function releaseGradients<Value, Gradient>(
+  gradients: Iterable<Gradient>, operations: DerivativeOperations<Value, Gradient>,
+  failures: unknown[] | undefined,
+): unknown[] | undefined {
+  for (const gradient of gradients) {
+    try { operations.close(gradient); }
+    catch (error) { (failures ??= []).push(error); }
+  }
+  return failures;
+}
+
 /** Own dynamic recipes and logical saved pins independently of payload storage. */
 export class DerivativeHistory<Value> {
   readonly #nodes = new Set<DerivativeNode<Value>>();
@@ -92,25 +104,32 @@ export class DerivativeHistory<Value> {
 
   release(node: DerivativeNode<Value>): void {
     const pending = [node];
+    let failures: unknown[] | undefined;
     while (pending.length !== 0) {
       const current = pending.pop()!;
       current.references -= 1;
       if (current.references !== 0) continue;
       this.#nodes.delete(current);
-      this.#releaseSaved(current);
+      try { this.#releaseSaved(current); }
+      catch (error) { (failures ??= []).push(error); }
       for (const input of current.inputs) if (input !== null) pending.push(input);
       current.inputs = [];
     }
+    throwCleanupFailures(failures, "Derivative history cleanup failed.");
   }
 
   #releaseSaved(node: DerivativeNode<Value>): void {
-    for (const operands of node.saved) {
+    const saved = node.saved;
+    node.saved = [];
+    let failures: unknown[] | undefined;
+    for (const operands of saved) {
       for (const value of operands) {
-        this.releaseValue(value);
         this.#savedValues -= 1;
+        try { this.releaseValue(value); }
+        catch (error) { (failures ??= []).push(error); }
       }
     }
-    node.saved = [];
+    throwCleanupFailures(failures, "Saved derivative value cleanup failed.");
   }
 
   /** Validate the entire selected ancestry before numerical admission or consumption. */
@@ -155,6 +174,7 @@ export class DerivativeHistory<Value> {
     const requested = new Set(plan.requested);
     const results: Gradient[] = [];
     const consumed: DerivativeNode<Value>[] = [];
+    let failures: unknown[] | undefined;
     gradients.set(plan.order[plan.order.length - 1]!, seed);
     try {
       for (let index = plan.order.length - 1; index >= 0; index -= 1) {
@@ -184,17 +204,20 @@ export class DerivativeHistory<Value> {
         }
       }
       for (const node of plan.requested) results.push(operations.view(gradients.get(node)!, node.shape));
+      let consumptionFailures: unknown[] | undefined;
       for (const node of consumed) {
-        this.#releaseSaved(node);
         node.consumed = true;
+        try { this.#releaseSaved(node); }
+        catch (error) { (consumptionFailures ??= []).push(error); }
       }
-      return results;
+      throwCleanupFailures(consumptionFailures, "Consumed derivative history cleanup failed.");
     } catch (error) {
-      for (const result of results) operations.close(result);
-      throw error;
-    } finally {
-      for (const temporary of temporaries) operations.close(temporary);
+      failures = [error];
     }
+    failures = releaseGradients(temporaries, operations, failures);
+    if (failures !== undefined) failures = releaseGradients(results, operations, failures);
+    throwCleanupFailures(failures, "Derivative construction or cleanup failed.");
+    return results;
   }
 
   diagnostics(): { readonly liveDerivativeNodes: number; readonly liveSavedValues: number } {

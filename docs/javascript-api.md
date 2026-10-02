@@ -167,6 +167,22 @@ session, releases resident allocations, and is also idempotent. Applications
 should close long-lived tensors and sessions explicitly rather than depending
 on JavaScript garbage-collection timing.
 
+Closing invalidates public handles immediately, even if releasing a backend
+resource fails. `tensor.close()` can throw that cleanup failure; repeating it
+does not retry the release. `session.close()` always returns its shared Promise,
+including during a reentrant cleanup callback. It attempts independent safe
+cleanup and backend closure before settling that Promise. One cleanup failure
+is preserved unchanged; several are retained in an `AggregateError` in attempt
+order. An aggregate can contain another aggregate from a nested owner, preserving
+its original causes rather than flattening or replacing them.
+
+A failure while retiring an accepted request's pins is reported by session
+close, not substituted for the request's result or execution error. Close does
+not replay an execution failure already delivered to its caller, nor a cleanup
+failure already thrown by an explicit tensor close. Logical ownership ending
+does not prove physical reclamation: unacknowledged GPU cleanup remains a
+failure with unknown physical completion, not a successful close.
+
 ## Select a manifest location
 
 By default, `createRuntimeSession()` resolves `manifest.json` relative to the

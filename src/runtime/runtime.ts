@@ -5,6 +5,7 @@ import {
 import {
   TabgradError,
   retainExecutionFailureContext,
+  throwCleanupFailures,
 } from "../shared/errors.js";
 import { ExecutionRequest, type QueuedExecutionRequest } from "./execution-request.js";
 import { ExecutionTicket, type ExecutionStep } from "../execution/execution-ticket.js";
@@ -630,6 +631,7 @@ export class RuntimeSession {
   readonly #history = new DerivativeHistory<TensorValue>(
     (value) => this.#retainValue(value), (value) => this.#releaseValue(value),
   );
+  #cleanupFailures: unknown[] | undefined;
   readonly #materializations = new MaterializationTable();
   readonly #states = new Set<TensorState>();
   readonly #values = new Set<TensorValue>();
@@ -941,26 +943,39 @@ export class RuntimeSession {
       return this.#closePromise;
     }
     this.#closed = true;
+    let resolve!: () => void;
+    let reject!: (error: unknown) => void;
+    // Install the join before invoking fallible or reentrant backend cleanup.
+    this.#closePromise = new Promise<void>((onClosed, onFailure) => {
+      resolve = onClosed;
+      reject = onFailure;
+    });
+    const failures = this.#cleanupFailures ??= [];
     for (const state of [...this.#states]) {
       if (!state.closed) {
         state.closed = true;
-        this.#releaseHandle(state);
+        try { this.#releaseHandle(state); }
+        catch (error) { failures.push(error); }
       }
     }
-    this.#closePromise = this.#finishClose();
+    void this.#finishClose(failures).then(resolve, reject);
     return this.#closePromise;
   }
 
-  async #finishClose(): Promise<void> {
+  async #finishClose(failures: unknown[]): Promise<void> {
     await this.#drainRequests();
     for (const materialization of this.#materializations.values()) {
       if (materialization.kind === "resident") {
-        materialization.backend.release(materialization.allocation);
+        try { materialization.backend.release(materialization.allocation); }
+        catch (error) { failures.push(error); }
       }
     }
     this.#materializations.clear();
-    await this.#backend.close();
-    await this.#gpuBackend?.close();
+    try { await this.#backend.close(); }
+    catch (error) { failures.push(error); }
+    try { await this.#gpuBackend?.close(); }
+    catch (error) { failures.push(error); }
+    throwCleanupFailures(failures, "Runtime session cleanup failed.");
   }
 
   #assertOpen(): void {
@@ -971,8 +986,14 @@ export class RuntimeSession {
 
   #releaseHandle(state: TensorState): void {
     this.#states.delete(state);
-    if (state.history !== null) this.#history.release(state.history);
-    this.#releaseValue(state.value);
+    let failures: unknown[] | undefined;
+    if (state.history !== null) {
+      try { this.#history.release(state.history); }
+      catch (error) { (failures ??= []).push(error); }
+    }
+    try { this.#releaseValue(state.value); }
+    catch (error) { (failures ??= []).push(error); }
+    throwCleanupFailures(failures, "Tensor handle cleanup failed.");
   }
 
   #createHandle(value: TensorValue, history: DerivativeNode<TensorValue> | null = null): Tensor {
@@ -997,6 +1018,7 @@ export class RuntimeSession {
     // Entries represent owning references, not distinct values: repeated
     // input positions must each be released, even when they share a value.
     const pending = [value];
+    let failures: unknown[] | undefined;
     while (pending.length > 0) {
       const current = pending.pop()!;
       current.references -= 1;
@@ -1011,7 +1033,8 @@ export class RuntimeSession {
       if (current.storage.references > 0) continue;
       const materialization = this.#materializations.delete(current);
       if (materialization?.kind === "resident") {
-        materialization.backend.release(materialization.allocation);
+        try { materialization.backend.release(materialization.allocation); }
+        catch (error) { (failures ??= []).push(error); }
       }
       const producer = this.#detachProducer(current);
       if (producer !== null) {
@@ -1021,6 +1044,7 @@ export class RuntimeSession {
         }
       }
     }
+    throwCleanupFailures(failures, "Tensor value cleanup failed.");
   }
 
   #detachProducer(value: TensorValue): OperationRecord | null {
@@ -1038,9 +1062,12 @@ export class RuntimeSession {
   #releaseDependencies(value: TensorValue): void {
     const producer = this.#detachProducer(value);
     if (producer === null) return;
+    let failures: unknown[] | undefined;
     for (const input of producer.inputs) {
-      this.#releaseValue(input);
+      try { this.#releaseValue(input); }
+      catch (error) { (failures ??= []).push(error); }
     }
+    throwCleanupFailures(failures, "Completed tensor dependency cleanup failed.");
   }
 
   *#materialize(value: TensorValue, formed: FormedProgram<TensorValue>, backend: ExecutionBackend): Generator<ExecutionStep, void, unknown> {
@@ -1084,9 +1111,7 @@ export class RuntimeSession {
         }
         this.#materializations.setResident(boundValue, allocation, backend);
       }
-      for (const computedValue of formed.newlyComputed) {
-        this.#releaseDependencies(computedValue);
-      }
+      this.#releaseCompletedDependencies(formed.newlyComputed);
       const result = this.#materializations.get(value);
       if (result?.kind !== "resident") {
         throw new TabgradError(
@@ -1106,13 +1131,25 @@ export class RuntimeSession {
     return formed;
   }
 
+  #releaseCompletedDependencies(values: readonly TensorValue[]): void {
+    let failures: unknown[] | undefined;
+    for (const value of values) {
+      try { this.#releaseDependencies(value); }
+      catch (error) { (failures ??= []).push(error); }
+    }
+    throwCleanupFailures(failures, "Completed program dependency cleanup failed.");
+  }
+
   #enqueue<T>(steps: Generator<ExecutionStep, T, unknown>, release?: () => void): ExecutionRequest<T> {
     const request = new ExecutionRequest(
       steps,
       () => this.#advanceRequests(),
       () => this.#publishRequest(request),
       () => {
-        release?.();
+        // Publication is already authoritative. Report pin retirement failures
+        // at session close without replacing the result or stranding drain.
+        try { release?.(); }
+        catch (error) { (this.#cleanupFailures ??= []).push(error); }
         this.#requestLeases -= 1;
         if (this.#requestLeases === 0) {
           this.#drainCompletion?.resolve();
