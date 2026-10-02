@@ -8,9 +8,9 @@ import {
 } from "../shared/errors.js";
 import { ExecutionRequest, type QueuedExecutionRequest } from "./execution-request.js";
 import { ExecutionTicket, type ExecutionStep } from "../execution/execution-ticket.js";
-import { acquireWebGpuDevice, assertWebGpuSetupActive } from "../webgpu-device.js";
+import { acquireWebGpuDevice, assertWebGpuSetupActive } from "../backends/webgpu/webgpu-device.js";
 import type { ExecutionBackend, ResidentAllocation, TensorDevice } from "../execution/backend.js";
-import { WebGpuBackend, type WebGpuDiagnostics, type WebGpuExecutionBackend } from "../webgpu-backend.js";
+import { WebGpuBackend, type WebGpuDiagnostics, type WebGpuExecutionBackend } from "../backends/webgpu/webgpu-backend.js";
 export type { TensorDevice } from "../execution/backend.js";
 import { DerivativeHistory, type DerivativeNode, type DerivativeRecipe } from "./autograd/derivative-history.js";
 import { IDENTITY_DERIVATIVE, MUL_DERIVATIVE, SUM_DERIVATIVE } from "./autograd/derivative-recipes.js";

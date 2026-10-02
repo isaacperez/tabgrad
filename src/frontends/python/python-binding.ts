@@ -3,8 +3,8 @@ import { loadPythonSources, type PythonSources } from "./python-assets.js";
 import { PythonInstallation } from "./python-installation.js";
 import { PythonRuntimeBridge } from "./python-runtime-bridge.js";
 import { createRuntimeSession, createConnectedRuntimeSession, prepareRuntimeSession, type RuntimeSession } from "../../runtime/runtime.js";
-import { ConnectedWebGpuBackend, consumeWebGpuConnection, retireFailedGpuAttachment } from "../../webgpu-connected-backend.js";
-import type { WebGpuConnection, WebGpuConnectionData } from "../../webgpu-connection.js";
+import { ConnectedWebGpuBackend, consumeWebGpuConnection, retireFailedGpuAttachment } from "../../backends/webgpu/webgpu-connected-backend.js";
+import type { WebGpuConnection, WebGpuConnectionData } from "../../backends/webgpu/webgpu-connection.js";
 
 /** The dictionary-proxy methods consumed when running bootstrap code in isolation. */
 export interface PythonNamespace {

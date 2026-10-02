@@ -50,7 +50,7 @@ create the interpreter worker.
 
 | Option or controller member | Contract |
 | --- | --- |
-| `options.workerUrl?: URL` | Location of the compatible packaged physical worker under the application's CSP; defaults to `webgpu-worker.js` beside the emitted integration modules. Not an arbitrary worker protocol. |
+| `options.workerUrl?: URL` | Location of the compatible packaged physical worker under the application's CSP; defaults to distribution-root `webgpu-worker.js` beside the matching static `python.js` entry, independently of private module placement. Not an arbitrary worker protocol. |
 | `options.signal?: AbortSignal` | Cancellation during setup; lifetime GPU revocation after readiness. Unlike the direct-session factory's setup signal, this signal continues to govern the returned controller. |
 | `controller.connection: WebGpuConnection` | Opaque single-use connection for one attachment; transfer it rather than reconstructing its fields. |
 | `controller.transferables: readonly Transferable[]` | The matching endpoints to include in the bootstrap message's transfer list. Do not assume a fixed count. |

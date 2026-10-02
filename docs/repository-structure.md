@@ -77,6 +77,17 @@ session-private state. The numerical kernels remain in the Rust crate, with
 their own toolchain and build root; grouping the adapter does not move or
 redefine the WebAssembly artifact set.
 
+`src/backends/webgpu/` groups the physical GPU owner, device acquisition,
+connection transport, shared completion and host supervision. Its `kernels/`
+directory owns numerical shader source and the launch geometry used by that
+source and its encoder. These owners depend on common execution contracts,
+shared boundary rules and semantic shape rules, not Python diagnostics or
+session-private state. The physical worker implementation is `worker.ts`;
+the root `src/webgpu-worker.ts` starts it exactly once. Importing the public
+JavaScript or Python entry does not start that service. The controller resolves
+the default worker URL against the distribution root, independently of its
+own nested module location.
+
 `src/frontends/python/` owns the browser integration for a borrowed Python
 interpreter: binding lifetime, verified asset loading, reversible installation,
 runtime translation, script transport and diagnostics. These owners connect
@@ -101,8 +112,9 @@ filename; consult the API and [compatibility record](compatibility.md).
 browser entry. It includes interpreter attachment, script connection and
 managed GPU setup without making Pyodide part of the direct root import.
 [`src/webgpu-worker.ts`](../src/webgpu-worker.ts) is the packaged physical-worker
-entry, emitted alongside its matching JavaScript modules by the same build.
-It owns backend execution, not interpreter bootstrap or tensor semantics.
+entry, emitted at the distribution root by the same build. It starts the
+physical implementation under `backends/webgpu/`, not interpreter bootstrap
+or tensor semantics.
 The [host reference](reference/python-host.md) defines how applications use
 these matching static artifacts; private connection modules are not package
 extension interfaces.
@@ -125,7 +137,7 @@ use it before validating their own fields. It accepts native `Error` instances
 and objects without a prototype; it does not establish that an object is a
 valid message or diagnostic. Python's recursive failure schema remains in
 `src/frontends/python/python-worker-errors.ts`, while GPU's bounded diagnostic projection
-remains in `src/webgpu-shared-completion.ts`. Sharing the shape check does not
+remains in `src/backends/webgpu/webgpu-shared-completion.ts`. Sharing the shape check does not
 merge those policies or introduce a GPU dependency on Python diagnostics.
 
 TypeScript preserves this nested location under `dist/shared/`. Consumers

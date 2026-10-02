@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ConnectedWebGpuBackend } from "../../dist/webgpu-connected-backend.js";
+import { ConnectedWebGpuBackend } from "../../dist/backends/webgpu/webgpu-connected-backend.js";
 import { ExecutionRequest } from "../../dist/runtime/execution-request.js";
 import { TabgradError } from "../../dist/shared/errors.js";
-import { GPU_ACCOUNTED, GPU_CONTROL_LENGTH, GPU_METRIC_LENGTH, readGpuMetrics, retireGpuConnection, writeGpuMetrics } from "../../dist/webgpu-connection.js";
-import { publishSharedGpuFailure, publishSharedGpuDrain } from "../../dist/webgpu-shared-completion.js";
+import { GPU_ACCOUNTED, GPU_CONTROL_LENGTH, GPU_METRIC_LENGTH, readGpuMetrics, retireGpuConnection, writeGpuMetrics } from "../../dist/backends/webgpu/webgpu-connection.js";
+import { publishSharedGpuFailure, publishSharedGpuDrain } from "../../dist/backends/webgpu/webgpu-shared-completion.js";
 
 test("new synchronous backend activity retires previously drained caught failures without yielding", async () => {
   const physical = new MessageChannel();

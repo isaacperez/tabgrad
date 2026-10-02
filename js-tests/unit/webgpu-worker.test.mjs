@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { test } from "node:test";
 import * as python from "../../dist/python.js";
 
@@ -100,6 +101,48 @@ test("the ready controller owns one transferable connection and close joins clea
     transferred.port.close();
     transferred.supervision.close();
   } finally { restore(); }
+});
+
+test("the default GPU worker URL resolves to the distribution-root startup entry", async () => {
+  const restore = workerEnvironment();
+  try {
+    const setup = python.createWebGpuWorker();
+    const worker = ControlledWorker.instances[0];
+    assert.equal(worker.url.href, new URL("../../dist/webgpu-worker.js", import.meta.url).href);
+    assert.equal(worker.options.type, "module");
+    worker.ready();
+    const controller = await setup;
+    const close = controller.close();
+    worker.closed();
+    await close;
+  } finally { restore(); }
+});
+
+test("public API imports do not start the GPU service and its packaged entry starts once", () => {
+  const entries = ["index.js", "python.js", "webgpu-worker.js"].map(
+    (name) => new URL(`../../dist/${name}`, import.meta.url).href,
+  );
+  const program = `
+    import assert from "node:assert/strict";
+    const [runtime, python, worker] = ${JSON.stringify(entries)};
+    const listeners = [];
+    globalThis.addEventListener = (type, listener) => {
+      assert.equal(type, "message");
+      assert.equal(typeof listener, "function");
+      listeners.push(listener);
+    };
+    globalThis.Worker = class {
+      constructor() { assert.fail("Importing API entries must not construct a worker."); }
+    };
+    await import(runtime);
+    await import(python);
+    assert.equal(listeners.length, 0);
+    const first = await import(worker);
+    assert.equal(listeners.length, 1);
+    assert.equal(await import(worker), first);
+    assert.equal(listeners.length, 1);
+  `;
+  execFileSync(process.execPath, ["--input-type=module", "-e", program], { stdio: "pipe" });
 });
 
 test("readiness transports capabilities rather than a frontend-specific support list", async () => {

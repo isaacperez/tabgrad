@@ -1,5 +1,5 @@
 import { createWebGpuRuntimeSession } from "/index.js";
-import { WebGpuBackend } from "/webgpu-backend.js";
+import { WebGpuBackend } from "/backends/webgpu/webgpu-backend.js";
 import { ExecutableProgram } from "/execution/executable-program.js";
 import { ExecutionTicket } from "/execution/execution-ticket.js";
 
