@@ -9,7 +9,7 @@ calculation's resources takes longer.
 
 This chapter is for contributors familiar with JavaScript promises and workers.
 It explains the concrete lifecycle connection in
-[`src/python-worker.ts`](../../src/python-worker.ts), above the
+[`src/frontends/python/python-worker.ts`](../../src/frontends/python/python-worker.ts), above the
 [local script binding](python-script-binding.md). A worker is an execution
 realm with its own event loop. A `MessageChannel` supplies two connected
 `MessagePort` objects: each side posts a message that the other side receives

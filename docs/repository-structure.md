@@ -77,6 +77,13 @@ session-private state. The numerical kernels remain in the Rust crate, with
 their own toolchain and build root; grouping the adapter does not move or
 redefine the WebAssembly artifact set.
 
+`src/frontends/python/` owns the browser integration for a borrowed Python
+interpreter: binding lifetime, verified asset loading, reversible installation,
+runtime translation, script transport and diagnostics. These owners connect
+Python to the common runtime rather than implementing another tensor graph
+or scheduler. Maintained Python compatibility source remains under `python/`;
+the root `src/python.ts` selects the supported static integration surface.
+
 [`src/index.ts`](../src/index.ts) selects the direct JavaScript exports.
 [`package.json`](../package.json) defines the package entry through its
 `exports` map. The [JavaScript reference](javascript-api.md) defines the
@@ -117,7 +124,7 @@ a non-null, non-array object. Both Python worker transport and GPU boundaries
 use it before validating their own fields. It accepts native `Error` instances
 and objects without a prototype; it does not establish that an object is a
 valid message or diagnostic. Python's recursive failure schema remains in
-`src/python-worker-errors.ts`, while GPU's bounded diagnostic projection
+`src/frontends/python/python-worker-errors.ts`, while GPU's bounded diagnostic projection
 remains in `src/webgpu-shared-completion.ts`. Sharing the shape check does not
 merge those policies or introduce a GPU dependency on Python diagnostics.
 

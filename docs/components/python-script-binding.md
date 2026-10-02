@@ -19,7 +19,9 @@ objects through which a program refers to it. This chapter explains the
 connection's owner, not the representation of the tensor itself.
 
 This page explains the managed-entry and session-lifetime owner in
-[`src/python.ts`](../../src/python.ts). The wider
+[`src/frontends/python/python-binding.ts`](../../src/frontends/python/python-binding.ts).
+The static [`src/python.ts`](../../src/python.ts) entry selects this binding
+and the supported worker-connection APIs without owning their implementations. The wider
 [Python integration architecture](../architecture/python-integration.md)
 defines the separate tensor-wrapper, static-loading and observation contracts.
 This component description is not a Python operation-support record.
@@ -70,7 +72,8 @@ whose previous binding has not finished closing rejects with
 Attachment first validates the static Python artifact set, then creates the
 session and installs its private connection. An optional `manifestUrl` locates
 that artifact set; the default is `python/manifest.json` relative to the emitted
-Python entry module. Asset validation and installation have separate failure
+static `python.js` entry module, independently of the implementation's private
+location. Asset validation and installation have separate failure
 codes and owners, described in
 [Python package installation](python-package-installation.md).
 `PythonInterpreter` describes only the browser-facing methods and identity

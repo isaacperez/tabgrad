@@ -1,6 +1,6 @@
-import { TabgradError } from "./shared/errors.js";
-import { observeTensorSynchronously, type RuntimeSession, type Tensor } from "./runtime/runtime.js";
-import type { TensorDevice } from "./execution/backend.js";
+import { TabgradError } from "../../shared/errors.js";
+import { observeTensorSynchronously, type RuntimeSession, type Tensor } from "../../runtime/runtime.js";
+import type { TensorDevice } from "../../execution/backend.js";
 
 /** Structural subset of Pyodide's borrowed buffer protocol; no interpreter owner. */
 interface PythonBuffer {

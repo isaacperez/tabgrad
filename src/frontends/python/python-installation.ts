@@ -1,5 +1,5 @@
-import { TabgradError } from "./shared/errors.js";
-import type { PythonInterpreter, PythonNamespace } from "./python.js";
+import { TabgradError } from "../../shared/errors.js";
+import type { PythonInterpreter, PythonNamespace } from "./python-binding.js";
 import type { PythonSources } from "./python-assets.js";
 import type { PythonRuntimeBridge } from "./python-runtime-bridge.js";
 

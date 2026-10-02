@@ -14,7 +14,8 @@ and [worker connection](../components/python-worker-connection.md).
 prepared interpreter and owns one runtime session. Without a GPU connection,
 the session provides CPU execution. `options.manifestUrl?: URL`
 locates the matching Python asset manifest; its default is
-`python/manifest.json` relative to the emitted integration module. Attachment
+`python/manifest.json` beside the distribution-root static `python.js` entry,
+independently of private module placement. Attachment
 validates and installs those assets transactionally. It does not load Pyodide,
 create a worker or move an existing page interpreter.
 

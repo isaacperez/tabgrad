@@ -69,7 +69,7 @@ async function runWorker({ lastSampleMilliseconds = 0, closeMilliseconds = 0, sa
       if (specifier === "/execution-probe.mjs") return { ExecutionProbe: class { constructor() { return probe; } } };
       if (specifier === "/runtime/execution-request.js") return { ExecutionRequest: class {} };
       if (specifier === "/webgpu-connected-backend.js") return { ConnectedWebGpuBackend: class {} };
-      if (specifier === "/python-runtime-bridge.js") return { PythonRuntimeBridge: class {} };
+      if (specifier === "/frontends/python/python-runtime-bridge.js") return { PythonRuntimeBridge: class {} };
       throw new Error(`Unexpected worker dependency: ${specifier}`);
     },
     addEventListener: (_, callback) => { handleMessage = callback; },
