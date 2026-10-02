@@ -80,6 +80,26 @@ The [host reference](reference/python-host.md) defines how applications use
 these matching static artifacts; private connection modules are not package
 extension interfaces.
 
+### Shared source owns cross-component invariants
+
+Some small invariants belong to neither a frontend nor a backend. Keep their
+shared source independent of those consumers so that using the invariant does
+not also load an unrelated subsystem. `src/shared/` contains such internal
+source, not a general collection of utilities or a new public package.
+
+[`src/shared/object-shape.ts`](../src/shared/object-shape.ts) owns the check for
+a non-null, non-array object. Both Python worker transport and GPU boundaries
+use it before validating their own fields. It accepts native `Error` instances
+and objects without a prototype; it does not establish that an object is a
+valid message or diagnostic. Python's recursive failure schema remains in
+`src/python-worker-errors.ts`, while GPU's bounded diagnostic projection
+remains in `src/webgpu-shared-completion.ts`. Sharing the shape check does not
+merge those policies or introduce a GPU dependency on Python diagnostics.
+
+TypeScript preserves this nested location under `dist/shared/`. Consumers
+load the matching module from the distribution; its existence there does not
+add an export to the package's public entry.
+
 ### Why there are two test roots
 
 The roots correspond to different execution environments and configured

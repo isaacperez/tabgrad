@@ -2,7 +2,7 @@ import type { BackendCapabilities, ProgramBinding, ResidentAllocation } from "./
 import { TabgradError } from "./errors.js";
 import type { ExecutableProgram, ProgramSlot } from "./executable-program.js";
 import type { ExecutionTicket } from "./execution-ticket.js";
-import { isRecord } from "./python-worker-errors.js";
+import { isRecord } from "./shared/object-shape.js";
 import type { WebGpuDiagnostics, WebGpuExecutionBackend } from "./webgpu-backend.js";
 import { GPU_ACCOUNTED, GPU_CONSUMED, GPU_CONTROL_LENGTH, GPU_METRIC_LENGTH, GPU_PULSE, assertGpuConnectionActive,
   readGpuMetrics, retireGpuConnection, type WebGpuConnection, type WebGpuConnectionData } from "./webgpu-connection.js";

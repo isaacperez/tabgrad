@@ -1,6 +1,6 @@
 import type { BackendCapabilities } from "./backend.js";
 import { TabgradError } from "./errors.js";
-import { isRecord } from "./python-worker-errors.js";
+import { isRecord } from "./shared/object-shape.js";
 import type { WebGpuDiagnostics } from "./webgpu-backend.js";
 import { GPU_ACCOUNTED, GPU_CONTROL_LENGTH, GPU_METRIC_LENGTH, retireGpuConnection, type WebGpuConnection, type WebGpuConnectionData } from "./webgpu-connection.js";
 
