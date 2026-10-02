@@ -1,11 +1,11 @@
-import type { ExecutionBackend, ProgramBinding, ResidentAllocation, TensorDevice } from "./backend.js";
+import type { ExecutionBackend, ProgramBinding, ResidentAllocation, TensorDevice } from "../execution/backend.js";
 import {
   ExecutableProgram,
   type LoweredComputation,
   type ProgramProvenance,
   type ProgramSlot,
   type ProgramValue,
-} from "./executable-program.js";
+} from "../execution/executable-program.js";
 
 /** The admitted, acyclic value graph read by formation; no ownership is transferred. */
 export interface FormationValue<Value> {

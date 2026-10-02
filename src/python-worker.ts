@@ -1,4 +1,4 @@
-import { TabgradError } from "./errors.js";
+import { TabgradError } from "./shared/errors.js";
 import type { PythonBinding } from "./python.js";
 import { describePythonFailure, isPythonFailure, PythonWorkerError } from "./python-worker-errors.js";
 import { isRecord } from "./shared/object-shape.js";

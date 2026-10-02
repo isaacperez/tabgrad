@@ -1,5 +1,5 @@
-import { TabgradError, type TabgradErrorCode } from "./errors.js";
-import { ExecutionTicket, type SynchronousCompletion } from "./execution-ticket.js";
+import { TabgradError, type TabgradErrorCode } from "./shared/errors.js";
+import { ExecutionTicket, type SynchronousCompletion } from "./execution/execution-ticket.js";
 import { isRecord } from "./shared/object-shape.js";
 import { GPU_ACCOUNTED, GPU_PULSE, assertGpuConnectionActive, wakeGpuObservers } from "./webgpu-connection.js";
 

@@ -1,4 +1,4 @@
-import { ExecutionTicket, type ExecutionStep } from "./execution-ticket.js";
+import { ExecutionTicket, type ExecutionStep } from "../execution/execution-ticket.js";
 
 /** One finite invocation's progression, distinct from its optional Promise observer. */
 export interface QueuedExecutionRequest {

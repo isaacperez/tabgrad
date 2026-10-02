@@ -1,5 +1,5 @@
-import type { BackendCapabilities } from "./backend.js";
-import { TabgradError } from "./errors.js";
+import type { BackendCapabilities } from "./execution/backend.js";
+import { TabgradError } from "./shared/errors.js";
 import type { WebGpuDiagnostics } from "./webgpu-backend.js";
 
 /** Library-issued, single-use connection; transfer using its controller's list. */

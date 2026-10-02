@@ -1,9 +1,9 @@
-import type { BackendCapabilities, ExecutionBackend, ProgramBinding, ResidentAllocation } from "./backend.js";
-import { TabgradError } from "./errors.js";
-import type { ExecutableProgram, ProgramSlot } from "./executable-program.js";
-import { tensorElementCount } from "./tensor-shape.js";
+import type { BackendCapabilities, ExecutionBackend, ProgramBinding, ResidentAllocation } from "./execution/backend.js";
+import { TabgradError } from "./shared/errors.js";
+import type { ExecutableProgram, ProgramSlot } from "./execution/executable-program.js";
+import { tensorElementCount } from "./runtime/tensor-shape.js";
 import { WEBGPU_ADDITION_SOURCE, WEBGPU_ADDITION_WORKGROUP_SIZE } from "./webgpu-addition.js";
-import { ExecutionTicket } from "./execution-ticket.js";
+import { ExecutionTicket } from "./execution/execution-ticket.js";
 
 // WebGPU flag values are fixed by the API. The selected DOM declarations expose
 // their numeric types but not the namespace objects; no ambient typing patch is needed.

@@ -77,7 +77,7 @@ export class ExecutionProbe {
 /** Install only in a disposable diagnostic worker, after Pyodide has loaded. */
 export async function installExecutionProbe() {
   const [{ Tensor }, { WebAssemblyCpuBackend }, { PythonRuntimeBridge }] = await Promise.all([
-    import("/runtime.js"), import("/cpu-backend.js"), import("/python-runtime-bridge.js"),
+    import("/runtime/runtime.js"), import("/cpu-backend.js"), import("/python-runtime-bridge.js"),
   ]);
   const probe = new ExecutionProbe();
   try {

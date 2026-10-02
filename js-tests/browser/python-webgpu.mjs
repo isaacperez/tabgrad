@@ -1,5 +1,5 @@
 import { attachPython, servePythonWorker } from "/python.js";
-import { ExecutionTicket } from "/execution-ticket.js";
+import { ExecutionTicket } from "/execution/execution-ticket.js";
 import { numericalPairs, exactAddition } from "/float32-addition-oracle.mjs";
 
 function expectedAddition(pairs, depth) {

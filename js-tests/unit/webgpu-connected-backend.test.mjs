@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ConnectedWebGpuBackend } from "../../dist/webgpu-connected-backend.js";
-import { ExecutionRequest } from "../../dist/execution-request.js";
-import { TabgradError } from "../../dist/errors.js";
+import { ExecutionRequest } from "../../dist/runtime/execution-request.js";
+import { TabgradError } from "../../dist/shared/errors.js";
 import { GPU_ACCOUNTED, GPU_CONTROL_LENGTH, GPU_METRIC_LENGTH, readGpuMetrics, retireGpuConnection, writeGpuMetrics } from "../../dist/webgpu-connection.js";
 import { publishSharedGpuFailure, publishSharedGpuDrain } from "../../dist/webgpu-shared-completion.js";
 

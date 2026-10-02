@@ -1,6 +1,6 @@
 import type { WasmVariant } from "./cpu-backend.js";
-import { inspectExecutionFailureContext } from "./errors.js";
-import { ExecutableProgram } from "./executable-program.js";
+import { inspectExecutionFailureContext } from "./shared/errors.js";
+import { ExecutableProgram } from "./execution/executable-program.js";
 import {
   countResidentProgramReferencesForTesting,
   inspectTensorAncestryForTesting,
@@ -8,7 +8,7 @@ import {
   type RuntimeSession,
   type RuntimeSessionOptions,
   createRuntimeSessionForTesting,
-} from "./runtime.js";
+} from "./runtime/runtime.js";
 
 export interface TestRuntimeSessionOptions extends RuntimeSessionOptions {
   readonly forceVariant: WasmVariant;

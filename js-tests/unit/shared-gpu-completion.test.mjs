@@ -3,8 +3,8 @@ import { once } from "node:events";
 import { createHook } from "node:async_hooks";
 import { test } from "node:test";
 import { Worker } from "node:worker_threads";
-import { TabgradError } from "../../dist/errors.js";
-import { ExecutionRequest } from "../../dist/execution-request.js";
+import { TabgradError } from "../../dist/shared/errors.js";
+import { ExecutionRequest } from "../../dist/runtime/execution-request.js";
 import { GPU_CONTROL_LENGTH, retireGpuConnection } from "../../dist/webgpu-connection.js";
 import { SharedGpuCompletion, publishSharedGpuFailure, publishSharedGpuSuccess, publishSharedGpuDrain } from "../../dist/webgpu-shared-completion.js";
 

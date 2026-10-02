@@ -1,4 +1,4 @@
-import { TabgradError } from "./errors.js";
+import { TabgradError } from "../shared/errors.js";
 
 function invalidShape(dataLength: number, cause?: unknown): TabgradError {
   return new TabgradError(

@@ -1,7 +1,7 @@
-import type { BackendCapabilities, ProgramBinding, ResidentAllocation } from "./backend.js";
-import { TabgradError } from "./errors.js";
-import type { ExecutableProgram, ProgramSlot } from "./executable-program.js";
-import type { ExecutionTicket } from "./execution-ticket.js";
+import type { BackendCapabilities, ProgramBinding, ResidentAllocation } from "./execution/backend.js";
+import { TabgradError } from "./shared/errors.js";
+import type { ExecutableProgram, ProgramSlot } from "./execution/executable-program.js";
+import type { ExecutionTicket } from "./execution/execution-ticket.js";
 import { isRecord } from "./shared/object-shape.js";
 import type { WebGpuDiagnostics, WebGpuExecutionBackend } from "./webgpu-backend.js";
 import { GPU_ACCOUNTED, GPU_CONSUMED, GPU_CONTROL_LENGTH, GPU_METRIC_LENGTH, GPU_PULSE, assertGpuConnectionActive,

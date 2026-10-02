@@ -57,6 +57,19 @@ in the Rust crate. These locations implement the accepted responsibilities;
 they do not define new architectural boundaries merely by being directories.
 A cohesive owner may span files, and a small module need not become a package.
 
+`src/runtime/` owns tensor semantics and the coordination of logical values,
+materialization, program formation and observation requests. Its
+`autograd/` subdirectory owns derivative history and recipes, whose numerical
+work is supplied through the runtime's operation callbacks. This keeps
+derivative bookkeeping separate from physical allocation and device execution
+without creating a second tensor engine.
+
+`src/execution/` holds the common backend, executable-program and
+execution-ticket contracts. Both runtime coordination and concrete backends
+use those contracts; the contracts do not import a concrete runtime session,
+frontend or backend. Directory names make these responsibilities navigable,
+but do not introduce packages, registries or additional scheduling layers.
+
 [`src/index.ts`](../src/index.ts) selects the direct JavaScript exports.
 [`package.json`](../package.json) defines the package entry through its
 `exports` map. The [JavaScript reference](javascript-api.md) defines the
@@ -86,6 +99,11 @@ Some small invariants belong to neither a frontend nor a backend. Keep their
 shared source independent of those consumers so that using the invariant does
 not also load an unrelated subsystem. `src/shared/` contains such internal
 source, not a general collection of utilities or a new public package.
+
+[`src/shared/errors.ts`](../src/shared/errors.ts) owns the common error class,
+codes and private execution-failure context. Keeping that owner independent of
+component implementations lets all boundaries preserve the same error and
+diagnostic identity without importing an unrelated frontend or backend.
 
 [`src/shared/object-shape.ts`](../src/shared/object-shape.ts) owns the check for
 a non-null, non-array object. Both Python worker transport and GPU boundaries

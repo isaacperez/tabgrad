@@ -1,4 +1,4 @@
-import { TabgradError } from "./errors.js";
+import { TabgradError } from "./shared/errors.js";
 
 const SOURCE_PATHS = ["bootstrap.py", "torch/__init__.py", "torch/autograd.py"] as const;
 

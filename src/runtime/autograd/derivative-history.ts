@@ -1,4 +1,4 @@
-import { TabgradError } from "./errors.js";
+import { TabgradError } from "../../shared/errors.js";
 
 /** A canonical operation supplies its saved-operand selection and local VJP. */
 export interface DerivativeRecipe {

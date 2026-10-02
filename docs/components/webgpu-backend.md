@@ -8,7 +8,7 @@ semantic graph use the same formation and observation machinery as CPU work.
 
 The accepted [integration architecture](../architecture/webgpu-integration.md)
 governs this division. The concrete boundaries are
-[`ExecutionBackend`](../../src/backend.ts),
+[`ExecutionBackend`](../../src/execution/backend.ts),
 [`WebGpuBackend`](../../src/webgpu-backend.ts) and the
 [common request owner](runtime-observation.md). The backend is internal, not a
 public plugin interface or another semantic engine.

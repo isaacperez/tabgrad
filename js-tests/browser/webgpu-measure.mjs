@@ -1,7 +1,7 @@
 import { createWebGpuRuntimeSession } from "/index.js";
 import { WebGpuBackend } from "/webgpu-backend.js";
-import { ExecutableProgram } from "/executable-program.js";
-import { ExecutionTicket } from "/execution-ticket.js";
+import { ExecutableProgram } from "/execution/executable-program.js";
+import { ExecutionTicket } from "/execution/execution-ticket.js";
 
 const query = new URLSearchParams(location.search);
 const mode = query.get("mode");

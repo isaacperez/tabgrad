@@ -1,4 +1,4 @@
-import { TabgradError } from "./errors.js";
+import { TabgradError } from "./shared/errors.js";
 
 function setupCancelled(signal: AbortSignal): TabgradError {
   return new TabgradError("BACKEND_LOAD_FAILED", "WebGPU setup was cancelled.", {
