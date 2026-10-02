@@ -26,6 +26,37 @@ function getInterpreter() {
   return interpreterPromise;
 }
 
+for (const custom of [false, true]) {
+  test(`attachment resolves ${custom ? "custom" : "default"} Python manifest and relative sources`, async (context) => {
+    const { attachPython } = await import("../../dist/python.js");
+    const interpreter = await getInterpreter();
+    const artifactBase = new URL("../../dist/python/", import.meta.url);
+    const manifestUrl = custom
+      ? new URL("https://assets.example.invalid/custom/python.json?release=matching")
+      : new URL("manifest.json", artifactBase);
+    const resources = new Map([
+      [manifestUrl.href, new URL("manifest.json", artifactBase)],
+      ...["bootstrap.py", "torch/__init__.py", "torch/autograd.py"].map((path) =>
+        [new URL(path, manifestUrl).href, new URL(path, artifactBase)]),
+    ]);
+    const requests = [];
+    const replacement = context.mock.method(globalThis, "fetch", async (url) => {
+      requests.push(url.href);
+      const resource = resources.get(url.href);
+      assert.notEqual(resource, undefined, "Unexpected artifact request or default fallback.");
+      return new Response(await readFile(resource));
+    });
+    let binding;
+    try {
+      binding = await attachPython(interpreter, custom ? { manifestUrl } : {});
+      assert.deepEqual(requests.toSorted(), [...resources.keys()].toSorted());
+    } finally {
+      await binding?.close();
+      replacement.mock.restore();
+    }
+  });
+}
+
 test("Python functional gradients normalize calls and preserve ordinary observation", { timeout: 20_000 }, async () => {
   const { attachPython } = await import("../../dist/python.js");
   const interpreter = await getInterpreter();

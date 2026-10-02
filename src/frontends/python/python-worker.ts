@@ -1,7 +1,7 @@
-import { TabgradError } from "./shared/errors.js";
-import type { PythonBinding } from "./python.js";
+import { TabgradError } from "../../shared/errors.js";
+import type { PythonBinding } from "./python-binding.js";
 import { describePythonFailure, isPythonFailure, PythonWorkerError } from "./python-worker-errors.js";
-import { isRecord } from "./shared/object-shape.js";
+import { isRecord } from "../../shared/object-shape.js";
 
 interface Completion {
   readonly promise: Promise<void>;

@@ -43,10 +43,11 @@ operation contracts and [compatibility evidence](../compatibility.md).
 
 ## Verify everything before executing anything
 
-[`src/python-assets.ts`](../../src/python-assets.ts) owns artifact validation.
+[`src/frontends/python/python-assets.ts`](../../src/frontends/python/python-assets.ts) owns artifact validation.
 Its input is the manifest URL; its output is verified source text, not an
 installed package. The default URL is `python/manifest.json` relative to the
-emitted Python entry module. The host may provide `manifestUrl` when serving
+emitted static `python.js` entry module, not the private loader's location.
+The host may provide `manifestUrl` when serving
 the assets elsewhere; relative file locations still resolve beside that
 manifest. Browser hosting must permit those requests and provide Web Crypto
 for hashing. No Node filesystem API is imported by the delivered loader.
@@ -69,7 +70,7 @@ security boundary against its own application.
 
 ## Install through a private namespace
 
-Once validation succeeds, [`src/python-installation.ts`](../../src/python-installation.ts)
+Once validation succeeds, [`src/frontends/python/python-installation.ts`](../../src/frontends/python/python-installation.ts)
 owns one Python dictionary proxy. A dictionary can be used as the globals for
 a particular Python execution without becoming the interpreter's application
 globals. The installer evaluates the verified bootstrap in this private
@@ -118,7 +119,7 @@ session; it does not change the old module's connection.
 ## Import a buffer without retaining interpreter memory
 
 The registered object is a
-[`PythonRuntimeBridge`](../../src/python-runtime-bridge.ts), bound to that same
+[`PythonRuntimeBridge`](../../src/frontends/python/python-runtime-bridge.ts), bound to that same
 session. Its `tensorFromBuffer` method is an internal transfer boundary, not a
 public tensor constructor or a second operation engine. It accepts a borrowed
 Python buffer proxy plus separate logical shape metadata and returns the
