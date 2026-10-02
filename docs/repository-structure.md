@@ -70,6 +70,13 @@ use those contracts; the contracts do not import a concrete runtime session,
 frontend or backend. Directory names make these responsibilities navigable,
 but do not introduce packages, registries or additional scheduling layers.
 
+`src/backends/cpu/` owns the TypeScript adapter that loads and validates CPU
+artifacts, binds programs and accounts for physical invocation storage. It
+uses the common execution contracts and semantic shape rules, not frontend or
+session-private state. The numerical kernels remain in the Rust crate, with
+their own toolchain and build root; grouping the adapter does not move or
+redefine the WebAssembly artifact set.
+
 [`src/index.ts`](../src/index.ts) selects the direct JavaScript exports.
 [`package.json`](../package.json) defines the package entry through its
 `exports` map. The [JavaScript reference](javascript-api.md) defines the

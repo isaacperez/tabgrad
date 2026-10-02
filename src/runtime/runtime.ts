@@ -1,7 +1,7 @@
 import {
   type WasmVariant,
   WebAssemblyCpuBackend,
-} from "../cpu-backend.js";
+} from "../backends/cpu/cpu-backend.js";
 import {
   TabgradError,
   retainExecutionFailureContext,
