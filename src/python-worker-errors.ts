@@ -1,4 +1,5 @@
 import { inspectExecutionFailureContext, TabgradError } from "./errors.js";
+import { isRecord } from "./shared/object-shape.js";
 
 /** A remote diagnostic, not a live exception object or Python proxy. */
 export class PythonWorkerError extends Error {
@@ -64,10 +65,6 @@ export function describePythonFailure(error: unknown, seen = new Map<unknown, Fa
     result.errors = error.errors.map((item: unknown) => describePythonFailure(item, seen));
   }
   return result;
-}
-
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 export function isPythonFailure(value: unknown, seen = new Set<unknown>()): value is FailureRecord {

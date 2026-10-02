@@ -6,7 +6,7 @@ import { acquireWebGpuDevice } from "./webgpu-device.js";
 import { GPU_ACCOUNTED, GPU_CONTROL_LENGTH, GPU_METRIC_LENGTH, assertGpuConnectionActive, retireGpuConnection, writeGpuMetrics } from "./webgpu-connection.js";
 import { publishSharedGpuDrain, publishSharedGpuFailure, publishSharedGpuSuccess } from "./webgpu-shared-completion.js";
 import { TabgradError } from "./errors.js";
-import { isRecord } from "./python-worker-errors.js";
+import { isRecord } from "./shared/object-shape.js";
 
 interface PhysicalWorkerScope {
   addEventListener(type: "message", listener: (event: MessageEvent<unknown>) => void): void;
