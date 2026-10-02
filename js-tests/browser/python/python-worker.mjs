@@ -1,6 +1,6 @@
 // Application-owned worker bootstrap used by the real-artifact integration check.
 import { attachPython, servePythonWorker } from "/python.js";
-import { selectCpuProfile } from "/cpu-profile.mjs";
+import { selectCpuProfile } from "/helpers/cpu-profile.mjs";
 
 async function start(event) {
   const { port, disableJspi, gate, variant } = event.data;

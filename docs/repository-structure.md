@@ -173,9 +173,23 @@ Reusable numerical assertions and recorded oracle data live in
 `js-tests/fixtures/`. They support their CPU and Python consumers without being
 admitted as test entry files; helper modules do not use the `.test.mjs` suffix.
 
-`js-tests/browser/` holds HTML entry pages loaded by the browser harness,
-including pages for bounded measurements. The runner and loopback server
-support live in `scripts/` so test pages can focus on what they exercise.
+`js-tests/browser/` is the serving root for maintained browser fixtures. Its
+`runtime/`, `python/`, `webgpu/` and `python-webgpu/` cohorts qualify runtime,
+interpreter and device behavior. Paired pages and interpreter or physical-worker
+fixtures stay with the behavior they exercise. `measurements/` separately
+groups CPU, Python, WebGPU and managed Python/WebGPU workloads; their timing,
+adequacy and reporting policies are not qualification scenarios. `helpers/`
+owns support with actual cross-cohort consumers, such as controlled feature
+profiles, numerical assertions and diagnostic observation.
+
+The runner and loopback server support live in `scripts/`. Launchers explicitly
+register each nested page and fixture asset relative to the browser serving
+root; the existing server enforces those registrations and path containment.
+Moving a fixture therefore requires carrying its launcher, HTML/import/worker
+URLs and any Node harness consumers together. Distribution entries and their
+manifest-selected artifacts remain rooted at the served distribution, not at
+the nested fixture page. This separation lets contributors reorganize test
+owners without changing the public package's worker or asset contract.
 
 When adding a test, identify its subject, required environment and actual
 runner before choosing its location. A test file that no configured command

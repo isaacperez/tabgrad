@@ -162,8 +162,8 @@ memory or the latency of a model.
 
 The [endpoint tests](../../js-tests/unit/python/python-worker.test.mjs) exercise real
 message ports with controlled local bindings. The
-[browser check](../../js-tests/browser/python-worker.html) uses an
-application-owned [worker bootstrap](../../js-tests/browser/python-worker.mjs),
+[browser check](../../js-tests/browser/python/python-worker.html) uses an
+application-owned [worker bootstrap](../../js-tests/browser/python/python-worker.mjs),
 real Pyodide and built Tabgrad artifacts. Normal CPU cases run without
 cross-origin isolation and with native or controlled-absent JSPI. A separate
 isolated test parks Python on a bounded shared-memory test gate and proves

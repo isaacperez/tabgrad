@@ -11,11 +11,11 @@ const report = { mode, measuredAt: new Date().toISOString(), sourceSha256,
   platform: platform(), operatingSystemRelease: release(), architecture: arch(), node: process.version,
   operatingSystemVersion: platform() === "darwin" ? execFileSync("sw_vers", ["-productVersion"], { encoding: "utf8" }).trim() : release(),
   browsers: [] };
-const server = await startBrowserServer(["webgpu-measure.html"], { assets: ["webgpu-measure.mjs"] });
+const server = await startBrowserServer(["measurements/webgpu/webgpu-measure.html"], { assets: ["measurements/webgpu/webgpu-measure.mjs"] });
 try {
   for (const browser of selectBrowserDefinitions(process.env.TABGRAD_BROWSER ?? "Chrome", browserDefinitions)) {
     const executable = await resolveBrowser(browser), version = browserVersion(executable);
-    await runBrowserPage({ server, browser, executable, version, page: "webgpu-measure.html",
+    await runBrowserPage({ server, browser, executable, version, page: "measurements/webgpu/webgpu-measure.html",
       parameters: { mode }, applicationTimeoutMilliseconds: 65_000,
       validateResult(result) {
         report.browsers.push({ browser: browser.name, version, result });

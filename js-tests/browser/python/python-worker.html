@@ -8,7 +8,7 @@
       const parameters = new URLSearchParams(location.search);
       const token = parameters.get("token");
       const lifetime = new AbortController();
-      const worker = new Worker("/python-worker.mjs", { type: "module" });
+      const worker = new Worker("/python/python-worker.mjs", { type: "module" });
       const channel = new MessageChannel();
       const client = connectPythonWorker(channel.port1, lifetime.signal);
       const output = [];

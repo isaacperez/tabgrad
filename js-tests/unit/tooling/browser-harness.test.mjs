@@ -54,14 +54,14 @@ function fixtureBrowser(script, onArguments = undefined) {
 
 async function runFixtureBrowser(script, options = {}) {
   const { onArguments, ...runOptions } = options;
-  const server = await startBrowserServer(["runtime.html"]);
+  const server = await startBrowserServer(["runtime/runtime.html"]);
   try {
     return await runBrowserPage({
       applicationTimeoutMilliseconds: 500,
       browser: fixtureBrowser(script, onArguments),
       executable: process.execPath,
       navigationTimeoutMilliseconds: 500,
-      page: "runtime.html",
+      page: "runtime/runtime.html",
       server,
       version: process.version,
       ...runOptions,
@@ -77,7 +77,7 @@ function expectBrowserFailure(expectedKind, inspect = undefined) {
     assert.equal(error.diagnostics.failureKind, expectedKind);
     assert.equal(error.diagnostics.browser, "FixtureBrowser");
     assert.equal(error.diagnostics.browserVersion, process.version);
-    assert.equal(error.diagnostics.page, "runtime.html");
+    assert.equal(error.diagnostics.page, "runtime/runtime.html");
     assert(Number.isInteger(error.diagnostics.elapsedMilliseconds));
     inspect?.(error);
     return true;
@@ -310,8 +310,8 @@ test("timeout snapshots distinguish failure-time state from final owned cleanup"
 });
 
 test("unassociated incoming controls are visible without advancing the run", async () => {
-  const server = await startBrowserServer(["runtime.html"]);
-  const registration = server.register("active-fixture-token", "runtime.html");
+  const server = await startBrowserServer(["runtime/runtime.html"]);
+  const registration = server.register("active-fixture-token", "runtime/runtime.html");
   registration.navigation.catch(() => {});
   registration.result.catch(() => {});
   try {
@@ -366,7 +366,7 @@ setInterval(() => {}, 1_000);
       assert.deepEqual(
         error.diagnostics.requests.map(({ method, path, status }) => ({ method, path, status })),
         [
-          { method: "GET", path: "/runtime.html", status: 200 },
+          { method: "GET", path: "/runtime/runtime.html", status: 200 },
           { method: "POST", path: "/__phase", status: 204 },
           { method: "GET", path: "/index.js", status: 200 },
         ],
@@ -420,7 +420,7 @@ setInterval(() => {}, 1_000);
       assert.equal(error.diagnostics.lastPhase, "page-requested");
       assert.deepEqual(
         error.diagnostics.requests.map(({ method, path }) => ({ method, path })),
-        [{ method: "GET", path: "/runtime.html" }],
+        [{ method: "GET", path: "/runtime/runtime.html" }],
       );
     }),
   );
@@ -449,7 +449,7 @@ setInterval(() => {}, 1_000);
       assert.equal(error.diagnostics.lastPhase, "page-requested");
       assert.deepEqual(
         error.diagnostics.requests.map(({ method, path }) => ({ method, path })),
-        [{ method: "GET", path: "/runtime.html" }],
+        [{ method: "GET", path: "/runtime/runtime.html" }],
       );
     }),
   );
@@ -569,7 +569,7 @@ test("cleanup failure does not replace the primary browser failure", async () =>
     expectBrowserFailure("navigation-timeout", (error) => {
       assert.equal(error.diagnostics.cleanupFailure, "fixture cleanup failure");
       assert(error.cause instanceof AggregateError);
-      assert.match(error.message, /navigation to runtime\.html timed out/);
+      assert.match(error.message, /navigation to runtime\/runtime\.html timed out/);
     }),
   );
 });

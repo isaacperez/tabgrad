@@ -264,7 +264,7 @@ deliberately spending linear work to preserve host edits.
 The [Node integration cases](../../js-tests/unit/python/python-binding.test.mjs)
 exercise real built source, integrity failures, conflicts, rollback, replacement
 identities, retained closed sessions and repeated attachment bookkeeping.
-The [browser lifecycle page](../../js-tests/browser/python-lifecycle.html)
+The [browser lifecycle page](../../js-tests/browser/python/python-lifecycle.html)
 checks the delivered files with actual Pyodide in the configured browsers.
 Deterministic resource checks do not establish a bound on the whole browser
 process's memory. Quantitative claims require the bounded, comparable

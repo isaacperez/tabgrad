@@ -79,11 +79,11 @@ async function runHarness(scenario) {
     });
   });
   await new Promise((resolve) => gate.listen(0, "127.0.0.1", resolve));
-  const server = await startBrowserServer(["runtime.html"]);
+  const server = await startBrowserServer(["runtime/runtime.html"]);
   let outcome;
   try {
     const result = await runBrowserPage({
-      server, executable: process.execPath, page: "runtime.html", version: process.version,
+      server, executable: process.execPath, page: "runtime/runtime.html", version: process.version,
       browser: {
         name: "InheritedStderrBrowser",
         argumentsFor(directory, url) {

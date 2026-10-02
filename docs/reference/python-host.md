@@ -99,8 +99,8 @@ await servePythonWorker(binding, event.data.port);
 Its managed Python scripts may select `device='webgpu'` or
 `torch.device('webgpu')`, with ordinary `tolist()`. The
 [tensor reference](python-tensors.md) defines the admitted numerical domain.
-The [packaged integration fixture](../../js-tests/browser/python-webgpu.html)
-and its [interpreter worker](../../js-tests/browser/python-webgpu.mjs) exercise
+The [packaged integration fixture](../../js-tests/browser/python-webgpu/python-webgpu.html)
+and its [interpreter worker](../../js-tests/browser/python-webgpu/python-webgpu.mjs) exercise
 these calls with explicit readiness, no JSPI, preserved host globals and joined
 cleanup. They are tests, not a public bootstrap loader.
 
@@ -204,7 +204,7 @@ addEventListener('message', async event => {
 ```
 
 The expected Python output is `[4.0, 6.0]`. The production-artifact
-[worker integration check](../../js-tests/browser/python-worker.html) exercises
+[worker integration check](../../js-tests/browser/python/python-worker.html) exercises
 this composition with a more explicit application readiness/result channel,
 worker-local capability controls and lifecycle assertions. Application URLs,
 stdout presentation and termination policy belong to the embedding host, not

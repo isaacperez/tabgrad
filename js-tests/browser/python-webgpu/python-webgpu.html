@@ -24,7 +24,7 @@
       try {
         await send("/__phase", { phase: "application-started" });
         controller = await createWebGpuWorker({ signal: lifetime.signal });
-        worker = new Worker("/python-webgpu.mjs", { type: "module" });
+        worker = new Worker("/python-webgpu/python-webgpu.mjs", { type: "module" });
         const channel = new MessageChannel();
         const client = connectPythonWorker(channel.port1, lifetime.signal);
         const ready = next("ready");

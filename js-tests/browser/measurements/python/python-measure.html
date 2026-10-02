@@ -5,7 +5,7 @@
     <script type="module">
       const parameters = new URLSearchParams(location.search);
       const token = parameters.get("token");
-      const worker = new Worker("/python-measure.mjs", { type: "module" });
+      const worker = new Worker("/measurements/python/python-measure.mjs", { type: "module" });
       async function send(endpoint, value) {
         const response = await fetch(`${endpoint}?token=${encodeURIComponent(token)}`, {
           method: "POST", headers: { "content-type": "application/json" },
