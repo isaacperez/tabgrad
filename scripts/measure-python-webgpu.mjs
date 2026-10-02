@@ -9,7 +9,7 @@ const sourceSha256 = await fingerprintTypeScriptSources(new URL("../src/", impor
 const report = { mode, measuredAt: new Date().toISOString(), sourceSha256,
   platform: platform(), operatingSystemRelease: release(), architecture: arch(), node: process.version, browsers: [] };
 const server = await startBrowserServer(["measurements/python-webgpu/python-webgpu-measure.html"], { crossOriginIsolation: true,
-  assets: ["measurements/python-webgpu/python-webgpu-measure-host.mjs", "measurements/python-webgpu/python-webgpu-measure-worker.mjs", "measurements/python-webgpu/python-webgpu-measure-physical.mjs", "helpers/execution-probe.mjs"] });
+  assets: ["measurements/python-webgpu/python-webgpu-measure-host.mjs", "measurements/python-webgpu/python-webgpu-measure-worker.mjs", "measurements/python-webgpu/python-webgpu-measure-controller.mjs", "measurements/python-webgpu/python-webgpu-measure-physical.mjs", "helpers/execution-probe.mjs"] });
 try {
   for (const browser of selectBrowserDefinitions(process.env.TABGRAD_BROWSER ?? "Chrome", browserDefinitions)) {
     const executable = await resolveBrowser(browser);
