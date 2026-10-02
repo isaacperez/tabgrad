@@ -70,7 +70,7 @@ test("JavaScript cannot construct a tensor handle outside a runtime session", ()
 
 test("the public declarations do not expose runtime-to-backend plumbing", async () => {
   const declarations = await readFile(
-    new URL("../../dist/runtime.d.ts", import.meta.url),
+    new URL("../../dist/runtime/runtime.d.ts", import.meta.url),
     "utf8",
   );
   assert.match(declarations, /get shape\(\): readonly number\[\]/);

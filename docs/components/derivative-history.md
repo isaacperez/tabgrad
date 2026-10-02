@@ -9,11 +9,11 @@ Keeping the whole forward graph would preserve too much; keeping only its
 result would preserve too little.
 
 `DerivativeHistory` in
-[`src/derivative-history.ts`](../../src/derivative-history.ts) owns the separate
+[`src/runtime/autograd/derivative-history.ts`](../../src/runtime/autograd/derivative-history.ts) owns the separate
 dynamic history required by the
 [autograd architecture](../architecture/autograd-and-training.md). Canonical
 operation definitions bind their local recipes from
-[`src/derivative-recipes.ts`](../../src/derivative-recipes.ts). History owns
+[`src/runtime/autograd/derivative-recipes.ts`](../../src/runtime/autograd/derivative-recipes.ts). History owns
 traversal and saved logical pins; it does not interpret operation names or own
 numerical memory. The runtime supplies ordinary operations and handle cleanup.
 

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ExecutionRequest } from "../../dist/execution-request.js";
-import { ExecutionTicket } from "../../dist/execution-ticket.js";
+import { ExecutionRequest } from "../../dist/runtime/execution-request.js";
+import { ExecutionTicket } from "../../dist/execution/execution-ticket.js";
 
 function deferred() {
   let resolve;

@@ -16,8 +16,8 @@ ways to consume one request, not two execution engines.
 
 The [observation architecture](../architecture/python-observation.md) establishes
 the broader CPU/GPU contract. This component describes local request ownership
-in [`src/runtime.ts`](../../src/runtime.ts) and
-[`src/execution-request.ts`](../../src/execution-request.ts). It does not own
+in [`src/runtime/runtime.ts`](../../src/runtime/runtime.ts) and
+[`src/runtime/execution-request.ts`](../../src/runtime/execution-request.ts). It does not own
 worker transport, kernel scheduling on a GPU or a general Python task manager.
 
 ## Follow one observation

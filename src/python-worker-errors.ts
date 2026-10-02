@@ -1,4 +1,4 @@
-import { inspectExecutionFailureContext, TabgradError } from "./errors.js";
+import { inspectExecutionFailureContext, TabgradError } from "./shared/errors.js";
 import { isRecord } from "./shared/object-shape.js";
 
 /** A remote diagnostic, not a live exception object or Python proxy. */

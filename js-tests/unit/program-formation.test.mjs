@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { formExecutableProgram } from "../../dist/program-formation.js";
+import { formExecutableProgram } from "../../dist/runtime/program-formation.js";
 
 function input(length = 1) {
   return {

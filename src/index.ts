@@ -1,4 +1,4 @@
-export { TabgradError, type TabgradErrorCode } from "./errors.js";
+export { TabgradError, type TabgradErrorCode } from "./shared/errors.js";
 export {
   RuntimeSession,
   Tensor,
@@ -11,4 +11,4 @@ export {
   type TensorDType,
   type TensorLayout,
   type TensorOptions,
-} from "./runtime.js";
+} from "./runtime/runtime.js";

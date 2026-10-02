@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as tabgrad from "../../dist/index.js";
-import { inspectExecutionFailureContext } from "../../dist/errors.js";
+import { inspectExecutionFailureContext } from "../../dist/shared/errors.js";
 
 function deferred() {
   let resolve;

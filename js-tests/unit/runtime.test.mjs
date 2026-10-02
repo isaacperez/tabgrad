@@ -17,8 +17,8 @@ import {
   getTestResidentProgramReferenceCount,
   getTestTensorAncestry,
 } from "../../dist/testing.js";
-import { ExecutableProgram } from "../../dist/executable-program.js";
-import { observeTensorSynchronously, prepareRuntimeSession } from "../../dist/runtime.js";
+import { ExecutableProgram } from "../../dist/execution/executable-program.js";
+import { observeTensorSynchronously, prepareRuntimeSession } from "../../dist/runtime/runtime.js";
 
 const distributionRoot = normalize(fileURLToPath(new URL("../../dist", import.meta.url)));
 let server;

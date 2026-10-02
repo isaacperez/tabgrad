@@ -67,7 +67,7 @@ async function runWorker({ lastSampleMilliseconds = 0, closeMilliseconds = 0, sa
     loadModule: async (specifier) => {
       if (specifier === "/pyodide/pyodide.mjs") return { loadPyodide: async () => interpreter };
       if (specifier === "/execution-probe.mjs") return { ExecutionProbe: class { constructor() { return probe; } } };
-      if (specifier === "/execution-request.js") return { ExecutionRequest: class {} };
+      if (specifier === "/runtime/execution-request.js") return { ExecutionRequest: class {} };
       if (specifier === "/webgpu-connected-backend.js") return { ConnectedWebGpuBackend: class {} };
       if (specifier === "/python-runtime-bridge.js") return { PythonRuntimeBridge: class {} };
       throw new Error(`Unexpected worker dependency: ${specifier}`);

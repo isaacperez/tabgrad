@@ -1,24 +1,24 @@
 import {
   type WasmVariant,
   WebAssemblyCpuBackend,
-} from "./cpu-backend.js";
+} from "../cpu-backend.js";
 import {
   TabgradError,
   retainExecutionFailureContext,
-} from "./errors.js";
+} from "../shared/errors.js";
 import { ExecutionRequest, type QueuedExecutionRequest } from "./execution-request.js";
-import { ExecutionTicket, type ExecutionStep } from "./execution-ticket.js";
-import { acquireWebGpuDevice, assertWebGpuSetupActive } from "./webgpu-device.js";
-import type { ExecutionBackend, ResidentAllocation, TensorDevice } from "./backend.js";
-import { WebGpuBackend, type WebGpuDiagnostics, type WebGpuExecutionBackend } from "./webgpu-backend.js";
-export type { TensorDevice } from "./backend.js";
-import { DerivativeHistory, type DerivativeNode, type DerivativeRecipe } from "./derivative-history.js";
-import { IDENTITY_DERIVATIVE, MUL_DERIVATIVE, SUM_DERIVATIVE } from "./derivative-recipes.js";
+import { ExecutionTicket, type ExecutionStep } from "../execution/execution-ticket.js";
+import { acquireWebGpuDevice, assertWebGpuSetupActive } from "../webgpu-device.js";
+import type { ExecutionBackend, ResidentAllocation, TensorDevice } from "../execution/backend.js";
+import { WebGpuBackend, type WebGpuDiagnostics, type WebGpuExecutionBackend } from "../webgpu-backend.js";
+export type { TensorDevice } from "../execution/backend.js";
+import { DerivativeHistory, type DerivativeNode, type DerivativeRecipe } from "./autograd/derivative-history.js";
+import { IDENTITY_DERIVATIVE, MUL_DERIVATIVE, SUM_DERIVATIVE } from "./autograd/derivative-recipes.js";
 import { copyTensorShape, equalTensorShapes, inferViewShape, tensorElementCount } from "./tensor-shape.js";
 import {
   ExecutableProgram,
   type ProgramProvenance,
-} from "./executable-program.js";
+} from "../execution/executable-program.js";
 import {
   formExecutableProgram,
   type FormedProgram,
@@ -650,9 +650,12 @@ export class RuntimeSession {
     const testConfiguration = (options as InternalRuntimeSessionOptions)[
       RUNTIME_SESSION_TEST_CONFIGURATION
     ];
+    // Preserve the original distribution-root URL base, including empty,
+    // query-only and fragment-only strings. This anchor is not a module import.
+    const manifestBaseUrl = new URL("../runtime.js", import.meta.url);
     const manifestUrl = options.manifestUrl === undefined
-      ? new URL("./manifest.json", import.meta.url)
-      : new URL(options.manifestUrl, import.meta.url);
+      ? new URL("./manifest.json", manifestBaseUrl)
+      : new URL(options.manifestUrl, manifestBaseUrl);
     this.#backend = new WebAssemblyCpuBackend(
       manifestUrl,
       testConfiguration?.forceVariant,

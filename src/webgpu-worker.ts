@@ -1,11 +1,11 @@
 import { WebGpuBackend } from "./webgpu-backend.js";
-import type { ProgramBinding, ResidentAllocation } from "./backend.js";
-import { ExecutableProgram } from "./executable-program.js";
-import { ExecutionTicket } from "./execution-ticket.js";
+import type { ProgramBinding, ResidentAllocation } from "./execution/backend.js";
+import { ExecutableProgram } from "./execution/executable-program.js";
+import { ExecutionTicket } from "./execution/execution-ticket.js";
 import { acquireWebGpuDevice } from "./webgpu-device.js";
 import { GPU_ACCOUNTED, GPU_CONTROL_LENGTH, GPU_METRIC_LENGTH, assertGpuConnectionActive, retireGpuConnection, writeGpuMetrics } from "./webgpu-connection.js";
 import { publishSharedGpuDrain, publishSharedGpuFailure, publishSharedGpuSuccess } from "./webgpu-shared-completion.js";
-import { TabgradError } from "./errors.js";
+import { TabgradError } from "./shared/errors.js";
 import { isRecord } from "./shared/object-shape.js";
 
 interface PhysicalWorkerScope {

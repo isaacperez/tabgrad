@@ -143,7 +143,7 @@ already reserved asynchronous host entry. Even a first script containing only
 `pass` pays this startup cost; attachment alone does not.
 
 The binding calls the internal `prepareRuntimeSession` entry in
-[`src/runtime.ts`](../../src/runtime.ts). The session owns one preparation
+[`src/runtime/runtime.ts`](../../src/runtime/runtime.ts). The session owns one preparation
 completion and includes it in its normal drain ordering. The CPU backend owns
 the actual work: selecting, fetching, checking and compiling its module,
 creating its bounded context and validating the kernel interface. The binding

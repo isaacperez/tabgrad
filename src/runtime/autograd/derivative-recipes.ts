@@ -1,5 +1,5 @@
 import type { DerivativeOperations, DerivativeRecipe } from "./derivative-history.js";
-import { TabgradError } from "./errors.js";
+import { TabgradError } from "../../shared/errors.js";
 
 /** Addition and contiguous views both pass incoming values in the input shape. */
 export const IDENTITY_DERIVATIVE: DerivativeRecipe = Object.freeze({

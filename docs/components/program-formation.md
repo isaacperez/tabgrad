@@ -7,7 +7,7 @@ not need the whole session's graph, public tensor handles, or the history of
 unrelated calculations. It needs a description of the work selected by this
 demand and the data bound to that particular invocation.
 
-[`formExecutableProgram`](../../src/program-formation.ts) owns this
+[`formExecutableProgram`](../../src/runtime/program-formation.ts) owns this
 transformation. The session calls it from the
 [observation path](runtime-observation.md), before backend preparation and
 execution. The [representation architecture](../architecture/internal-representations.md)
@@ -51,7 +51,7 @@ execution domain; device buffers and backend instances remain outside it.
 Each slot preserves the complete admitted shape, including scalar rank and
 dimensions after a zero. Formation does not infer dimensions from a payload or
 collapse a shape to its first dimension. The semantic helpers in
-[`tensor-shape.ts`](../../src/tensor-shape.ts) own dimension validation, element
+[`tensor-shape.ts`](../../src/runtime/tensor-shape.ts) own dimension validation, element
 counting and exact shape comparison. Runtime admission validates and copies
 external dimensions once; formation and the backend consume admitted metadata.
 The [shape concept](../concepts/tensor-shape.md) explains why equal payload sizes

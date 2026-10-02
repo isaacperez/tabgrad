@@ -4,7 +4,7 @@ A tensor can remain useful after the calculation that produced it has finished.
 Keeping its numbers does not require keeping every earlier calculation alive.
 Conversely, closing an input handle cannot discard numbers that a pending
 calculation still needs. This chapter explains how the semantic lifetime owner
-in [`src/runtime.ts`](../../src/runtime.ts) preserves both requirements. It is
+in [`src/runtime/runtime.ts`](../../src/runtime/runtime.ts) preserves both requirements. It is
 for contributors changing execution or frontend ownership, rather than a guide
 to calling the public tensor API.
 
