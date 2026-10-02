@@ -2,10 +2,9 @@ import type { BackendCapabilities, ExecutionBackend, ProgramBinding, ResidentAll
 import { TabgradError } from "./errors.js";
 import type { ExecutableProgram, ProgramSlot } from "./executable-program.js";
 import { tensorElementCount } from "./tensor-shape.js";
-import { WEBGPU_ADDITION_SOURCE } from "./webgpu-addition.js";
+import { WEBGPU_ADDITION_SOURCE, WEBGPU_ADDITION_WORKGROUP_SIZE } from "./webgpu-addition.js";
 import { ExecutionTicket } from "./execution-ticket.js";
 
-const WORKGROUP_SIZE = 64;
 // WebGPU flag values are fixed by the API. The selected DOM declarations expose
 // their numeric types but not the namespace objects; no ambient typing patch is needed.
 const GPUBufferUsage = Object.freeze({ MAP_READ: 1, COPY_SRC: 4, COPY_DST: 8, STORAGE: 128 });
@@ -82,7 +81,7 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
       maxComputeWorkgroupsPerDimension: device.limits.maxComputeWorkgroupsPerDimension });
     this.capabilities = Object.freeze({ device: "webgpu", computations: Object.freeze(["add-f32"] as const),
       gradients: false, maximumTensorBytes: Math.min(this.#limits.maxBufferSize,
-        this.#limits.maxStorageBufferBindingSize, this.#limits.maxComputeWorkgroupsPerDimension * WORKGROUP_SIZE * 4) });
+        this.#limits.maxStorageBufferBindingSize, this.#limits.maxComputeWorkgroupsPerDimension * WEBGPU_ADDITION_WORKGROUP_SIZE * 4) });
     void device.lost.then((info) => {
       if (!this.#closed) this.#retire(new TabgradError("BACKEND_STATUS_ERROR", "The WebGPU device was lost.", {
         backend: "webgpu", device: "webgpu", phase: "device-loss", reason: info.reason,
@@ -227,7 +226,7 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
         entries: [...inputs, output].map((allocation, binding) => ({ binding, resource: { buffer: allocation.buffer } })) });
       const pass = encoder.beginComputePass();
       pass.setPipeline(pipeline); pass.setBindGroup(0, bindGroup);
-      pass.dispatchWorkgroups(Math.ceil(output.byteLength / 4 / WORKGROUP_SIZE)); pass.end();
+      pass.dispatchWorkgroups(Math.ceil(output.byteLength / 4 / WEBGPU_ADDITION_WORKGROUP_SIZE)); pass.end();
       this.#kernelCalls += 1;
     } catch (cause) {
       throw new TabgradError("BACKEND_STATUS_ERROR", "WebGPU computation encoding failed.", {
