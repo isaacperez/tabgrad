@@ -169,9 +169,11 @@ not establish a successful command: native browser termination and profile
 cleanup are independently checked by the harness. A failed closure remains a
 failed run even when its workload produced valid observations.
 
-The source fingerprint covers sorted top-level `src/*.ts` names and bytes.
-It is not proof that a stale distribution was rebuilt, and does not identify
-the Python source or measurement fixtures. Final evidence must identify those
-exact inputs and the emitted distribution too. Keep the first failed attempts,
+The source fingerprint covers regular TypeScript files throughout `src/`,
+including nested directories, using the [shared source-identity method](webgpu-measurements.md#typescript-source-identity)
+also used by direct GPU measurements. It is not proof that a stale distribution
+was rebuilt, and does not identify the Python source, interpreter, measurement
+fixtures or contributor tools. Final evidence must identify those exact inputs
+and the emitted distribution too. Keep the first failed attempts,
 calibration rationale, successful observations, uncertainty and resulting
 decision together under the performance policy.

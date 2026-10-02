@@ -89,10 +89,34 @@ adapter information and resource snapshots. Inspect reports for privacy
 before publishing derived evidence. Preserve unsuccessful attempts as well
 as successful runs with the issue or reviewed evidence, not in normative docs.
 
-The recorded source fingerprint hashes sorted top-level `src/*.ts` names and
-bytes. The verifier must also identify the exact distribution, measurement
-tool and fixture revision used; a source fingerprint alone does not prove
-that a stale distribution was rebuilt. Report whether the adapter is a
-fallback and distinguish accounted bytes from physical VRAM or total browser
+The verifier must identify the exact distribution, measurement tool and fixture
+revision as well as the source fingerprint described below; that fingerprint
+alone does not prove that a stale distribution was rebuilt. Report whether the
+adapter is a fallback and distinguish accounted bytes from physical VRAM or total browser
 memory. Neither a bounded growth observation nor one adapter's timings
 establishes general asymptotic or cross-browser performance guarantees.
+
+## TypeScript source identity
+
+The direct and managed GPU measurement commands use the same contributor helper,
+`scripts/source-identity.mjs`, for the report's `sourceSha256`. It enumerates all
+regular files ending in `.ts` beneath `src/`, including nested directories and
+`.d.ts` declarations. It sorts root-relative paths using JavaScript's default
+string order, with `/` as the directory separator, then feeds each UTF-8 path
+followed immediately by that file's raw bytes into one SHA-256 hash. There are
+no added delimiters or length fields: an unchanged flat tree retains the former
+sorted filename/byte identity. Empty trees use the empty byte-stream digest;
+other extensions and empty directories contribute nothing.
+
+Symbolic-link entries are rejected, even when they name a directory or an
+excluded extension. The helper does not follow external trees, silently omit
+linked sources or loop through directory links. Enumeration and file-read
+failures propagate rather than yield a partial report identity. The caller
+supplies the trusted local source directory and must keep it stable while the
+tool reads it; this method is not an atomic snapshot of concurrent edits.
+
+This is a bounded contributor source fingerprint, not a canonical provenance
+commitment or execution proof. It does not cover the contributor helper itself,
+Python assets, interpreter, measurement fixtures or emitted distribution. Record
+those inputs separately under the [performance policy](../performance.md).
+Discovery and hashing require no browser, GPU workload or dependency installation.

@@ -1,16 +1,13 @@
-import { createHash } from "node:crypto";
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { platform, release, arch } from "node:os";
 import { execFileSync } from "node:child_process";
 import { browserDefinitions, browserVersion, resolveBrowser, runBrowserPage, selectBrowserDefinitions, startBrowserServer } from "./browser-harness.mjs";
+import { fingerprintTypeScriptSources } from "./source-identity.mjs";
 
 const mode = process.argv[2];
 if (mode !== "pilot" && mode !== "measure") throw new Error("Use: node scripts/measure-webgpu.mjs pilot|measure");
-const fingerprint = createHash("sha256");
-for (const name of (await readdir(new URL("../src/", import.meta.url))).filter((name) => name.endsWith(".ts")).sort()) {
-  fingerprint.update(name).update(await readFile(new URL(`../src/${name}`, import.meta.url)));
-}
-const report = { mode, measuredAt: new Date().toISOString(), sourceSha256: fingerprint.digest("hex"),
+const sourceSha256 = await fingerprintTypeScriptSources(new URL("../src/", import.meta.url));
+const report = { mode, measuredAt: new Date().toISOString(), sourceSha256,
   platform: platform(), operatingSystemRelease: release(), architecture: arch(), node: process.version,
   operatingSystemVersion: platform() === "darwin" ? execFileSync("sw_vers", ["-productVersion"], { encoding: "utf8" }).trim() : release(),
   browsers: [] };
