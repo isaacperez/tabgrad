@@ -308,7 +308,7 @@ path. Quantitative claims require [separate measurements](../performance.md).
 [`python-binding.test.mjs`](../../js-tests/unit/python/python-binding.test.mjs) checks
 these ownership and admission rules with the pinned interpreter, including an
 ordinary weak-reference check without forced collection. The
-[browser lifecycle check](../../js-tests/browser/python-lifecycle.html) loads
+[browser lifecycle check](../../js-tests/browser/python/python-lifecycle.html) loads
 the built JavaScript and local Pyodide assets in real browsers. Neither check
 establishes tensor-operation parity or whole-application performance.
 

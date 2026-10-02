@@ -1,5 +1,5 @@
 import { createWebGpuRuntimeSession } from "/index.js";
-import { exactAddition, equivalentBits, numericalPairs } from "./float32-addition-oracle.mjs";
+import { exactAddition, equivalentBits, numericalPairs } from "../helpers/float32-addition-oracle.mjs";
 
 const token = new URLSearchParams(location.search).get("token");
 async function send(endpoint, body) {

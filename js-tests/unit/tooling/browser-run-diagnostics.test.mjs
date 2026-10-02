@@ -18,7 +18,7 @@ function gate() {
 }
 
 function register(server, token) {
-  const registration = server.register(token, "runtime.html");
+  const registration = server.register(token, "runtime/runtime.html");
   registration.navigation.catch(() => {});
   registration.result.catch(() => {});
   return registration;
@@ -36,7 +36,7 @@ async function waitForStage(registration, stage) {
 test("file ingress precedes admission and late completion cannot mutate the next interval", async () => {
   const entered = gate();
   const release = gate();
-  const server = await startBrowserServer(["runtime.html"], {
+  const server = await startBrowserServer(["runtime/runtime.html"], {
     async readAsset(path) {
       entered.resolve();
       await release.promise;
@@ -47,7 +47,7 @@ test("file ingress precedes admission and late completion cannot mutate the next
   let fetchResult;
   let second;
   try {
-    fetchResult = fetch(`${server.origin}/runtime.html?token=first-fixture-token&private=fixture-query`);
+    fetchResult = fetch(`${server.origin}/runtime/runtime.html?token=first-fixture-token&private=fixture-query`);
     await entered.promise;
     const heldSnapshot = first.snapshot();
     assert.deepEqual(heldSnapshot.requests, []);
@@ -79,7 +79,7 @@ test("file ingress precedes admission and late completion cannot mutate the next
 });
 
 test("a partial control body is observed before its contents are available", async () => {
-  const server = await startBrowserServer(["runtime.html"]);
+  const server = await startBrowserServer(["runtime/runtime.html"]);
   const registration = register(server, "body-fixture-token");
   const body = JSON.stringify({ phase: "application-started", private: "fixture-body-secret" });
   const client = request(`${server.origin}/__phase?token=body-fixture-token`, {
@@ -111,7 +111,7 @@ test("a partial control body is observed before its contents are available", asy
 });
 
 test("ingress is capped per interval and unknown paths remain categorical", async () => {
-  const server = await startBrowserServer(["runtime.html"]);
+  const server = await startBrowserServer(["runtime/runtime.html"]);
   const first = register(server, "capacity-fixture-token");
   let second;
   try {
@@ -126,7 +126,7 @@ test("ingress is capped per interval and unknown paths remain categorical", asyn
     assert.equal(JSON.stringify(snapshot.incomingRequests).includes("fixture-secret"), false);
     first.cancel();
     second = register(server, "new-capacity-fixture-token");
-    const response = await fetch(`${server.origin}/runtime.html`);
+    const response = await fetch(`${server.origin}/runtime/runtime.html`);
     assert.equal(response.status, 200);
     await second.navigation;
     const next = second.snapshot();

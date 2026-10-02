@@ -114,7 +114,7 @@ const report = {
   browsers: [],
 };
 
-const server = await startBrowserServer(["measure.html", "raw-kernel-measure.html"], {
+const server = await startBrowserServer(["measurements/cpu/measure.html", "measurements/cpu/raw-kernel-measure.html"], {
   crossOriginIsolation: true,
 });
 try {
@@ -131,7 +131,7 @@ try {
         server,
         browser,
         executable,
-        page: "measure.html",
+        page: "measurements/cpu/measure.html",
         parameters: { variant },
         applicationTimeoutMilliseconds: 60_000,
         validateResult: assertSuccessfulBrowserResult,
@@ -143,7 +143,7 @@ try {
           server,
           browser,
           executable,
-          page: "raw-kernel-measure.html",
+          page: "measurements/cpu/raw-kernel-measure.html",
           parameters: { variant, round },
           applicationTimeoutMilliseconds: 60_000,
           validateResult: assertSuccessfulBrowserResult,

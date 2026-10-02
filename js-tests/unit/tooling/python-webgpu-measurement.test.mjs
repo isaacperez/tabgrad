@@ -6,7 +6,7 @@ import { runInNewContext } from "node:vm";
 // Execute the real browser worker callback with controlled dependency owners.
 // Supplying its static bindings and dynamic loader replaces dependencies,
 // not the worker's sampling, deadline or cleanup logic.
-const source = (await readFile(new URL("../../browser/python-webgpu-measure-worker.mjs", import.meta.url), "utf8"))
+const source = (await readFile(new URL("../../browser/measurements/python-webgpu/python-webgpu-measure-worker.mjs", import.meta.url), "utf8"))
   .replace(/^import .* from "\/(?:python|index)\.js";\n/gm, "")
   .replace(/\bimport\(/g, "loadModule(");
 const length = 262144;
@@ -66,7 +66,7 @@ async function runWorker({ lastSampleMilliseconds = 0, closeMilliseconds = 0, sa
     attachPython: async () => binding, createWebGpuRuntimeSession: async () => session,
     loadModule: async (specifier) => {
       if (specifier === "/pyodide/pyodide.mjs") return { loadPyodide: async () => interpreter };
-      if (specifier === "/execution-probe.mjs") return { ExecutionProbe: class { constructor() { return probe; } } };
+      if (specifier === "/helpers/execution-probe.mjs") return { ExecutionProbe: class { constructor() { return probe; } } };
       if (specifier === "/runtime/execution-request.js") return { ExecutionRequest: class {} };
       if (specifier === "/backends/webgpu/webgpu-connected-backend.js") return { ConnectedWebGpuBackend: class {} };
       if (specifier === "/frontends/python/python-runtime-bridge.js") return { PythonRuntimeBridge: class {} };

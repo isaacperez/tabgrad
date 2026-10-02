@@ -144,7 +144,7 @@ function transportCounters(connection) {
 
 async function installGpuDiagnosticProbe() {
   const [{ ExecutionProbe }, { ExecutionRequest }, { ConnectedWebGpuBackend }, { PythonRuntimeBridge }] = await Promise.all([
-    import("/execution-probe.mjs"), import("/runtime/execution-request.js"),
+    import("/helpers/execution-probe.mjs"), import("/runtime/execution-request.js"),
     import("/backends/webgpu/webgpu-connected-backend.js"), import("/frontends/python/python-runtime-bridge.js"),
   ]);
   const probe = new ExecutionProbe();

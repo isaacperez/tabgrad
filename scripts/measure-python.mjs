@@ -101,11 +101,11 @@ try {
         const run = { browser: browser.name, version, variant, build,
           profile: diagnostic ? "boundary-diagnostics" : python ? "python-comparison" : "javascript-only" };
         report.runs.push(run);
-        const server = await startBrowserServer(["python-measure.html"], {
-          assets: ["python-measure.mjs", "cpu-profile.mjs", "execution-probe.mjs"], distributionDirectory: distributions[build],
+        const server = await startBrowserServer(["measurements/python/python-measure.html"], {
+          assets: ["measurements/python/python-measure.mjs", "helpers/cpu-profile.mjs", "helpers/execution-probe.mjs"], distributionDirectory: distributions[build],
         });
         try {
-          run.result = await runBrowserPage({ server, browser, executable, version, page: "python-measure.html",
+          run.result = await runBrowserPage({ server, browser, executable, version, page: "measurements/python/python-measure.html",
             parameters: { variant, python: python ? "yes" : "no", diagnostic: diagnostic ? "yes" : "no" },
             applicationTimeoutMilliseconds: 60_000 });
           summarizeResult(run.result);

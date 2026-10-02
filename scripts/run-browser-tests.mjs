@@ -35,8 +35,8 @@ function assertPythonWorkerResult(result, jspi, gated, variant = "simd128") {
   if (jspi === "disabled") assert.equal(result.jspiAvailable, false);
 }
 
-const server = await startBrowserServer(["runtime.html", "python-lifecycle.html", "python-worker.html"], {
-  assets: ["python-worker.mjs", "cpu-profile.mjs"],
+const server = await startBrowserServer(["runtime/runtime.html", "python/python-lifecycle.html", "python/python-worker.html"], {
+  assets: ["python/python-worker.mjs", "helpers/cpu-profile.mjs"],
 });
 try {
   const selectedBrowsers = selectBrowserDefinitions(
@@ -52,7 +52,7 @@ try {
         server,
         browser,
         executable,
-        page: "runtime.html",
+        page: "runtime/runtime.html",
         parameters: { variant },
         version,
         validateResult(result) {
@@ -66,7 +66,7 @@ try {
         server,
         browser,
         executable,
-        page: "python-lifecycle.html",
+        page: "python/python-lifecycle.html",
         parameters: { jspi },
         version,
         validateResult(result) {
@@ -80,29 +80,29 @@ try {
       });
       process.stdout.write(`PASS ${browser.name} Python observation and lifecycle (${jspi} JSPI profile)\n`);
       await runBrowserPage({
-        server, browser, executable, page: "python-worker.html", parameters: { jspi }, version,
+        server, browser, executable, page: "python/python-worker.html", parameters: { jspi }, version,
         validateResult(result) { assertPythonWorkerResult(result, jspi, false); },
       });
       process.stdout.write(`PASS ${browser.name} Python worker (${jspi} JSPI profile, no isolation)\n`);
     }
-    const isolatedServer = await startBrowserServer(["python-worker.html"], {
-      crossOriginIsolation: true, assets: ["python-worker.mjs", "cpu-profile.mjs"],
+    const isolatedServer = await startBrowserServer(["python/python-worker.html"], {
+      crossOriginIsolation: true, assets: ["python/python-worker.mjs", "helpers/cpu-profile.mjs"],
     });
     try {
       await runBrowserPage({
-        server: isolatedServer, browser, executable, page: "python-worker.html",
+        server: isolatedServer, browser, executable, page: "python/python-worker.html",
         parameters: { jspi: "disabled", gate: "shared" }, version,
         validateResult(result) { assertPythonWorkerResult(result, "disabled", true); },
       });
       process.stdout.write(`PASS ${browser.name} host admission and close while Python worker is parked\n`);
     } finally { await isolatedServer.close(); }
     for (const cpuVariant of ["scalar", "simd128"]) {
-      const variantServer = await startBrowserServer(["python-worker.html"], {
-        assets: ["python-worker.mjs", "cpu-profile.mjs"],
+      const variantServer = await startBrowserServer(["python/python-worker.html"], {
+        assets: ["python/python-worker.mjs", "helpers/cpu-profile.mjs"],
       });
       try {
         await runBrowserPage({
-          server: variantServer, browser, executable, page: "python-worker.html",
+          server: variantServer, browser, executable, page: "python/python-worker.html",
           parameters: { jspi: "disabled", variant: cpuVariant }, version,
           validateResult(result) { assertPythonWorkerResult(result, "disabled", false, cpuVariant); },
         });

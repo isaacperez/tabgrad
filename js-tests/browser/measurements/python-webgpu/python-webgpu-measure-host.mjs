@@ -28,10 +28,10 @@ try {
   }
   const start = performance.now();
   controller = await createWebGpuWorker(parameters.get("mode") === "diagnose"
-    ? { workerUrl: new URL("/python-webgpu-measure-physical.mjs", location.href) } : undefined);
+    ? { workerUrl: new URL("/measurements/python-webgpu/python-webgpu-measure-physical.mjs", location.href) } : undefined);
   globalThis.Worker = NativeWorker;
   const workerAcquisitionMilliseconds = performance.now() - start;
-  worker = new Worker("/python-webgpu-measure-worker.mjs", { type: "module" });
+  worker = new Worker("/measurements/python-webgpu/python-webgpu-measure-worker.mjs", { type: "module" });
   const result = new Promise((resolve, reject) => {
     worker.addEventListener("message", ({ data }) => resolve(data), { once: true });
     worker.addEventListener("error", (event) => reject(new Error(event.message)), { once: true });

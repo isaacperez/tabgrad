@@ -32,9 +32,9 @@ try {
       });
     }
   };
-  controller = await createWebGpuWorker({ workerUrl: new URL("/python-webgpu-delayed.mjs", location.href) });
+  controller = await createWebGpuWorker({ workerUrl: new URL("/python-webgpu/python-webgpu-delayed.mjs", location.href) });
   globalThis.Worker = NativeWorker;
-  interpreterWorker = new NativeWorker("/python-webgpu.mjs", { type: "module" });
+  interpreterWorker = new NativeWorker("/python-webgpu/python-webgpu.mjs", { type: "module" });
   const channel = new MessageChannel();
   const client = connectPythonWorker(channel.port1, lifetime.signal);
   const ready = next("ready");

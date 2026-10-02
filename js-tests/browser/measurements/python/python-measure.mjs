@@ -1,6 +1,6 @@
 // Measurement-only worker. No instrumentation is shipped in the public entry.
 import { createRuntimeSession } from "/index.js";
-import { selectCpuProfile } from "/cpu-profile.mjs";
+import { selectCpuProfile } from "/helpers/cpu-profile.mjs";
 
 const lengths = [0, 1, 4, 256, 4096];
 const depths = [1, 4, 16];
@@ -241,7 +241,7 @@ async function run({ data }) {
       interpreter.runPython(pythonMeasurement);
     }
     if (data.diagnostic) {
-      const { installExecutionProbe } = await import("/execution-probe.mjs");
+      const { installExecutionProbe } = await import("/helpers/execution-probe.mjs");
       probe = await installExecutionProbe();
     }
     selectCpuProfile(data.variant);
