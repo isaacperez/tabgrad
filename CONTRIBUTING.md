@@ -83,6 +83,11 @@ unresolved questions. Only one agent at a time may modify the target working
 tree. Delegated investigators, verifiers, reviewers, and specialists remain
 read-only unless a later, explicit handoff makes one of them the sole writer.
 
+That preflight also records a contextual validation plan under
+[`docs/agent-workflow.md`](docs/agent-workflow.md#plan-contextual-validation).
+The final verifier/reviewer checks its applicability against the complete
+result. Do not add another routine agent or run unrelated environments by default.
+
 After implementation, an agent independent of the writer must verify the exact
 final state. The independent review must examine that same state and its
 verification evidence. Use additional specialists when separate material risks
