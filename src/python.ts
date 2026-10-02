@@ -12,4 +12,4 @@ export {
   type WebGpuWorkerController,
   type WebGpuWorkerOptions,
   type WebGpuConnection,
-} from "./webgpu-worker-controller.js";
+} from "./backends/webgpu/webgpu-worker-controller.js";

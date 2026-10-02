@@ -1,6 +1,6 @@
-import type { BackendCapabilities } from "./execution/backend.js";
-import { TabgradError } from "./shared/errors.js";
-import { isRecord } from "./shared/object-shape.js";
+import type { BackendCapabilities } from "../../execution/backend.js";
+import { TabgradError } from "../../shared/errors.js";
+import { isRecord } from "../../shared/object-shape.js";
 import type { WebGpuDiagnostics } from "./webgpu-backend.js";
 import { GPU_ACCOUNTED, GPU_CONTROL_LENGTH, GPU_METRIC_LENGTH, retireGpuConnection, type WebGpuConnection, type WebGpuConnectionData } from "./webgpu-connection.js";
 
@@ -56,7 +56,7 @@ class GpuWorkerController implements WebGpuWorkerController {
   constructor(options: WebGpuWorkerOptions) {
     this.#signal = options.signal;
     try {
-      this.#worker = new Worker(options.workerUrl ?? new URL("./webgpu-worker.js", import.meta.url), { type: "module" });
+      this.#worker = new Worker(options.workerUrl ?? new URL("../../webgpu-worker.js", import.meta.url), { type: "module" });
     } catch (error) {
       this.#channel.port1.close();
       this.#channel.port2.close();

@@ -9,7 +9,7 @@ semantic graph use the same formation and observation machinery as CPU work.
 The accepted [integration architecture](../architecture/webgpu-integration.md)
 governs this division. The concrete boundaries are
 [`ExecutionBackend`](../../src/execution/backend.ts),
-[`WebGpuBackend`](../../src/webgpu-backend.ts) and the
+[`WebGpuBackend`](../../src/backends/webgpu/webgpu-backend.ts) and the
 [common request owner](runtime-observation.md). The backend is internal, not a
 public plugin interface or another semantic engine.
 
@@ -63,7 +63,7 @@ launch width connects two physical facts: how many elements one group can
 cover, and how many groups the host must dispatch for a given output. That
 knowledge belongs to the kernel, not to tensor semantics or device acquisition.
 
-[`webgpu-addition.ts`](../../src/webgpu-addition.ts) owns
+[`kernels/addition.ts`](../../src/backends/webgpu/kernels/addition.ts) owns
 `WEBGPU_ADDITION_WORKGROUP_SIZE`, with width 64. Shader construction uses that
 same value in its `@workgroup_size` declaration. The backend imports it for
 both the dispatch-related capacity bound and the ceiling division that computes

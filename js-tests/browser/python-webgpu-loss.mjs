@@ -1,5 +1,5 @@
 import { connectPythonWorker, createWebGpuWorker } from "/python.js";
-import { readGpuMetrics } from "/webgpu-connection.js";
+import { readGpuMetrics } from "/backends/webgpu/webgpu-connection.js";
 
 const parameters = new URLSearchParams(location.search);
 const token = parameters.get("token");

@@ -8,7 +8,7 @@ function holdInitialization(event) {
 }
 addEventListener("message", holdInitialization);
 const [{ WebGpuBackend }, { ExecutionTicket }] = await Promise.all([
-  import("/webgpu-backend.js"), import("/execution/execution-ticket.js"),
+  import("/backends/webgpu/webgpu-backend.js"), import("/execution/execution-ticket.js"),
 ]);
 
 function record(name, started, failed = false) {
