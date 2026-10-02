@@ -6,6 +6,17 @@ accepted form and scope without following a complete design narrative.
 
 ## Questions this perspective answers
 
+Use [JavaScript tensor API](../javascript-api.md) for the direct session and
+tensor interface, observation and explicit resource cleanup.
+
+Use [Compatibility and public API support](../compatibility.md) for the meaning
+and scope of support records, the evidence they require and explicit
+differences from the reference behavior.
+
+For a reminder of a term already introduced in the design guide, use the
+[Architecture glossary](../architecture/glossary.md). It complements the
+explanations in each architecture chapter rather than replacing them.
+
 Use [Direct JavaScript WebGPU runtime](webgpu-runtime.md) for ready-session
 acquisition, device selection, operation limits, lifecycle and GPU diagnostics.
 
