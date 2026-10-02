@@ -75,6 +75,9 @@ This is direct JavaScript observation, with ordinary asynchronous browser
 progress. It needs no interpreter worker or shared-memory wait mechanism and
 does not establish Python GPU support. The
 [Python observation architecture](../architecture/python-observation.md) defines
-that distinct transport requirement over the same semantic lifecycle.
+that distinct transport requirement over the same semantic lifecycle. Its
+[concrete GPU connection](../components/webgpu-worker-connection.md) follows
+shared observation and independent supervision; a direct JavaScript Promise
+run cannot qualify those parked-interpreter boundaries.
 CPU tensors keep their local synchronous execution path and ordinary default
 device. There is no automatic CPU/GPU transfer or fallback in this flow.

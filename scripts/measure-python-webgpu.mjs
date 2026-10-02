@@ -1,0 +1,34 @@
+import { createHash } from "node:crypto";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { arch, platform, release } from "node:os";
+import { browserDefinitions, browserVersion, resolveBrowser, runBrowserPage, selectBrowserDefinitions, startBrowserServer } from "./browser-harness.mjs";
+
+const mode = process.argv[2];
+if (!["pilot", "measure", "diagnose"].includes(mode)) throw new Error("Use: node scripts/measure-python-webgpu.mjs pilot|measure|diagnose");
+const fingerprint = createHash("sha256");
+for (const name of (await readdir(new URL("../src/", import.meta.url))).filter((name) => name.endsWith(".ts")).sort()) {
+  fingerprint.update(name).update(await readFile(new URL(`../src/${name}`, import.meta.url)));
+}
+const report = { mode, measuredAt: new Date().toISOString(), sourceSha256: fingerprint.digest("hex"),
+  platform: platform(), operatingSystemRelease: release(), architecture: arch(), node: process.version, browsers: [] };
+const server = await startBrowserServer(["python-webgpu-measure.html"], { crossOriginIsolation: true,
+  assets: ["python-webgpu-measure-host.mjs", "python-webgpu-measure-worker.mjs", "python-webgpu-measure-physical.mjs", "execution-probe.mjs"] });
+try {
+  for (const browser of selectBrowserDefinitions(process.env.TABGRAD_BROWSER ?? "Chrome", browserDefinitions)) {
+    const executable = await resolveBrowser(browser);
+    const version = browserVersion(executable);
+    await runBrowserPage({ server, browser, executable, version, page: "python-webgpu-measure.html",
+      parameters: { mode }, applicationTimeoutMilliseconds: 65000,
+      validateResult(result) {
+        report.browsers.push({ browser: browser.name, version, result });
+        if (!result.ok) throw new Error(JSON.stringify(result.error));
+        if (!result.interpreterWorkerTerminated) throw new Error("Result preceded interpreter-worker termination.");
+      } });
+  }
+} finally {
+  await server.close();
+  await mkdir(new URL("../test-results/", import.meta.url), { recursive: true });
+  const filename = `python-webgpu-${mode}-${report.measuredAt.replaceAll(":", "-")}.json`;
+  await writeFile(new URL(`../test-results/${filename}`, import.meta.url), JSON.stringify(report, null, 2));
+  process.stdout.write(`Saved test-results/${filename}\n`);
+}

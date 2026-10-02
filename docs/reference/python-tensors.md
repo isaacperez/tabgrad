@@ -9,7 +9,8 @@ It is not the official PyTorch runtime.
 
 The [wrapper component](../components/python-tensor-wrappers.md) explains the
 owners behind these calls. This page covers creation, metadata, addition
-admission and ordinary CPU observation, not general PyTorch support.
+admission and ordinary observation, not general PyTorch support. GPU use
+requires the explicit [managed connection](python-host.md#acquire-a-managed-gpu-connection).
 Release claims follow the [compatibility policy](../compatibility.md).
 
 Shape-only `Tensor.view` has its own [operation reference](tensor-view.md),
@@ -41,16 +42,19 @@ bound by Python: there is no silent inference of an integer or default dtype.
   produces shape `()`. Empty input produces shape `(0,)`; `[[], []]` produces
   `(2, 0)`. Nesting cannot imply dimensions after an empty sequence.
 - The only accepted dtype is the `torch.float32` object, not its string name.
-- The device may be the string `'cpu'` or a `torch.device('cpu')` descriptor.
+- The device may be the string `'cpu'` or `'webgpu'`, or the corresponding
+  `torch.device` descriptor. CPU is the default even with GPU attached.
+  `webgpu` is a Tabgrad extension, not an upstream PyTorch device name.
 - Gradient and pinned-memory flags must be booleans. `requires_grad=True`
   enables tracking; `pin_memory` must remain false.
+  GPU gradient tracking is rejected against backend capabilities.
 - Creation converts to float32 and owns a copy. Later input mutations cannot
   change the tensor. Integer overflow during conversion raises `OverflowError`.
 - Ragged inputs, mixed numerical/container depth and cycles are rejected.
   Reusing an acyclic child container is allowed and copies its values at each
   occurrence. No partially admitted tensor survives an invalid input.
 - Custom numeric/container classes, other dtypes,
-  indexed/non-CPU devices and additional keywords are outside this contract.
+  indexed/other devices and additional keywords are outside this contract.
 
 Use `torch.tensor`, not `torch.Tensor(...)`. The latter constructor is rejected;
 an opaque handle cannot be manufactured by a public constructor.
@@ -65,14 +69,15 @@ serve cached metadata.
 | --- | --- | --- |
 | `shape` | `torch.Size`, an immutable integer tuple | Iteration, indexing, tuple equality/hash, representation, slicing, concatenation, repetition and `numel()` |
 | `dtype` | The `torch.float32` constant of type `torch.dtype` | Identity, representation, read-only `is_floating_point=True`, `is_complex=False`, `is_signed=True` |
-| `device` | A `torch.device('cpu')` object | Equality with CPU descriptors, hashing, representation, string form, read-only `type='cpu'` and `index=None` |
+| `device` | A `torch.device` object for the runtime's device | Equality with the same device name, hashing, representation, string form, read-only `type` and `index=None`; supported names are `cpu` and `webgpu` |
 | `requires_grad` | Python `bool` | Tracking propagates through supported operations; functional gradients return untracked tensors |
 
 `torch.Size(iterable)` uses integer-index conversion, including Python booleans;
 `numel()` is the product of its dimensions, with the empty product equal to one.
 Constructing a `Size` does not create a tensor or validate a storage layout.
-`torch.dtype()` is not constructible. The device constructor accepts only a CPU
-string, not other device types, indices, context management or transfer requests.
+`torch.dtype()` is not constructible. The device constructor accepts the two
+unindexed names above, not other device types, indices, context management or
+transfer requests. Constructing a descriptor does not acquire a backend.
 
 ## Admit addition
 
@@ -85,7 +90,8 @@ operator = left + right
 ```
 
 `torch.add(input, other, *, alpha=1, out=None)` and
-`Tensor.add(other, *, alpha=1)` require two equal-shape CPU float32 tensors.
+`Tensor.add(other, *, alpha=1)` require two equal-shape float32 tensors on the
+same supported device. GPU admission also requires an attached, ready backend.
 There is no broadcasting, Python-number operand, promotion or in-place result.
 Two scalar tensors can be added; a scalar tensor and a one-element vector
 cannot. Every dimension must match, even for tensors with zero elements.
@@ -155,13 +161,30 @@ The private `_handle` and factory mechanics are not user-facing escape APIs.
 Outside an active managed entry, ordinary observation rejects with
 `PYTHON_SYNC_CONTEXT_REQUIRED` before demanding numerical work, including for
 ready host data. The error remains a `JsException`; inspect `js_error.code`,
-not a substring of its formatted traceback. Execution and readback failures
-preserve the backend code, phase, cause and internal causal program context.
+not a substring of its formatted traceback. Local CPU execution and readback
+failures preserve the backend code, phase, cause and internal causal program
+context. Remote physical failures use the bounded projection described below.
 The internal runtime observer can reject
 `SYNCHRONOUS_OBSERVATION_UNAVAILABLE` before admission when local readiness is
 absent or an asynchronous predecessor still owns the queue. Managed CPU entry
 establishes readiness before Python starts; that internal guard is not a JSPI
 requirement or a second Python API.
+
+Managed GPU observation consumes authoritative shared completion from the
+independently progressing physical worker. It may park the interpreter, but
+does not require a local Promise callback to advance the calculation. GPU
+addition, shape-only views and observations share the ordinary runtime path;
+GPU multiplication, reduction and gradients are not enabled by attachment.
+Missing backend or unsupported computation is an explicit capability error,
+not implicit CPU execution.
+
+Physical GPU errors cross a bounded diagnostic boundary: code, message,
+scalar backend/phase/program-slot locators and the immediate native cause's
+name/message survive, with explicit truncation when needed. The cause is a
+reconstructed diagnostic, not the original remote exception object, stack or
+nested cause graph. The local runtime still attaches its causal invocation context.
+This differs from a local CPU failure's directly retained cause; applications
+must inspect available fields rather than assume remote object identity.
 
 Ordinary Python temporary wrappers release their runtime handles without
 manual per-expression close. Cycles and retained tracebacks follow their actual

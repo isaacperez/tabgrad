@@ -163,6 +163,12 @@ security policy, not an arbitrary worker protocol. The
 [deployment chapter](python-observation.md#hosting-requirements-are-part-of-the-decision)
 explains the shared-memory requirements and their limitations.
 
+The [managed connection component](../components/webgpu-worker-connection.md)
+explains the concrete transport, shared result/drain authority and independent
+supervision that preserve this boundary. The
+[host reference](../reference/python-host.md) owns exact setup signatures and
+composition; this architecture chapter does not duplicate the private encoding.
+
 Connection ownership remains explicit on unsuccessful paths. Failed
 attachment retires the connection and releases its backend ownership; it
 cannot be retried as a fresh attachment. The host closes a controller that was

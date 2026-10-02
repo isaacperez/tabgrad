@@ -149,6 +149,13 @@ defines their boundaries, limits and interpretation. They are disposable local
 evidence, not committed or distributed artifacts; publication requires the
 ordinary privacy review.
 
+`npm run measure:python:webgpu -- pilot`, `measure` and `diagnose` write timestamped
+`test-results/python-webgpu-*.json` reports. The
+[managed GPU measurement reference](reference/python-webgpu-measurements.md)
+owns their representative workloads, safety caps and observation boundaries.
+The reports are ignored evidence, not library assets; a failed harness cleanup
+must remain visible even when a page's numerical report is successful.
+
 ## Verify generated output
 
 Run the registered generator in a controlled environment and compare the

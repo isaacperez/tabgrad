@@ -138,6 +138,10 @@ not interpret a public observation duration as an isolated kernel duration.
 - [WebGPU resource measurements](reference/webgpu-measurements.md) separates
   setup, transfers, resident execution and retention, with a prerequisite pilot
   and bounded device-owned allocation accounting.
+- [Managed Python GPU boundary measurements](reference/python-webgpu-measurements.md)
+  compares ordinary Python observation and the same direct JavaScript backend,
+  separating public timing boundaries, finite transport counts and owned-resource
+  checkpoints under a prerequisite pilot.
 
 These references own their command-specific workloads and interpretation.
 They do not establish general performance guarantees. Keep each actual run's

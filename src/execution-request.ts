@@ -17,6 +17,11 @@ interface Completion<T> {
   readonly reject: (error: unknown) => void;
 }
 
+interface PendingStep {
+  readonly step: ExecutionStep;
+  observed: boolean;
+}
+
 /**
  * Advance ordinary local steps immediately; yield only actual asynchronous work.
  * The session owns ordering and drain. No Promise is allocated for a completed
@@ -26,10 +31,10 @@ interface Completion<T> {
  */
 export class ExecutionRequest<T> implements QueuedExecutionRequest {
   next: QueuedExecutionRequest | undefined;
-  #steps: Generator<ExecutionStep, T, void> | undefined;
-  #drains: Promise<void>[] | undefined;
-  #waiting = false;
-  #resumeFailure: { readonly error: unknown } | undefined;
+  #steps: Generator<ExecutionStep, T, unknown> | undefined;
+  #drains: ExecutionTicket<unknown>[] | undefined;
+  #waiting: PendingStep | undefined;
+  #input: Exclude<Outcome<unknown>, { kind: "pending" }> | undefined;
   #outcome: Outcome<T> = { kind: "pending" };
   #completion: Completion<T> | undefined;
   readonly #advanceQueue: () => void;
@@ -37,7 +42,7 @@ export class ExecutionRequest<T> implements QueuedExecutionRequest {
   readonly #publish: () => void;
 
   constructor(
-    steps: Generator<ExecutionStep, T, void>,
+    steps: Generator<ExecutionStep, T, unknown>,
     advanceQueue: () => void,
     publish: () => void,
     retire: () => void,
@@ -49,36 +54,47 @@ export class ExecutionRequest<T> implements QueuedExecutionRequest {
   }
 
   advance(): void {
-    if (this.#waiting || this.#steps === undefined) return;
+    if (this.#waiting !== undefined || this.#steps === undefined) return;
     try {
-      const failure = this.#resumeFailure;
-      this.#resumeFailure = undefined;
-      const step = failure === undefined
-        ? this.#steps.next()
-        : this.#steps.throw(failure.error);
+      const input = this.#input;
+      this.#input = undefined;
+      const step = input?.kind === "failure"
+        ? this.#steps.throw(input.error)
+        : this.#steps.next(input?.value);
       if (step.done) {
         this.#settle({ kind: "success", value: step.value });
       } else {
-        this.#waiting = true;
-        const pending = step.value;
-        if (pending instanceof ExecutionTicket) {
+        const pending = { step: step.value, observed: false };
+        this.#waiting = pending;
+        if (pending.step instanceof ExecutionTicket) {
           this.#drains ??= [];
-          this.#drains.push(pending.drained);
+          this.#drains.push(pending.step);
         }
-        const result = pending instanceof ExecutionTicket ? pending.result : pending;
-        result.then(
-          () => this.#resume(),
-          (error: unknown) => this.#resume({ error }),
-        );
+        if (!(pending.step instanceof ExecutionTicket) || pending.step.synchronous === undefined || this.#completion !== undefined) {
+          this.#observePending(pending);
+        }
       }
     } catch (error) {
       this.#settle({ kind: "failure", error });
     }
   }
 
-  #resume(failure?: { readonly error: unknown }): void {
-    this.#waiting = false;
-    this.#resumeFailure = failure;
+  #observePending(pending: PendingStep): void {
+    if (pending.observed) return;
+    pending.observed = true;
+    const result = pending.step instanceof ExecutionTicket ? pending.step.result : pending.step;
+    result.then(
+      (value) => this.#resume(pending, { kind: "success", value }),
+      (error: unknown) => this.#resume(pending, { kind: "failure", error }),
+    );
+  }
+
+  #resume(pending: PendingStep, input: Exclude<Outcome<unknown>, { kind: "pending" }>): void {
+    // A synchronous consumer may already have advanced this step. Its delayed
+    // Promise notification must not resume a subsequent step or retired request.
+    if (this.#waiting !== pending) return;
+    this.#waiting = undefined;
+    this.#input = input;
     this.#advanceQueue();
   }
 
@@ -86,8 +102,9 @@ export class ExecutionRequest<T> implements QueuedExecutionRequest {
     this.#outcome = outcome;
     this.#steps = undefined;
     this.#publish();
-    if (this.#drains === undefined) this.#retire();
-    else void Promise.all(this.#drains).then(this.#retire);
+    const drains = this.#drains?.filter((ticket) => ticket.synchronous?.isDrained() !== true);
+    if (drains === undefined || drains.length === 0) this.#retire();
+    else retireAfterDrain(drains, this.#retire);
     this.#drains = undefined;
     if (outcome.kind === "success") this.#completion?.resolve(outcome.value);
     else this.#completion?.reject(outcome.error);
@@ -95,6 +112,18 @@ export class ExecutionRequest<T> implements QueuedExecutionRequest {
   }
 
   read(): T {
+    while (this.#waiting !== undefined) {
+      const pending = this.#waiting;
+      if (!(pending.step instanceof ExecutionTicket) || pending.step.synchronous === undefined) break;
+      const synchronous = pending.step.synchronous;
+      let input: Exclude<Outcome<unknown>, { kind: "pending" }>;
+      try {
+        input = { kind: "success", value: synchronous.read() };
+      } catch (error) {
+        input = { kind: "failure", error };
+      }
+      this.#resume(pending, input);
+    }
     if (this.#outcome.kind === "success") return this.#outcome.value;
     if (this.#outcome.kind === "failure") throw this.#outcome.error;
     throw new Error("The execution request has not reached a terminal result.");
@@ -112,6 +141,17 @@ export class ExecutionRequest<T> implements QueuedExecutionRequest {
       });
       this.#completion = { promise, resolve, reject };
     }
+    if (this.#waiting !== undefined) this.#observePending(this.#waiting);
     return this.#completion.promise;
+  }
+}
+
+/** Shared accounting need not enqueue interpreter-local Promise reactions. */
+function retireAfterDrain(tickets: readonly ExecutionTicket<unknown>[], retire: () => void): void {
+  let remaining = tickets.length;
+  const drained = (): void => { if (--remaining === 0) retire(); };
+  for (const ticket of tickets) {
+    if (ticket.synchronous?.onDrained !== undefined) ticket.synchronous.onDrained(drained);
+    else void ticket.drained.then(drained);
   }
 }
