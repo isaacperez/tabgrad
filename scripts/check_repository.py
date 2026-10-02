@@ -175,7 +175,7 @@ REQUIRED_FILES = TIMELESS_DOCUMENTS | {
     "scripts/measure-runtime.mjs",
     "scripts/run_tests.py",
     "scripts/write-wasm-manifest.mjs",
-    "src/cpu-backend.ts",
+    "src/backends/cpu/cpu-backend.ts",
     "src/shared/errors.ts",
     "src/execution/executable-program.ts",
     "src/index.ts",

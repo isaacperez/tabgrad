@@ -9,7 +9,8 @@ another handle, pending calculation or observation still needs.
 The [reuse architecture](../architecture/cpu-intermediate-reuse.md) establishes
 the separation between logical retention and physical last access. Here that
 boundary connects `ExecutableProgram`, `RuntimeSession` and
-`WebAssemblyCpuBackend`. The backend's private `InvocationStorage` accounts for
+[`WebAssemblyCpuBackend`](../../src/backends/cpu/cpu-backend.ts). The backend's
+private `InvocationStorage` accounts for
 allocations during one synchronous execution; it is not a second allocator,
 semantic reference counter or persistent program cache.
 

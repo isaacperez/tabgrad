@@ -1,4 +1,4 @@
-import type { WasmVariant } from "./cpu-backend.js";
+import type { WasmVariant } from "./backends/cpu/cpu-backend.js";
 import { inspectExecutionFailureContext } from "./shared/errors.js";
 import { ExecutableProgram } from "./execution/executable-program.js";
 import {

@@ -1,7 +1,7 @@
-import { TabgradError } from "./shared/errors.js";
-import type { BackendCapabilities, ExecutionBackend, ProgramBinding, ResidentAllocation } from "./execution/backend.js";
-import type { ExecutableProgram, ProgramSlot } from "./execution/executable-program.js";
-import { tensorElementCount } from "./runtime/tensor-shape.js";
+import { TabgradError } from "../../shared/errors.js";
+import type { BackendCapabilities, ExecutionBackend, ProgramBinding, ResidentAllocation } from "../../execution/backend.js";
+import type { ExecutableProgram, ProgramSlot } from "../../execution/executable-program.js";
+import { tensorElementCount } from "../../runtime/tensor-shape.js";
 
 const ABI_VERSION = 1;
 const CAPABILITY_ADD_FLOAT32 = 1;
