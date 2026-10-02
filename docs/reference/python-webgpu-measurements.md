@@ -43,6 +43,35 @@ remaining inadequate for a very small formation or transport difference.
 Do not interpret repetition alone as proof of growth or convert an
 inconclusive small signal into a design conclusion.
 
+## Separate measurement policy from worker adaptation
+
+The [measurement controller](../../js-tests/browser/measurements/python-webgpu/python-webgpu-measure-controller.mjs)
+owns one complete run: interpreter and direct-session acquisition, case order,
+sampling, resource limits, diagnostic restoration and worker-side cleanup. Its
+`runManagedGpuMeasurement` function receives the transferred connection and
+mode, together with explicit runtime factories, module loader, monotonic clock
+and platform state. It returns the report for that run. Importing the controller
+does not load browser-only distribution entries or install an event handler.
+
+The [interpreter worker adapter](../../js-tests/browser/measurements/python-webgpu/python-webgpu-measure-worker.mjs)
+connects this policy to browser execution. It supplies the real runtime
+factories, native dynamic import, `performance` clock, isolation state and
+`WebAssembly` object, then posts the returned report. The controller disables
+JSPI on that supplied platform object before loading Pyodide; it does not
+choose an alternate execution strategy for controlled tests. The host still
+owns physical-worker closure and interpreter-worker termination before final
+reporting. Moving report construction into a callable function does not move
+those host lifetime obligations into the interpreter.
+
+The [Node policy tests](../../js-tests/unit/tooling/python-webgpu-measurement.test.mjs)
+import that same controller and supply controlled acquisitions, module results
+and elapsed time. They check late final samples, the complete cleanup interval,
+exact-limit acceptance and primary-error precedence without rewriting imports
+or intercepting an event callback. Such tests establish control-policy
+behavior, not GPU performance or compatibility. Actual worker/module serving
+and browser dependency wiring need their own evidence; ordinary tensor
+qualification does not execute a measurement workload.
+
 ## Run the size and depth matrix
 
 After recording the pilot's adequacy for the chosen question, run
