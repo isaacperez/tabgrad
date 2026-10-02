@@ -246,6 +246,39 @@ architecture, concepts, components, flows and reference; the
 defines their boundaries. This repository map does not introduce a sixth
 technical perspective or require a document for every module.
 
+### Reassess placement and dependencies
+
+Before adding or extending maintained code, identify its responsibility, the
+owner and location that express it, and its relevant producers, consumers and
+dependencies. Existing layout is evidence to examine, not automatic approval
+to put another responsibility in the nearest file. Assess the resulting
+affected responsibility, not only the added lines; inspect adjacent content
+when ownership, a shared invariant or an actual dependency connects it to the
+change. This does not require a whole-repository audit.
+
+Reconsider a location when the change grows a cohesive group, mixes independently
+changing responsibilities, or makes consumers borrow implementation details
+from an unrelated owner. Check both incoming and outgoing dependencies. A
+composition module can legitimately connect several components when assembly
+is its explicit responsibility; it must not become their alternative policy
+owner. Retaining the location is a valid conclusion when the resulting
+ownership and dependencies remain clear. File counts and filename prefixes
+alone do not decide this question.
+
+When structure changes, account for its actual consumers: imports, public and
+worker entry points, declaration and distribution paths, default and
+caller-relative asset resolution, test or check discovery, evidence source
+identities, and documentation links. Include only the consumers the change can
+affect, but do not assume a checker discovers a new location automatically.
+Verify those relationships using their registered contracts and commands.
+
+The [quality criteria](quality.md#give-each-unit-one-clear-responsibility)
+govern cohesion and shared knowledge. The
+[independent design assessment](agent-workflow.md#assess-design-and-extensibility-before-code-delivery)
+governs agent handoffs, the explicit review conclusion and correction handling.
+Documentation placement still follows the reader-question policy above;
+disposable research does not need a permanent production home.
+
 ### Add structure when a responsibility needs it
 
 A subdirectory is useful when it groups a cohesive responsibility and makes

@@ -214,6 +214,17 @@ cannot describe its responsibility, its branches represent unrelated policy,
 its state cannot be reasoned about locally, or meaningful behavior cannot be
 tested without exercising unrelated work.
 
+Apply cohesion across modules as well as within them. Check whether a component
+has one understandable ownership boundary and whether its dependencies use
+the relevant owner's contract rather than borrowing an unrelated owner's
+private helper. Distinct lifetimes, state or policies can justify separation;
+shared knowledge can justify one common owner. A composition layer may connect
+those owners without duplicating their policies. Judge the resulting affected
+responsibility and evidenced neighbors, not just the new lines or existing
+names. Use [placement reassessment](repository-structure.md#reassess-placement-and-dependencies)
+to decide where that responsibility belongs; neither more folders nor fewer
+files establishes modularity.
+
 Do not declare a helper with an independent domain responsibility, reusable
 rule, failure policy, or testing purpose inside another function or method.
 Put that helper at module scope or on the type that owns it. A callback or

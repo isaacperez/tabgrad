@@ -490,12 +490,27 @@ and, for retained library code, the
 The writer's handoff identifies affected owners, contracts, accepted design
 constraints and evidenced extension axes, applying the
 [specialization and extension-cost rule](quality.md#keep-specialization-owned-and-extension-costs-explicit).
-The reviewer checks the source and its relevant producers and consumers
-rather than accepting that account or
-inferring design quality from passing tests.
+It also supplies the justified location, relevant dependency boundaries and
+affected structural consumers under
+[placement reassessment](repository-structure.md#reassess-placement-and-dependencies).
+The reviewer inspects the resulting affected responsibility and its evidenced
+neighbors, not just added lines or the writer's selected files. Expand only
+when an actual dependency, shared invariant or concrete risk warrants it;
+this gate does not authorize a routine whole-repository audit. Check original
+source rather than accepting the writer's account or inferring design quality
+from passing tests or inherited layout.
 
 Record a design and extensibility conclusion in the existing review report:
 
+- State an explicit organization, cohesion and dependency conclusion. Identify
+  the responsibility, inspected locations and relevant incoming and outgoing
+  dependencies. Explain why the resulting grouping and dependency ownership
+  are appropriate, or identify the defect and required outcome. Consider
+  cross-owner coupling, mixed responsibilities and dispersed shared knowledge
+  using the linked placement and quality rules. Justify retained structure
+  when no extraction is needed; a bare checklist or claim of modularity is
+  insufficient. Verification of structural consumers supports consistency,
+  but does not replace this independent design judgment.
 - Identify the inspected boundaries and their governing architecture or
   project standards. Explain whether ownership, interfaces, conventions and
   shared invariants are consistent, or whether duplication or coupling makes
@@ -531,6 +546,15 @@ reuse an existing component, or remove an unnecessary abstraction. Do not
 require a new interface merely for its name, implement deferred capabilities,
 or demand zero future refactoring. An extension-path assessment does not claim
 that an unimplemented capability works.
+
+The issue's narrow scope is not a reason to retain such a blocking defect.
+If its correction needs an unapproved architectural choice or materially
+different scope, stop that part and obtain the required decision rather than
+claiming completion. For independent pre-existing debt, record its owner,
+consequence and concrete disposition in the existing report: a relevant
+tracked issue, a bounded follow-up proposal pending authority, or an
+evidence-backed reason no action is needed. A vague promise to refactor later
+is not a disposition. Do not create an issue or expand work without authority.
 
 Apply the existing finding classification and author-review loop below.
 Required corrections return to the sole writer and the resulting state must

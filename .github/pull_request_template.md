@@ -82,7 +82,7 @@ unexplained `Not applicable`.
 
 | Subject | Evidence or reason it does not apply |
 | --- | --- |
-| Code quality and design | <!-- Explain the governing invariant, chosen abstraction or reason no abstraction is needed, root-cause reasoning for a bug, and any material performance tradeoff. --> |
+| Code quality and design | <!-- Explain the governing invariant, chosen abstraction or reason no abstraction is needed, root-cause reasoning for a bug, and any material performance tradeoff. For code changes, point to the independent organization, cohesion and dependency conclusion under docs/agent-workflow.md#assess-design-and-extensibility-before-code-delivery, including inspected boundaries, justified placement and any required correction or separate-debt disposition. For non-code changes, use their content-specific review. --> |
 | Tests | <!-- Identify added or changed tests and the behavior they detect. --> |
 | Documentation | <!-- Identify and link every affected durable source. When technical documentation applies, classify its architecture, concept, component, flow, or reference perspective and link each changed primary source or index. For explanatory material, identify the reader, questions and reading path, and editorial evidence under docs/documentation.md. Otherwise, explain from the changed contracts why no documentation can become inaccurate. --> |
 | PyTorch compatibility | <!-- Identify the reference behavior and comparison, or explain why compatibility is unaffected. --> |
@@ -134,6 +134,10 @@ not apply, explain why under **Independent verification and review**.
 - [ ] Responsibilities and variations use the smallest justified structure;
   no independently responsible helper is nested inside another function, and
   every local callback or closure satisfies `docs/quality.md`.
+- [ ] For code changes, the existing independent review explicitly assesses
+  organization, cohesion and dependencies under the design gate; required
+  corrections are resolved and separate debt has a concrete disposition.
+  Otherwise, the applicable content-specific review is recorded.
 - [ ] Every distributed production-behavior change has a test that would fail
   without the change.
 - [ ] Every useful cycle for new or corrected distributed production behavior

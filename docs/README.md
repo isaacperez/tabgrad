@@ -76,10 +76,12 @@ link to its primary source, but they must not create a competing version.
 | WebGPU float32 addition numerical contract, alternatives and optimization constraints | [`architecture/webgpu-float32-addition.md`](architecture/webgpu-float32-addition.md) |
 | Contribution workflow | [`CONTRIBUTING.md`](../CONTRIBUTING.md) |
 | Repository map and content placement | [`repository-structure.md`](repository-structure.md) |
+| Placement and dependency reassessment | [`repository-structure.md`](repository-structure.md#reassess-placement-and-dependencies) |
 | Integrated implementation workflow and reading guide | [`implementation-workflow.md`](implementation-workflow.md) |
 | Issues, labels, project fields, and milestones | [`project-management.md`](project-management.md) |
 | Capability-route discovery, consultation and impact handoffs | [`project-management.md`](project-management.md#maintain-the-capability-route) |
 | Agent delegation and independent checks | [`agent-workflow.md`](agent-workflow.md) |
+| Independent organization, design and extensibility assessment | [`agent-workflow.md`](agent-workflow.md#assess-design-and-extensibility-before-code-delivery) |
 | Unexpected findings, blockers, and pending decisions | [`CONTRIBUTING.md`](../CONTRIBUTING.md#handling-unexpected-findings-and-pending-decisions) |
 | Branches, worktrees, commits, and merge history | [`version-control.md`](version-control.md) |
 | Code style, design quality, abstractions, and root-cause corrections | [`quality.md`](quality.md) |

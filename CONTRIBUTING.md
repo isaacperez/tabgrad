@@ -54,6 +54,9 @@ primary source for each other project rule.
 Use the [repository map](docs/repository-structure.md) to locate the owner of
 the change and distinguish maintained source from generated or local files.
 It also explains placement and when a structural change requires a map update.
+Apply its [placement reassessment](docs/repository-structure.md#reassess-placement-and-dependencies)
+when adding or extending maintained code; inherited layout does not by itself
+justify the resulting responsibility or dependencies.
 
 Read the `README.md`, the relevant issue, and any documentation related to the
 part of the project you will change. Inspect the existing code and tests before
@@ -246,6 +249,12 @@ satisfies the issue. The result must be readable and testable, enforce the real
 invariant, and use a shared abstraction when genuine variations would otherwise
 duplicate knowledge. Do not introduce speculative generality or a workaround
 that hides a known cause.
+
+Coding-agent delivery includes an explicit organization, cohesion and
+dependency conclusion within the existing
+[independent design assessment](docs/agent-workflow.md#assess-design-and-extensibility-before-code-delivery),
+not an additional general audit. The assessment owns its bounded inspection,
+correction and separate-debt rules.
 
 Keep helpers with an independent responsibility at module or type scope. Do
 not declare them inside another function. A callback or closure required by an
