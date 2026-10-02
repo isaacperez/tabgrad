@@ -6,7 +6,7 @@ import { runInNewContext } from "node:vm";
 // Execute the real browser worker callback with controlled dependency owners.
 // Supplying its static bindings and dynamic loader replaces dependencies,
 // not the worker's sampling, deadline or cleanup logic.
-const source = (await readFile(new URL("../browser/python-webgpu-measure-worker.mjs", import.meta.url), "utf8"))
+const source = (await readFile(new URL("../../browser/python-webgpu-measure-worker.mjs", import.meta.url), "utf8"))
   .replace(/^import .* from "\/(?:python|index)\.js";\n/gm, "")
   .replace(/\bimport\(/g, "loadModule(");
 const length = 262144;

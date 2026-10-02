@@ -60,7 +60,7 @@ jobs:
         run: node scripts/validation-scope.mjs
 
       - name: Test validation applicability independently of its decision
-        run: node --test --test-concurrency=2 js-tests/unit/validation-scope.test.mjs
+        run: node --test --test-concurrency=2 js-tests/unit/tooling/validation-scope.test.mjs
 
       - name: Select the pinned npm release
         run: npm install --global npm@11.1.0 --ignore-scripts --no-audit --no-fund

@@ -151,10 +151,11 @@ REQUIRED_FILES = TIMELESS_DOCUMENTS | {
     "js-tests/browser/runtime.html",
     "js-tests/browser/python-lifecycle.html",
     "js-tests/browser/measure.html",
-    "js-tests/unit/runtime.test.mjs",
-    "js-tests/unit/public-types.test.mjs",
-    "js-tests/unit/python-binding.test.mjs",
-    "js-tests/unit/validation-scope.test.mjs",
+    "js-tests/unit/runtime/runtime.test.mjs",
+    "js-tests/unit/runtime/public-types.test.mjs",
+    "js-tests/unit/cpu/raw-abi.test.mjs",
+    "js-tests/unit/python/python-binding.test.mjs",
+    "js-tests/unit/tooling/validation-scope.test.mjs",
     "package-lock.json",
     "package.json",
     "pyrightconfig.json",
@@ -412,7 +413,7 @@ CI_NODE_TEST_COMMAND = "npm run test:node"
 CI_BROWSER_TEST_COMMAND = "npm run test:browser:from-source"
 CI_SCOPE_COMMAND = "node scripts/validation-scope.mjs"
 CI_SCOPE_TEST_COMMAND = (
-    "node --test --test-concurrency=2 js-tests/unit/validation-scope.test.mjs"
+    "node --test --test-concurrency=2 js-tests/unit/tooling/validation-scope.test.mjs"
 )
 CI_RUNTIME_SCOPE_REPORT = "node scripts/validation-scope.mjs --report runtime"
 CI_BROWSER_SCOPE_REPORT = "node scripts/validation-scope.mjs --report browser"

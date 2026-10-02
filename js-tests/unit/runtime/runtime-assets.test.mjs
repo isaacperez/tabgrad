@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createRuntimeSession } from "../../dist/index.js";
+import { createRuntimeSession } from "../../../dist/index.js";
 
-const distributionRoot = new URL("../../dist/", import.meta.url);
+const distributionRoot = new URL("../../../dist/", import.meta.url);
 
 for (const [name, manifestUrl, expected] of [
   ["default", undefined, new URL("manifest.json", distributionRoot)],

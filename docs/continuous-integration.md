@@ -34,7 +34,7 @@ Python tooling and the selected Node/npm environment with locked Pyright. It run
 
 After Node setup it also selects execution applicability with
 `node scripts/validation-scope.mjs` and always runs
-`node --test --test-concurrency=2 js-tests/unit/validation-scope.test.mjs`.
+`node --test --test-concurrency=2 js-tests/unit/tooling/validation-scope.test.mjs`.
 Those tests need only Node and disposable local Git trees, not a distribution
 build. The selector cannot decide to omit its own tests. Consistency remains
 unconditional and publishes the validated runtime/browser decision to the

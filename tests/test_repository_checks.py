@@ -799,8 +799,8 @@ class RepositoryCheckTests(unittest.TestCase):
             ),
             (
                 "disabled selection self-test",
-                "        run: node --test --test-concurrency=2 js-tests/unit/validation-scope.test.mjs\n",
-                "        run: node --test --test-concurrency=2 js-tests/unit/validation-scope.test.mjs\n"
+                "        run: node --test --test-concurrency=2 js-tests/unit/tooling/validation-scope.test.mjs\n",
+                "        run: node --test --test-concurrency=2 js-tests/unit/tooling/validation-scope.test.mjs\n"
                 "        if: false\n",
             ),
             (

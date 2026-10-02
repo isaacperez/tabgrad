@@ -12,7 +12,7 @@ import {
   selectBrowserDefinitions,
   startBrowserServer,
   terminateBrowser,
-} from "../../scripts/browser-harness.mjs";
+} from "../../../scripts/browser-harness.mjs";
 
 const fixturePrelude = `
 const pageUrl = new URL(process.argv[1]);
@@ -29,8 +29,8 @@ async function post(path, body) {
 `;
 
 test("an isolated distribution can be measured without replacing the working distribution", async () => {
-  const directory = fileURLToPath(new URL("../fixtures", import.meta.url));
-  const original = await readFile(new URL("../../dist/manifest.json", import.meta.url), "utf8");
+  const directory = fileURLToPath(new URL("../../fixtures", import.meta.url));
+  const original = await readFile(new URL("../../../dist/manifest.json", import.meta.url), "utf8");
   const server = await startBrowserServer([], { distributionDirectory: directory });
   try {
     const response = await fetch(`${server.origin}/python-tensor-oracle.json`);
@@ -38,7 +38,7 @@ test("an isolated distribution can be measured without replacing the working dis
     assert.equal(await response.text(), await readFile(`${directory}/python-tensor-oracle.json`, "utf8"));
     assert.equal((await fetch(`${server.origin}/manifest.json`)).status, 404);
   } finally { await server.close(); }
-  assert.equal(await readFile(new URL("../../dist/manifest.json", import.meta.url), "utf8"), original);
+  assert.equal(await readFile(new URL("../../../dist/manifest.json", import.meta.url), "utf8"), original);
 });
 
 
@@ -86,7 +86,7 @@ function expectBrowserFailure(expectedKind, inspect = undefined) {
 
 async function runInheritedStderrFixture(scenario) {
   const child = spawn(process.execPath, [
-    fileURLToPath(new URL("../fixtures/inherited-browser-stderr.mjs", import.meta.url)),
+    fileURLToPath(new URL("../../fixtures/inherited-browser-stderr.mjs", import.meta.url)),
     "harness", scenario,
   ], { stdio: ["ignore", "pipe", "pipe"] });
   let output = "";

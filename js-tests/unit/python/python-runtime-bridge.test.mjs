@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { RuntimeSession } from "../../dist/index.js";
-import { PythonRuntimeBridge } from "../../dist/frontends/python/python-runtime-bridge.js";
+import { RuntimeSession } from "../../../dist/index.js";
+import { PythonRuntimeBridge } from "../../../dist/frontends/python/python-runtime-bridge.js";
 
 function bufferLoan(overrides = {}) {
   let releases = 0;

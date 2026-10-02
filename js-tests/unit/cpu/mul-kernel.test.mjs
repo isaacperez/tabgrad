@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
-import { float32FromBits } from "./sum-oracle.mjs";
+import { float32FromBits } from "../../fixtures/sum-oracle.mjs";
 
 for (const variant of ["scalar", "simd128"]) {
   test(`raw ${variant} multiplication agrees with native float32 bit fixtures`, async () => {
-    const oracle = JSON.parse(await readFile(new URL("../fixtures/python-tensor-oracle.json", import.meta.url), "utf8"));
+    const oracle = JSON.parse(await readFile(new URL("../../fixtures/python-tensor-oracle.json", import.meta.url), "utf8"));
     const memory = new WebAssembly.Memory({ initial: 32, maximum: 1024 });
-    const bytes = await readFile(new URL(`../../dist/wasm/kernels-${variant}.wasm`, import.meta.url));
+    const bytes = await readFile(new URL(`../../../dist/wasm/kernels-${variant}.wasm`, import.meta.url));
     const { instance } = await WebAssembly.instantiate(bytes, { env: { memory } });
     const base = instance.exports.tabgrad_arena_base() + 4;
     const values = new Float32Array(memory.buffer);
@@ -20,7 +20,7 @@ for (const variant of ["scalar", "simd128"]) {
     }
   });
   test(`raw ${variant} multiplication validates ranges and handles aliases and tails`, async () => {
-    const bytes = await readFile(new URL(`../../dist/wasm/kernels-${variant}.wasm`, import.meta.url));
+    const bytes = await readFile(new URL(`../../../dist/wasm/kernels-${variant}.wasm`, import.meta.url));
     const memory = new WebAssembly.Memory({ initial: 32, maximum: 1024 });
     const { instance } = await WebAssembly.instantiate(bytes, { env: { memory } });
     const { tabgrad_mul_f32: mul, tabgrad_arena_base: arena } = instance.exports;

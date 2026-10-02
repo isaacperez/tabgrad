@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { getEventListeners } from "node:events";
-import * as python from "../../dist/python.js";
-import { TabgradError, retainExecutionFailureContext } from "../../dist/shared/errors.js";
+import * as python from "../../../dist/python.js";
+import { TabgradError, retainExecutionFailureContext } from "../../../dist/shared/errors.js";
 
 function deferred() {
   let resolve;

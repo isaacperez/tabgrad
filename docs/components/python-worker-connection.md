@@ -160,7 +160,7 @@ by active work; script text and diagnostic size remain proportional to the
 content being transmitted. This is not a measured claim about total browser
 memory or the latency of a model.
 
-The [endpoint tests](../../js-tests/unit/python-worker.test.mjs) exercise real
+The [endpoint tests](../../js-tests/unit/python/python-worker.test.mjs) exercise real
 message ports with controlled local bindings. The
 [browser check](../../js-tests/browser/python-worker.html) uses an
 application-owned [worker bootstrap](../../js-tests/browser/python-worker.mjs),

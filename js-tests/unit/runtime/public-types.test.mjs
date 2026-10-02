@@ -4,12 +4,12 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 
-import * as tabgrad from "../../dist/index.js";
+import * as tabgrad from "../../../dist/index.js";
 
 const { RuntimeSession, Tensor } = tabgrad;
 
 test("the static Python entry selects only the supported runtime exports", async () => {
-  const python = await import("../../dist/python.js");
+  const python = await import("../../../dist/python.js");
   assert.deepEqual(Object.keys(python).sort(), [
     "PythonWorkerError", "attachPython", "connectPythonWorker",
     "createWebGpuWorker", "servePythonWorker",
@@ -18,7 +18,7 @@ test("the static Python entry selects only the supported runtime exports", async
 
 test("Python binding declarations typecheck without stripped internal or Node-only types", () => {
   const program = ts.createProgram({
-    rootNames: [fileURLToPath(new URL("../../dist/python.d.ts", import.meta.url))],
+    rootNames: [fileURLToPath(new URL("../../../dist/python.d.ts", import.meta.url))],
     options: {
       strict: true,
       noEmit: true,
@@ -78,7 +78,7 @@ test("JavaScript cannot construct a tensor handle outside a runtime session", ()
 
 test("the public declarations do not expose runtime-to-backend plumbing", async () => {
   const declarations = await readFile(
-    new URL("../../dist/runtime/runtime.d.ts", import.meta.url),
+    new URL("../../../dist/runtime/runtime.d.ts", import.meta.url),
     "utf8",
   );
   assert.match(declarations, /get shape\(\): readonly number\[\]/);
@@ -105,7 +105,7 @@ test("the public declarations do not expose runtime-to-backend plumbing", async 
 
 test("the package entry point does not export executable or failure internals", async () => {
   const declarations = await readFile(
-    new URL("../../dist/index.d.ts", import.meta.url),
+    new URL("../../../dist/index.d.ts", import.meta.url),
     "utf8",
   );
 

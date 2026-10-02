@@ -7,8 +7,8 @@ import { setTimeout as delay } from "node:timers/promises";
 import {
   BrowserIngressDiagnostics,
   captureBrowserTimeoutSnapshot,
-} from "../../scripts/browser-run-diagnostics.mjs";
-import { startBrowserServer } from "../../scripts/browser-harness.mjs";
+} from "../../../scripts/browser-run-diagnostics.mjs";
+import { startBrowserServer } from "../../../scripts/browser-harness.mjs";
 
 function gate() {
   let resolve;
