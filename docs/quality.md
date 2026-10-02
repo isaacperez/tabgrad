@@ -456,6 +456,31 @@ completion condition and every material risk to one or more checks. Run both
 focused checks that diagnose the changed behavior and the broader configured
 checks that detect regressions elsewhere.
 
+Make this selection before expensive execution. Classify the retained result
+as production behavior, a preserving refactor, maintained tooling, prose or
+instructions, or an approved experiment. Trace affected responsibilities and
+their consumers, shared contracts, build/distribution inputs and environments;
+the number of changed lines or a directory name alone does not establish scope.
+Document which controls always apply, which checks cover this change, and why
+other checks do not apply. Distinguish an unaffected concern from a required
+check that cannot run. Missing capability or permission is not non-applicability.
+
+Keep applicable full suites and specialized environment evidence. Selection is
+not permission to substitute a small example for a regression suite, a GPU
+double for shader execution, or functional tests for decision-grade performance
+evidence. Do not run production TDD, hardware qualification or benchmarks for
+prose or instructions that cannot affect those behaviors. Uncertain impact,
+shared contracts or changed discovery may require broader coverage. Configured
+mandatory checks remain mandatory unless their reviewed policy explicitly
+provides a conclusive non-applicability result.
+
+Reassess selection against the complete final diff. Changed scope, consumers,
+claims or environment assumptions invalidate affected exclusions and evidence.
+For coding agents, the existing independent preflight records the initial plan
+and the existing final verifier/reviewer validates its coverage under the
+[contextual validation handoff](agent-workflow.md#plan-contextual-validation).
+Do not add a routine agent just to repeat that decision.
+
 The following categories apply when the change can affect them:
 
 | Change | Required evidence |

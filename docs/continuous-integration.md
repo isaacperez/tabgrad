@@ -32,13 +32,21 @@ Python tooling and the selected Node/npm environment with locked Pyright. It run
 4. `.venv/bin/python scripts/check_repository.py`.
 5. `.venv/bin/python scripts/run_tests.py`.
 
+After Node setup it also selects execution applicability with
+`node scripts/validation-scope.mjs` and always runs
+`node --test --test-concurrency=2 js-tests/unit/validation-scope.test.mjs`.
+Those tests need only Node and disposable local Git trees, not a distribution
+build. The selector cannot decide to omit its own tests. Consistency remains
+unconditional and publishes the validated runtime/browser decision to the
+execution jobs only after its complete result succeeds.
+
 Python type checking includes the maintained compatibility source with the
 Pyodide interpreter target, separately from native tooling's Python target.
 The check reads upstream type sources from the locked npm-installed Pyodide
 archive; it does not install dependencies or import browser modules into
 native Python. See [the command coverage](development.md#configured-commands).
 
-The `runtime` job uses Node.js 22.12.0 from `.node-version`, installs the Rust
+When runtime execution applies, the `runtime` job uses Node.js 22.12.0 from `.node-version`, installs the Rust
 1.98.1 minimal toolchain with `wasm32-unknown-unknown`, Rustfmt, and Clippy,
 installs the npm lockfile without lifecycle scripts, and runs:
 
@@ -50,7 +58,7 @@ installs the npm lockfile without lifecycle scripts, and runs:
 The `browser` matrix creates one job with `TABGRAD_BROWSER=Chrome` and another
 with `TABGRAD_BROWSER=Firefox`. Each isolated job prepares the same locked
 Node.js, npm, and Rust environment and runs
-`npm run test:browser:from-source`. The command builds its own distribution and
+`npm run test:browser:from-source` when browser execution applies. The command builds its own distribution and
 executes scalar and SIMD additions only in the selected installed browser.
 `fail-fast` is disabled, so one browser failure does not suppress evidence from
 the other browser. This deliberately duplicates a small build and setup cost in
@@ -93,6 +101,54 @@ checkout credentials, uses an explicit runner and Python version, limits job
 time, grants only `contents: read`, and cancels superseded runs for the same
 reference. Treat every workflow as executable code with access to the
 permissions stated in its file.
+
+## Select CI execution by impact
+
+CI selects execution families, not individual tests. The selection owner is
+[`scripts/validation-scope.mjs`](../scripts/validation-scope.mjs); it does not
+invoke agents, infer semantic correctness or replace the independent review's
+contextual validation plan. Local specialized checks may still be required by
+a changed contract even when a generic CI family cannot cover that environment.
+
+For a pull request, compare the event base commit with the actual checked-out
+candidate (`github.sha`, normally the PR merge commit). Full history is fetched
+in the consistency job. Both identifiers must be complete commit hashes, the
+candidate must match checkout HEAD and the base must be its ancestor. Read the
+complete NUL-separated Git diff with rename detection disabled so removed and
+added homes both influence coverage. Do not classify a guessed head-only diff
+while testing a different merge result.
+
+The conservative policy is:
+
+| Complete change set | Execution coverage |
+| --- | --- |
+| Maintained Markdown documentation/root policy files, brand Markdown/SVG, issue forms/template, or native Python tests under `tests/` only | Repository consistency and the applicable independent content/instruction/tooling review; no runtime build or browser execution |
+| Node unit `.mjs` cases under `js-tests/unit/`, optionally mixed with the previous group | Runtime checks and the complete Node suite; unchanged browser execution is not selected |
+| Runtime, Python compatibility, Rust, browser fixtures, build/dependency inputs, selector/workflow code, mixed executable areas, or an unclassified path | Both runtime and browser families |
+| Main push, manual or unknown event, empty diff, malformed identifiers, missing history, checkout mismatch or failed/incomplete Git comparison | Both runtime and browser families |
+
+Only known exclusions narrow coverage. New maintained locations default to full
+coverage until their ownership and consumers justify a reviewed policy update.
+The path policy is an automation boundary, not proof that a document's runnable
+example or changed contract needs no additional check. Review decides that from
+the actual result under [quality rules](quality.md#select-checks-from-the-affected-risks).
+
+The four existing check names remain. Runtime and browser jobs wait for the
+successful consistency decision, set up Node, and always record applicability
+using `node scripts/validation-scope.mjs --report runtime` or `--report browser`.
+Only their costly Rust/npm installation, compilation and execution steps are
+conditional. A validated `false` is explicit non-applicability, **not** evidence
+that those tests ran or passed. Missing/invalid outputs fail the reporting
+command. A failed consistency job blocks downstream jobs and merge; it is not
+an unaffected result. This admission ordering avoids running expensive jobs on
+a rejected consistency result; it is not a measured speed improvement for
+execution-affecting changes.
+
+All configured execution runs on `main` and manual dispatch. There are no
+workflow-level PR path filters, relaxed protections, error-tolerance flags,
+new dependencies or secrets. Review and register the complete workflow and
+selection policy together. CI evidence must include the actual decision,
+selected step results and explicit exclusions, not merely four green badges.
 
 ## Add checks by responsibility
 
@@ -176,9 +232,12 @@ requires direct inspection of GitHub.
 ## Interpret CI results
 
 A green status applies only to the commit and environment named by the run.
-Inspect that the expected jobs ran, discovered their tests, and did not pass
-through an unintended skip. A canceled, neutral, skipped, timed-out, or missing
-required result is not a pass.
+Inspect that expected jobs ran and selected tests were discovered and executed.
+For explicitly unaffected families, verify the reviewed selection decision and
+successful applicability report; describe conditional execution steps as not
+applicable, never as passed tests. An unintended skip or missing applicability
+record is not valid coverage. A canceled, neutral, skipped, timed-out, or
+missing required result is not a pass.
 
 When a workflow fails, classify the failure under `CONTRIBUTING.md`. Compare
 with the base when necessary, preserve every failed attempt, and correct the

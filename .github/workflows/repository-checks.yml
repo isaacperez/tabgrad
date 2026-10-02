@@ -19,12 +19,16 @@ jobs:
     name: repository-consistency
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    outputs:
+      runtime: ${{ steps.validation.outputs.runtime }}
+      browser: ${{ steps.validation.outputs.browser }}
 
     steps:
       - name: Check out the repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -47,6 +51,17 @@ jobs:
           node-version-file: .node-version
           check-latest: false
 
+      - name: Select contextual execution coverage
+        id: validation
+        env:
+          TABGRAD_VALIDATION_EVENT: ${{ github.event_name }}
+          TABGRAD_VALIDATION_BASE: ${{ github.event.pull_request.base.sha }}
+          TABGRAD_VALIDATION_HEAD: ${{ github.sha }}
+        run: node scripts/validation-scope.mjs
+
+      - name: Test validation applicability independently of its decision
+        run: node --test --test-concurrency=2 js-tests/unit/validation-scope.test.mjs
+
       - name: Select the pinned npm release
         run: npm install --global npm@11.1.0 --ignore-scripts --no-audit --no-fund
 
@@ -66,6 +81,7 @@ jobs:
     name: runtime
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    needs: repository-consistency
 
     steps:
       - name: Check out the repository
@@ -80,24 +96,35 @@ jobs:
           check-latest: false
 
       - name: Install the pinned Rust toolchain
+        if: needs.repository-consistency.outputs.runtime == 'true'
         run: rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy --target wasm32-unknown-unknown
 
       - name: Select the pinned npm release
+        if: needs.repository-consistency.outputs.runtime == 'true'
         run: npm install --global npm@11.1.0 --ignore-scripts --no-audit --no-fund
 
       - name: Install locked JavaScript development dependencies
+        if: needs.repository-consistency.outputs.runtime == 'true'
         run: npm ci --ignore-scripts --no-audit --no-fund
 
       - name: Check TypeScript and Rust
+        if: needs.repository-consistency.outputs.runtime == 'true'
         run: npm run check
 
       - name: Build and test the Node.js runtime
+        if: needs.repository-consistency.outputs.runtime == 'true'
         run: npm run test:node
+
+      - name: Record runtime validation applicability
+        env:
+          TABGRAD_VALIDATION_RUNTIME: ${{ needs.repository-consistency.outputs.runtime }}
+        run: node scripts/validation-scope.mjs --report runtime
 
   browser:
     name: browser-${{ matrix.browser }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    needs: repository-consistency
     strategy:
       fail-fast: false
       matrix:
@@ -120,13 +147,22 @@ jobs:
           check-latest: false
 
       - name: Install the pinned Rust toolchain
+        if: needs.repository-consistency.outputs.browser == 'true'
         run: rustup toolchain install 1.98.1 --profile minimal --target wasm32-unknown-unknown
 
       - name: Select the pinned npm release
+        if: needs.repository-consistency.outputs.browser == 'true'
         run: npm install --global npm@11.1.0 --ignore-scripts --no-audit --no-fund
 
       - name: Install locked JavaScript development dependencies
+        if: needs.repository-consistency.outputs.browser == 'true'
         run: npm ci --ignore-scripts --no-audit --no-fund
 
       - name: Build and test the selected browser runtime
+        if: needs.repository-consistency.outputs.browser == 'true'
         run: npm run test:browser:from-source
+
+      - name: Record browser validation applicability
+        env:
+          TABGRAD_VALIDATION_BROWSER: ${{ needs.repository-consistency.outputs.browser }}
+        run: node scripts/validation-scope.mjs --report browser
