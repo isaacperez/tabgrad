@@ -793,6 +793,27 @@ class RepositoryCheckTests(unittest.TestCase):
     def test_ci_rejects_changes_that_can_neutralize_required_checks(self) -> None:
         mutations = (
             (
+                "fixed exclusion instead of reviewed selector output",
+                "      runtime: ${{ steps.validation.outputs.runtime }}\n",
+                "      runtime: 'false'\n",
+            ),
+            (
+                "disabled selection self-test",
+                "        run: node --test --test-concurrency=2 js-tests/unit/validation-scope.test.mjs\n",
+                "        run: node --test --test-concurrency=2 js-tests/unit/validation-scope.test.mjs\n"
+                "        if: false\n",
+            ),
+            (
+                "candidate different from the checked-out CI merge state",
+                "          TABGRAD_VALIDATION_HEAD: ${{ github.sha }}\n",
+                "          TABGRAD_VALIDATION_HEAD: ${{ github.event.pull_request.head.sha }}\n",
+            ),
+            (
+                "runtime prerequisite bypass",
+                "    needs: repository-consistency\n",
+                "    needs: []\n",
+            ),
+            (
                 "pull request path filter",
                 "  pull_request:\n",
                 "  pull_request:\n    paths:\n      - docs/**\n",

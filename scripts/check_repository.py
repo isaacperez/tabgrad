@@ -154,6 +154,7 @@ REQUIRED_FILES = TIMELESS_DOCUMENTS | {
     "js-tests/unit/runtime.test.mjs",
     "js-tests/unit/public-types.test.mjs",
     "js-tests/unit/python-binding.test.mjs",
+    "js-tests/unit/validation-scope.test.mjs",
     "package-lock.json",
     "package.json",
     "pyrightconfig.json",
@@ -174,6 +175,7 @@ REQUIRED_FILES = TIMELESS_DOCUMENTS | {
     "scripts/run-browser-tests.mjs",
     "scripts/measure-runtime.mjs",
     "scripts/run_tests.py",
+    "scripts/validation-scope.mjs",
     "scripts/write-wasm-manifest.mjs",
     "src/backends/cpu/cpu-backend.ts",
     "src/shared/errors.ts",
@@ -408,6 +410,14 @@ CI_NPM_TOOL_COMMAND = (
 CI_RUNTIME_CHECK_COMMAND = "npm run check"
 CI_NODE_TEST_COMMAND = "npm run test:node"
 CI_BROWSER_TEST_COMMAND = "npm run test:browser:from-source"
+CI_SCOPE_COMMAND = "node scripts/validation-scope.mjs"
+CI_SCOPE_TEST_COMMAND = (
+    "node --test --test-concurrency=2 js-tests/unit/validation-scope.test.mjs"
+)
+CI_RUNTIME_SCOPE_REPORT = "node scripts/validation-scope.mjs --report runtime"
+CI_BROWSER_SCOPE_REPORT = "node scripts/validation-scope.mjs --report browser"
+CI_RUNTIME_CONDITION = "needs.repository-consistency.outputs.runtime == 'true'"
+CI_BROWSER_CONDITION = "needs.repository-consistency.outputs.browser == 'true'"
 REQUIRED_CI_COMMANDS = {
     CI_INSTALL_COMMAND,
     CI_FORMAT_COMMAND,
@@ -422,6 +432,10 @@ REQUIRED_CI_COMMANDS = {
     CI_RUNTIME_CHECK_COMMAND,
     CI_NODE_TEST_COMMAND,
     CI_BROWSER_TEST_COMMAND,
+    CI_SCOPE_COMMAND,
+    CI_SCOPE_TEST_COMMAND,
+    CI_RUNTIME_SCOPE_REPORT,
+    CI_BROWSER_SCOPE_REPORT,
 }
 REPEATABLE_CI_SETUP_COMMANDS = {
     CI_NPM_INSTALL_COMMAND,
@@ -452,11 +466,15 @@ EXPECTED_REPOSITORY_CHECKS_WORKFLOW = {
             "name": "repository-consistency",
             "runs-on": "ubuntu-24.04",
             "timeout-minutes": 5,
+            "outputs": {
+                "runtime": "${{ steps.validation.outputs.runtime }}",
+                "browser": "${{ steps.validation.outputs.browser }}",
+            },
             "steps": [
                 {
                     "name": "Check out the repository",
                     "uses": CHECKOUT_ACTION,
-                    "with": {"persist-credentials": False},
+                    "with": {"persist-credentials": False, "fetch-depth": 0},
                 },
                 {
                     "name": "Set up Python",
@@ -480,6 +498,20 @@ EXPECTED_REPOSITORY_CHECKS_WORKFLOW = {
                         "check-latest": False,
                     },
                 },
+                {
+                    "name": "Select contextual execution coverage",
+                    "id": "validation",
+                    "env": {
+                        "TABGRAD_VALIDATION_EVENT": "${{ github.event_name }}",
+                        "TABGRAD_VALIDATION_BASE": "${{ github.event.pull_request.base.sha }}",
+                        "TABGRAD_VALIDATION_HEAD": "${{ github.sha }}",
+                    },
+                    "run": CI_SCOPE_COMMAND,
+                },
+                {
+                    "name": "Test validation applicability independently of its decision",
+                    "run": CI_SCOPE_TEST_COMMAND,
+                },
                 {"name": "Select the pinned npm release", "run": CI_NPM_TOOL_COMMAND},
                 {
                     "name": "Install locked JavaScript development dependencies",
@@ -497,6 +529,7 @@ EXPECTED_REPOSITORY_CHECKS_WORKFLOW = {
             "name": "runtime",
             "runs-on": "ubuntu-24.04",
             "timeout-minutes": 15,
+            "needs": "repository-consistency",
             "steps": [
                 {
                     "name": "Check out the repository",
@@ -513,23 +546,35 @@ EXPECTED_REPOSITORY_CHECKS_WORKFLOW = {
                 },
                 {
                     "name": "Install the pinned Rust toolchain",
+                    "if": CI_RUNTIME_CONDITION,
                     "run": CI_RUST_INSTALL_COMMAND,
                 },
                 {
                     "name": "Select the pinned npm release",
+                    "if": CI_RUNTIME_CONDITION,
                     "run": CI_NPM_TOOL_COMMAND,
                 },
                 {
                     "name": "Install locked JavaScript development dependencies",
+                    "if": CI_RUNTIME_CONDITION,
                     "run": CI_NPM_INSTALL_COMMAND,
                 },
                 {
                     "name": "Check TypeScript and Rust",
+                    "if": CI_RUNTIME_CONDITION,
                     "run": CI_RUNTIME_CHECK_COMMAND,
                 },
                 {
                     "name": "Build and test the Node.js runtime",
+                    "if": CI_RUNTIME_CONDITION,
                     "run": CI_NODE_TEST_COMMAND,
+                },
+                {
+                    "name": "Record runtime validation applicability",
+                    "env": {
+                        "TABGRAD_VALIDATION_RUNTIME": "${{ needs.repository-consistency.outputs.runtime }}",
+                    },
+                    "run": CI_RUNTIME_SCOPE_REPORT,
                 },
             ],
         },
@@ -537,6 +582,7 @@ EXPECTED_REPOSITORY_CHECKS_WORKFLOW = {
             "name": "browser-${{ matrix.browser }}",
             "runs-on": "ubuntu-24.04",
             "timeout-minutes": 15,
+            "needs": "repository-consistency",
             "strategy": {
                 "fail-fast": False,
                 "matrix": {"browser": ["Chrome", "Firefox"]},
@@ -558,19 +604,30 @@ EXPECTED_REPOSITORY_CHECKS_WORKFLOW = {
                 },
                 {
                     "name": "Install the pinned Rust toolchain",
+                    "if": CI_BROWSER_CONDITION,
                     "run": CI_RUST_BUILD_INSTALL_COMMAND,
                 },
                 {
                     "name": "Select the pinned npm release",
+                    "if": CI_BROWSER_CONDITION,
                     "run": CI_NPM_TOOL_COMMAND,
                 },
                 {
                     "name": "Install locked JavaScript development dependencies",
+                    "if": CI_BROWSER_CONDITION,
                     "run": CI_NPM_INSTALL_COMMAND,
                 },
                 {
                     "name": "Build and test the selected browser runtime",
+                    "if": CI_BROWSER_CONDITION,
                     "run": CI_BROWSER_TEST_COMMAND,
+                },
+                {
+                    "name": "Record browser validation applicability",
+                    "env": {
+                        "TABGRAD_VALIDATION_BROWSER": "${{ needs.repository-consistency.outputs.browser }}",
+                    },
+                    "run": CI_BROWSER_SCOPE_REPORT,
                 },
             ],
         },

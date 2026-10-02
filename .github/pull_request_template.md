@@ -45,9 +45,13 @@ not required.
 
 ## Verification
 
-List every command and manual check run against the final commit. Do not claim
-that a check passed if it was skipped, could not run, or ran against an earlier
-version of the change.
+State the contextual validation plan and list each command or manual check,
+its applicability, result and observed target. Explain exclusions and required
+checks that could not run. For reused evidence, identify the original target
+and why relevant inputs remain equivalent; do not present it as a new run.
+Reconcile the plan against the complete final diff under
+`docs/agent-workflow.md#plan-contextual-validation`. Non-applicability is not a
+test pass, and an unverified older result is not current evidence.
 
 | Command or manual check | Result |
 | --- | --- |

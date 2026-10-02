@@ -159,6 +159,15 @@ a blocker, missing authority, or justified expansion is found. Never claim
 complete coverage beyond the paths, concerns, environments, and evidence that
 were actually inspected.
 
+Within a continuing workflow, an agent may reuse its own completed reading of
+unchanged instructions and primary documents while their content identity and
+applicability remain established. Check changed rules when switching targets or
+when new evidence can alter their application; do not reread every unchanged
+document at each skill handoff. This does not waive a skill's first complete
+reading or let a new agent substitute the writer's summary for original rules.
+Keep reports concise and finding-driven, referring to original evidence instead
+of copying it or restating the whole project protocol.
+
 ## Classify concurrent work before running it in parallel
 
 Before starting or resuming work alongside another active issue, branch, or
@@ -342,6 +351,16 @@ issue out of `In review`, and report the incomplete operation. This authority
 does not include a formal GitHub review, approval, reviewer notification, or
 another unrelated mutation.
 
+Prefer one final review of that published draft snapshot over a complete
+prepared review followed by a second complete publication review. After the
+writer's applicable local checks and publication-content inspection, the
+authorized transient draft may launch CI while the existing independent agent
+performs final verification and skeptical review. Missing independent evidence
+is explicit draft work, not a readiness claim. Freeze otherwise-complete title,
+description and head before that final assignment; add the report afterward
+without editing the snapshot. Prepared review remains useful when publication
+is not authorized, or required for an update that must remain non-draft.
+
 For an existing review-ready pull request, an authorized verified-head, title,
 or description update may remain non-draft when every condition available
 before publication passes and the exact prepared snapshot has independent
@@ -405,6 +424,43 @@ The coordinating agent must inspect the evidence behind material findings. If
 the issue is stale, duplicated, incomplete, incorrectly scoped, or blocked,
 stop the affected implementation. Use `tabgrad-issue` for a proposed or
 authorized correction. Do not edit code first and repair the issue afterward.
+
+## Plan contextual validation
+
+The existing independent preflight supplies a validation plan under
+[the affected-risk selection rule](quality.md#select-checks-from-the-affected-risks).
+It is part of its report, not another issue, agent or mandatory planning file.
+Identify the work class and exact base, affected responsibilities/consumers,
+claimed conditions, material risks and the smallest sufficient inspection.
+For each relevant check or check family, state its purpose, command or review
+method, environment, applicability and the evidence that would invalidate that
+choice. Distinguish mandatory controls, change-specific coverage, justified
+exclusions and required-but-unavailable evidence. Use a compact table when it
+makes those mappings clearer; do not fill a catalogue of unrelated concerns.
+
+Implementation uses and updates that plan as the actual scope becomes known.
+The final handoff includes the complete diff, changes to the plan and reasoned
+exclusions, plus original results and their validity for the current target.
+The existing independent verifier/reviewer must assess selection against the
+complete result and its consumers; it can require additional coverage or reject
+an exclusion. Preflight is not advance approval of a later implementation.
+Do not execute every conceivable check before this applicability decision, or
+launch another general agent merely to make it again.
+
+Commands are collected once per valid input state. Reused evidence identifies
+the original observed revision/environment and why its relevant source, test,
+configuration, dependency and generated inputs remain equivalent for the new
+target. Do not present an older execution as a new one. If equivalence cannot
+be bounded, repeat the affected check. Live issue state, authority, outgoing
+payload, remote snapshot and merge safety are not stable-content caches and
+must still be checked at their action boundaries.
+
+CI applicability is owned by
+[the reviewed CI policy](continuous-integration.md#select-ci-execution-by-impact),
+not by an agent's ad hoc omission. That conservative family selection does not
+replace semantic inspection, specialized GPU/compatibility evidence or an
+approved experiment's method. An invalid or missing selection must not become
+a claim that unexecuted tests passed; a justified exclusion is not a test pass.
 
 ## Preserve one writer and one coherent target
 
