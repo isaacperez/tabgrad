@@ -77,6 +77,14 @@ session-private state. The numerical kernels remain in the Rust crate, with
 their own toolchain and build root; grouping the adapter does not move or
 redefine the WebAssembly artifact set.
 
+Within `crates/tabgrad-wasm-kernels/src/`, each numerical operation owns its
+raw entry point and scalar/SIMD algorithms in one module: `addition.rs`,
+`multiplication.rs`, `reduction.rs` and `expansion.rs`. The shared `abi.rs`
+owns metadata, arena bounds and range/alias validation. `lib.rs` composes these
+private modules and the panic boundary. Source ownership is separate from
+distribution: both complete variant artifacts are built from the same crate,
+not downloaded or compiled separately for each operation.
+
 `src/backends/webgpu/` groups the physical GPU owner, device acquisition,
 connection transport, shared completion and host supervision. Its `kernels/`
 directory owns numerical shader source and the launch geometry used by that
