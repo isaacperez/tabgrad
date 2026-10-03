@@ -1,13 +1,14 @@
 import type { BackendCapabilities, ExecutionBackend, ProgramBinding, ResidentAllocation } from "../../execution/backend.js";
 import { TabgradError } from "../../shared/errors.js";
-import type { ExecutableProgram, ProgramSlot } from "../../execution/executable-program.js";
+import type { ExecutableProgram, LoweredComputation, ProgramSlot } from "../../execution/executable-program.js";
 import { tensorElementCount } from "../../runtime/tensor-shape.js";
 import { WEBGPU_ADDITION_SOURCE, WEBGPU_ADDITION_WORKGROUP_SIZE } from "./kernels/addition.js";
+import { WEBGPU_SUM_SOURCE, WEBGPU_SUM_GROUP_ELEMENTS, WEBGPU_SUM_PARTIAL_BYTES, WEBGPU_SUM_WORKGROUP_BYTES, WEBGPU_SUM_WORKGROUP_SIZE } from "./kernels/sum.js";
 import { ExecutionTicket } from "../../execution/execution-ticket.js";
 
 // WebGPU flag values are fixed by the API. The selected DOM declarations expose
 // their numeric types but not the namespace objects; no ambient typing patch is needed.
-const GPUBufferUsage = Object.freeze({ MAP_READ: 1, COPY_SRC: 4, COPY_DST: 8, STORAGE: 128 });
+const GPUBufferUsage = Object.freeze({ MAP_READ: 1, COPY_SRC: 4, COPY_DST: 8, UNIFORM: 64, STORAGE: 128 });
 const GPUMapMode = Object.freeze({ READ: 1 });
 
 export interface WebGpuDiagnostics {
@@ -39,6 +40,7 @@ interface GpuInvocationStorage {
   readonly created: Set<GpuAllocation>;
   drained?: Promise<void>;
   success: boolean;
+  queuedWrites: boolean;
 }
 
 interface GpuReadback {
@@ -60,8 +62,8 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
   readonly #limits: WebGpuDiagnostics["limits"];
   #failure: TabgradError | undefined;
   #closed = false;
-  #pipeline: GPUComputePipeline | undefined;
-  #preparation: Promise<void> | undefined;
+  readonly #pipelines = new Map<"add-f32" | "sum-f32", GPUComputePipeline>();
+  readonly #preparations = new Map<"add-f32" | "sum-f32", Promise<void>>();
   #ownedBytes = 0;
   #peakBytes = 0;
   #pendingSubmissions = 0;
@@ -79,9 +81,13 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
     this.#limits = Object.freeze({ maxBufferSize: device.limits.maxBufferSize,
       maxStorageBufferBindingSize: device.limits.maxStorageBufferBindingSize,
       maxComputeWorkgroupsPerDimension: device.limits.maxComputeWorkgroupsPerDimension });
-    this.capabilities = Object.freeze({ device: "webgpu", computations: Object.freeze(["add-f32"] as const),
+    const sumSupported = device.limits.maxBufferSize >= 16
+      && device.limits.maxComputeWorkgroupStorageSize >= WEBGPU_SUM_WORKGROUP_BYTES
+      && device.limits.maxComputeWorkgroupSizeX >= WEBGPU_SUM_WORKGROUP_SIZE
+      && device.limits.maxComputeInvocationsPerWorkgroup >= WEBGPU_SUM_WORKGROUP_SIZE;
+    this.capabilities = Object.freeze({ device: "webgpu", computations: Object.freeze(sumSupported ? ["add-f32", "sum-f32"] as const : ["add-f32"] as const),
       gradients: false, maximumTensorBytes: Math.min(this.#limits.maxBufferSize,
-        this.#limits.maxStorageBufferBindingSize, this.#limits.maxComputeWorkgroupsPerDimension * WEBGPU_ADDITION_WORKGROUP_SIZE * 4) });
+        this.#limits.maxStorageBufferBindingSize, 0xffffffff * 4, this.#limits.maxComputeWorkgroupsPerDimension * WEBGPU_ADDITION_WORKGROUP_SIZE * 4) });
     void device.lost.then((info) => {
       if (!this.#closed) this.#retire(new TabgradError("BACKEND_STATUS_ERROR", "The WebGPU device was lost.", {
         backend: "webgpu", device: "webgpu", phase: "device-loss", reason: info.reason,
@@ -108,27 +114,34 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
 
   prepare(program?: ExecutableProgram): Promise<void> | undefined {
     this.assertAvailable();
-    if (program !== undefined) {
-      for (const computation of program.computations) {
-        if (!this.capabilities.computations.includes(computation.kind)) {
-          throw new TabgradError("BACKEND_CAPABILITY_MISMATCH", "Unsupported WebGPU computation.", {
-            backend: "webgpu", phase: "preparation", programValueSlot: computation.output,
-          });
-        }
+    const requested = program?.computations.map((computation) => computation.kind) ?? ["add-f32"];
+    const pending: Promise<void>[] = [];
+    for (const kind of new Set(requested)) {
+      if ((kind !== "add-f32" && kind !== "sum-f32") || !this.capabilities.computations.includes(kind)) {
+        throw new TabgradError("BACKEND_CAPABILITY_MISMATCH", "Unsupported WebGPU computation.", {
+          backend: "webgpu", phase: "preparation",
+          programValueSlot: program?.computations.find((computation) => computation.kind === kind)?.output,
+        });
       }
+      if (this.#pipelines.has(kind)) continue;
+      let preparation = this.#preparations.get(kind);
+      if (preparation === undefined) {
+        preparation = this.#compile(kind);
+        this.#preparations.set(kind, preparation);
+      }
+      pending.push(preparation);
     }
-    if (program?.computations.length === 0 || this.#pipeline !== undefined) return undefined;
-    this.#preparation ??= this.#compile();
-    return this.#preparation;
+    return pending.length === 0 ? undefined : Promise.all(pending).then(() => undefined);
   }
 
-  async #compile(): Promise<void> {
+  async #compile(kind: "add-f32" | "sum-f32"): Promise<void> {
     const pipeline = await this.#checked("preparation", () => {
-      const module = this.#device.createShaderModule({ code: WEBGPU_ADDITION_SOURCE });
+      const code = kind === "add-f32" ? WEBGPU_ADDITION_SOURCE : WEBGPU_SUM_SOURCE;
+      const module = this.#device.createShaderModule({ code });
       return this.#device.createComputePipelineAsync({ layout: "auto", compute: { module, entryPoint: "main" } });
     });
     this.assertAvailable();
-    this.#pipeline = pipeline;
+    this.#pipelines.set(kind, pipeline);
   }
 
   #allocate(byteLength: number, usage: GPUBufferUsageFlags): GpuAllocation {
@@ -152,7 +165,7 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
 
   execute(program: ExecutableProgram, bindings: ReadonlyMap<ProgramSlot, ProgramBinding>, retainedSlots: readonly boolean[]): ExecutionTicket<ReadonlyMap<ProgramSlot, ResidentAllocation>> {
     this.assertAvailable();
-    const storage: GpuInvocationStorage = { allocations: new Map(), created: new Set(), success: false };
+    const storage: GpuInvocationStorage = { allocations: new Map(), created: new Set(), success: false, queuedWrites: false };
     const result = this.#checked("execution", () => this.#encodeExecution(program, bindings, retainedSlots, storage))
       .then(() => {
         this.assertAvailable();
@@ -167,7 +180,6 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
     const { allocations, created } = storage;
     const spare = new Map<number, GpuAllocation[]>();
     const uses = program.storageUseCounts.slice();
-    let queuedWrites = false;
     try {
       const encoder = this.#device.createCommandEncoder();
       for (const value of program.values) {
@@ -181,7 +193,7 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
           allocations.set(value.slot, allocation); created.add(allocation);
           if (binding?.hostData === undefined) throw new TabgradError("BACKEND_STATUS_ERROR", "Missing GPU input binding.");
           if (allocation.byteLength !== 0) {
-            queuedWrites = true;
+            storage.queuedWrites = true;
             // Host bindings are copied by tensor creation into owned ArrayBuffers.
             this.#device.queue.writeBuffer(allocation.buffer, 0, binding.hostData as Float32Array<ArrayBuffer>);
           }
@@ -195,7 +207,7 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
         created.add(output); allocations.set(computation.output, output);
         if (byteLength !== 0) {
           const inputs = computation.inputs.map((slot) => allocations.get(program.values[slot]!.storageSlot)!);
-          this.#encodeComputation(encoder, inputs, output, computation.output);
+          this.#encodeComputation(encoder, computation, inputs, output, storage);
         }
         for (const input of computation.inputs) {
           const slot = program.values[input]!.storageSlot;
@@ -213,15 +225,19 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
     } finally {
       // Never reuse or destroy submitted buffers merely because an error scope failed.
       // writeBuffer itself enqueues work, even if encoding fails before submit.
-      if (storage.drained === undefined && queuedWrites) storage.drained = this.#drain();
+      if (storage.drained === undefined && storage.queuedWrites) storage.drained = this.#drain();
     }
   }
 
-  #encodeComputation(encoder: GPUCommandEncoder, inputs: readonly GpuAllocation[],
-    output: GpuAllocation, outputSlot: ProgramSlot): void {
+  #encodeComputation(encoder: GPUCommandEncoder, computation: LoweredComputation,
+    inputs: readonly GpuAllocation[], output: GpuAllocation, storage: GpuInvocationStorage): void {
     try {
-      const pipeline = this.#pipeline;
-      if (pipeline === undefined) throw new Error("WebGPU computation was not prepared.");
+      if (computation.kind === "sum-f32") {
+        this.#encodeSum(encoder, inputs[0]!, output, storage);
+        return;
+      }
+      const pipeline = this.#pipelines.get("add-f32");
+      if (computation.kind !== "add-f32" || pipeline === undefined) throw new Error("WebGPU computation was not prepared.");
       const bindGroup = this.#device.createBindGroup({ layout: pipeline.getBindGroupLayout(0),
         entries: [...inputs, output].map((allocation, binding) => ({ binding, resource: { buffer: allocation.buffer } })) });
       const pass = encoder.beginComputePass();
@@ -230,9 +246,40 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
       this.#kernelCalls += 1;
     } catch (cause) {
       throw new TabgradError("BACKEND_STATUS_ERROR", "WebGPU computation encoding failed.", {
-        backend: "webgpu", phase: "execution", programValueSlot: outputSlot,
+        backend: "webgpu", phase: "execution", programValueSlot: computation.output,
       }, cause);
     }
+  }
+
+  #encodeSum(encoder: GPUCommandEncoder, input: GpuAllocation, output: GpuAllocation, storage: GpuInvocationStorage): void {
+    const pipeline = this.#pipelines.get("sum-f32");
+    if (pipeline === undefined) throw new Error("WebGPU sum was not prepared.");
+    const pass = encoder.beginComputePass();
+    pass.setPipeline(pipeline);
+    let current = input;
+    let count = input.byteLength / 4;
+    let partialInput = false;
+    do {
+      const groups = Math.max(1, Math.ceil(count / WEBGPU_SUM_GROUP_ELEMENTS));
+      const final = groups === 1;
+      const target = final ? output : this.#allocate(groups * WEBGPU_SUM_PARTIAL_BYTES, GPUBufferUsage.STORAGE);
+      if (!final) storage.created.add(target);
+      const parameters = this.#allocate(16, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST);
+      storage.created.add(parameters);
+      // Immutable per-stage parameters enqueue work even with resident/empty input.
+      storage.queuedWrites = true;
+      this.#device.queue.writeBuffer(parameters.buffer, 0, new Uint32Array([count, Number(final), Number(partialInput), 0]));
+      const bindGroup = this.#device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [
+        { binding: 0, resource: { buffer: current.buffer } },
+        { binding: 1, resource: { buffer: target.buffer } },
+        { binding: 2, resource: { buffer: parameters.buffer } },
+      ] });
+      pass.setBindGroup(0, bindGroup); pass.dispatchWorkgroups(groups);
+      this.#kernelCalls += 1;
+      if (final) break;
+      current = target; count = groups; partialInput = true;
+    } while (true);
+    pass.end();
   }
 
   async #releaseInvocation(result: Promise<unknown>, storage: GpuInvocationStorage): Promise<void> {
@@ -291,8 +338,8 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
     if (this.#failure === undefined && this.#pendingSubmissions !== 0) await this.#drain();
     for (const allocation of this.#owned) this.release(allocation);
     this.#closed = true;
-    this.#pipeline = undefined;
-    this.#preparation = undefined;
+    this.#pipelines.clear();
+    this.#preparations.clear();
     this.#device.destroy();
   }
 

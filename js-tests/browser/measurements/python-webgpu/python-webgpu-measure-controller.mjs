@@ -106,6 +106,59 @@ def measure_python(length: int, depth: int) -> dict:
         resident=resident, released=released)
 `;
 
+async function measureJavascriptSum(session, length, clock) {
+  const remainder = length % 17;
+  const expectedTotal = remainder * (remainder - 17) / 8192;
+  const start = clock.now();
+  const input = session.tensor(Float32Array.from({ length }, (_, index) => (index % 17 - 8) / 4096), { device: "webgpu" });
+  const imported = clock.now();
+  const total = input.sum();
+  const admitted = clock.now();
+  const value = await total.toArray();
+  const observed = clock.now();
+  if (value[0] !== expectedTotal) throw new Error("Incorrect direct exact dyadic total.");
+  const rereading = clock.now();
+  const cached = await total.toArray();
+  const cachedObserved = clock.now();
+  if (cached[0] !== value[0]) throw new Error("Incorrect cached total.");
+  const resident = session.diagnostics();
+  total.close(); input.close();
+  await awaitRequestRetirement(session, clock);
+  const released = session.diagnostics();
+  checkResources(released);
+  const milliseconds = { import: imported - start, admission: admitted - imported,
+    firstDemandAndObservation: observed - admitted, cachedObservation: cachedObserved - rereading };
+  checkBurst(milliseconds);
+  return { milliseconds, resident, released };
+}
+
+const pythonSumMeasurement = `
+import torch, time, json, gc
+def measure_python(length: int, depth: int) -> dict:
+    remainder = length % 17
+    expected = remainder * (remainder - 17) / 8192
+    start = time.perf_counter()
+    values = [((index % 17) - 8) / 4096 for index in range(length)]
+    input = torch.tensor(values, dtype=torch.float32, device='webgpu')
+    imported = time.perf_counter()
+    total = input.sum()
+    admitted = time.perf_counter()
+    value = total.tolist()
+    observed = time.perf_counter()
+    assert value == expected
+    rereading = time.perf_counter()
+    cached = total.tolist()
+    cached_observed = time.perf_counter()
+    assert cached == expected
+    resident = torch._runtime_session.diagnostics().to_py()
+    del cached, total, input, values
+    gc.collect()
+    released = torch._runtime_session.diagnostics().to_py()
+    return dict(milliseconds=dict(import_=(imported-start)*1000, admission=(admitted-imported)*1000,
+        firstDemandAndObservation=(observed-admitted)*1000, cachedObservation=(cached_observed-rereading)*1000),
+        resident=resident, released=released)
+`;
+
 const pythonPresentationProbe = `
 presentation_probe = dict(calls=0, milliseconds=0.)
 original_nested_values = torch._nested_values
@@ -173,8 +226,9 @@ export async function runManagedGpuMeasurement(data, {
   attachPython, createWebGpuRuntimeSession, loadModule, clock,
   crossOriginIsolated, webAssembly,
 }) {
+  const isSum = data.operation === "sum";
   const report = { ok: false, cases: [], worker: true, crossOriginIsolated,
-    mode: data.mode, caps: { maximumOwnedGpuBytes, maximumInterpreterBytes, maximumBurstMilliseconds, maximumTotalMilliseconds } };
+    mode: data.mode, operation: isSum ? "sum" : "add", caps: { maximumOwnedGpuBytes, maximumInterpreterBytes, maximumBurstMilliseconds, maximumTotalMilliseconds } };
   let binding;
   let direct;
   let probe;
@@ -192,7 +246,7 @@ export async function runManagedGpuMeasurement(data, {
     const transport = transportCounters(data.webgpu);
     transport.reset();
     binding = await attachPython(interpreter, { webgpu: data.webgpu });
-    await binding.runPythonAsync(pythonMeasurement);
+    await binding.runPythonAsync(isSum ? pythonSumMeasurement : pythonMeasurement);
     const acquiring = clock.now();
     direct = await createWebGpuRuntimeSession();
     report.directAcquisitionMilliseconds = clock.now() - acquiring;
@@ -202,7 +256,7 @@ export async function runManagedGpuMeasurement(data, {
       await binding.runPythonAsync(pythonPresentationProbe);
     }
     const caseLengths = data.mode === "diagnose" ? [262144] : lengths;
-    const depths = data.mode === "measure" ? [1, 8, 32] : [8];
+    const depths = isSum ? [1] : data.mode === "measure" ? [1, 8, 32] : [8];
     const samples = data.mode === "diagnose" ? 0 : data.mode === "pilot" ? 3 : 5;
     let caseIndex = 0;
     for (const length of caseLengths) for (const depth of depths) {
@@ -215,7 +269,7 @@ export async function runManagedGpuMeasurement(data, {
           transport.reset();
           probe?.reset();
           let sample;
-          if (language === "javascript") sample = await measureJavascript(direct, length, depth, clock);
+          if (language === "javascript") sample = isSum ? await measureJavascriptSum(direct, length, clock) : await measureJavascript(direct, length, depth, clock);
           else {
             if (probe !== undefined) interpreter.runPython("presentation_probe.update(calls=0, milliseconds=0.)");
             const entering = clock.now();
@@ -232,7 +286,7 @@ export async function runManagedGpuMeasurement(data, {
             checkResources(sample.released);
             checkBurst(sample.milliseconds);
             if (sample.transport.messages.execute !== 1 || sample.transport.messages.read !== 2
-              || sample.transport.hostBindingCopies !== 2 || sample.transport.hostBindingBytes !== length * 8
+              || sample.transport.hostBindingCopies !== (isSum ? 1 : 2) || sample.transport.hostBindingBytes !== length * (isSum ? 4 : 8)
               || sample.transport.programComputations !== depth) throw new Error("Unexpected finite transport counts.");
           }
           if (probe !== undefined) sample.inclusiveDiagnostic = probe.snapshot();

@@ -4,9 +4,10 @@ import { browserDefinitions, browserVersion, resolveBrowser, runBrowserPage, sel
 import { fingerprintTypeScriptSources } from "./source-identity.mjs";
 
 const mode = process.argv[2];
-if (!["pilot", "measure", "diagnose"].includes(mode)) throw new Error("Use: node scripts/measure-python-webgpu.mjs pilot|measure|diagnose");
+const operation = process.argv[3] ?? "add";
+if (!["pilot", "measure", "diagnose"].includes(mode) || !["add", "sum"].includes(operation)) throw new Error("Use: node scripts/measure-python-webgpu.mjs pilot|measure|diagnose [add|sum]");
 const sourceSha256 = await fingerprintTypeScriptSources(new URL("../src/", import.meta.url));
-const report = { mode, measuredAt: new Date().toISOString(), sourceSha256,
+const report = { mode, operation, measuredAt: new Date().toISOString(), sourceSha256,
   platform: platform(), operatingSystemRelease: release(), architecture: arch(), node: process.version, browsers: [] };
 const server = await startBrowserServer(["measurements/python-webgpu/python-webgpu-measure.html"], { crossOriginIsolation: true,
   assets: ["measurements/python-webgpu/python-webgpu-measure-host.mjs", "measurements/python-webgpu/python-webgpu-measure-worker.mjs", "measurements/python-webgpu/python-webgpu-measure-controller.mjs", "measurements/python-webgpu/python-webgpu-measure-physical.mjs", "helpers/execution-probe.mjs"] });
@@ -15,7 +16,7 @@ try {
     const executable = await resolveBrowser(browser);
     const version = browserVersion(executable);
     await runBrowserPage({ server, browser, executable, version, page: "measurements/python-webgpu/python-webgpu-measure.html",
-      parameters: { mode }, applicationTimeoutMilliseconds: 65000,
+      parameters: { mode, operation }, applicationTimeoutMilliseconds: 65000,
       validateResult(result) {
         report.browsers.push({ browser: browser.name, version, result });
         if (!result.ok) throw new Error(JSON.stringify(result.error));
@@ -25,7 +26,7 @@ try {
 } finally {
   await server.close();
   await mkdir(new URL("../test-results/", import.meta.url), { recursive: true });
-  const filename = `python-webgpu-${mode}-${report.measuredAt.replaceAll(":", "-")}.json`;
+  const filename = `python-webgpu-${operation === "sum" ? "sum-" : ""}${mode}-${report.measuredAt.replaceAll(":", "-")}.json`;
   await writeFile(new URL(`../test-results/${filename}`, import.meta.url), JSON.stringify(report, null, 2));
   process.stdout.write(`Saved test-results/${filename}\n`);
 }

@@ -67,6 +67,27 @@ def check_gpu():
     cpu = torch.tensor([1., 2., 3., 4.], dtype=torch.float32)
     assert (cpu + cpu).tolist() == [2., 4., 6., 8.]
 check_gpu()
+def check_total_sum():
+    import struct, _test_sum
+    cases = _test_sum.cases.to_py()
+    expected = _test_sum.expected.to_py()
+    for index, (bits, reference) in enumerate(zip(cases, expected)):
+        values = [struct.unpack('<f', struct.pack('<I', b))[0] for b in bits]
+        x = torch.tensor([values], dtype=torch.float32, device=gpu).view(len(values))
+        if index % 3 == 0:
+            total = x.sum()
+        elif index % 3 == 1:
+            total = torch.sum(x)
+        else:
+            total = torch.sum(input=x)
+        assert total is not x and total.shape == () and total.device == gpu
+        actual = struct.unpack('<I', struct.pack('<f', total.tolist()))[0]
+        assert actual == reference or (actual & 0x7fffffff) > 0x7f800000 and (reference & 0x7fffffff) > 0x7f800000, (index, actual, reference)
+        assert session.diagnostics().liveRequestLeases == 0
+    x = torch.tensor([1., 2. ** -24], dtype=torch.float32, device=gpu)
+    total = x.sum()
+    assert (total + torch.tensor(2. ** -24, dtype=torch.float32, device=gpu)).sum().tolist() == 1.
+check_total_sum()
 def check_numerical_transport():
     import struct, _test_f32
     def value(bits):
