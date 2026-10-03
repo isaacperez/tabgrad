@@ -169,9 +169,12 @@ neutral contracts actually shared by production components, not miscellaneous
 helpers. Keep cohesive integration files together so placement does not
 multiply their interpreter or session fixtures.
 
-Reusable numerical assertions and recorded oracle data live in
-`js-tests/fixtures/`. They support their CPU and Python consumers without being
-admitted as test entry files; helper modules do not use the `.test.mjs` suffix.
+Reusable test support lives in `js-tests/fixtures/`: numerical assertions,
+recorded oracle data, and runtime integration fixtures. The runtime fixture
+server owns distribution/virtual-response routing, request counts and response
+gates; its Wasm encoder owns controlled raw-ABI modules. Test suites compose
+one server lifetime without embedding request policy or importing another test
+suite. Support modules register no cases and do not use the `.test.mjs` suffix.
 
 `js-tests/browser/` is the serving root for maintained browser fixtures. Its
 `runtime/`, `python/`, `webgpu/` and `python-webgpu/` cohorts qualify runtime,
