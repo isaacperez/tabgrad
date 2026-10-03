@@ -249,3 +249,11 @@ Closing is a lifecycle boundary, not a second execution mode. It cannot report
 success while submitted effects, undelivered errors, or backend-owned physical
 resources retained for an invocation remain undrained or otherwise unaccounted
 for.
+
+Failure of one cleanup action cannot cancel independent cleanup obligations.
+The owner attempts those that remain safe and preserves their errors while
+joining one terminal close outcome. Logical reference retirement, an attempted
+release, and confirmed physical reclamation are distinct facts. Cleanup failure
+must neither erase an already delivered execution outcome nor turn unknown
+physical completion into success. The concrete error and joining conventions
+are defined in the [JavaScript lifecycle contract](../javascript-api.md#create-compute-observe-and-release).

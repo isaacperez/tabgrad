@@ -83,6 +83,16 @@ results keep retry dependencies, and closing results releases them. Session
 close also releases handles and history before draining accepted numerical
 requests, whose own pins preserve work already admitted.
 
+Saved-pin retirement first removes each pin from history accounting, then
+attempts its ordinary value release. A release failure does not abandon other
+saved pins or history edges. Once derivative construction has completed and
+saved-state consumption starts, every selected saved owner is retired and
+marked consumed even if physical release fails. Already retired pins must not
+be reused as though construction had failed before consumption began. The
+cleanup failure is reported, and newly constructed result handles are closed
+instead of being returned. This is distinct from a construction failure before
+consumption, which leaves the original saved state usable.
+
 ## Costs and extension boundary
 
 For `V` history nodes and `E` edges reachable from the output, planning uses

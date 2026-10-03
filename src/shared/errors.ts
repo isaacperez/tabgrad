@@ -69,6 +69,12 @@ export class TabgradError extends Error {
   }
 }
 
+/** @internal Preserve individual causes after independent cleanup attempts. */
+export function throwCleanupFailures(failures: readonly unknown[] | undefined, message: string): void {
+  if (failures?.length === 1) throw failures[0];
+  if (failures !== undefined && failures.length > 1) throw new AggregateError(failures, message);
+}
+
 /** @internal */
 export function retainExecutionFailureContext(
   error: TabgradError,
