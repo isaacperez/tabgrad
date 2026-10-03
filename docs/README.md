@@ -74,6 +74,7 @@ link to its primary source, but they must not create a competing version.
 | WebGPU device selection, readiness, application setup and connection ownership | [`architecture/webgpu-integration.md`](architecture/webgpu-integration.md) |
 | Managed WebGPU transport, shared completion and concrete supervision ownership | [`components/webgpu-worker-connection.md`](components/webgpu-worker-connection.md) |
 | WebGPU float32 addition numerical contract, alternatives and optimization constraints | [`architecture/webgpu-float32-addition.md`](architecture/webgpu-float32-addition.md) |
+| WebGPU float32 total-sum numerical and private execution contract | [`architecture/webgpu-float32-sum.md`](architecture/webgpu-float32-sum.md) |
 | Contribution workflow | [`CONTRIBUTING.md`](../CONTRIBUTING.md) |
 | Repository map and content placement | [`repository-structure.md`](repository-structure.md) |
 | Placement and dependency reassessment | [`repository-structure.md`](repository-structure.md#reassess-placement-and-dependencies) |
