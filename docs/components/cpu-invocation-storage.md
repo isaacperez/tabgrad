@@ -9,10 +9,17 @@ another handle, pending calculation or observation still needs.
 The [reuse architecture](../architecture/cpu-intermediate-reuse.md) establishes
 the separation between logical retention and physical last access. Here that
 boundary connects `ExecutableProgram`, `RuntimeSession` and
-[`WebAssemblyCpuBackend`](../../src/backends/cpu/cpu-backend.ts). The backend's
-private `InvocationStorage` accounts for
+[`WebAssemblyCpuBackend`](../../src/backends/cpu/cpu-backend.ts). Its internal
+[`InvocationStorage`](../../src/backends/cpu/invocation-storage.ts) accounts for
 allocations during one synchronous execution; it is not a second allocator,
 semantic reference counter or persistent program cache.
+
+The persistent [`LinearMemoryAllocator`](../../src/backends/cpu/linear-memory.ts)
+owns aligned ranges, memory growth and allocation identity across invocations.
+The backend composes it with invocation-local use accounting and kernel dispatch.
+[Artifact preparation](cpu-artifact-preparation.md) supplies verified memory,
+exports and arena limits before those execution owners can be used; preparation
+does not decide which intermediate values are reusable.
 
 ## Allocate from element count, not rank
 

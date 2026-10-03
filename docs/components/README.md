@@ -19,6 +19,8 @@ Read [Runtime observation](runtime-observation.md) for common request progressio
 result publication, synchronous consumers and asynchronous observers.
 Read [Program formation](program-formation.md) for selected dependency traversal,
 logical slot ordering and the separation of executable structure from invocation bindings.
+Read [CPU artifact preparation](cpu-artifact-preparation.md) for verified
+physical readiness, preparation failures and the handoff to backend context ownership.
 Read [CPU invocation storage](cpu-invocation-storage.md) for shared use counts,
 fresh retention obligations, scratch reuse and failure rollback.
 Read [WebGPU physical execution](webgpu-backend.md) for device-owned buffers,

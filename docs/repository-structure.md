@@ -70,10 +70,15 @@ use those contracts; the contracts do not import a concrete runtime session,
 frontend or backend. Directory names make these responsibilities navigable,
 but do not introduce packages, registries or additional scheduling layers.
 
-`src/backends/cpu/` owns the TypeScript adapter that loads and validates CPU
-artifacts, binds programs and accounts for physical invocation storage. It
-uses the common execution contracts and semantic shape rules, not frontend or
-session-private state. The numerical kernels remain in the Rust crate, with
+`src/backends/cpu/` owns the TypeScript adapter. `artifact-loader.ts` verifies
+and instantiates CPU artifacts; `linear-memory.ts` owns persistent arena ranges
+and allocation identity; `invocation-storage.ts` tracks physical use and rollback
+for one execution. `cpu-backend.ts` composes those owners and keeps preparation
+caching, generation, quarantine, dispatch and diagnostics. Shared CPU variant
+and diagnostic types live in `cpu-types.ts` without creating another state
+owner. The adapter uses common execution contracts and semantic shape rules,
+not frontend or session-private state. The numerical kernels remain in the Rust
+crate, with
 their own toolchain and build root; grouping the adapter does not move or
 redefine the WebAssembly artifact set.
 
