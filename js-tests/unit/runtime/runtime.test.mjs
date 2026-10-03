@@ -1,10 +1,9 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
-import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { after, before, test } from "node:test";
-import { extname, isAbsolute, join, normalize, relative, sep } from "node:path";
+import { join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
+import { RuntimeFixtureServer } from "../../fixtures/runtime-fixture-server.mjs";
 
 import {
   TabgradError,
@@ -21,10 +20,10 @@ import { ExecutableProgram } from "../../../dist/execution/executable-program.js
 import { observeTensorSynchronously, prepareRuntimeSession } from "../../../dist/runtime/runtime.js";
 
 const distributionRoot = normalize(fileURLToPath(new URL("../../../dist", import.meta.url)));
-let server;
 let distributionUrl;
-const requestCounts = new Map();
-const virtualResponses = new Map();
+const fixtures = new RuntimeFixtureServer(distributionRoot);
+const { requestCounts, virtualResponses } = fixtures;
+const installFixture = fixtures.installFixture.bind(fixtures);
 
 for (const behavior of ["status", "trap"]) {
   test(`functional gradient ${behavior} releases pending derivative ownership on failure and close`, async () => {
@@ -758,232 +757,12 @@ test("failed alias execution rolls back owned scratch and preserves borrowed sha
   } finally { await session.close(); }
 });
 
-function unsignedLeb128(value) {
-  const bytes = [];
-  do {
-    let byte = value & 0x7f;
-    value >>>= 7;
-    if (value !== 0) {
-      byte |= 0x80;
-    }
-    bytes.push(byte);
-  } while (value !== 0);
-  return bytes;
-}
-
-function signedLeb128(value) {
-  const bytes = [];
-  let remaining = value;
-  while (true) {
-    const byte = remaining & 0x7f;
-    remaining >>= 7;
-    const complete = (remaining === 0 && (byte & 0x40) === 0)
-      || (remaining === -1 && (byte & 0x40) !== 0);
-    bytes.push(complete ? byte : byte | 0x80);
-    if (complete) {
-      return bytes;
-    }
-  }
-}
-
-function encodedString(value) {
-  const bytes = Buffer.from(value, "utf8");
-  return [...unsignedLeb128(bytes.length), ...bytes];
-}
-
-function section(identifier, contents) {
-  return [identifier, ...unsignedLeb128(contents.length), ...contents];
-}
-
-// A one-element arithmetic fixture that fails on exactly one selected call.
-// The failure is a real Wasm status/exception, not a thrown JavaScript probe.
-function scalarFaultKernel(behavior, failureCall, operation = "add") {
-  return [
-    0x23, 0x00, 0x41, 0x01, 0x6a, 0x24, 0x00, // ++global call counter
-    0x23, 0x00, 0x41, ...signedLeb128(failureCall), 0x46,
-    0x04, 0x40, // if counter == failureCall
-    ...(behavior === "trap" ? [0x00] : [0x41, 0x07, 0x0f]),
-    0x0b,
-    0x20, operation === "sum" ? 0x01 : 0x02, // output address
-    0x20, 0x00, 0x2a, 0x02, 0x00, // load left f32
-    ...(operation === "sum" ? [] : [0x20, 0x01, 0x2a, 0x02, 0x00, operation === "mul" ? 0x94 : 0x92]),
-    0x38, 0x02, 0x00, // store one-element result
-    0x41, 0x00, 0x0b,
-  ];
-}
-
-function fixtureModule({
-  abiVersion = 1,
-  arenaBase = 1_048_576,
-  capabilities = 15,
-  kernelBehavior = "success",
-  memoryImportName = "memory",
-  omitKernelExport = false,
-  omitSumExport = false,
-  omitMulExport = false,
-  omitExpandExport = false,
-  failureCall,
-} = {}) {
-  const functionType = (parameters, results) => [
-    0x60,
-    ...unsignedLeb128(parameters.length),
-    ...parameters,
-    ...unsignedLeb128(results.length),
-    ...results,
-  ];
-  const i32 = 0x7f;
-  const types = section(1, [
-    0x03,
-    ...functionType([], [i32]),
-    ...functionType([i32, i32, i32, i32], [i32]),
-    ...functionType([i32, i32, i32], [i32]),
-  ]);
-  const imports = section(2, [
-    0x01,
-    ...encodedString("env"),
-    ...encodedString(memoryImportName),
-    0x02,
-    0x01,
-    ...unsignedLeb128(32),
-    ...unsignedLeb128(1024),
-  ]);
-  const functions = section(3, [0x07, 0x00, 0x00, 0x00, 0x01, 0x02, 0x01, 0x02]);
-  const exportedFunctions = [
-    ["tabgrad_abi_version", 0],
-    ["tabgrad_capabilities", 1],
-    ["tabgrad_arena_base", 2],
-    ...(omitKernelExport ? [] : [["tabgrad_add_f32", 3]]),
-    ...(omitSumExport ? [] : [["tabgrad_sum_f32", 4]]),
-    ...(omitMulExport ? [] : [["tabgrad_mul_f32", 5]]),
-    ...(omitExpandExport ? [] : [["tabgrad_expand_f32", 6]]),
-  ];
-  const exports = section(7, [
-    ...unsignedLeb128(exportedFunctions.length),
-    ...exportedFunctions.flatMap(([name, index]) => [
-      ...encodedString(name),
-      0x00,
-      ...unsignedLeb128(index),
-    ]),
-  ]);
-  const constantBody = (value) => {
-    const instructions = [0x41, ...signedLeb128(value), 0x0b];
-    const body = [0x00, ...instructions];
-    return [...unsignedLeb128(body.length), ...body];
-  };
-  const kernelInstructions = failureCall !== undefined
-    ? scalarFaultKernel(kernelBehavior, failureCall)
-    : kernelBehavior === "trap"
-    ? [0x00, 0x0b]
-    : [0x41, ...signedLeb128(kernelBehavior === "status" ? 7 : 0), 0x0b];
-  const kernelBody = [0x00, ...kernelInstructions];
-  const sumBody = [0x00, ...(failureCall === undefined
-    ? kernelInstructions : scalarFaultKernel(kernelBehavior, failureCall, "sum"))];
-  const mulBody = [0x00, ...(failureCall === undefined
-    ? kernelInstructions : scalarFaultKernel(kernelBehavior, failureCall, "mul"))];
-  const code = section(10, [
-    0x07,
-    ...constantBody(abiVersion),
-    ...constantBody(capabilities),
-    ...constantBody(arenaBase),
-    ...unsignedLeb128(kernelBody.length),
-    ...kernelBody,
-    ...unsignedLeb128(sumBody.length),
-    ...sumBody,
-    ...unsignedLeb128(mulBody.length),
-    ...mulBody,
-    ...unsignedLeb128(sumBody.length),
-    ...sumBody,
-  ]);
-  return Buffer.from([
-    0x00, 0x61, 0x73, 0x6d,
-    0x01, 0x00, 0x00, 0x00,
-    ...types,
-    ...imports,
-    ...functions,
-    ...(failureCall === undefined ? [] : section(6, [0x01, i32, 0x01, 0x41, 0x00, 0x0b])),
-    ...exports,
-    ...code,
-  ]);
-}
-
-function installFixture(name, moduleOptions = {}, manifestTransform = (value) => value) {
-  const modulePath = `/fixture-${name}.wasm`;
-  const manifestPath = `/fixture-${name}.json`;
-  const bytes = fixtureModule(moduleOptions);
-  const hash = createHash("sha256").update(bytes).digest("hex");
-  const variant = (id, requiredFeatures) => ({
-    id,
-    path: modulePath.slice(1),
-    sha256: hash,
-    byteLength: bytes.byteLength,
-    requiredFeatures,
-  });
-  const manifest = manifestTransform({
-    schemaVersion: 1,
-    moduleVersion: 4,
-    abiVersion: 1,
-    addressWidth: 32,
-    sharedMemory: false,
-    capabilities: ["add-f32", "sum-f32", "mul-f32", "expand-f32"],
-    imports: [{ module: "env", name: "memory", kind: "memory" }],
-    memory: { initialPages: 32, maximumPages: 1024, alignment: 16 },
-    variants: [variant("scalar", []), variant("simd128", ["simd128"])],
-  });
-  virtualResponses.set(modulePath, {
-    body: bytes,
-    contentType: "application/wasm",
-  });
-  virtualResponses.set(manifestPath, {
-    body: Buffer.from(`${JSON.stringify(manifest)}\n`),
-    contentType: "application/json",
-  });
-  return new URL(manifestPath.slice(1), distributionUrl);
-}
-
 before(async () => {
-  server = createServer(async (request, response) => {
-    try {
-      const pathname = new URL(request.url, "http://localhost").pathname;
-      requestCounts.set(pathname, (requestCounts.get(pathname) ?? 0) + 1);
-      const virtualResponse = virtualResponses.get(pathname);
-      if (virtualResponse !== undefined) {
-        if (virtualResponse.waitFor !== undefined) {
-          await virtualResponse.waitFor;
-        }
-        response.writeHead(200, { "content-type": virtualResponse.contentType })
-          .end(virtualResponse.body);
-        return;
-      }
-      const path = join(distributionRoot, pathname);
-      const pathFromRoot = relative(distributionRoot, path);
-      if (
-        pathFromRoot === ".."
-        || pathFromRoot.startsWith(`..${sep}`)
-        || isAbsolute(pathFromRoot)
-      ) {
-        response.writeHead(403).end();
-        return;
-      }
-      const body = await readFile(path);
-      const contentType = extname(path) === ".wasm"
-        ? "application/wasm"
-        : extname(path) === ".json"
-          ? "application/json"
-          : "text/javascript";
-      response.writeHead(200, { "content-type": contentType }).end(body);
-    } catch {
-      response.writeHead(404).end();
-    }
-  });
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const address = server.address();
-  distributionUrl = `http://127.0.0.1:${address.port}/`;
+  distributionUrl = await fixtures.start();
 });
 
 after(async () => {
-  await new Promise((resolve, reject) => {
-    server.close((error) => error ? reject(error) : resolve());
-  });
+  await fixtures.close();
 });
 
 for (const variant of ["scalar", "simd128"]) {
