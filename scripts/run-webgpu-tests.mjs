@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { browserDefinitions, browserVersion, resolveBrowser, runBrowserPage, selectBrowserDefinitions, startBrowserServer } from "./browser-harness.mjs";
 
-const server = await startBrowserServer(["webgpu/webgpu-runtime.html"], { assets: ["webgpu/webgpu-runtime.mjs", "helpers/float32-addition-oracle.mjs"] });
+const server = await startBrowserServer(["webgpu/webgpu-runtime.html"], { assets: ["webgpu/webgpu-runtime.mjs", "helpers/float32-addition-oracle.mjs", "helpers/float32-sum-oracle.mjs"] });
 try {
   for (const browser of selectBrowserDefinitions(process.env.TABGRAD_BROWSER ?? "Chrome", browserDefinitions)) {
     const executable = await resolveBrowser(browser);

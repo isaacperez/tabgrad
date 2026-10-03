@@ -206,3 +206,28 @@ fixtures or contributor tools. Final evidence must identify those exact inputs
 and the emitted distribution too. Keep the first failed attempts,
 calibration rationale, successful observations, uncertainty and resulting
 decision together under the performance policy.
+
+## Total-sum frontend workload
+
+The optional final argument `sum` selects a one-input total reduction for
+`pilot`, `measure` or `diagnose`; for example,
+`npm run measure:python:webgpu -- pilot sum`. Addition remains the default.
+Sum uses the same three lengths, language order, excluded warmup, sample counts,
+timer calibration and resource/time limits. Depth is one logical operation,
+not the number of private GPU reduction stages.
+
+Both languages construct identical `(index % 17 - 8) / 4096` float32 values,
+admit `input.sum()`, observe a scalar twice and release every handle. The
+expected exact dyadic total is computed outside the input-creation clock.
+Each sample checks one execution, two scalar reads, one host binding copy of
+`4*N` bytes and one transferred computation. The repeated read must reuse the
+resident result; preparation and uploads belong to first demand.
+
+The timing boundaries above retain their meanings, with a Python numeric
+scalar instead of nested output lists. Public first demand combines formation,
+upload, preparation when needed, all reduction stages and scalar observation;
+subtracting JavaScript from Python still does not isolate transport. Fine
+admission/readback differences require sufficient pilot sensitivity rather
+than rounding coarse timings into a ranking. Reports use
+`test-results/python-webgpu-sum-{pilot,measure,diagnose}-*.json` and retain JSPI
+absence, interpreter capacity, transport counts and ownership checkpoints.

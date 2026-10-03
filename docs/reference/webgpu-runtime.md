@@ -70,7 +70,14 @@ Its precise rounding and exceptional-value contract is the
 including a separately rounded result for every logical addition. It does not
 promise native WGSL floating-point behavior or NaN payload preservation.
 
-GPU multiplication, reductions and gradients are outside this execution
+GPU `sum()` reduces the whole contiguous tensor to a distinct scalar, including
+an empty input's positive-zero write. Its exact-total accumulation and logical
+rounding boundaries are specified by the [sum reference](tensor-sum.md).
+Admission requires the acquired device's sum workgroup and parameter-buffer
+limits before recording work. Kernels use input geometry, not the output's
+single element.
+
+GPU multiplication, dimensional reductions and gradients are outside this execution
 domain. Capability rejection happens before recording unsupported work.
 `requiresGrad: true` and GPU gradient requests use `UNSUPPORTED_GRADIENT`;
 unsupported computations use `BACKEND_CAPABILITY_MISMATCH`. Mixing CPU and GPU
@@ -116,12 +123,12 @@ remain CPU counters; adding this device does not change their meaning.
 | --- | --- |
 | `state` | `ready`, `lost` or `closed`; a lost owner remains reported as lost after terminal cleanup |
 | `adapter`, `features`, `limits` | Browser-provided acquired-device identity, enabled features and relevant limits; identity strings can be empty |
-| `ownedBufferBytes` | Bytes in currently owned buffers, including readback staging and the minimum four-byte allocation for an empty value |
+| `ownedBufferBytes` | Bytes in currently owned buffers, including private sum partials and uniforms, readback staging and the minimum four-byte allocation for an empty value |
 | `peakOwnedBufferBytes` | High-water mark of that accounting for this backend lifetime |
 | `pendingSubmissions` | Completion checkpoints not yet confirmed, including queued uploads; not a hardware queue-depth measurement |
 | `unknownCompletionBytes` | Owned bytes conservatively recorded when completion becomes unconfirmable; not reset to suggest confirmed reclamation |
 | `uploadBytes`, `readbackBytes` | Cumulative bytes at the named host/device boundaries |
-| `kernelCalls` | Encoded nonempty numerical dispatches; not a count of successfully completed kernels after failure |
+| `kernelCalls` | Encoded numerical dispatches, including an empty sum's scalar identity write; not a count of successfully completed kernels after failure |
 
 These counters are not browser RSS or physical VRAM. They do not include
 driver caches, compiler state or every host copy. The common

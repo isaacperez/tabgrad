@@ -1,6 +1,8 @@
 import { createWebGpuRuntimeSession } from "/index.js";
 import { exactAddition, equivalentBits, numericalPairs } from "../helpers/float32-addition-oracle.mjs";
 
+import { exactTotal, exactCases } from "../helpers/float32-sum-oracle.mjs";
+
 const token = new URLSearchParams(location.search).get("token");
 async function send(endpoint, body) {
   const response = await fetch(`/${endpoint}?token=${encodeURIComponent(token)}`, {
@@ -11,7 +13,65 @@ async function send(endpoint, body) {
 
 function check(condition, message) { if (!condition) throw new Error(message); }
 
+async function exerciseTotalSum(session) {
+  for (const [index, bits] of exactCases().entries()) {
+    const input = session.tensor(new Float32Array(bits.buffer), { device: "webgpu" });
+    const total = input.sum();
+    check(total.shape.length === 0 && total.device === "webgpu" && total !== input, "Sum scalar metadata mismatch");
+    const actual = new Uint32Array((await total.toArray()).buffer)[0];
+    const expected = exactTotal(bits).bits;
+    check(equivalentBits(actual, expected), `Exact total mismatch at case ${index}: ${actual.toString(16)} != ${expected.toString(16)}`);
+    input.close(); total.close();
+  }
+  for (const shape of [[], [1], [2, 3], [2, 1, 3], [0], [2, 0, 3]]) {
+    const length = shape.reduce((n, dimension) => n * dimension, 1);
+    const input = session.tensor(new Float32Array(length).fill(2), { shape, device: "webgpu" });
+    const view = input.view([-1]);
+    const total = view.sum();
+    input.close(); view.close();
+    check(total.shape.length === 0 && (await total.toArray())[0] === 2 * length, "View/shape total mismatch");
+    total.close();
+  }
+  // All work stays deferred until the final scalar; intermediate rounding must
+  // be observable without reading a subtotal back to the host.
+  const input = session.tensor([1, 2 ** -24], { device: "webgpu" });
+  const increment = session.tensor([2 ** -24], { shape: [], device: "webgpu" });
+  const first = input.sum();
+  const added = first.add(increment);
+  const result = added.sum();
+  input.close(); increment.close(); first.close(); added.close();
+  const before = session.diagnostics().webgpu;
+  check((await result.toArray())[0] === 1, "Hidden exact subtotal crossed a logical boundary");
+  const after = session.diagnostics().webgpu;
+  check(after.readbackBytes - before.readbackBytes === 4, "Resident sum chain read an intermediate to host");
+  check(after.kernelCalls - before.kernelCalls === 3, "Resident sum/add/sum chain missing a stage");
+  const again = await result.toArray();
+  check(again[0] === 1 && session.diagnostics().webgpu.kernelCalls === after.kernelCalls, "Resident total was recomputed");
+  result.close();
+
+  const left = session.tensor([1, 2 ** -24], { device: "webgpu" });
+  const right = session.tensor([2 ** -24, 2 ** -149], { device: "webgpu" });
+  const producer = left.add(right);
+  const total = producer.sum();
+  left.close(); right.close(); producer.close();
+  check((await total.toArray())[0] === 1, "Producer rounding was bypassed by total sum");
+  total.close();
+
+  // A retired scalar producer provides a nonzero spare allocation for the
+  // independent empty reduction in the same region; it must explicitly write +0.
+  const scalar = session.tensor([23], { shape: [], device: "webgpu" });
+  const nonzero = scalar.add(scalar);
+  const nonzeroTotal = nonzero.sum();
+  const empty = session.tensor([], { device: "webgpu" });
+  const identity = empty.sum();
+  const combined = nonzeroTotal.add(identity);
+  scalar.close(); nonzero.close(); nonzeroTotal.close(); empty.close(); identity.close();
+  check((await combined.toArray())[0] === 46, "Empty reduction did not overwrite reused scalar storage");
+  combined.close();
+}
+
 async function exercise(session) {
+  await exerciseTotalSum(session);
   const pairs = numericalPairs();
   for (const depth of [1, 8]) {
     let expected = pairs.left;

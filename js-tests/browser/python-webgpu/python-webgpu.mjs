@@ -2,6 +2,8 @@ import { attachPython, servePythonWorker } from "/python.js";
 import { ExecutionTicket } from "/execution/execution-ticket.js";
 import { numericalPairs, exactAddition } from "/helpers/float32-addition-oracle.mjs";
 
+import { exactTotal, exactCases } from "/helpers/float32-sum-oracle.mjs";
+
 function expectedAddition(pairs, depth) {
   let bits = pairs.left;
   for (let step = 0; step < depth; step += 1) bits = bits.map((left, index) => exactAddition(left, pairs.right[index]));
@@ -36,6 +38,9 @@ addEventListener("message", async ({ data }) => {
     });
     interpreter.registerJsModule("_test_gpu_observers", { count: () => asynchronousGpuObservers });
     if (data.numericalCorpus) {
+      const sums = exactCases();
+      interpreter.registerJsModule("_test_sum", { cases: sums.map((bits) => Array.from(bits)),
+        expected: sums.map((bits) => exactTotal(bits).bits) });
       const pairs = numericalPairs();
       interpreter.registerJsModule("_test_f32", { left: Array.from(pairs.left), right: Array.from(pairs.right),
         expected: (depth) => expectedAddition(pairs, depth) });
@@ -52,7 +57,10 @@ addEventListener("message", async ({ data }) => {
     }
     Object.defineProperty(ExecutionTicket.prototype, "result", descriptor);
     interpreter.unregisterJsModule("_test_gpu_observers");
-    if (data.numericalCorpus) interpreter.unregisterJsModule("_test_f32");
+    if (data.numericalCorpus) {
+      interpreter.unregisterJsModule("_test_f32");
+      interpreter.unregisterJsModule("_test_sum");
+    }
     interpreter.runPython("assert host_value == 40; assert 'torch' not in __import__('sys').modules");
     postMessage({ kind: "finished", diagnostics: session.diagnostics(), closeFailed });
   } catch (error) {

@@ -1,6 +1,7 @@
 import { connectPythonWorker, createWebGpuWorker } from "/python.js";
 
 const token = new URLSearchParams(location.search).get("token");
+const operation = new URLSearchParams(location.search).get("operation") ?? "add";
 const NativeWorker = Worker;
 const lifetime = new AbortController();
 let controller;
@@ -58,7 +59,7 @@ import torch, gc
 session = torch._runtime_session
 def caught_revocation():
     x = torch.tensor([float(index % 32) for index in range(65536)], dtype=torch.float32, device='webgpu')
-    y = x + x
+    y = ${operation === "sum" ? "x.sum()" : "x + x"}
     try:
         y.tolist()
     except Exception as error:
