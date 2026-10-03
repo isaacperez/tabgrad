@@ -34,15 +34,16 @@ also accepts no arguments and returns a `Tensor`; its shape is `[]`, and
 callers close their input and result handles under the ordinary session
 lifetime contract.
 
-The supported input domain is contiguous CPU `float32`, including scalar,
-singleton, multidimensional and empty shapes and whole-contiguous views. The
+This reference describes the supported contiguous CPU `float32` domain,
+including scalar, singleton, multidimensional and empty shapes and whole-contiguous views. The
 result preserves dtype and device and owns a distinct scalar value. Empty
 input produces positive zero, not an empty tensor. A scalar input also creates
 a reduction result rather than returning the original handle.
 
 Dimension selection, `keepdim`, explicit `dtype`, `out`, promotion,
 non-contiguous inputs and other devices are outside this
-operation's contract. Even apparently redundant options such as `dtype=None`,
+supported CPU call domain described here. Even apparently redundant options
+such as `dtype=None`,
 `dim=None`, `keepdim=False` or `out=None` are rejected, not silently ignored.
 
 Tracked inputs participate in [functional gradients](functional-gradients.md).
@@ -80,6 +81,16 @@ view storage. Dropping the final owner of unobserved work releases it without
 executing it. Repeated observation reuses a computed value. Python uses ordinary
 `tolist()` inside managed entry, without a new asynchronous method or JSPI.
 
+## Backend numerical contracts
+
+The public float32 dtype does not prescribe one accumulator for every backend.
+The [WebGPU total-sum decision](../architecture/webgpu-float32-sum.md) requires
+the exact total of stored finite inputs rounded to float32 nearest with ties
+to even, while permitting wider private accumulation. It also defines its own
+exceptional-value and composition rules. That architectural contract does not
+extend the supported call domain or establish release compatibility evidence
+for this reference. CPU accumulation and its evidence are described below.
+
 ## Floating-point accumulation is not exact arithmetic
 
 Float32 has finite precision and a finite range. Adding small values to large
@@ -88,8 +99,8 @@ overflow. Changing the grouping of additions can therefore change the result,
 even though the mathematical expression is the same. Compatibility does not
 mean reproducing every bit of one native CPU's reduction algorithm.
 
-Tabgrad accumulates in float32 without implicit widening or a fallback. The CPU
-kernel divides large ranges into a balanced tree. Leaves contain at most 128
+The CPU backend accumulates in float32 without implicit widening or a fallback.
+Its kernel divides large ranges into a balanced tree. Leaves contain at most 128
 elements, accumulated in four lanes, then combined pairwise with a scalar tail.
 The leaf limit bounds each lane to 32 additions. Scalar and fixed-vector
 artifacts implement the same association; SIMD changes how the four lanes run,
@@ -115,10 +126,10 @@ For `[M, M, -M, -M]`, with `M` the largest finite float32 value, the CPU kernel'
 grouping forms positive and negative infinity before combining them into NaN.
 The pinned native oracle returns positive infinity for this case. The
 mathematical result is zero, but neither float32 algorithm preserves it.
-Tabgrad records both outcomes and does not claim classification equality when
-intermediate overflow changes the computation. It does not detect and repair
-these inputs by switching precision. Applications that require stronger
-accuracy must not infer such a guarantee from a float32 return type.
+The CPU fixtures record both outcomes and do not claim classification equality
+when intermediate overflow changes the computation. The CPU kernel does not
+detect and repair these inputs by switching precision. Applications that require
+stronger accuracy must not infer such a guarantee from a float32 return type.
 
 Fixtures containing explicit NaN or infinity still check their specified
 classification; NaN payload bits are not compared. Empty and all-negative-zero

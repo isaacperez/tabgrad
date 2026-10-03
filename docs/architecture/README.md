@@ -149,6 +149,9 @@ Read the documents in this order when learning the architecture:
    [WebGPU float32 addition](webgpu-float32-addition.md) develops a bounded
    numerical decision: rounding, exceptional values, implementation freedom
    and the evidence behind the accepted cost tradeoff.
+   [WebGPU float32 total sum](webgpu-float32-sum.md) explains the exact-total
+   result, wider private accumulation, staged ownership and the distinct
+   accuracy/cost tradeoff for a scalar reduction.
 7. [WebAssembly CPU backend](webassembly-cpu-backend.md) develops the CPU branch:
    Rust-authored kernels, prebuilt scalar and vector modules, the private binary
    interface, memory ownership, and optional worker constraints.
