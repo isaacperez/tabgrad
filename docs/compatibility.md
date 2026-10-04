@@ -72,7 +72,7 @@ The [managed GPU connection reference](reference/python-host.md) defines the
 host helper, single-use attachment, independent physical worker and ordinary
 Python observation. `webgpu` is a Tabgrad device extension, not a native
 PyTorch device identifier. The packaged Python GPU fixtures combine the
-accepted exact float32 addition corpus with scalar, nested, empty, chained,
+accepted exact float32 addition and total-sum corpora with scalar, nested, empty, chained,
 branched and contiguous-view cases; they explicitly remove JSPI before loading
 the pinned interpreter. CPU remains independently available in that binding.
 
@@ -85,7 +85,7 @@ Unacknowledged worker loss preserves last-known owned/pending counters and
 unknown-completion accounting rather than reporting successful drain or zero
 physical VRAM. Exact qualified browser, operating-system, adapter and artifact
 identities belong in the verification evidence. This evidence does not expand
-GPU support to multiplication, reductions, gradients or untested environments,
+GPU support to multiplication, dimensional reductions, gradients or untested environments,
 and does not itself establish a release's support status.
 
 The [multiplication reference](reference/tensor-multiplication.md) defines the

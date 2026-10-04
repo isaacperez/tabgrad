@@ -38,7 +38,7 @@ try {
   });
   await report("/__phase", { phase: "assets-loaded" });
   await report("/__phase", { phase: "runtime-started" });
-  worker.postMessage({ webgpu: controller.connection, mode: parameters.get("mode") }, [...controller.transferables]);
+  worker.postMessage({ webgpu: controller.connection, mode: parameters.get("mode"), operation: parameters.get("operation") ?? "add" }, [...controller.transferables]);
   outcome = { ...await result, workerAcquisitionMilliseconds };
 } catch (error) {
   outcome = { ok: false, error: { message: String(error), stack: error?.stack } };

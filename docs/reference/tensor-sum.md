@@ -34,7 +34,7 @@ also accepts no arguments and returns a `Tensor`; its shape is `[]`, and
 callers close their input and result handles under the ordinary session
 lifetime contract.
 
-This reference describes the supported contiguous CPU `float32` domain,
+This reference describes the supported contiguous CPU and WebGPU `float32` domain,
 including scalar, singleton, multidimensional and empty shapes and whole-contiguous views. The
 result preserves dtype and device and owns a distinct scalar value. Empty
 input produces positive zero, not an empty tensor. A scalar input also creates
@@ -42,13 +42,15 @@ a reduction result rather than returning the original handle.
 
 Dimension selection, `keepdim`, explicit `dtype`, `out`, promotion,
 non-contiguous inputs and other devices are outside this
-supported CPU call domain described here. Even apparently redundant options
+supported call domain. Even apparently redundant options
 such as `dtype=None`,
 `dim=None`, `keepdim=False` or `out=None` are rejected, not silently ignored.
 
-Tracked inputs participate in [functional gradients](functional-gradients.md).
+Tracked CPU inputs participate in [functional gradients](functional-gradients.md).
 The derivative expands the incoming scalar to the input shape, including empty
 dimensions; an interior sum does not assume that incoming scalar equals one.
+WebGPU does not support tracked inputs or gradients. Device selection is
+explicit; a GPU sum does not fall back to CPU.
 
 ## Admission, observation and ownership
 
@@ -68,7 +70,7 @@ flowchart LR
     Scalar --> Observation[Explicit observation]
 ```
 
-Observation forms the selected program and dispatches the CPU kernel through
+Observation forms the selected program and dispatches the selected backend through
 the shared execution path. Output allocation uses the scalar shape; input
 traversal uses the input's element count. Confusing those counts would read
 only one element of a non-scalar input or skip an empty reduction's required
@@ -84,12 +86,28 @@ executing it. Repeated observation reuses a computed value. Python uses ordinary
 ## Backend numerical contracts
 
 The public float32 dtype does not prescribe one accumulator for every backend.
-The [WebGPU total-sum decision](../architecture/webgpu-float32-sum.md) requires
+On WebGPU, the [total-sum decision](../architecture/webgpu-float32-sum.md) requires
 the exact total of stored finite inputs rounded to float32 nearest with ties
 to even, while permitting wider private accumulation. It also defines its own
-exceptional-value and composition rules. That architectural contract does not
-extend the supported call domain or establish release compatibility evidence
-for this reference. CPU accumulation and its evidence are described below.
+exceptional-value and composition rules: explicit NaN or both infinity signs
+produce NaN; one infinity sign dominates finite inputs; exact zero and empty
+input produce positive zero. Subnormal totals are preserved and finite totals
+overflow only at the final rounding. NaN payloads and floating-point flags are
+not preserved. CPU accumulation and its evidence are described below.
+
+GPU private integer partials are not tensor values. Every logical sum writes
+one float32 scalar before a consumer can use it; preceding operations likewise
+deliver their separately rounded float32 results. A sum of `[M, M, -M, -M]`
+therefore returns positive zero on GPU, whereas the CPU grouping described
+below may produce NaN. This stronger GPU accumulation contract does not change
+CPU behavior or promise identical CPU/GPU bits.
+
+The [GPU backend component](../components/webgpu-backend.md) describes staged
+execution, admission limits and private storage. JavaScript and managed Python
+GPU fixtures compare stored input bits against an independent BigInt exact
+oracle, including ties, sticky bits, subnormals, cancellation, special values
+and stage boundaries. Those samples accompany the integer-width and rounding
+argument; they are not an exhaustive proof or release-wide qualification.
 
 ## Floating-point accumulation is not exact arithmetic
 
@@ -136,7 +154,7 @@ classification; NaN payload bits are not compared. Empty and all-negative-zero
 fixtures check positive zero. Non-finite values do not disable bounds checks,
 change memory ownership or trigger another backend.
 
-## Internal kernel and cost contract
+## CPU internal kernel and cost contract
 
 The private raw export is
 `tabgrad_sum_f32(input_offset, output_offset, input_length) -> status`.

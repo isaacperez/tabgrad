@@ -86,7 +86,10 @@ numerical qualification, not just changing a shared declaration.
 
 The acquired device is ready before the factory returns, but a compute pipeline
 is prepared only when numerical execution first needs it. Preparation is shared
-within that backend owner. The numerical implementation and its precision
+within that backend owner, separately for each computation kind. A prepared
+addition pipeline cannot satisfy a sum's preparation. Cache identity is bounded
+by that owner's device lifetime and the selected kernel semantics; it retains
+neither uniforms nor partial buffers. The numerical implementation and its precision
 constraints are defined in the
 [addition decision](../architecture/webgpu-float32-addition.md), not in the
 runtime's generic dispatch policy.
@@ -102,6 +105,28 @@ Rejected browser promises retain their cause. An upload is itself queued work:
 failure while creating a subsequent command does not make an earlier
 `writeBuffer` safe to destroy immediately. The backend's cleanup joins all work
 that actually started, whether a logical result succeeded or failed.
+
+### Total-sum geometry and private storage
+
+The [sum kernel](../../src/backends/webgpu/kernels/sum.ts) owns groups of 128
+input elements, processed by 64 invocations. Each nonfinal stage writes 44-byte
+integer partials and the next stage reduces those partials. Dispatches establish
+the dependency between stages; no device-wide barrier is assumed within a
+dispatch. The final stage writes four scalar bytes. Even empty input dispatches
+one guarded group to write positive zero rather than reuse stale scalar data.
+
+Each stage has a distinct 16-byte uniform. Partial and parameter allocations
+belong to the invocation's physical owner, not semantic tensor slots, and are
+released only after drain. A queued uniform write creates this obligation even
+when all inputs are resident or empty and command encoding later fails.
+
+The acquired workgroup limits must permit 64 invocations and 2,816 bytes of
+workgroup storage; the buffer limit must permit a uniform. The existing tensor
+extent bound also limits the unsigned input count and first-stage dispatch.
+For nonfinal stages, `44 * ceil(N/128) <= 4*N` for `N >= 129`, so private storage
+bindings fit the already admitted input extent. Later stages only shrink.
+The [sum decision](../architecture/webgpu-float32-sum.md) gives the integer-width
+proof and analytical storage/traffic bounds. These do not measure physical VRAM.
 
 ## Loss, release and extension boundaries
 

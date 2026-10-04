@@ -120,3 +120,37 @@ commitment or execution proof. It does not cover the contributor helper itself,
 Python assets, interpreter, measurement fixtures or emitted distribution. Record
 those inputs separately under the [performance policy](../performance.md).
 Discovery and hashing require no browser, GPU workload or dependency installation.
+
+## Total-sum workload
+
+`npm run measure:webgpu -- pilot sum` and, after adequate calibration,
+`npm run measure:webgpu -- measure sum` select the maintained total-sum page.
+Omitting the last argument retains the addition procedure above. Sum uses
+65,536, 262,144 and 1,048,576 elements, one resident input and a four-byte scalar
+result. The deterministic input is `(index % 17 - 8) / 4096`; all subset sums
+are exactly representable at these sizes. The independent expected total is
+checked on each observed batch. This is a synthetic resource workload, not
+the numerical qualification corpus or a native PyTorch benchmark.
+
+Each size acquires a fresh owner, separately times preparation/upload, then
+runs three excluded warmup batches and three pilot or five decision batches.
+Each batch performs sixteen serialized complete invocations, retiring private
+partials/uniforms and the previous scalar between invocations. Input stays
+resident; readback observes only the final scalar. The reported execution
+clock includes encoding, allocation, submission, completion and cleanup.
+Preparation describes the observed driver cache state, not cold compilation.
+
+For each case, the report records analytical input/output/private bytes beside
+fresh-owner peak, resident and released counters. With stage count `D` and
+nonfinal partial count `S`, private bytes are `44*S + 16*D`. Readback owns four
+additional bytes at its distinct phase. Prepared pipelines retain no partials
+or uniforms. Accounting does not measure compiler memory or physical VRAM.
+The same direct-tool 64 MiB, five-second phase and sixty-second workload caps
+apply. Reports use `test-results/webgpu-sum-{pilot,measure}-*.json`.
+
+Inspect timer resolution and batch spread before interpreting coarse costs;
+short individual scalar readbacks may remain unresolved. All three sizes use
+three stages, so this range does not measure a stage-count transition. There
+is no earlier production GPU sum to serve as a before/after timing baseline.
+Descriptive cost, accuracy and resource evidence must not be relabeled as a
+speedup, CPU/GPU numerical equivalence or general scaling guarantee.
