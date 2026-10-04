@@ -126,6 +126,12 @@ survivors. A logical intermediate can therefore exist during execution without
 requiring its own resident materialization afterward. Empty values participate
 in the same ownership accounting even though their allocation has zero bytes.
 
+Copy shares the source backing rather than allocating a destination payload.
+Multiple logical bindings may borrow its single resident allocation. Numeric
+F/R/Q pins supply external retention beyond internal use counts; C controls
+never own allocations. Rollback excludes borrowed residents, and only final
+backing retirement releases the allocation.
+
 ## Failure cleanup must not destroy retry inputs
 
 `InvocationStorage` retains only active allocation records. A released scratch

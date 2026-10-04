@@ -3673,6 +3673,689 @@
       "type": "RuntimeError"
     }
   ],
+  "copyCases": [
+    {
+      "name": "stale-child-bypasses-parent-new-child-binds-parent",
+      "source": "\ndef query(kind, write_view=False):\n    leaf = torch.tensor([2., 3.], dtype=torch.float32, requires_grad=True)\n    base = leaf * leaf\n    parent = base.view(1, 2)\n    child = parent.view(2)\n    old = child.sum()\n    source = torch.tensor([5., 7.], dtype=torch.float32, requires_grad=True)\n    if write_view:\n        parent.copy_(source.view(1, 2))\n    else:\n        base.copy_(source)\n    if kind == 'old':\n        result = torch.autograd.grad(old, leaf)\n    elif kind == 'stale-connected':\n        result = torch.autograd.grad(child.sum(), (base, leaf, source))\n    else:\n        output = child.sum() if kind == 'stale-parent' else parent.view(2).sum()\n        try:\n            result = torch.autograd.grad(output, (base, parent, leaf, source))\n        except Exception as error:\n            return [type(error).__name__, old.tolist(), child.tolist()]\n    return [[t.tolist() for t in result], old.tolist(), child.tolist()]\nreport = [[query(kind, write_view) for kind in ('old', 'stale-connected', 'stale-parent', 'new-parent')] for write_view in (False, True)]\n",
+      "expected": [
+        [
+          [
+            [
+              [
+                4.0,
+                6.0
+              ]
+            ],
+            13.0,
+            [
+              5.0,
+              7.0
+            ]
+          ],
+          [
+            [
+              [
+                1.0,
+                1.0
+              ],
+              [
+                0.0,
+                0.0
+              ],
+              [
+                1.0,
+                1.0
+              ]
+            ],
+            13.0,
+            [
+              5.0,
+              7.0
+            ]
+          ],
+          [
+            "RuntimeError",
+            13.0,
+            [
+              5.0,
+              7.0
+            ]
+          ],
+          [
+            [
+              [
+                1.0,
+                1.0
+              ],
+              [
+                [
+                  1.0,
+                  1.0
+                ]
+              ],
+              [
+                0.0,
+                0.0
+              ],
+              [
+                1.0,
+                1.0
+              ]
+            ],
+            13.0,
+            [
+              5.0,
+              7.0
+            ]
+          ]
+        ],
+        [
+          [
+            [
+              [
+                4.0,
+                6.0
+              ]
+            ],
+            13.0,
+            [
+              5.0,
+              7.0
+            ]
+          ],
+          [
+            [
+              [
+                1.0,
+                1.0
+              ],
+              [
+                0.0,
+                0.0
+              ],
+              [
+                1.0,
+                1.0
+              ]
+            ],
+            13.0,
+            [
+              5.0,
+              7.0
+            ]
+          ],
+          [
+            "RuntimeError",
+            13.0,
+            [
+              5.0,
+              7.0
+            ]
+          ],
+          [
+            [
+              [
+                1.0,
+                1.0
+              ],
+              [
+                [
+                  1.0,
+                  1.0
+                ]
+              ],
+              [
+                0.0,
+                0.0
+              ],
+              [
+                1.0,
+                1.0
+              ]
+            ],
+            13.0,
+            [
+              5.0,
+              7.0
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "copy-float32-bits-and-independent-source",
+      "source": "\nimport struct, math\ns = torch.tensor([0., -0., 2.**-149, 1. + 2.**-23, float('inf'), -float('inf'), float('nan')], dtype=torch.float32)\nd = torch.tensor([1.] * 7, dtype=torch.float32)\ndef bits(t):\n    return ['nan' if math.isnan(v) else struct.unpack('<I', struct.pack('<f', v))[0] for v in t.tolist()]\nbefore = bits(s)\nd.copy_(s)\ns.copy_(torch.tensor([2.] * 7, dtype=torch.float32))\nreport = [before, bits(d), bits(s), list(d.shape), d.requires_grad]\n",
+      "expected": [
+        [
+          0,
+          2147483648,
+          1,
+          1065353217,
+          2139095040,
+          4286578688,
+          "nan"
+        ],
+        [
+          0,
+          2147483648,
+          1,
+          1065353217,
+          2139095040,
+          4286578688,
+          "nan"
+        ],
+        [
+          1073741824,
+          1073741824,
+          1073741824,
+          1073741824,
+          1073741824,
+          1073741824,
+          1073741824
+        ],
+        [
+          7
+        ],
+        false
+      ]
+    },
+    {
+      "name": "source-only-prunes-consumed-old-multiplication",
+      "source": "\nx = torch.tensor([2.], dtype=torch.float32, requires_grad=True)\ns = torch.tensor([7.], dtype=torch.float32, requires_grad=True)\nd = x * x\ntorch.autograd.grad(d, x)\nd.copy_(s)\nfirst = torch.autograd.grad(d, s)[0]\ntry:\n    torch.autograd.grad(d, (x, s))\nexcept Exception as error:\n    consumed = type(error).__name__\nsecond = torch.autograd.grad(d, s)[0]\nreport = [first.tolist(), consumed, second.tolist(), d.tolist()]\n",
+      "expected": [
+        [
+          1.0
+        ],
+        "RuntimeError",
+        [
+          1.0
+        ],
+        [
+          7.0
+        ]
+      ]
+    },
+    {
+      "name": "zero-edge-validates-old-saved-plain-position",
+      "source": "\nx = torch.tensor([2.], dtype=torch.float32, requires_grad=True)\ny = torch.tensor([3.], dtype=torch.float32)\ns = torch.tensor([7.], dtype=torch.float32)\nd = x * y\nd.copy_(s)\ny.copy_(s)\ntry:\n    torch.autograd.grad(d, x)\nexcept Exception as error:\n    rejected = type(error).__name__\ncutoff = torch.autograd.grad(d, d)[0]\nreport = [rejected, cutoff.tolist(), d.tolist()]\n",
+      "expected": [
+        "RuntimeError",
+        [
+          1.0
+        ],
+        [
+          7.0
+        ]
+      ]
+    },
+    {
+      "name": "no-grad-leaf-alias-old-output",
+      "source": "\nx = torch.tensor([2., 4.], dtype=torch.float32, requires_grad=True)\ns = torch.tensor([7., 9.], dtype=torch.float32)\nv = x.view(1, 2)\nold = x + x\nwith torch.no_grad():\n    returned = x.copy_(other=s, non_blocking=True)\ng = torch.autograd.grad(old, x, torch.tensor([1., 1.], dtype=torch.float32))[0]\nreport = [returned is x, x.tolist(), v.tolist(), x.requires_grad, g.tolist()]\n",
+      "expected": [
+        true,
+        [
+          7.0,
+          9.0
+        ],
+        [
+          [
+            7.0,
+            9.0
+          ]
+        ],
+        true,
+        [
+          2.0,
+          2.0
+        ]
+      ]
+    },
+    {
+      "name": "active-promotion-connected-zeros-reuse",
+      "source": "\nx = torch.tensor([2., 4.], dtype=torch.float32, requires_grad=True)\ns = torch.tensor([7., 9.], dtype=torch.float32, requires_grad=True)\nd = x + x\nreturned = d.copy_(s)\ng = torch.autograd.grad(d, (x, s), torch.tensor([1., 1.], dtype=torch.float32))\nagain = torch.autograd.grad(d, s, torch.tensor([1., 1.], dtype=torch.float32))[0]\np = torch.tensor([0., 0.], dtype=torch.float32)\np.copy_(s, False)\npg = torch.autograd.grad(p, s, torch.tensor([1., 1.], dtype=torch.float32))[0]\nreport = [returned is d, d.tolist(), d.requires_grad, [t.tolist() for t in g], again.tolist(), p.requires_grad, pg.tolist()]\n",
+      "expected": [
+        true,
+        [
+          7.0,
+          9.0
+        ],
+        true,
+        [
+          [
+            0.0,
+            0.0
+          ],
+          [
+            1.0,
+            1.0
+          ]
+        ],
+        [
+          1.0,
+          1.0
+        ],
+        true,
+        [
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    {
+      "name": "view-copy-consumption-and-cutoff",
+      "source": "\nx = torch.tensor([2., 4.], dtype=torch.float32, requires_grad=True)\ns = torch.tensor([[7., 9.]], dtype=torch.float32, requires_grad=True)\nb = x + x\nv = b.view(1, 2)\nold = v + v\nv.copy_(s)\ng = torch.autograd.grad(v, s, torch.tensor([[1., 1.]], dtype=torch.float32))[0]\ntry:\n    torch.autograd.grad(v, s, torch.tensor([[1., 1.]], dtype=torch.float32))\nexcept Exception as error:\n    consumed = type(error).__name__\ncutoff = torch.autograd.grad(v, b, torch.tensor([[1., 1.]], dtype=torch.float32))[0]\nold_g = torch.autograd.grad(old, x, torch.tensor([[1., 1.]], dtype=torch.float32))[0]\nreport = [v.tolist(), b.tolist(), g.tolist(), consumed, cutoff.tolist(), old_g.tolist()]\n",
+      "expected": [
+        [
+          [
+            7.0,
+            9.0
+          ]
+        ],
+        [
+          7.0,
+          9.0
+        ],
+        [
+          [
+            1.0,
+            1.0
+          ]
+        ],
+        "RuntimeError",
+        [
+          1.0,
+          1.0
+        ],
+        [
+          4.0,
+          4.0
+        ]
+      ]
+    },
+    {
+      "name": "node-saves-before-pruning-and-cutoff",
+      "source": "\nx = torch.tensor([2.], dtype=torch.float32, requires_grad=True)\ny = torch.tensor([3.], dtype=torch.float32, requires_grad=True)\np = x * y\nwith torch.no_grad():\n    x.copy_(y)\ntry:\n    torch.autograd.grad(p, x)\nexcept Exception as error:\n    rejected = type(error).__name__\ncutoff = torch.autograd.grad(p, p)[0]\nreport = [rejected, cutoff.tolist(), x.tolist()]\n",
+      "expected": [
+        "RuntimeError",
+        [
+          1.0
+        ],
+        [
+          3.0
+        ]
+      ]
+    },
+    {
+      "name": "special-dirty-resolution-and-fresh-epoch",
+      "source": "\np = torch.tensor([2., 4.], dtype=torch.float32)\ns = torch.tensor([7., 9.], dtype=torch.float32, requires_grad=True)\nwith torch.no_grad():\n    special = p.view(1, 2)\np.copy_(s)\nreport = [special.tolist(), special.requires_grad]\ntry:\n    special + special\nexcept Exception as error:\n    report.append(type(error).__name__)\nwith torch.no_grad():\n    fresh = special.view(1, 2)\nactive = fresh + fresh\nreport.extend([fresh.tolist(), fresh.requires_grad, active.requires_grad])\ntry:\n    torch.autograd.grad(active, s, torch.tensor([[1., 1.]], dtype=torch.float32))\nexcept Exception as error:\n    report.append(type(error).__name__)\n",
+      "expected": [
+        [
+          [
+            7.0,
+            9.0
+          ]
+        ],
+        true,
+        "RuntimeError",
+        [
+          [
+            7.0,
+            9.0
+          ]
+        ],
+        true,
+        true,
+        "RuntimeError"
+      ]
+    },
+    {
+      "name": "self-copy-connected-source-path",
+      "source": "\nx = torch.tensor([2., 4.], dtype=torch.float32, requires_grad=True)\nd = x + x\nd.copy_(d)\ng = torch.autograd.grad(d, x, torch.tensor([1., 1.], dtype=torch.float32))[0]\nreport = [d.tolist(), d.requires_grad, g.tolist()]\n",
+      "expected": [
+        [
+          4.0,
+          8.0
+        ],
+        true,
+        [
+          2.0,
+          2.0
+        ]
+      ]
+    },
+    {
+      "name": "inherited-special-origin-on-plain-child",
+      "source": "\np = torch.tensor([2., 4.], dtype=torch.float32)\ns = torch.tensor([7., 9.], dtype=torch.float32, requires_grad=True)\nwith torch.no_grad():\n    special = p.view(1, 2)\nchild = special.view(1, 2)\nreport = []\ntry:\n    child.copy_(s.view(1, 2))\nexcept Exception as error:\n    report.append(type(error).__name__)\nreport.extend([p.tolist(), child.requires_grad])\np.copy_(s)\ntry:\n    child + child\nexcept Exception as error:\n    report.append(type(error).__name__)\nreport.extend([child.tolist(), child.requires_grad])\n",
+      "expected": [
+        "RuntimeError",
+        [
+          2.0,
+          4.0
+        ],
+        false,
+        "RuntimeError",
+        [
+          [
+            7.0,
+            9.0
+          ]
+        ],
+        true
+      ]
+    },
+    {
+      "name": "inherited-special-origin-with-bound-entry",
+      "source": "\np = torch.tensor([2., 4.], dtype=torch.float32, requires_grad=True)\ns = torch.tensor([[7., 9.]], dtype=torch.float32)\nwith torch.no_grad():\n    special = p.view(1, 2)\nchild = special.view(1, 2)\ng = torch.autograd.grad(child, child, torch.tensor([[1., 1.]], dtype=torch.float32))[0]\nreport = [g.tolist(), child.requires_grad]\ntry:\n    child.copy_(s)\nexcept Exception as error:\n    report.append(type(error).__name__)\nwith torch.no_grad():\n    p.copy_(s.view(2))\ntry:\n    child.sum()\nexcept Exception as error:\n    report.append(type(error).__name__)\nreport.append(child.tolist())\n",
+      "expected": [
+        [
+          [
+            1.0,
+            1.0
+          ]
+        ],
+        true,
+        "RuntimeError",
+        "RuntimeError",
+        [
+          [
+            7.0,
+            9.0
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "scalar:d.copy_(s)",
+      "source": "s = torch.tensor(3., dtype=torch.float32)\nd = torch.tensor(3., dtype=torch.float32)\nreturned = d.copy_(s)\nreport = [returned is d, list(d.shape), d.tolist(), d.requires_grad]\n",
+      "expected": [
+        true,
+        [],
+        3.0,
+        false
+      ]
+    },
+    {
+      "name": "scalar:d.copy_(other=s)",
+      "source": "s = torch.tensor(3., dtype=torch.float32)\nd = torch.tensor(3., dtype=torch.float32)\nreturned = d.copy_(other=s)\nreport = [returned is d, list(d.shape), d.tolist(), d.requires_grad]\n",
+      "expected": [
+        true,
+        [],
+        3.0,
+        false
+      ]
+    },
+    {
+      "name": "scalar:d.copy_(s, False)",
+      "source": "s = torch.tensor(3., dtype=torch.float32)\nd = torch.tensor(3., dtype=torch.float32)\nreturned = d.copy_(s, False)\nreport = [returned is d, list(d.shape), d.tolist(), d.requires_grad]\n",
+      "expected": [
+        true,
+        [],
+        3.0,
+        false
+      ]
+    },
+    {
+      "name": "scalar:d.copy_(s, non_blocking=True)",
+      "source": "s = torch.tensor(3., dtype=torch.float32)\nd = torch.tensor(3., dtype=torch.float32)\nreturned = d.copy_(s, non_blocking=True)\nreport = [returned is d, list(d.shape), d.tolist(), d.requires_grad]\n",
+      "expected": [
+        true,
+        [],
+        3.0,
+        false
+      ]
+    },
+    {
+      "name": "empty:d.copy_(s)",
+      "source": "s = torch.tensor([[], []], dtype=torch.float32)\nd = torch.tensor([[], []], dtype=torch.float32)\nreturned = d.copy_(s)\nreport = [returned is d, list(d.shape), d.tolist(), d.requires_grad]\n",
+      "expected": [
+        true,
+        [
+          2,
+          0
+        ],
+        [
+          [],
+          []
+        ],
+        false
+      ]
+    },
+    {
+      "name": "empty:d.copy_(other=s)",
+      "source": "s = torch.tensor([[], []], dtype=torch.float32)\nd = torch.tensor([[], []], dtype=torch.float32)\nreturned = d.copy_(other=s)\nreport = [returned is d, list(d.shape), d.tolist(), d.requires_grad]\n",
+      "expected": [
+        true,
+        [
+          2,
+          0
+        ],
+        [
+          [],
+          []
+        ],
+        false
+      ]
+    },
+    {
+      "name": "empty:d.copy_(s, False)",
+      "source": "s = torch.tensor([[], []], dtype=torch.float32)\nd = torch.tensor([[], []], dtype=torch.float32)\nreturned = d.copy_(s, False)\nreport = [returned is d, list(d.shape), d.tolist(), d.requires_grad]\n",
+      "expected": [
+        true,
+        [
+          2,
+          0
+        ],
+        [
+          [],
+          []
+        ],
+        false
+      ]
+    },
+    {
+      "name": "empty:d.copy_(s, non_blocking=True)",
+      "source": "s = torch.tensor([[], []], dtype=torch.float32)\nd = torch.tensor([[], []], dtype=torch.float32)\nreturned = d.copy_(s, non_blocking=True)\nreport = [returned is d, list(d.shape), d.tolist(), d.requires_grad]\n",
+      "expected": [
+        true,
+        [
+          2,
+          0
+        ],
+        [
+          [],
+          []
+        ],
+        false
+      ]
+    },
+    {
+      "name": "matrix:d.copy_(s)",
+      "source": "s = torch.tensor([[1., -0.], [3., 4.]], dtype=torch.float32)\nd = torch.tensor([[1., -0.], [3., 4.]], dtype=torch.float32)\nreturned = d.copy_(s)\nreport = [returned is d, list(d.shape), d.tolist(), d.requires_grad]\n",
+      "expected": [
+        true,
+        [
+          2,
+          2
+        ],
+        [
+          [
+            1.0,
+            -0.0
+          ],
+          [
+            3.0,
+            4.0
+          ]
+        ],
+        false
+      ]
+    },
+    {
+      "name": "matrix:d.copy_(other=s)",
+      "source": "s = torch.tensor([[1., -0.], [3., 4.]], dtype=torch.float32)\nd = torch.tensor([[1., -0.], [3., 4.]], dtype=torch.float32)\nreturned = d.copy_(other=s)\nreport = [returned is d, list(d.shape), d.tolist(), d.requires_grad]\n",
+      "expected": [
+        true,
+        [
+          2,
+          2
+        ],
+        [
+          [
+            1.0,
+            -0.0
+          ],
+          [
+            3.0,
+            4.0
+          ]
+        ],
+        false
+      ]
+    },
+    {
+      "name": "matrix:d.copy_(s, False)",
+      "source": "s = torch.tensor([[1., -0.], [3., 4.]], dtype=torch.float32)\nd = torch.tensor([[1., -0.], [3., 4.]], dtype=torch.float32)\nreturned = d.copy_(s, False)\nreport = [returned is d, list(d.shape), d.tolist(), d.requires_grad]\n",
+      "expected": [
+        true,
+        [
+          2,
+          2
+        ],
+        [
+          [
+            1.0,
+            -0.0
+          ],
+          [
+            3.0,
+            4.0
+          ]
+        ],
+        false
+      ]
+    },
+    {
+      "name": "matrix:d.copy_(s, non_blocking=True)",
+      "source": "s = torch.tensor([[1., -0.], [3., 4.]], dtype=torch.float32)\nd = torch.tensor([[1., -0.], [3., 4.]], dtype=torch.float32)\nreturned = d.copy_(s, non_blocking=True)\nreport = [returned is d, list(d.shape), d.tolist(), d.requires_grad]\n",
+      "expected": [
+        true,
+        [
+          2,
+          2
+        ],
+        [
+          [
+            1.0,
+            -0.0
+          ],
+          [
+            3.0,
+            4.0
+          ]
+        ],
+        false
+      ]
+    },
+    {
+      "name": "d.copy_()",
+      "source": "d = torch.tensor([2.], dtype=torch.float32, requires_grad=True)\ns = torch.tensor([3.], dtype=torch.float32)\ntry:\n    d.copy_()\nexcept Exception as error:\n    report = [type(error).__name__, d.tolist(), d.requires_grad]\n",
+      "expected": [
+        "TypeError",
+        [
+          2.0
+        ],
+        true
+      ]
+    },
+    {
+      "name": "d.copy_(src=s)",
+      "source": "d = torch.tensor([2.], dtype=torch.float32, requires_grad=True)\ns = torch.tensor([3.], dtype=torch.float32)\ntry:\n    d.copy_(src=s)\nexcept Exception as error:\n    report = [type(error).__name__, d.tolist(), d.requires_grad]\n",
+      "expected": [
+        "TypeError",
+        [
+          2.0
+        ],
+        true
+      ]
+    },
+    {
+      "name": "d.copy_(s, other=s)",
+      "source": "d = torch.tensor([2.], dtype=torch.float32, requires_grad=True)\ns = torch.tensor([3.], dtype=torch.float32)\ntry:\n    d.copy_(s, other=s)\nexcept Exception as error:\n    report = [type(error).__name__, d.tolist(), d.requires_grad]\n",
+      "expected": [
+        "TypeError",
+        [
+          2.0
+        ],
+        true
+      ]
+    },
+    {
+      "name": "d.copy_(s, non_blocking=1)",
+      "source": "d = torch.tensor([2.], dtype=torch.float32, requires_grad=True)\ns = torch.tensor([3.], dtype=torch.float32)\ntry:\n    d.copy_(s, non_blocking=1)\nexcept Exception as error:\n    report = [type(error).__name__, d.tolist(), d.requires_grad]\n",
+      "expected": [
+        "TypeError",
+        [
+          2.0
+        ],
+        true
+      ]
+    },
+    {
+      "name": "d.copy_(s, non_blocking=None)",
+      "source": "d = torch.tensor([2.], dtype=torch.float32, requires_grad=True)\ns = torch.tensor([3.], dtype=torch.float32)\ntry:\n    d.copy_(s, non_blocking=None)\nexcept Exception as error:\n    report = [type(error).__name__, d.tolist(), d.requires_grad]\n",
+      "expected": [
+        "TypeError",
+        [
+          2.0
+        ],
+        true
+      ]
+    },
+    {
+      "name": "d.copy_(s, False, False)",
+      "source": "d = torch.tensor([2.], dtype=torch.float32, requires_grad=True)\ns = torch.tensor([3.], dtype=torch.float32)\ntry:\n    d.copy_(s, False, False)\nexcept Exception as error:\n    report = [type(error).__name__, d.tolist(), d.requires_grad]\n",
+      "expected": [
+        "TypeError",
+        [
+          2.0
+        ],
+        true
+      ]
+    },
+    {
+      "name": "d.copy_(1)",
+      "source": "d = torch.tensor([2.], dtype=torch.float32, requires_grad=True)\ns = torch.tensor([3.], dtype=torch.float32)\ntry:\n    d.copy_(1)\nexcept Exception as error:\n    report = [type(error).__name__, d.tolist(), d.requires_grad]\n",
+      "expected": [
+        "RuntimeError",
+        [
+          2.0
+        ],
+        true
+      ]
+    },
+    {
+      "name": "d.copy_(torch.tensor([1., 2.], dtype=torch.float32))",
+      "source": "d = torch.tensor([2.], dtype=torch.float32, requires_grad=True)\ns = torch.tensor([3.], dtype=torch.float32)\ntry:\n    d.copy_(torch.tensor([1., 2.], dtype=torch.float32))\nexcept Exception as error:\n    report = [type(error).__name__, d.tolist(), d.requires_grad]\n",
+      "expected": [
+        "RuntimeError",
+        [
+          2.0
+        ],
+        true
+      ]
+    },
+    {
+      "name": "d.view(1).copy_(s)",
+      "source": "d = torch.tensor([2.], dtype=torch.float32, requires_grad=True)\ns = torch.tensor([3.], dtype=torch.float32)\ntry:\n    d.view(1).copy_(s)\nexcept Exception as error:\n    report = [type(error).__name__, d.tolist(), d.requires_grad]\n",
+      "expected": [
+        "RuntimeError",
+        [
+          2.0
+        ],
+        true
+      ]
+    }
+  ],
   "noGradCases": [
     {
       "name": "entry-binding-order",

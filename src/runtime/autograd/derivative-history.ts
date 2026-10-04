@@ -1,11 +1,13 @@
+import { WriterOutcome, captureWriterOutcomes, retainWriterOutcomes, releaseWriterOutcomes } from "../writer-outcome.js";
 import { TabgradError, throwCleanupFailures } from "../../shared/errors.js";
 
 /** A canonical operation supplies its saved-operand selection and local VJP. */
 export interface DerivativeRecipe {
+  readonly consumesHistory?: boolean;
   savedOperands(position: number): readonly number[];
   apply<Value, Gradient>(
     incoming: Gradient, saved: readonly Value[], shape: readonly number[],
-    operations: DerivativeOperations<Value, Gradient>,
+    operations: DerivativeOperations<Value, Gradient>, position: number,
   ): Gradient;
 }
 
@@ -18,6 +20,7 @@ export class DerivativeNode<Value> {
     readonly recipe: DerivativeRecipe | null,
     public inputs: readonly (DerivativeNode<Value> | null)[],
     public saved: readonly (readonly Value[])[],
+    readonly outcomes: readonly WriterOutcome[] = [],
   ) {}
 }
 
@@ -28,6 +31,7 @@ export interface DerivativeOperations<Value, Gradient> {
   mul(left: Gradient, right: Gradient): Gradient;
   view(value: Gradient, shape: readonly number[]): Gradient;
   expand(value: Gradient, shape: readonly number[]): Gradient;
+  zeros(shape: readonly number[]): Gradient;
   close(value: Gradient): void;
 }
 
@@ -40,6 +44,7 @@ export interface DerivativePlan<Value> {
   readonly order: readonly DerivativeNode<Value>[];
   readonly needed: ReadonlySet<DerivativeNode<Value>>;
   readonly requested: readonly DerivativeNode<Value>[];
+  readonly outcomes: readonly (readonly WriterOutcome[])[];
 }
 
 function releaseTemporary<Value, Gradient>(
@@ -64,10 +69,14 @@ function releaseGradients<Value, Gradient>(
 export class DerivativeHistory<Value> {
   readonly #nodes = new Set<DerivativeNode<Value>>();
   #savedValues = 0;
+  #references = 0;
+  get references(): number { return this.#references; }
 
   constructor(
     private readonly retainValue: (value: Value) => void,
     private readonly releaseValue: (value: Value) => void,
+    private readonly validateValue: (value: Value) => void = () => {},
+    private readonly valueOutcomes: (value: Value) => readonly WriterOutcome[] = () => [],
   ) {}
 
   leaf(shape: readonly number[]): DerivativeNode<Value> {
@@ -77,6 +86,7 @@ export class DerivativeHistory<Value> {
   record(
     shape: readonly number[], recipe: DerivativeRecipe,
     inputs: readonly (DerivativeNode<Value> | null)[], values: readonly Value[],
+    outcomes: readonly WriterOutcome[] = [],
   ): DerivativeNode<Value> {
     // Admission decides advertised tracking. An active operation on a tracked
     // no-grad view has a real recipe even when all its input edges are absent.
@@ -84,22 +94,26 @@ export class DerivativeHistory<Value> {
       const operands = input === null ? [] : recipe.savedOperands(position);
       return operands.map((operand) => values[operand]!);
     });
-    for (const input of inputs) if (input !== null) input.references += 1;
+    for (const input of inputs) if (input !== null) { input.references += 1; this.#references += 1; }
     for (const operands of saved) {
       for (const value of operands) {
         this.retainValue(value);
         this.#savedValues += 1;
       }
     }
-    return this.#create(shape, recipe, inputs, saved.some((operands) => operands.length !== 0) ? saved : []);
+    return this.#create(shape, recipe, inputs, saved.some((operands) => operands.length !== 0) ? saved : [],
+      captureWriterOutcomes([outcomes, ...values.map(this.valueOutcomes)]));
   }
 
   #create(
     shape: readonly number[], recipe: DerivativeRecipe | null,
     inputs: readonly (DerivativeNode<Value> | null)[], saved: readonly (readonly Value[])[],
+    outcomes: readonly WriterOutcome[] = [],
   ): DerivativeNode<Value> {
-    const node = new DerivativeNode(shape, recipe, inputs, saved);
+    const node = new DerivativeNode(shape, recipe, inputs, saved, outcomes);
+    retainWriterOutcomes(outcomes);
     this.#nodes.add(node);
+    this.#references += 1;
     return node;
   }
 
@@ -109,8 +123,10 @@ export class DerivativeHistory<Value> {
     while (pending.length !== 0) {
       const current = pending.pop()!;
       current.references -= 1;
+      this.#references -= 1;
       if (current.references !== 0) continue;
       this.#nodes.delete(current);
+      releaseWriterOutcomes(current.outcomes);
       try { this.#releaseSaved(current); }
       catch (error) { (failures ??= []).push(error); }
       for (const input of current.inputs) if (input !== null) pending.push(input);
@@ -159,11 +175,15 @@ export class DerivativeHistory<Value> {
       throw new TabgradError("UNUSED_INPUT", "A requested input was not used to compute the output.");
     }
     for (const node of order) {
-      if (node.consumed && node.inputs.some((input) => input !== null && needed.has(input))) {
+      const executes = node.inputs.some((input) => input !== null && needed.has(input));
+      if (executes) for (const operands of node.saved) for (const value of operands) this.validateValue(value);
+      if (node.consumed && executes) {
         throw new TabgradError("CONSUMED_HISTORY", "Saved derivative values have already been consumed.");
       }
     }
-    return { order, needed, requested };
+    return { order, needed, requested, outcomes: order
+      .filter((node) => node.inputs.some((input) => input !== null && needed.has(input)))
+      .map((node) => node.outcomes) };
   }
 
   /** Each contribution is an ordinary untracked tensor; repeated requests own distinct handles. */
@@ -186,7 +206,7 @@ export class DerivativeHistory<Value> {
           const input = node.inputs[position]!;
           if (input === null || !plan.needed.has(input)) continue;
           traversed = true;
-          let contribution = node.recipe!.apply(incoming, node.saved[position] ?? [], input.shape, operations);
+          let contribution = node.recipe!.apply(incoming, node.saved[position] ?? [], input.shape, operations, position);
           temporaries.add(contribution);
           const previous = gradients.get(input);
           if (previous !== undefined) {
@@ -198,7 +218,7 @@ export class DerivativeHistory<Value> {
           }
           gradients.set(input, contribution);
         }
-        if (traversed && node.saved.length !== 0) consumed.push(node);
+        if (traversed && (node.saved.length !== 0 || node.recipe?.consumesHistory === true)) consumed.push(node);
         if (!requested.has(node)) {
           gradients.delete(node);
           releaseTemporary(incoming, temporaries, operations);

@@ -423,6 +423,288 @@ def no_grad_cases(oracle: _OracleModule) -> list[dict[str, object]]:
     return cases
 
 
+COPY_CASES = (
+    (
+        "stale-child-bypasses-parent-new-child-binds-parent",
+        """
+def query(kind, write_view=False):
+    leaf = torch.tensor([2., 3.], dtype=torch.float32, requires_grad=True)
+    base = leaf * leaf
+    parent = base.view(1, 2)
+    child = parent.view(2)
+    old = child.sum()
+    source = torch.tensor([5., 7.], dtype=torch.float32, requires_grad=True)
+    if write_view:
+        parent.copy_(source.view(1, 2))
+    else:
+        base.copy_(source)
+    if kind == 'old':
+        result = torch.autograd.grad(old, leaf)
+    elif kind == 'stale-connected':
+        result = torch.autograd.grad(child.sum(), (base, leaf, source))
+    else:
+        output = child.sum() if kind == 'stale-parent' else parent.view(2).sum()
+        try:
+            result = torch.autograd.grad(output, (base, parent, leaf, source))
+        except Exception as error:
+            return [type(error).__name__, old.tolist(), child.tolist()]
+    return [[t.tolist() for t in result], old.tolist(), child.tolist()]
+report = [[query(kind, write_view) for kind in ('old', 'stale-connected', 'stale-parent', 'new-parent')] for write_view in (False, True)]
+""",
+    ),
+    (
+        "copy-float32-bits-and-independent-source",
+        """
+import struct, math
+s = torch.tensor([0., -0., 2.**-149, 1. + 2.**-23, float('inf'), -float('inf'), float('nan')], dtype=torch.float32)
+d = torch.tensor([1.] * 7, dtype=torch.float32)
+def bits(t):
+    return ['nan' if math.isnan(v) else struct.unpack('<I', struct.pack('<f', v))[0] for v in t.tolist()]
+before = bits(s)
+d.copy_(s)
+s.copy_(torch.tensor([2.] * 7, dtype=torch.float32))
+report = [before, bits(d), bits(s), list(d.shape), d.requires_grad]
+""",
+    ),
+    (
+        "source-only-prunes-consumed-old-multiplication",
+        """
+x = torch.tensor([2.], dtype=torch.float32, requires_grad=True)
+s = torch.tensor([7.], dtype=torch.float32, requires_grad=True)
+d = x * x
+torch.autograd.grad(d, x)
+d.copy_(s)
+first = torch.autograd.grad(d, s)[0]
+try:
+    torch.autograd.grad(d, (x, s))
+except Exception as error:
+    consumed = type(error).__name__
+second = torch.autograd.grad(d, s)[0]
+report = [first.tolist(), consumed, second.tolist(), d.tolist()]
+""",
+    ),
+    (
+        "zero-edge-validates-old-saved-plain-position",
+        """
+x = torch.tensor([2.], dtype=torch.float32, requires_grad=True)
+y = torch.tensor([3.], dtype=torch.float32)
+s = torch.tensor([7.], dtype=torch.float32)
+d = x * y
+d.copy_(s)
+y.copy_(s)
+try:
+    torch.autograd.grad(d, x)
+except Exception as error:
+    rejected = type(error).__name__
+cutoff = torch.autograd.grad(d, d)[0]
+report = [rejected, cutoff.tolist(), d.tolist()]
+""",
+    ),
+    (
+        "no-grad-leaf-alias-old-output",
+        """
+x = torch.tensor([2., 4.], dtype=torch.float32, requires_grad=True)
+s = torch.tensor([7., 9.], dtype=torch.float32)
+v = x.view(1, 2)
+old = x + x
+with torch.no_grad():
+    returned = x.copy_(other=s, non_blocking=True)
+g = torch.autograd.grad(old, x, torch.tensor([1., 1.], dtype=torch.float32))[0]
+report = [returned is x, x.tolist(), v.tolist(), x.requires_grad, g.tolist()]
+""",
+    ),
+    (
+        "active-promotion-connected-zeros-reuse",
+        """
+x = torch.tensor([2., 4.], dtype=torch.float32, requires_grad=True)
+s = torch.tensor([7., 9.], dtype=torch.float32, requires_grad=True)
+d = x + x
+returned = d.copy_(s)
+g = torch.autograd.grad(d, (x, s), torch.tensor([1., 1.], dtype=torch.float32))
+again = torch.autograd.grad(d, s, torch.tensor([1., 1.], dtype=torch.float32))[0]
+p = torch.tensor([0., 0.], dtype=torch.float32)
+p.copy_(s, False)
+pg = torch.autograd.grad(p, s, torch.tensor([1., 1.], dtype=torch.float32))[0]
+report = [returned is d, d.tolist(), d.requires_grad, [t.tolist() for t in g], again.tolist(), p.requires_grad, pg.tolist()]
+""",
+    ),
+    (
+        "view-copy-consumption-and-cutoff",
+        """
+x = torch.tensor([2., 4.], dtype=torch.float32, requires_grad=True)
+s = torch.tensor([[7., 9.]], dtype=torch.float32, requires_grad=True)
+b = x + x
+v = b.view(1, 2)
+old = v + v
+v.copy_(s)
+g = torch.autograd.grad(v, s, torch.tensor([[1., 1.]], dtype=torch.float32))[0]
+try:
+    torch.autograd.grad(v, s, torch.tensor([[1., 1.]], dtype=torch.float32))
+except Exception as error:
+    consumed = type(error).__name__
+cutoff = torch.autograd.grad(v, b, torch.tensor([[1., 1.]], dtype=torch.float32))[0]
+old_g = torch.autograd.grad(old, x, torch.tensor([[1., 1.]], dtype=torch.float32))[0]
+report = [v.tolist(), b.tolist(), g.tolist(), consumed, cutoff.tolist(), old_g.tolist()]
+""",
+    ),
+    (
+        "node-saves-before-pruning-and-cutoff",
+        """
+x = torch.tensor([2.], dtype=torch.float32, requires_grad=True)
+y = torch.tensor([3.], dtype=torch.float32, requires_grad=True)
+p = x * y
+with torch.no_grad():
+    x.copy_(y)
+try:
+    torch.autograd.grad(p, x)
+except Exception as error:
+    rejected = type(error).__name__
+cutoff = torch.autograd.grad(p, p)[0]
+report = [rejected, cutoff.tolist(), x.tolist()]
+""",
+    ),
+    (
+        "special-dirty-resolution-and-fresh-epoch",
+        """
+p = torch.tensor([2., 4.], dtype=torch.float32)
+s = torch.tensor([7., 9.], dtype=torch.float32, requires_grad=True)
+with torch.no_grad():
+    special = p.view(1, 2)
+p.copy_(s)
+report = [special.tolist(), special.requires_grad]
+try:
+    special + special
+except Exception as error:
+    report.append(type(error).__name__)
+with torch.no_grad():
+    fresh = special.view(1, 2)
+active = fresh + fresh
+report.extend([fresh.tolist(), fresh.requires_grad, active.requires_grad])
+try:
+    torch.autograd.grad(active, s, torch.tensor([[1., 1.]], dtype=torch.float32))
+except Exception as error:
+    report.append(type(error).__name__)
+""",
+    ),
+    (
+        "self-copy-connected-source-path",
+        """
+x = torch.tensor([2., 4.], dtype=torch.float32, requires_grad=True)
+d = x + x
+d.copy_(d)
+g = torch.autograd.grad(d, x, torch.tensor([1., 1.], dtype=torch.float32))[0]
+report = [d.tolist(), d.requires_grad, g.tolist()]
+""",
+    ),
+    (
+        "inherited-special-origin-on-plain-child",
+        """
+p = torch.tensor([2., 4.], dtype=torch.float32)
+s = torch.tensor([7., 9.], dtype=torch.float32, requires_grad=True)
+with torch.no_grad():
+    special = p.view(1, 2)
+child = special.view(1, 2)
+report = []
+try:
+    child.copy_(s.view(1, 2))
+except Exception as error:
+    report.append(type(error).__name__)
+report.extend([p.tolist(), child.requires_grad])
+p.copy_(s)
+try:
+    child + child
+except Exception as error:
+    report.append(type(error).__name__)
+report.extend([child.tolist(), child.requires_grad])
+""",
+    ),
+    (
+        "inherited-special-origin-with-bound-entry",
+        """
+p = torch.tensor([2., 4.], dtype=torch.float32, requires_grad=True)
+s = torch.tensor([[7., 9.]], dtype=torch.float32)
+with torch.no_grad():
+    special = p.view(1, 2)
+child = special.view(1, 2)
+g = torch.autograd.grad(child, child, torch.tensor([[1., 1.]], dtype=torch.float32))[0]
+report = [g.tolist(), child.requires_grad]
+try:
+    child.copy_(s)
+except Exception as error:
+    report.append(type(error).__name__)
+with torch.no_grad():
+    p.copy_(s.view(2))
+try:
+    child.sum()
+except Exception as error:
+    report.append(type(error).__name__)
+report.append(child.tolist())
+""",
+    ),
+)
+
+
+def copy_cases(oracle: _OracleModule) -> list[dict[str, object]]:
+    """Capture supported copy workflows and effective native argument binding."""
+    cases: list[dict[str, object]] = []
+    for name, source in COPY_CASES:
+        namespace: dict[str, object] = {"torch": oracle}
+        exec(source, namespace)
+        cases.append({"name": name, "source": source, "expected": namespace["report"]})
+    for name, data in (
+        ("scalar", "3."),
+        ("empty", "[[], []]"),
+        ("matrix", "[[1., -0.], [3., 4.]]"),
+    ):
+        for expression in (
+            "d.copy_(s)",
+            "d.copy_(other=s)",
+            "d.copy_(s, False)",
+            "d.copy_(s, non_blocking=True)",
+        ):
+            source = (
+                f"s = torch.tensor({data}, dtype=torch.float32)\nd = torch.tensor({data}, dtype=torch.float32)\n"
+                f"returned = {expression}\n"
+                "report = [returned is d, list(d.shape), d.tolist(), d.requires_grad]\n"
+            )
+            namespace = {"torch": oracle}
+            exec(source, namespace)
+            cases.append(
+                {
+                    "name": f"{name}:{expression}",
+                    "source": source,
+                    "expected": namespace["report"],
+                }
+            )
+    expressions = (
+        "d.copy_()",
+        "d.copy_(src=s)",
+        "d.copy_(s, other=s)",
+        "d.copy_(s, non_blocking=1)",
+        "d.copy_(s, non_blocking=None)",
+        "d.copy_(s, False, False)",
+        "d.copy_(1)",
+        "d.copy_(torch.tensor([1., 2.], dtype=torch.float32))",
+        "d.view(1).copy_(s)",
+    )
+    for expression in expressions:
+        source = (
+            "d = torch.tensor([2.], dtype=torch.float32, requires_grad=True)\ns = torch.tensor([3.], dtype=torch.float32)\n"
+            "try:\n"
+            f"    {expression}\n"
+            "except Exception as error:\n"
+            "    report = [type(error).__name__, d.tolist(), d.requires_grad]\n"
+        )
+        namespace = {"torch": oracle}
+        exec(source, namespace)
+        if "report" not in namespace:
+            raise AssertionError(f"Expected copy rejection: {expression}")
+        cases.append(
+            {"name": expression, "source": source, "expected": namespace["report"]}
+        )
+    return cases
+
+
 NO_GRAD_VIEW_QUERIES = (
     ("special-self", "special", "special"),
     ("special-base", "special", "base"),
@@ -713,6 +995,7 @@ def generate() -> str:
                 "sumCases": sum_cases(oracle),
                 "gradientCases": gradient_cases(oracle),
                 "gradientErrors": gradient_errors(oracle),
+                "copyCases": copy_cases(oracle),
                 "noGradCases": no_grad_cases(oracle),
                 "noGradViewCases": no_grad_view_cases(oracle),
                 "cases": cases,

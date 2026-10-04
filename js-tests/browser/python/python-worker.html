@@ -3,6 +3,7 @@
   <head><meta charset="utf-8"><title>Python worker integration</title></head>
   <body>
     <script type="module">
+      import { pythonCopyChecks } from "/helpers/python-copy-cases.mjs";
       import { pythonNoGradChecks } from "/helpers/python-no-grad-cases.mjs";
       import { connectPythonWorker } from "/python.js";
 
@@ -111,6 +112,7 @@ for input_data, expected_shape, expected in [
 assert session.diagnostics().liveRequestLeases == 0
 `);
         await client.runPythonAsync(pythonNoGradChecks);
+        await client.runPythonAsync(await pythonCopyChecks());
         try {
           await client.runPythonAsync("raise ValueError('controlled script failure')");
           throw new Error("Python failure was reported as success.");

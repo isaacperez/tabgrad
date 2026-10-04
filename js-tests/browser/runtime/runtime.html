@@ -170,6 +170,37 @@
         }
       }
 
+      async function checkCopy(session) {
+        for (const shape of [[], [2], [2, 0, 3]]) {
+          const count = shape.reduce((a, b) => a * b, 1);
+          const parameter = session.tensor(new Float32Array(count).fill(2), { shape, requiresGrad: true });
+          const alias = parameter.view(shape);
+          const rate = session.tensor(new Float32Array(count).fill(-0.25), { shape });
+          for (let step = 0; step < 16; step++) {
+            const square = parameter.mul(parameter);
+            const loss = square.sum();
+            const [gradient] = session.grad(loss, [parameter]);
+            const scaled = session.noGrad(() => gradient.mul(rate));
+            const next = session.noGrad(() => parameter.add(scaled));
+            if (session.noGrad(() => parameter.copy_(next)) !== parameter) throw new Error("Copy changed handle identity.");
+            for (const value of [square, loss, gradient, scaled, next]) value.close();
+            if (!(await alias.toArray()).every(value => value === 2 ** -step)) throw new Error("Copy lost alias/current values.");
+          }
+          parameter.close(); alias.close(); rate.close();
+          const source = session.tensor(new Float32Array(count).fill(3), { shape, requiresGrad: true });
+          const plain = session.tensor(new Float32Array(count).fill(0), { shape });
+          plain.copy_(source);
+          const seed = session.tensor(new Float32Array(count).fill(1), { shape });
+          const [result] = session.grad(plain, [source], seed);
+          if (!(await result.toArray()).every(value => value === 1)) throw new Error("Copy lost active source edge.");
+          for (const value of [plain, source, seed, result]) value.close();
+          const state = session.diagnostics();
+          if (state.liveTensorValues || state.liveDerivativeNodes || state.liveSavedValues || state.liveRequestLeases || state.liveAllocationBytes) {
+            throw new Error("Copy retained completed owners.");
+          }
+        }
+      }
+
       async function checkFunctionalGradients(session) {
         for (const shape of [[], [5], [2, 3], [2, 0, 3]]) {
           const length = shape.reduce((count, dimension) => count * dimension, 1);
@@ -231,6 +262,7 @@
         await checkMultiplication(session);
         await checkFunctionalGradients(session);
         await checkNoGrad(session);
+        await checkCopy(session);
         await session.close();
         await reportPhase("runtime-finished");
         await report({ ok: true, before, after, values });

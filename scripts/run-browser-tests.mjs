@@ -1,4 +1,12 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+
+const copyAssets = ["helpers/python-copy-cases.mjs", "helpers/python-copy-oracle.json"];
+function readCopyAsset(path, ...arguments_) {
+  return String(path).endsWith("/helpers/python-copy-oracle.json")
+    ? readFile(new URL("../js-tests/fixtures/python-tensor-oracle.json", import.meta.url), ...arguments_)
+    : readFile(path, ...arguments_);
+}
 
 import {
   browserDefinitions,
@@ -36,7 +44,7 @@ function assertPythonWorkerResult(result, jspi, gated, variant = "simd128") {
 }
 
 const server = await startBrowserServer(["runtime/runtime.html", "python/python-lifecycle.html", "python/python-worker.html"], {
-  assets: ["python/python-worker.mjs", "helpers/cpu-profile.mjs", "helpers/python-no-grad-cases.mjs"],
+  assets: ["python/python-worker.mjs", "helpers/cpu-profile.mjs", "helpers/python-no-grad-cases.mjs", ...copyAssets], readAsset: readCopyAsset,
 });
 try {
   const selectedBrowsers = selectBrowserDefinitions(
@@ -86,7 +94,7 @@ try {
       process.stdout.write(`PASS ${browser.name} Python worker (${jspi} JSPI profile, no isolation)\n`);
     }
     const isolatedServer = await startBrowserServer(["python/python-worker.html"], {
-      crossOriginIsolation: true, assets: ["python/python-worker.mjs", "helpers/cpu-profile.mjs", "helpers/python-no-grad-cases.mjs"],
+      crossOriginIsolation: true, assets: ["python/python-worker.mjs", "helpers/cpu-profile.mjs", "helpers/python-no-grad-cases.mjs", ...copyAssets], readAsset: readCopyAsset,
     });
     try {
       await runBrowserPage({
@@ -98,7 +106,7 @@ try {
     } finally { await isolatedServer.close(); }
     for (const cpuVariant of ["scalar", "simd128"]) {
       const variantServer = await startBrowserServer(["python/python-worker.html"], {
-        assets: ["python/python-worker.mjs", "helpers/cpu-profile.mjs", "helpers/python-no-grad-cases.mjs"],
+        assets: ["python/python-worker.mjs", "helpers/cpu-profile.mjs", "helpers/python-no-grad-cases.mjs", ...copyAssets], readAsset: readCopyAsset,
       });
       try {
         await runBrowserPage({

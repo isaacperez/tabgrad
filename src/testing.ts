@@ -2,6 +2,9 @@ import type { WasmVariant } from "./backends/cpu/cpu-backend.js";
 import { inspectExecutionFailureContext } from "./shared/errors.js";
 import { ExecutableProgram } from "./execution/executable-program.js";
 import {
+  inspectRuntimeOwnershipForTesting,
+  inspectTensorVersionForTesting,
+  inspectTensorReachabilityForTesting,
   countResidentProgramReferencesForTesting,
   inspectTensorAncestryForTesting,
   type Tensor,
@@ -14,6 +17,8 @@ export interface TestRuntimeSessionOptions extends RuntimeSessionOptions {
   readonly forceVariant: WasmVariant;
   readonly onProgramFormed?: (program: ExecutableProgram) => void;
   readonly beforeReadback?: () => void;
+  readonly beforeCopyPublication?: () => void;
+  readonly updateLimits?: { readonly pendingCopies?: number; readonly owners?: number; readonly backingBytes?: number };
 }
 
 export interface TestExecutionFailureContext {
@@ -33,6 +38,8 @@ export function createTestRuntimeSession(
     options,
     options.onProgramFormed,
     options.beforeReadback,
+    options.beforeCopyPublication,
+    options.updateLimits,
   );
 }
 
@@ -60,3 +67,8 @@ export function getTestTensorAncestry(handle: Tensor): {
 } {
   return inspectTensorAncestryForTesting(handle);
 }
+
+/** Snapshot actual family, numerical, history and control owners. */
+export const getTestRuntimeOwnership = inspectRuntimeOwnershipForTesting;
+export const getTestTensorVersion = inspectTensorVersionForTesting;
+export const getTestTensorReachability = inspectTensorReachabilityForTesting;

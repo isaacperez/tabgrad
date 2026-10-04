@@ -1,5 +1,5 @@
-import { TabgradError } from "../../shared/errors.js";
-import { getRecordingMode, enterNoGradScope, restoreRecordingMode, observeTensorSynchronously, type RuntimeSession, type Tensor } from "../../runtime/runtime.js";
+import { TabgradError, throwCleanupFailures } from "../../shared/errors.js";
+import { getRecordingMode, enterNoGradScope, restoreRecordingMode, observeTensorSynchronously, completeRuntimeSession, type RuntimeSession, type Tensor } from "../../runtime/runtime.js";
 import type { TensorDevice } from "../../execution/backend.js";
 
 /** Structural subset of Pyodide's borrowed buffer protocol; no interpreter owner. */
@@ -49,8 +49,15 @@ export class PythonRuntimeBridge {
 
   async runManaged(execute: () => Promise<unknown>): Promise<unknown> {
     this.#managedEntry = true;
+    let result: unknown;
+    let failures: unknown[] | undefined;
     try {
-      return await execute();
+      try { result = await execute(); }
+      catch (error) { (failures ??= []).push(error); }
+      try { await completeRuntimeSession(this.session); }
+      catch (error) { (failures ??= []).push(error); }
+      throwCleanupFailures(failures, "Managed execution and mandatory effects failed.");
+      return result;
     } finally {
       this.#managedEntry = false;
     }

@@ -4,7 +4,7 @@ This document is the user reference for calling the Tabgrad tensor runtime
 directly from JavaScript. It describes a deliberately narrow but complete
 execution path: contiguous `float32` tensors on CPU with
 out-of-place elementwise addition and multiplication, total sum and shape-only
-shared-storage views, with functional first-order gradients. A narrow contract is useful here because it
+shared-storage views, persistent equal-shape copy, with functional first-order gradients. A narrow contract is useful here because it
 lets a reader see the complete lifecycle—admission, lazy recording, WebAssembly
 execution, observation, and release—without implying support for tensor
 features that have not been established by tests. An explicitly acquired
@@ -36,6 +36,10 @@ the captured previous mode on completion or failure. It shares the Python
 `torch.no_grad()` owner. The [recording reference](reference/gradient-recording.md)
 defines overlap, factory exceptions and views whose advertised tracking has no
 ordinary derivative accumulator.
+
+`Tensor.copy_(source)` preserves handle identity and updates its CPU alias family.
+The [copy reference](reference/tensor-copy.md) defines active/no-grad guards,
+versions, captured reads, mandatory progress and failure.
 
 ## Browser delivery requires no developer toolchain
 

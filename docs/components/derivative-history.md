@@ -85,8 +85,12 @@ result views, so closing one cannot invalidate another.
 
 After successful construction, every traversed multiplication releases all its
 saved pins and marks its saved state consumed. The new pending derivative
-operations now own their numerical operands. Payload-free history remains
-usable. A construction failure closes newly created handles without consuming
+operations now own their numerical operands. Payload-free pure/direct-copy history remains usable; traversed view-copy
+history is consumable without saved payload. Every save of an executed node is
+version validated before any seed/admission, including pruned input positions.
+Cutoffs do not execute their ancestors. Node controls capture relevant writers
+and every returned gradient also retains root/history/seed controls, separately
+from numeric saves. A construction failure closes newly created handles without consuming
 saved state. A later backend failure belongs to ordinary observation: retained
 results keep retry dependencies, and closing results releases them. Session
 close also releases handles and history before draining accepted numerical
@@ -124,13 +128,13 @@ It identifies required saved operands and emits operations through the existing
 runtime interface. History traversal, storage pinning and backend ownership do
 not depend on the operation's name. A rule requiring another numerical
 primitive would additionally extend the ordinary admitted vocabulary and its
-backend capability profile; a rule requiring mutation versions would need that
-separate semantic contract. The supported specialization is described in the
+backend capability profile; mutation versions use the independent shared counter under the
+[persistent update contract](../reference/tensor-copy.md). The supported specialization is described in the
 [functional API reference](../reference/functional-gradients.md).
 
 Persistent gradient accumulation has a different ownership need: it changes
 stable parameter state and must respect alias-visible mutation and version
 order. Pure addition inside one functional request establishes no such effect.
 The accepted architecture keeps that state at the semantic tensor/effect
-owners while reusing the numerical execution path. This extension boundary
-does not claim that accumulation or mutation is implemented.
+owners while reusing the numerical execution path. The supported CPU copy updates stable state; persistent gradient accumulation
+is a separate excluded API.

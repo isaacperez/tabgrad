@@ -23,6 +23,10 @@ equal-shape domain and numerical limits.
 The [functional gradient reference](functional-gradients.md) defines
 `torch.autograd.grad`, tracked creation and first-order result ownership.
 
+`Tensor.copy_(other, non_blocking=False)` has its own
+[persistent copy reference](tensor-copy.md), covering identity, alias updates,
+recording, saved-version guards and deferred execution.
+
 ## Create a tensor
 
 ```python

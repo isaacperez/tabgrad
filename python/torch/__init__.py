@@ -197,6 +197,7 @@ class Tensor:
         try:
             return Tensor._from_handle(self._handle.add(other._handle))
         except JsException as error:
+            _raise_view_history_failure(error)
             failure = cast("_bridge.RuntimeException", error)
             if failure.js_error.code == "SHAPE_MISMATCH":
                 raise RuntimeError("Tensor shapes must match for addition.") from error
@@ -214,6 +215,7 @@ class Tensor:
         try:
             return Tensor._from_handle(left._handle.mul(right._handle))
         except JsException as error:
+            _raise_view_history_failure(error)
             failure = cast("_bridge.RuntimeException", error)
             if failure.js_error.code == "SHAPE_MISMATCH":
                 raise RuntimeError(
@@ -227,10 +229,40 @@ class Tensor:
             return NotImplemented
         return left.mul(other)
 
+    def copy_(self: object, other: object, non_blocking: object = False) -> Tensor:
+        """Replace this CPU tensor's current value while preserving its identity.
+
+        Equal-shape contiguous float32 tensors must share the runtime session.
+        Gradient recording follows the active no_grad context. non_blocking is
+        accepted as a bool; CPU publication uses the same ordered runtime path.
+        """
+        if not isinstance(self, Tensor) or not hasattr(self, "_handle"):
+            raise TypeError("copy_ requires a tensor destination.")
+        numeric = type(other) in (int, float, bool)
+        if not numeric and (
+            not isinstance(other, Tensor) or not hasattr(other, "_handle")
+        ):
+            raise TypeError("copy_ requires a tensor source.")
+        if type(non_blocking) is not bool:
+            raise TypeError("non_blocking must be bool.")
+        if not isinstance(other, Tensor):
+            raise RuntimeError(
+                "Tabgrad copy_ requires a tensor source; scalar copy is unsupported."
+            )
+        try:
+            self._handle.copy_(other._handle)
+        except JsException as error:
+            raise RuntimeError(str(error)) from error
+        return self
+
     def sum(self) -> Tensor:
         """Admit a total reduction, preserving deferred runtime ownership."""
         source = _require_sum_input(self)
-        return Tensor._from_handle(source._handle.sum())
+        try:
+            return Tensor._from_handle(source._handle.sum())
+        except JsException as error:
+            _raise_view_history_failure(error)
+            raise
 
     def view(self, *shape: object) -> Tensor:
         """Share contiguous storage with a shape, optionally inferring one -1."""
@@ -244,6 +276,7 @@ class Tensor:
         try:
             return Tensor._from_handle(self._handle.view(to_js(dimensions)))
         except JsException as error:
+            _raise_view_history_failure(error)
             failure = cast("_bridge.RuntimeException", error)
             if failure.js_error.code == "INVALID_SHAPE":
                 raise RuntimeError(
@@ -267,6 +300,13 @@ class Tensor:
         except BaseException:
             handle.close()
             raise
+
+
+def _raise_view_history_failure(error: JsException) -> None:
+    """Translate native view-history guards shared by tensor operations."""
+    failure = cast("_bridge.RuntimeException", error)
+    if failure.js_error.code == "INPLACE_VIEW":
+        raise RuntimeError(str(error)) from error
 
 
 def _append_numeric_values(items: Iterable[object], buffer: array[float]) -> None:

@@ -38,6 +38,9 @@ product signatures, equal-shape inputs, numerical behavior and CPU limits.
 Use [Functional first-order gradients](functional-gradients.md) for tracked
 creation, seed and input forms, saved-history consumption, errors and limits.
 
+Use [Persistent CPU tensor copy](tensor-copy.md) for identity-preserving updates,
+recording, alias versions, derivative guards and deferred failure.
+
 Use [Gradient recording scopes](gradient-recording.md) for Python `no_grad`,
 JavaScript callbacks, shared mode restoration and special-view tracking.
 
