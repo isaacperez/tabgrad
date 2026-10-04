@@ -173,6 +173,22 @@ implicit-seed and consumed-history error categories. Real Pyodide consumes that
 same source and expected result data. The generator uses one intra-operation
 and one inter-operation thread; no NumPy or native runtime is distributed.
 
+The [recording scope reference](reference/gradient-recording.md) defines
+`torch.no_grad()` contexts and the direct JavaScript callback integration.
+`noGradCases` freeze native context returns, binding error classes, sequential
+reuse, same-object reentry, captured overlap, factory exceptions, explicit
+gradients and joined asyncio mode sharing. `noGradViewCases` record scalar,
+empty and matrix values/shapes/tracking, derivative connectivity and error
+classes for immutable plain/leaf/nonleaf/ordinary-view bases, special views,
+children and active absent-edge nodes. Both real Pyodide and direct CPU
+scalar/SIMD consumers use the pinned expectations. Callback result/throw,
+Promise settlement, cross-entry state, stale binding contexts and explicit-GC
+retention have separate Tabgrad integration tests. Browser fixtures exercise
+ordinary CPU Python and direct calls with controlled-absent JSPI. These cases
+do not qualify mutation, decorators, inference mode or GPU gradients, and do
+not establish a speed or total-memory claim. The official reference is
+[PyTorch 2.14 no-grad](https://docs.pytorch.org/docs/2.14/generated/torch.no_grad.html).
+
 Direct scalar/SIMD runtime and raw expansion tests additionally cover admission
 atomicity, saved pins, iterative deep traversal/release, dropped results, backend
 failure and shutdown. Browser fixtures exercise direct scalar/SIMD derivatives

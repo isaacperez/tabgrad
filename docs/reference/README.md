@@ -38,6 +38,9 @@ product signatures, equal-shape inputs, numerical behavior and CPU limits.
 Use [Functional first-order gradients](functional-gradients.md) for tracked
 creation, seed and input forms, saved-history consumption, errors and limits.
 
+Use [Gradient recording scopes](gradient-recording.md) for Python `no_grad`,
+JavaScript callbacks, shared mode restoration and special-view tracking.
+
 For contributor measurements, use
 [WebAssembly addition measurements](webassembly-addition-measurements.md) for
 the direct JavaScript path and resident CPU kernel, or

@@ -57,6 +57,98 @@ for (const custom of [false, true]) {
   });
 }
 
+test("Python no_grad contexts and special views match pinned native behavior", { timeout: 20_000 }, async () => {
+  const oracle = JSON.parse(await readFile(new URL("../../fixtures/python-tensor-oracle.json", import.meta.url), "utf8"));
+  const { attachPython } = await import("../../../dist/python.js");
+  const interpreter = await getInterpreter();
+  const binding = await attachPython(interpreter);
+  try {
+    for (const fixture of [...oracle.noGradCases, ...oracle.noGradViewCases]) {
+      await binding.runPythonAsync(`
+import torch, json, gc
+async def check_native_no_grad():
+    restorer = torch.no_grad()
+    restorer.__enter__()
+    restorer.__exit__(None, None, None)
+    try:
+${fixture.source.trimEnd().split("\n").map((line) => `        ${line}`).join("\n")}
+        assert report == json.loads(${JSON.stringify(JSON.stringify(fixture.expected))}), ${JSON.stringify(fixture.name)}
+    finally:
+        restorer.__exit__(None, None, None)
+await check_native_no_grad()
+gc.collect()
+assert torch._runtime_session.diagnostics().liveDerivativeNodes == 0
+assert torch._runtime_session.diagnostics().liveSavedValues == 0
+assert torch._runtime_session.diagnostics().liveTensorHandles == 0
+`);
+    }
+  } finally {
+    await binding.close();
+    interpreter.runPython("[globals().pop(name, None) for name in ('torch', 'json', 'gc', 'check_native_no_grad')]; None");
+  }
+});
+
+test("Python no_grad shares mode with joined asyncio and JavaScript across entries and closure", { timeout: 20_000 }, async () => {
+  const { attachPython } = await import("../../../dist/python.js");
+  const interpreter = await getInterpreter();
+  const binding = await attachPython(interpreter);
+  let session, oldManager;
+  try {
+    await binding.runPythonAsync(`
+import torch, asyncio, gc
+async def check_tasks():
+    x = torch.tensor(2., dtype=torch.float32, requires_grad=True)
+    first_entered, second_entered, exit_first = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    async def first():
+        with torch.no_grad():
+            first_entered.set()
+            await second_entered.wait()
+        exit_first.set()
+    async def second():
+        await first_entered.wait()
+        assert not (x + x).requires_grad
+        with torch.no_grad():
+            second_entered.set()
+            await exit_first.wait()
+            assert (x + x).requires_grad
+        assert not (x + x).requires_grad
+    restorer = torch.no_grad()
+    restorer.__enter__(); restorer.__exit__(None, None, None)
+    try:
+        await asyncio.gather(first(), second())
+    finally:
+        restorer.__exit__(None, None, None)
+    assert (x + x).requires_grad
+await check_tasks()
+manager = torch.no_grad()
+manager.__enter__()
+`);
+    session = interpreter.runPython("torch._runtime_session");
+    const x = session.tensor([2], { requiresGrad: true });
+    let result = x.add(x); assert.equal(result.requiresGrad, false); result.close();
+    await assert.rejects(binding.runPythonAsync("assert not torch.tensor(2., dtype=torch.float32, requires_grad=True).sum().requires_grad\nraise ValueError('entry failure')"), /entry failure/);
+    await binding.runPythonAsync("manager.__exit__(None, None, None)");
+    result = x.add(x); assert.equal(result.requiresGrad, true); result.close();
+    await session.noGrad(() => binding.runPythonAsync("assert not torch.tensor(2., dtype=torch.float32, requires_grad=True).sum().requires_grad"));
+    result = x.add(x); assert.equal(result.requiresGrad, true); result.close(); x.close();
+    oldManager = interpreter.runPython("manager");
+    await binding.close();
+    assert.throws(() => oldManager.__enter__(), /runtime session is closed/);
+    oldManager.__exit__(null, null, null);
+    const fresh = await attachPython(interpreter);
+    try {
+      await fresh.runPythonAsync("import torch\nassert torch.tensor(2., dtype=torch.float32, requires_grad=True).sum().requires_grad");
+      assert.throws(() => oldManager.__enter__(), /runtime session is closed/);
+    } finally { await fresh.close(); }
+    assert.equal(session.diagnostics().liveTensorHandles, 0);
+    assert.equal(session.diagnostics().liveDerivativeNodes, 0);
+  } finally {
+    oldManager?.destroy();
+    await binding.close();
+    interpreter.runPython("[globals().pop(name, None) for name in ('torch', 'asyncio', 'gc', 'check_tasks', 'manager')]; None");
+  }
+});
+
 test("Python functional gradients normalize calls and preserve ordinary observation", { timeout: 20_000 }, async () => {
   const { attachPython } = await import("../../../dist/python.js");
   const interpreter = await getInterpreter();

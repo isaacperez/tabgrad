@@ -168,6 +168,14 @@ Python modules. A narrow declaration also records Pyodide's runtime
 declaration. Real-interpreter tests cover that boundary; a cast alone is not
 evidence that the attribute exists.
 
+`torch.no_grad` stores only its captured previous boolean. Its entry and exit
+call the bridge's private scope methods on the same session used by JavaScript
+callbacks. The wrapper owns context syntax; the runtime owns recording mode.
+Managed-entry completion does not reset that mode. Closing or reattaching a
+binding cannot redirect an old context to the new session. The
+[scope reference](../reference/gradient-recording.md) defines restoration and
+the special tracking behavior of immutable views.
+
 ## What the evidence establishes
 
 The fixture generator runs pinned native PyTorch with one intra-operation and

@@ -3,6 +3,7 @@
   <head><meta charset="utf-8"><title>Python binding lifecycle</title></head>
   <body>
     <script type="module">
+      import { pythonNoGradChecks } from "/helpers/python-no-grad-cases.mjs";
       const token = new URLSearchParams(location.search).get("token");
       async function send(endpoint, value) {
         const response = await fetch(`${endpoint}?token=${encodeURIComponent(token)}`, {
@@ -107,6 +108,7 @@ def check_gradients():
     else:
         raise AssertionError('Consumed saved history was reused')
 check_gradients()
+${pythonNoGradChecks}
 gc.collect()
 assert old_session.diagnostics().liveDerivativeNodes == 0
 assert old_session.diagnostics().liveSavedValues == 0

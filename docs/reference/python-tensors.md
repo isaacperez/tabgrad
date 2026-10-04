@@ -70,7 +70,7 @@ serve cached metadata.
 | `shape` | `torch.Size`, an immutable integer tuple | Iteration, indexing, tuple equality/hash, representation, slicing, concatenation, repetition and `numel()` |
 | `dtype` | The `torch.float32` constant of type `torch.dtype` | Identity, representation, read-only `is_floating_point=True`, `is_complex=False`, `is_signed=True` |
 | `device` | A `torch.device` object for the runtime's device | Equality with the same device name, hashing, representation, string form, read-only `type` and `index=None`; supported names are `cpu` and `webgpu` |
-| `requires_grad` | Python `bool` | Tracking propagates through supported operations; functional gradients return untracked tensors |
+| `requires_grad` | Python `bool` | Advertised tracking; propagation follows the [recording mode and view rules](gradient-recording.md), and functional gradients return untracked tensors |
 
 `torch.Size(iterable)` uses integer-index conversion, including Python booleans;
 `numel()` is the product of its dimensions, with the empty product equal to one.

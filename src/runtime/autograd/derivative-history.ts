@@ -77,8 +77,9 @@ export class DerivativeHistory<Value> {
   record(
     shape: readonly number[], recipe: DerivativeRecipe,
     inputs: readonly (DerivativeNode<Value> | null)[], values: readonly Value[],
-  ): DerivativeNode<Value> | null {
-    if (inputs.every((input) => input === null)) return null;
+  ): DerivativeNode<Value> {
+    // Admission decides advertised tracking. An active operation on a tracked
+    // no-grad view has a real recipe even when all its input edges are absent.
     const saved = inputs.map((input, position) => {
       const operands = input === null ? [] : recipe.savedOperands(position);
       return operands.map((operand) => values[operand]!);

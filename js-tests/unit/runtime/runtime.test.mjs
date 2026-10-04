@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { after, before, test } from "node:test";
 import { join, normalize } from "node:path";
@@ -24,6 +25,156 @@ let distributionUrl;
 const fixtures = new RuntimeFixtureServer(distributionRoot);
 const { requestCounts, virtualResponses } = fixtures;
 const installFixture = fixtures.installFixture.bind(fixtures);
+
+
+test("noGrad restores captured modes across returns, failures and overlapping promises", async () => {
+  const session = createRuntimeSession({ manifestUrl: new URL("manifest.json", distributionUrl) });
+  const other = createRuntimeSession();
+  const x = session.tensor([2], { shape: [], requiresGrad: true });
+  const y = other.tensor([3], { shape: [], requiresGrad: true });
+  const mode = () => { const result = x.add(x); const tracked = result.requiresGrad; result.close(); return tracked; };
+  const oldGraph = x.mul(x);
+  try {
+    assert.equal(session.noGrad(() => {
+      assert.equal(mode(), false);
+      const separate = y.mul(y); assert.equal(separate.requiresGrad, true); separate.close();
+      const factory = session.tensor([5], { shape: [], requiresGrad: true });
+      assert.equal(factory.requiresGrad, true); factory.close();
+      const untracked = [x.add(x), x.mul(x), x.sum()];
+      assert.ok(untracked.every((value) => !value.requiresGrad));
+      untracked.forEach((value) => value.close());
+      const [gradient] = session.grad(oldGraph, [x]);
+      assert.equal(gradient.requiresGrad, false); gradient.close();
+      assert.equal(session.noGrad(() => mode()), false);
+      return 17;
+    }), 17);
+    assert.equal(mode(), true);
+    const failure = new Error("scope failure");
+    assert.throws(() => session.noGrad(() => { throw failure; }), (error) => error === failure);
+    assert.equal(mode(), true);
+    for (const callback of [null, 42, {}]) assert.throws(() => session.noGrad(callback), TypeError);
+    assert.equal(mode(), true);
+    await assert.rejects(session.noGrad(async () => { assert.equal(mode(), false); throw failure; }), (error) => error === failure);
+    assert.equal(mode(), true);
+    assert.equal(await session.noGrad(async () => { await Promise.resolve(); assert.equal(mode(), false); return 29; }), 29);
+    assert.equal(mode(), true);
+    let finishA, finishB;
+    const first = session.noGrad(() => new Promise((resolve) => { finishA = resolve; }));
+    assert.equal(mode(), false);
+    const second = session.noGrad(() => new Promise((resolve) => { finishB = resolve; }));
+    assert.equal(mode(), false);
+    finishA("a"); assert.equal(await first, "a");
+    assert.equal(mode(), true);
+    finishB("b"); assert.equal(await second, "b");
+    assert.equal(mode(), false);
+    assert.equal(session.diagnostics().kernelCalls, 0, "mode changes do not flush lazy work");
+  } finally { await session.close(); await other.close(); }
+  assertNoLiveState(session);
+  assert.equal(session.diagnostics().liveDerivativeNodes, 0);
+  assert.throws(() => session.noGrad(() => 1), { code: "CLOSED_SESSION" });
+});
+
+test("noGrad restores through thenable admission errors and close without retaining work", async () => {
+  const session = createRuntimeSession();
+  const x = session.tensor([2], { requiresGrad: true });
+  const failure = new Error("then getter");
+  assert.throws(() => session.noGrad(() => ({ get then() { throw failure; } })), (error) => error === failure);
+  const result = x.mul(x); assert.equal(result.requiresGrad, true); result.close();
+  assert.equal(await session.noGrad(() => ({ then(resolve) { resolve(13); } })), 13);
+  assert.equal(await session.noGrad(async () => { await session.close(); return 31; }), 31);
+  assertNoLiveState(session);
+  assert.equal(session.diagnostics().liveDerivativeNodes, 0);
+});
+
+
+for (const variant of ["scalar", "simd128"]) {
+  test('noGrad view provenance and absent-edge nodes match native PyTorch (' + variant + ')', async () => {
+    const oracle = JSON.parse(await readFile(new URL("../../fixtures/python-tensor-oracle.json", import.meta.url), "utf8"));
+    const session = createTestRuntimeSession({ manifestUrl: new URL("manifest.json", distributionUrl), forceVariant: variant });
+    try {
+      for (const fixture of oracle.noGradViewCases) {
+        const handles = [];
+        const own = (tensor) => { handles.push(tensor); return tensor; };
+        try {
+          const root = own(session.tensor(fixture.data, { requiresGrad: fixture.kind !== "plain" }));
+          const base = fixture.kind === "nonleaf" ? own(root.add(root))
+            : fixture.kind === "ordinary-view" ? own(root.view(fixture.shape)) : root;
+          const special = own(session.noGrad(() => base.view(fixture.shape)));
+          const disabled_child = own(session.noGrad(() => special.view(fixture.shape)));
+          const active = own(special.add(special));
+          const product = own(special.mul(special));
+          const special_sum = own(special.sum());
+          const ordinary = own(base.view(fixture.shape));
+          const mixed = own(special.add(ordinary));
+          const child = own(special.view(fixture.shape));
+          const summed = own(active.sum());
+          const tensors = { root, base, special, disabled_child, active, mixed, child, summed, product, special_sum };
+          const actualMetadata = [];
+          for (const tensor of [base, special, disabled_child, active, mixed, child, summed, product, special_sum]) {
+            actualMetadata.push([tensor.shape, [...await tensor.toArray()], tensor.requiresGrad]);
+          }
+          assert.deepEqual(actualMetadata, fixture.expected.metadata.map(flatNativeMetadata), fixture.name);
+          for (let index = 0; index < fixture.queries.length; index += 1) {
+            const [name, outputName, inputName] = fixture.queries[index];
+            const output = tensors[outputName], input = tensors[inputName];
+            const seed = own(session.tensor(Array(output.shape.reduce((a, b) => a * b, 1)).fill(1), { shape: output.shape }));
+            const expected = fixture.expected.queries[index];
+            if (expected[1] === "RuntimeError") {
+              assert.throws(() => session.grad(output, [input], seed), (error) => ["GRADIENT_NOT_TRACKED", "UNUSED_INPUT"].includes(error.code), fixture.name + ':' + name);
+            } else {
+              const gradient = own(session.grad(output, [input], seed)[0]);
+              assert.deepEqual([gradient.shape, [...await gradient.toArray()], gradient.requiresGrad], flatNativeMetadata(expected.slice(1)), fixture.name + ':' + name);
+            }
+          }
+          if (special.requiresGrad) {
+            const seed = own(session.tensor(fixture.data.map(() => 1), { shape: fixture.shape }));
+            assert.throws(() => session.grad(active, [special], seed), { code: "UNUSED_INPUT" });
+          }
+        } finally { handles.forEach((tensor) => tensor.close()); }
+        assert.equal(session.diagnostics().liveDerivativeNodes, 0, fixture.name);
+        assert.equal(session.diagnostics().liveSavedValues, 0, fixture.name);
+        assert.equal(session.diagnostics().liveTensorHandles, 0, fixture.name);
+      }
+    } finally { await session.close(); }
+    assertNoLiveState(session);
+  });
+}
+
+function flatNativeMetadata([shape, values, tracked]) {
+  return [shape, Array.isArray(values) ? values.flat(Infinity) : [values], tracked];
+}
+
+test("settled noGrad scopes release callback and session references", () => {
+  const script = `
+import assert from 'node:assert/strict';
+import { setImmediate } from 'node:timers/promises';
+import { RuntimeSession } from ${JSON.stringify(new URL("../../../dist/index.js", import.meta.url).href)};
+async function collect(reference) {
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    await setImmediate();
+    globalThis.gc();
+    if (reference.deref() === undefined) return;
+  }
+  assert.fail('Completed scope retained an owner');
+}
+function pendingScope() {
+  const session = new RuntimeSession();
+  let resolve;
+  const pending = new Promise((done) => { resolve = done; });
+  const callback = () => pending;
+  return { result: session.noGrad(callback), finish: resolve,
+    callback: new WeakRef(callback), session: new WeakRef(session) };
+}
+const scope = pendingScope();
+// While pending, restoration needs its session but has no need for the callback.
+await collect(scope.callback);
+scope.finish(23);
+assert.equal(await scope.result, 23);
+await collect(scope.session);
+`;
+  const result = spawnSync(process.execPath, ["--expose-gc", "--input-type=module", "-e", script], { encoding: "utf8", timeout: 10_000 });
+  assert.equal(result.status, 0, result.stderr || result.error?.message);
+});
 
 for (const behavior of ["status", "trap"]) {
   test(`functional gradient ${behavior} releases pending derivative ownership on failure and close`, async () => {

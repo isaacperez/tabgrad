@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import ast
+import asyncio
 import importlib
 import json
 import math
@@ -259,6 +261,252 @@ def gradient_errors(oracle: _OracleModule) -> list[dict[str, str]]:
     return cases
 
 
+NO_GRAD_CASES = (
+    (
+        "entry-binding-order",
+        """x = torch.tensor(2., dtype=torch.float32, requires_grad=True)
+report = [torch.no_grad().prev]
+try:
+    torch.no_grad.__enter__(None)
+except AttributeError:
+    report.append('AttributeError')
+else:
+    raise AssertionError('Invalid receiver was accepted')
+report.append((x + x).requires_grad)
+class RejectCapture(torch.no_grad):
+    def __setattr__(self, name, value):
+        if name == 'prev' and value is True:
+            raise ValueError('capture rejected')
+        super().__setattr__(name, value)
+try:
+    with RejectCapture():
+        raise AssertionError('Invalid capture entered its body')
+except ValueError:
+    report.append('ValueError')
+report.append((x + x).requires_grad)
+""",
+    ),
+    (
+        "joined-asyncio-overlap",
+        """import asyncio
+report = []
+async def joined_scopes():
+    x = torch.tensor(2., dtype=torch.float32, requires_grad=True)
+    first_entered, second_entered, first_exited = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    async def first():
+        report.append((x + x).requires_grad)
+        with torch.no_grad():
+            report.append((x + x).requires_grad)
+            first_entered.set()
+            await second_entered.wait()
+        report.append((x + x).requires_grad)
+        first_exited.set()
+    async def second():
+        await first_entered.wait()
+        with torch.no_grad():
+            report.append((x + x).requires_grad)
+            second_entered.set()
+            await first_exited.wait()
+        report.append((x + x).requires_grad)
+    await asyncio.gather(first(), second())
+await joined_scopes()
+""",
+    ),
+    (
+        "context-binding-errors",
+        """x = torch.tensor(2., dtype=torch.float32, requires_grad=True)
+report = []
+for expression in ('torch.no_grad(1, 2)', 'torch.no_grad(unknown=True)',
+                   'torch.no_grad().__enter__(1)', 'torch.no_grad().__exit__()'):
+    try:
+        eval(expression)
+    except TypeError:
+        report.append('TypeError')
+    else:
+        raise AssertionError(expression)
+    report.append((x + x).requires_grad)
+""",
+    ),
+    (
+        "scope-restoration",
+        """x = torch.tensor([2., 3.], dtype=torch.float32, requires_grad=True)
+report = []
+manager = torch.no_grad()
+with manager as entered:
+    report.append(entered is None)
+    report.append((x + x).requires_grad)
+    with torch.no_grad():
+        report.append((x * x).requires_grad)
+    report.append(x.sum().requires_grad)
+    factory = torch.tensor([5., 7.], dtype=torch.float32, requires_grad=True)
+    report.append(factory.requires_grad)
+    report.append(torch.autograd.grad(factory, factory, torch.tensor([1., 1.], dtype=torch.float32))[0].tolist())
+report.append((x + x).requires_grad)
+try:
+    with manager:
+        raise ValueError('scope error')
+except ValueError:
+    report.append((x * x).requires_grad)
+loss = (x * x).sum()
+ordinary = x.view(1, 2)
+with torch.no_grad():
+    report.append(torch.autograd.grad(ordinary, x, torch.tensor([[2., 3.]], dtype=torch.float32))[0].tolist())
+    report.append(torch.autograd.grad(loss, x)[0].tolist())
+    try:
+        torch.autograd.grad(loss, x)
+    except RuntimeError:
+        report.append('RuntimeError')
+    else:
+        raise AssertionError('Consumed history was reused under no-grad')
+    report.append((x * x).tolist())
+""",
+    ),
+    (
+        "captured-overlap",
+        """x = torch.tensor(2., dtype=torch.float32, requires_grad=True)
+first, second = torch.no_grad(), torch.no_grad()
+report = [(x + x).requires_grad]
+first.__enter__()
+report.append((x + x).requires_grad)
+second.__enter__()
+report.append((x + x).requires_grad)
+first.__exit__(None, None, None)
+report.append((x + x).requires_grad)
+second.__exit__(None, None, None)
+report.append((x + x).requires_grad)
+first.__exit__(None, None, None)
+report.append((x + x).requires_grad)
+""",
+    ),
+    (
+        "same-manager-reentry",
+        """x = torch.tensor(2., dtype=torch.float32, requires_grad=True)
+manager = torch.no_grad()
+report = []
+with manager:
+    with manager:
+        report.append((x * x).requires_grad)
+report.append((x * x).requires_grad)
+""",
+    ),
+)
+
+
+def no_grad_cases(oracle: _OracleModule) -> list[dict[str, object]]:
+    """Freeze observable context behavior from the pinned native runtime."""
+    cases: list[dict[str, object]] = []
+    for name, source in NO_GRAD_CASES:
+        namespace: dict[str, object] = {"torch": oracle}
+        # The reentered same object can leave native mode disabled. Give each
+        # case an outer restoration scope, independent of its inner captures.
+        exec(
+            "outer = torch.no_grad()\nouter.__enter__()\nouter.__exit__(None, None, None)",
+            namespace,
+        )
+        try:
+            result: object = eval(
+                compile(
+                    source,
+                    "<no-grad-oracle>",
+                    "exec",
+                    flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT,
+                ),
+                namespace,
+            )
+            if asyncio.iscoroutine(result):
+                asyncio.run(result)
+            cases.append(
+                {"name": name, "source": source, "expected": namespace["report"]}
+            )
+        finally:
+            exec("outer.__exit__(None, None, None)", namespace)
+    return cases
+
+
+NO_GRAD_VIEW_QUERIES = (
+    ("special-self", "special", "special"),
+    ("special-base", "special", "base"),
+    ("active-self", "active", "active"),
+    ("product-self", "product", "product"),
+    ("product-special", "product", "special"),
+    ("special-sum-self", "special_sum", "special_sum"),
+    ("special-sum-base", "special_sum", "base"),
+    ("active-special", "active", "special"),
+    ("active-base", "active", "base"),
+    ("mixed-base", "mixed", "base"),
+    ("mixed-special", "mixed", "special"),
+    ("child-base", "child", "base"),
+    ("child-root", "child", "root"),
+    ("mixed-root", "mixed", "root"),
+    ("child-special", "child", "special"),
+    ("child-self", "child", "child"),
+    ("disabled-child-self", "disabled_child", "disabled_child"),
+    ("summed-active", "summed", "active"),
+)
+
+
+def no_grad_view_cases(oracle: _OracleModule) -> list[dict[str, object]]:
+    """Capture immutable special-view provenance and disconnected tracked nodes."""
+    cases: list[dict[str, object]] = []
+    for geometry, data, shape in (
+        ("scalar", [2.0], []),
+        ("empty", [], [2, 0, 3]),
+        ("matrix", [2.0, 3.0, 4.0, 5.0], [2, 2]),
+    ):
+        for kind in ("plain", "leaf", "nonleaf", "ordinary-view"):
+            source = (
+                f"root = torch.tensor({data}, dtype=torch.float32, requires_grad={kind != 'plain'})\n"
+                "base = root\n"
+            )
+            if kind == "nonleaf":
+                source += "base = base + base\n"
+            elif kind == "ordinary-view":
+                source += f"base = root.view({shape})\n"
+            source += (
+                "with torch.no_grad():\n"
+                f"    special = base.view({shape})\n"
+                f"    disabled_child = special.view({shape})\n"
+                "active = special + special\n"
+                "product = special * special\n"
+                "special_sum = special.sum()\n"
+                f"mixed = special + base.view({shape})\n"
+                f"child = special.view({shape})\n"
+                "summed = active.sum()\n"
+                "tensors = [base, special, disabled_child, active, mixed, child, summed, product, special_sum]\n"
+                "report = {'metadata': [[list(t.shape), t.tolist(), t.requires_grad] for t in tensors], 'queries': []}\n"
+            )
+            for name, output, requested in NO_GRAD_VIEW_QUERIES:
+                seed = (
+                    "torch.tensor(1., dtype=torch.float32)"
+                    if output in ("summed", "special_sum")
+                    else (
+                        f"torch.tensor({[1.0] * len(data)}, dtype=torch.float32).view({shape})"
+                    )
+                )
+                source += (
+                    "try:\n"
+                    f"    gradient = torch.autograd.grad({output}, {requested}, {seed})[0]\n"
+                    "except RuntimeError:\n"
+                    f"    report['queries'].append(['{name}', 'RuntimeError'])\n"
+                    "else:\n"
+                    f"    report['queries'].append(['{name}', list(gradient.shape), gradient.tolist(), gradient.requires_grad])\n"
+                )
+            namespace: dict[str, object] = {"torch": oracle}
+            exec(source, namespace)
+            cases.append(
+                {
+                    "name": f"{geometry}-{kind}",
+                    "data": data,
+                    "shape": shape,
+                    "kind": kind,
+                    "queries": NO_GRAD_VIEW_QUERIES,
+                    "source": source,
+                    "expected": namespace["report"],
+                }
+            )
+    return cases
+
+
 class _VersionModule(Protocol):
     git_version: str
 
@@ -465,6 +713,8 @@ def generate() -> str:
                 "sumCases": sum_cases(oracle),
                 "gradientCases": gradient_cases(oracle),
                 "gradientErrors": gradient_errors(oracle),
+                "noGradCases": no_grad_cases(oracle),
+                "noGradViewCases": no_grad_view_cases(oracle),
                 "cases": cases,
                 "rankCases": rank_cases,
                 "viewCases": view_cases,

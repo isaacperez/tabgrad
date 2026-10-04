@@ -250,7 +250,8 @@ class TensorState {
   readonly value: TensorValue;
   closed = false;
 
-  constructor(session: RuntimeSession, value: TensorValue, readonly history: DerivativeNode<TensorValue> | null) {
+  constructor(session: RuntimeSession, value: TensorValue, readonly history: DerivativeNode<TensorValue> | null,
+    readonly requiresGrad: boolean = history !== null) {
     this.session = session;
     this.value = value;
   }
@@ -322,6 +323,9 @@ interface InternalRuntimeSessionOptions extends RuntimeSessionOptions {
 }
 
 interface RuntimeSessionAccess {
+  readonly recordingMode: () => boolean;
+  readonly enterNoGrad: () => boolean;
+  readonly restoreRecording: (previous: boolean) => void;
   readonly prepare: () => Promise<void>;
   readonly observeSynchronously: (state: TensorState) => Float32Array;
   readonly binary: (definition: EqualShapeBinaryOperationDefinition, left: TensorState, rightHandle: unknown) => Tensor;
@@ -419,11 +423,11 @@ export class Tensor {
     return state.value.device;
   }
 
-  /** Whether this value participates in first-order functional differentiation. */
+  /** Advertised tracking, including no-grad views with no derivative accumulator. */
   get requiresGrad(): boolean {
     const state = requireTensorState(this);
     assertTensorOpen(state);
-    return state.history !== null;
+    return state.requiresGrad;
   }
 
   add(right: Tensor): Tensor {
@@ -625,6 +629,11 @@ class ViewOperationDefinition {
 
 const VIEW_OPERATION = Object.freeze(new ViewOperationDefinition());
 
+function isPromiseLike<Result>(value: Result | PromiseLike<Result>): value is PromiseLike<Result> {
+  return value !== null && (typeof value === "object" || typeof value === "function")
+    && "then" in value && typeof value.then === "function";
+}
+
 export class RuntimeSession {
   #backend: WebAssemblyCpuBackend;
   readonly #gpuBackend: WebGpuExecutionBackend | undefined;
@@ -641,6 +650,7 @@ export class RuntimeSession {
   #drainCompletion: { readonly promise: Promise<void>; readonly resolve: () => void } | undefined;
   #preparation: Promise<void> | undefined;
   #closed = false;
+  #recording = true;
   #closePromise: Promise<void> | null = null;
   #operationRecords = 0;
   #requestLeases = 0;
@@ -665,6 +675,9 @@ export class RuntimeSession {
     this.#onProgramFormed = testConfiguration?.onProgramFormed;
     this.#beforeReadback = testConfiguration?.beforeReadback;
     RUNTIME_SESSION_ACCESS.set(this, Object.freeze({
+      recordingMode: () => { this.#assertOpen(); return this.#recording; },
+      enterNoGrad: () => this.#enterNoGrad(),
+      restoreRecording: (previous: boolean) => { this.#recording = previous; },
       prepare: () => this.#prepare(),
       observeSynchronously: (state: TensorState) => this.#observeSynchronously(state),
       binary: (definition: EqualShapeBinaryOperationDefinition, left: TensorState, rightHandle: unknown) => (
@@ -679,6 +692,39 @@ export class RuntimeSession {
         this.#materializations.countResidentProgramReferences()
       ),
     }));
+  }
+
+  /** Disable new derivative recording until this callback returns or settles. */
+  noGrad<Result>(callback: () => PromiseLike<Result>): Promise<Result>;
+  noGrad<Result>(callback: () => Result): Result;
+  noGrad<Result>(callback: () => Result | PromiseLike<Result>): Result | Promise<Result> {
+    this.#assertOpen();
+    if (arguments.length !== 1 || typeof callback !== "function") {
+      throw new TypeError("noGrad requires exactly one callback.");
+    }
+    const previous = this.#enterNoGrad();
+    try {
+      const result = callback();
+      if (isPromiseLike(result)) return this.#settleNoGrad(result, previous);
+      this.#recording = previous;
+      return result;
+    } catch (error) {
+      this.#recording = previous;
+      throw error;
+    }
+  }
+
+  #settleNoGrad<Result>(result: PromiseLike<Result>, previous: boolean): Promise<Result> {
+    // This continuation captures the mode owner and previous boolean, not the
+    // callback or its arguments. Restoration also works after session close.
+    return Promise.resolve(result).finally(() => { this.#recording = previous; });
+  }
+
+  #enterNoGrad(): boolean {
+    this.#assertOpen();
+    const previous = this.#recording;
+    this.#recording = false;
+    return previous;
   }
 
   tensor(data: Iterable<number> | ArrayLike<number>, options: TensorOptions = {}): Tensor {
@@ -735,12 +781,12 @@ export class RuntimeSession {
     }
     const result = this.#gradientInput(output);
     const requested = inputs.map((input: unknown) => this.#gradientInput(input));
-    if (result.history === null || requested.some((input) => input.history === null)) {
+    if (result.history === null || requested.some((input) => !input.requiresGrad)) {
       throw new TabgradError("GRADIENT_NOT_TRACKED", "Output and requested inputs must require gradients.");
     }
     const explicitSeed = gradient === undefined ? undefined : this.#gradientInput(gradient);
     if (explicitSeed !== undefined) {
-      if (explicitSeed.history !== null) {
+      if (explicitSeed.requiresGrad) {
         throw new TabgradError("UNSUPPORTED_GRADIENT", "The gradient seed must not require gradients.");
       }
       if (!equalTensorShapes(result.value.shape, explicitSeed.value.shape)) {
@@ -748,6 +794,10 @@ export class RuntimeSession {
       }
     } else if (tensorElementCount(result.value.shape) !== 1) {
       throw new TabgradError("INVALID_GRADIENT", "An implicit gradient requires an output with exactly one element.");
+    }
+    // A tracked no-grad view is an unused input, never a fabricated leaf.
+    if (requested.some((input) => input.history === null)) {
+      throw new TabgradError("UNUSED_INPUT", "A requested input has no derivative accumulator.");
     }
     const plan = this.#history.plan(result.history, requested.map((input) => input.history!));
     const seed = explicitSeed === undefined
@@ -811,7 +861,7 @@ export class RuntimeSession {
     assertTensorOpen(source);
     this.#requireComputation(source.value, SUM_OPERATION);
     const admitted = SUM_OPERATION.admit(source);
-    const history = source.history === null ? null
+    const history = !this.#recording || !source.requiresGrad ? null
       : this.#history.record(admitted.outputMetadata.shape, SUM_OPERATION.derivative, [source.history], [source.value]);
     return this.#recordOperation(admitted, history);
   }
@@ -832,7 +882,7 @@ export class RuntimeSession {
     const admitted = definition.admit(this, left, rightHandle);
     this.#requireComputation(left.value, definition);
     const right = requireTensorState(rightHandle);
-    const history = left.history === null && right.history === null ? null
+    const history = !this.#recording || (!left.requiresGrad && !right.requiresGrad) ? null
       : this.#history.record(admitted.outputMetadata.shape, definition.derivative,
         [left.history, right.history], [left.value, right.value]);
     return this.#recordOperation(admitted, history);
@@ -853,9 +903,9 @@ export class RuntimeSession {
     const value = new TensorValue(metadata, null, source.value.storage);
     value.storage.references += 1;
     this.#values.add(value);
-    const history = source.history === null ? null
+    const history = !this.#recording || !source.requiresGrad ? null
       : this.#history.record(value.shape, VIEW_OPERATION.derivative, [source.history], [source.value]);
-    return this.#createHandle(value, history);
+    return this.#createHandle(value, history, source.requiresGrad);
   }
 
   #prepare(): Promise<void> {
@@ -996,8 +1046,9 @@ export class RuntimeSession {
     throwCleanupFailures(failures, "Tensor handle cleanup failed.");
   }
 
-  #createHandle(value: TensorValue, history: DerivativeNode<TensorValue> | null = null): Tensor {
-    const state = new TensorState(this, value, history);
+  #createHandle(value: TensorValue, history: DerivativeNode<TensorValue> | null = null,
+    requiresGrad: boolean = history !== null): Tensor {
+    const state = new TensorState(this, value, history, requiresGrad);
     this.#states.add(state);
     return createTensorHandle(state);
   }
@@ -1224,6 +1275,22 @@ export async function createWebGpuRuntimeSession(
 function* awaitBackendResult<T>(result: T | ExecutionTicket<T>): Generator<ExecutionStep, T, unknown> {
   if (!(result instanceof ExecutionTicket)) return result;
   return (yield result) as T;
+}
+
+/** @internal Read the mode before Python assigns its native context capture. */
+export function getRecordingMode(session: RuntimeSession): boolean {
+  return runtimeSessionAccess(session).recordingMode();
+}
+
+/** @internal Enter a Python scope on the same recording owner as JavaScript. */
+export function enterNoGradScope(session: RuntimeSession): boolean {
+  return runtimeSessionAccess(session).enterNoGrad();
+}
+
+/** @internal Restore a captured scope mode, including after its owner closes. */
+export function restoreRecordingMode(session: RuntimeSession, previous: boolean): void {
+  if (typeof previous !== "boolean") throw new TypeError("A captured recording mode must be boolean.");
+  runtimeSessionAccess(session).restoreRecording(previous);
 }
 
 /** @internal Prepare the owned backend before entering a synchronous frontend. */

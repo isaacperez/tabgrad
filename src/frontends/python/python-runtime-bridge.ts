@@ -1,5 +1,5 @@
 import { TabgradError } from "../../shared/errors.js";
-import { observeTensorSynchronously, type RuntimeSession, type Tensor } from "../../runtime/runtime.js";
+import { getRecordingMode, enterNoGradScope, restoreRecordingMode, observeTensorSynchronously, type RuntimeSession, type Tensor } from "../../runtime/runtime.js";
 import type { TensorDevice } from "../../execution/backend.js";
 
 /** Structural subset of Pyodide's borrowed buffer protocol; no interpreter owner. */
@@ -34,6 +34,18 @@ function boundedFloat32View(view: PythonBufferView): Float32Array {
 export class PythonRuntimeBridge {
   #managedEntry = false;
   constructor(readonly session: RuntimeSession) {}
+
+  getRecordingMode(): boolean {
+    return getRecordingMode(this.session);
+  }
+
+  enterNoGrad(): boolean {
+    return enterNoGradScope(this.session);
+  }
+
+  exitNoGrad(previous: boolean): void {
+    restoreRecordingMode(this.session, previous);
+  }
 
   async runManaged(execute: () => Promise<unknown>): Promise<unknown> {
     this.#managedEntry = true;

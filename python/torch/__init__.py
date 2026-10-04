@@ -6,7 +6,7 @@ from array import array
 from collections.abc import Iterable, Iterator
 from math import prod
 from operator import index
-from types import NotImplementedType
+from types import NotImplementedType, TracebackType
 from typing import SupportsIndex, TypeAlias, cast, overload
 from weakref import finalize
 
@@ -17,6 +17,27 @@ from pyodide.ffi import JsException, to_js
 _runtime_session = _bridge.session
 
 TensorList: TypeAlias = float | list["TensorList"]
+
+
+class no_grad:
+    """Disable new recording in this environment and restore its captured mode."""
+
+    def __init__(self) -> None:
+        self.prev = False
+
+    def __enter__(self) -> None:
+        # Capture assignment can fail (for example, on an invalid receiver).
+        # Match native ordering: do not disable recording until it succeeds.
+        self.prev = _bridge.getRecordingMode()
+        _bridge.enterNoGrad()
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        _bridge.exitNoGrad(self.prev)
 
 
 class Size(tuple[int, ...]):
@@ -405,6 +426,7 @@ __all__ = [
     "dtype",
     "float32",
     "mul",
+    "no_grad",
     "sum",
     "tensor",
 ]

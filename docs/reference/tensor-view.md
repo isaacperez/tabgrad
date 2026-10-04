@@ -51,6 +51,10 @@ same storage rather than retaining a history of intermediate view handles.
 When tracking is enabled, independent derivative edges preserve the input shape
 for [functional differentiation](functional-gradients.md); they do not save
 numerical payload or alter this storage relationship.
+Views created with recording disabled preserve advertised tracking without a
+normal accumulator; active children and arithmetic can track with absent
+edges. The [recording scope reference](gradient-recording.md#tracking-and-views)
+defines these distinctions and their derivative-root/input consequences.
 
 Closing a JavaScript base handle does not invalidate a live view. Closing one
 view does not invalidate the base or its siblings. Python wrappers retain their
