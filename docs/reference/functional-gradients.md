@@ -15,8 +15,11 @@ calculation through forward admission, differentiation and observation.
 
 Inside a managed Python script, `torch.tensor(..., requires_grad=True)` enables
 tracking at creation. The read-only `Tensor.requires_grad` property reports
-tracking without observing payloads. An operation's result tracks if any input
-tracks. The default remains false.
+tracking without observing payloads. With recording enabled, an arithmetic
+result tracks if any input tracks. The default remains false. The
+[no-grad reference](gradient-recording.md) defines disabled recording,
+explicit tracked factories and special views whose advertised tracking has no
+ordinary derivative accumulator.
 
 ```python
 import torch
@@ -111,8 +114,8 @@ without consuming independently owned derivative history.
 
 | JavaScript error code | Meaning | Python presentation |
 | --- | --- | --- |
-| `GRADIENT_NOT_TRACKED` | Output or requested input does not track | `RuntimeError` |
-| `UNUSED_INPUT` | Requested input is disconnected from the output | `RuntimeError` |
+| `GRADIENT_NOT_TRACKED` | Output has no derivative entry, or requested input does not track | `RuntimeError` |
+| `UNUSED_INPUT` | Requested input is disconnected from the output, including a tracked no-grad view with no accumulator | `RuntimeError` |
 | `INVALID_GRADIENT` | An implicit seed was requested for a non-singleton output | `RuntimeError` |
 | `UNSUPPORTED_GRADIENT` | Explicit seed tracks gradients | `RuntimeError` |
 | `SHAPE_MISMATCH` | Seed and output shapes differ | `RuntimeError` |

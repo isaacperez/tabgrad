@@ -136,6 +136,40 @@
           || session.diagnostics().liveOperationRecords !== 0) throw new Error("Multiplication retained resources.");
       }
 
+      async function checkNoGrad(session) {
+        for (const shape of [[], [2], [2, 0, 3]]) {
+          const count = shape.reduce((a, b) => a * b, 1);
+          const input = session.tensor(new Float32Array(count).fill(2), { shape, requiresGrad: true });
+          const square = input.mul(input);
+          const total = square.sum();
+          const view = session.noGrad(() => input.view(shape));
+          const active = view.mul(view);
+          const disabled = await session.noGrad(async () => {
+            await Promise.resolve();
+            return input.mul(input);
+          });
+          if (!view.requiresGrad || !active.requiresGrad || disabled.requiresGrad) {
+            throw new Error("No-grad lost native arithmetic/view tracking.");
+          }
+          const seed = session.tensor(new Float32Array(count).fill(1), { shape });
+          try { session.grad(active, [view], seed); throw new Error("Ghost input was connected."); }
+          catch (error) { if (error.code !== "UNUSED_INPUT") throw error; }
+          try { session.grad(view, [view], seed); throw new Error("Ghost root was differentiated."); }
+          catch (error) { if (error.code !== "GRADIENT_NOT_TRACKED") throw error; }
+          const [self] = session.grad(active, [active], seed);
+          const [gradient] = session.noGrad(() => session.grad(total, [input]));
+          if (!(await self.toArray()).every((value) => value === 1)
+            || !(await gradient.toArray()).every((value) => value === 4)
+            || !(await disabled.toArray()).every((value) => value === 4)) {
+            throw new Error("No-grad changed derivative or forward values.");
+          }
+          for (const tensor of [input, square, total, view, active, disabled, seed, self, gradient]) tensor.close();
+          if (session.diagnostics().liveDerivativeNodes !== 0 || session.diagnostics().liveSavedValues !== 0) {
+            throw new Error("No-grad retained derivative owners.");
+          }
+        }
+      }
+
       async function checkFunctionalGradients(session) {
         for (const shape of [[], [5], [2, 3], [2, 0, 3]]) {
           const length = shape.reduce((count, dimension) => count * dimension, 1);
@@ -196,6 +230,7 @@
         await checkTotalSum(session);
         await checkMultiplication(session);
         await checkFunctionalGradients(session);
+        await checkNoGrad(session);
         await session.close();
         await reportPhase("runtime-finished");
         await report({ ok: true, before, after, values });

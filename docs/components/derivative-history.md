@@ -19,11 +19,20 @@ numerical memory. The runtime supplies ordinary operations and handle cleanup.
 
 ## Edges and saved values have different lifetimes
 
-A tracked public handle owns one history node. A tracked operation's node owns
+An ordinary tracked public handle owns one history node. A tracked operation's node owns
 one edge for each tracked input occurrence. An edge preserves that input's
 derivative identity and shape, even after its public handle closes. It does
 not preserve the numerical input. Repeated operands own repeated references;
 release decrements every occurrence through an iterative worklist.
+
+Advertised tracking and a derivative entry are distinct. A no-grad-created
+tracked view has no normal entry; runtime admission reports that view as an
+invalid derivative output or unused input. An active operation involving it
+can own a real recipe with all-null input edges. Such a node is a valid
+derivative cutoff, not a fabricated leaf accumulator. Admission decides when
+to record; `DerivativeHistory.record` preserves the admitted recipe even when
+no input edge exists. The [recording reference](../reference/gradient-recording.md)
+owns the observable scope/view contract.
 
 A saved operand is a separate logical value pin. For `x * y`, differentiating
 with respect to `x` needs `y`; differentiating with respect to `y` needs `x`.

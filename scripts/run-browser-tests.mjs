@@ -36,7 +36,7 @@ function assertPythonWorkerResult(result, jspi, gated, variant = "simd128") {
 }
 
 const server = await startBrowserServer(["runtime/runtime.html", "python/python-lifecycle.html", "python/python-worker.html"], {
-  assets: ["python/python-worker.mjs", "helpers/cpu-profile.mjs"],
+  assets: ["python/python-worker.mjs", "helpers/cpu-profile.mjs", "helpers/python-no-grad-cases.mjs"],
 });
 try {
   const selectedBrowsers = selectBrowserDefinitions(
@@ -86,7 +86,7 @@ try {
       process.stdout.write(`PASS ${browser.name} Python worker (${jspi} JSPI profile, no isolation)\n`);
     }
     const isolatedServer = await startBrowserServer(["python/python-worker.html"], {
-      crossOriginIsolation: true, assets: ["python/python-worker.mjs", "helpers/cpu-profile.mjs"],
+      crossOriginIsolation: true, assets: ["python/python-worker.mjs", "helpers/cpu-profile.mjs", "helpers/python-no-grad-cases.mjs"],
     });
     try {
       await runBrowserPage({
@@ -98,7 +98,7 @@ try {
     } finally { await isolatedServer.close(); }
     for (const cpuVariant of ["scalar", "simd128"]) {
       const variantServer = await startBrowserServer(["python/python-worker.html"], {
-        assets: ["python/python-worker.mjs", "helpers/cpu-profile.mjs"],
+        assets: ["python/python-worker.mjs", "helpers/cpu-profile.mjs", "helpers/python-no-grad-cases.mjs"],
       });
       try {
         await runBrowserPage({

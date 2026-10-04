@@ -3,6 +3,7 @@
   <head><meta charset="utf-8"><title>Python worker integration</title></head>
   <body>
     <script type="module">
+      import { pythonNoGradChecks } from "/helpers/python-no-grad-cases.mjs";
       import { connectPythonWorker } from "/python.js";
 
       const parameters = new URLSearchParams(location.search);
@@ -109,6 +110,7 @@ for input_data, expected_shape, expected in [
     del rank_result, rank_input
 assert session.diagnostics().liveRequestLeases == 0
 `);
+        await client.runPythonAsync(pythonNoGradChecks);
         try {
           await client.runPythonAsync("raise ValueError('controlled script failure')");
           throw new Error("Python failure was reported as success.");

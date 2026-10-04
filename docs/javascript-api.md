@@ -30,6 +30,13 @@ lazy untracked gradient handles, with independently closeable entries in input
 order. Creation accepts `requiresGrad: true`; read-only `Tensor.requiresGrad`
 reports tracking. Ordinary creation defaults to nontracking.
 
+`RuntimeSession.noGrad(callback)` disables new derivative recording for a
+synchronous or Promise-returning callback, preserving its result and restoring
+the captured previous mode on completion or failure. It shares the Python
+`torch.no_grad()` owner. The [recording reference](reference/gradient-recording.md)
+defines overlap, factory exceptions and views whose advertised tracking has no
+ordinary derivative accumulator.
+
 ## Browser delivery requires no developer toolchain
 
 A web application serves the files emitted under `dist/` by the Tabgrad build.

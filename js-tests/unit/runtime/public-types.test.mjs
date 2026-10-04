@@ -49,7 +49,7 @@ test("the JavaScript package entry point exposes only the supported runtime surf
     {
       exports: ["RuntimeSession", "TabgradError", "Tensor", "createRuntimeSession", "createWebGpuRuntimeSession"],
       runtimeSessionConstructor: ["length", "name", "prototype"],
-      runtimeSessionPrototype: ["close", "constructor", "diagnostics", "grad", "tensor"],
+      runtimeSessionPrototype: ["close", "constructor", "diagnostics", "grad", "noGrad", "tensor"],
       tensorConstructor: ["length", "name", "prototype"],
       tensorPrototype: [
         "add",
@@ -98,6 +98,9 @@ test("the public declarations do not expose runtime-to-backend plumbing", async 
     "inspectTensorAncestryForTesting",
     "observe(state",
     "releaseHandle",
+    "enterNoGradScope",
+    "getRecordingMode",
+    "restoreRecordingMode",
   ]) {
     assert.doesNotMatch(declarations, new RegExp(internalName.replace("(", "\\(")));
   }
@@ -119,4 +122,32 @@ test("the package entry point does not export executable or failure internals", 
   ]) {
     assert.doesNotMatch(declarations, new RegExp(internalName));
   }
+});
+
+test("noGrad emitted declarations preserve synchronous and Promise result types", () => {
+  const filename = fileURLToPath(new URL("no-grad-consumer.ts", import.meta.url));
+  const source = `
+import { RuntimeSession } from '../../../dist/index.js';
+const session = new RuntimeSession();
+const sync: number = session.noGrad(() => 17);
+const asynchronous: Promise<number> = session.noGrad(async () => 23);
+const nested: Promise<string> = session.noGrad(() => session.noGrad(async () => 'ok'));
+const empty: void = session.noGrad(() => {});
+// @ts-expect-error A callback is required.
+session.noGrad();
+// @ts-expect-error The callback must be callable.
+session.noGrad(17);
+// @ts-expect-error A Promise callback does not synchronously return its value.
+const incorrect: number = session.noGrad(async () => 1);
+`;
+  const options = { strict: true, noEmit: true, skipLibCheck: false, types: [],
+    target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.NodeNext,
+    moduleResolution: ts.ModuleResolutionKind.NodeNext, lib: ["lib.es2022.d.ts", "lib.dom.d.ts"] };
+  const host = ts.createCompilerHost(options);
+  const original = host.getSourceFile.bind(host);
+  host.getSourceFile = (path, languageVersion, ...rest) => path === filename
+    ? ts.createSourceFile(path, source, languageVersion) : original(path, languageVersion, ...rest);
+  const program = ts.createProgram({ rootNames: [filename], options, host });
+  assert.deepEqual(ts.getPreEmitDiagnostics(program).map((diagnostic) =>
+    ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n")), []);
 });
