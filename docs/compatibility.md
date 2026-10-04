@@ -159,7 +159,7 @@ and reject excluded overloads. Direct runtime tests establish shared allocation,
 materialization, alias retention, reuse and rollback; numerical equality alone
 does not prove storage sharing. Browser fixtures exercise views through both
 the managed Python and direct JavaScript paths. These bounded cases exclude
-dtype reinterpretation, non-contiguous access and mutation;
+dtype reinterpretation and non-contiguous access;
 Tabgrad's large-empty-shape representability policy is not attributed to PyTorch.
 
 The [functional gradient reference](reference/functional-gradients.md) defines
@@ -185,7 +185,7 @@ scalar/SIMD consumers use the pinned expectations. Callback result/throw,
 Promise settlement, cross-entry state, stale binding contexts and explicit-GC
 retention have separate Tabgrad integration tests. Browser fixtures exercise
 ordinary CPU Python and direct calls with controlled-absent JSPI. These cases
-do not qualify mutation, decorators, inference mode or GPU gradients, and do
+do not independently qualify mutation, decorators, inference mode or GPU gradients, and do
 not establish a speed or total-memory claim. The official reference is
 [PyTorch 2.14 no-grad](https://docs.pytorch.org/docs/2.14/generated/torch.no_grad.html).
 
@@ -217,6 +217,18 @@ This evidence group does not establish a release support status, general
 PyTorch compatibility or coverage of every CPU variant in every Python/browser combination. A release
 record must still identify its exact environment and interface dimensions
 under the rules below.
+
+The [persistent copy reference](reference/tensor-copy.md) defines the CPU
+same-session equal-shape tensor subset. Native `copyCases` preserve effective
+`other` binding, boolean options, return identity, scalar/empty/matrix values,
+active/no-grad connectivity, saved invalidation, consumable view history and
+inherited special-view provenance. Packaged Node and browser Pyodide consume
+these same cases; direct CPU scalar/SIMD tests independently establish float32
+bits, snapshots, failure responsibility, real owner/lease release and finite
+admission. This scope excludes native broadcasting, number sources, conversion,
+GPU mutation and broader gradients. Deferred backend failure is a Tabgrad
+integration contract. Existing read-only GPU consumers retain their separate
+qualification; CPU mutation does not expand that GPU domain.
 
 ### Contents of a release record
 

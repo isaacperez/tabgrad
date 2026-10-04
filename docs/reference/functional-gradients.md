@@ -101,7 +101,11 @@ Multiplication saves the operand needed by each tracked input's derivative.
 Traversing that multiplication consumes its saved values once. Repeating a
 request that needs those values fails, even if the first returned gradient was
 closed without observation. Addition, sum and views need only metadata, so
-their histories can be reused. This distinction follows the pinned native
+their histories can be reused. Direct copy is also reusable; traversed
+whole-storage view copy is consumable independently of numeric saves.
+Every save of an executed node is version checked before seed admission,
+including saves for pruned positions. The [copy reference](tensor-copy.md) owns
+rebasing, special-view guards and captured writer outcomes. This distinction follows the pinned native
 oracle; it is not a blanket rule that every derivative request consumes every
 ancestor.
 
@@ -119,6 +123,7 @@ without consuming independently owned derivative history.
 | `INVALID_GRADIENT` | An implicit seed was requested for a non-singleton output | `RuntimeError` |
 | `UNSUPPORTED_GRADIENT` | Explicit seed tracks gradients | `RuntimeError` |
 | `SHAPE_MISMATCH` | Seed and output shapes differ | `RuntimeError` |
+| `SAVED_VERSION_MISMATCH`, `INPLACE_VIEW` | Changed numeric save or dirty special-view derivative entry | `RuntimeError` |
 | `CONSUMED_HISTORY` | Selected derivative needs already consumed saved values | `RuntimeError` |
 | `INVALID_TENSOR`, `CLOSED_TENSOR`, `CLOSED_SESSION`, `DIFFERENT_SESSION` | Invalid handle or lifetime/session mismatch | Existing `JsException` lifecycle contract |
 
@@ -143,7 +148,6 @@ remain bounded by the underlying operation references. Oracle cases use small,
 exactly representable values to establish derivative semantics rather than
 claiming bitwise equivalence for every floating-point graph.
 
-No persistent `.grad` field, `backward()`, gradient reset, in-place update,
-optimizer, higher-order graph, JVP, public broadcasting, axis reduction or
+No persistent `.grad` field, `backward()`, gradient reset, optimizer, higher-order graph, JVP, public broadcasting, axis reduction or
 broader dtype/device/layout is included. These exclusions do not change
 ordinary nontracking computation or introduce a backend fallback.

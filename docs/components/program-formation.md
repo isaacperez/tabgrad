@@ -123,6 +123,11 @@ result must not imply selecting every calculation that once contributed to it.
 The session's [semantic lifetime owner](semantic-value-lifetimes.md) decides
 when producer edges can be released; formation only reads the boundary it sees.
 
+Copy snapshots and multiple family currents can bind the same immutable
+backing. Canonicalization still selects one storage slot. Current family F,
+input/save R and request Q pins are numeric retention obligations; C controls
+are checked outside formation and do not change numerical slot/use counts.
+
 ## Execution, failure and lifetime remain with their owners
 
 Formation does not load a backend, execute kernels, read back data or advance a

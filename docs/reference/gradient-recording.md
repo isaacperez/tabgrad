@@ -101,11 +101,12 @@ retain the usual [view rules](tensor-view.md); none of these distinctions copies
 storage or fabricates an accumulator. Advertised `requires_grad` alone does
 not establish that a particular derivative request is valid.
 
-The immutable specialization here includes views of plain and tracked bases,
-active and disabled child creation and absent-edge nodes. Mutation-dependent
-versions, dirty-view guards and rebasing belong to the
-[persistent update architecture](../architecture/cpu-tensor-updates.md), not
-this API. No update, decorator, general grad-mode setter, inference mode,
+Views of plain and tracked bases, active and disabled child creation and
+absent-edge nodes preserve their native provenance. Active children inherit
+special no-grad origin independently of their bound entry. CPU
+[`copy_`](tensor-copy.md) adds version checks, dirty-view guards and rebasing
+under the [persistent update architecture](../architecture/cpu-tensor-updates.md).
+No decorator, general grad-mode setter, inference mode,
 forward AD, higher-order mode or GPU gradient support is provided.
 
 ## Evidence and costs

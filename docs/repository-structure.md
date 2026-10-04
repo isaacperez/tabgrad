@@ -58,7 +58,11 @@ they do not define new architectural boundaries merely by being directories.
 A cohesive owner may span files, and a small module need not become a package.
 
 `src/runtime/` owns tensor semantics and the coordination of logical values,
-materialization, program formation and observation requests. Its
+materialization, program formation and observation requests. `tensor-value.ts`
+owns immutable numeric descriptors and shared backing records; `tensor-family.ts`
+owns alias-visible current/history/version state. `writer-outcome.ts` owns
+payload-free control outcomes and their reference ledger. These are private
+semantic owners, not new engines or public entries. Its
 `autograd/` subdirectory owns derivative history and recipes, whose numerical
 work is supplied through the runtime's operation callbacks. This keeps
 derivative bookkeeping separate from physical allocation and device execution

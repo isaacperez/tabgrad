@@ -93,6 +93,8 @@ def grad(
             "INVALID_GRADIENT",
             "UNUSED_INPUT",
             "CONSUMED_HISTORY",
+            "SAVED_VERSION_MISMATCH",
+            "INPLACE_VIEW",
             "SHAPE_MISMATCH",
         }:
             raise RuntimeError(str(error)) from error

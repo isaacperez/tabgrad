@@ -28,3 +28,18 @@ export const SUM_DERIVATIVE: DerivativeRecipe = Object.freeze({
     return operations.expand(incoming, shape);
   },
 });
+
+/** A full copy keeps a connected old-destination edge with exact positive zeros. */
+export const COPY_DERIVATIVE: DerivativeRecipe = Object.freeze({
+  savedOperands: () => [],
+  apply<Value, Gradient>(incoming: Gradient, _saved: readonly Value[], shape: readonly number[],
+    operations: DerivativeOperations<Value, Gradient>, position: number): Gradient {
+    return position === 0 ? operations.zeros(shape) : operations.view(incoming, shape);
+  },
+});
+
+/** Native whole-view rebasing consumes call state even without numerical saves. */
+export const COPY_SLICES_DERIVATIVE: DerivativeRecipe = Object.freeze({
+  ...COPY_DERIVATIVE,
+  consumesHistory: true,
+});

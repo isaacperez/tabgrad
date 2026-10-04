@@ -87,12 +87,18 @@ Python observation needs the managed entry but no JSPI or async observation
 extension. The [compatibility evidence](../compatibility.md#python-tensor-evidence)
 identifies the pinned native oracle and the distinction from release claims.
 
+Ordinary current views rebase after CPU updates; already captured outputs keep
+their bound entries and values. The [copy reference](tensor-copy.md) defines
+special creation provenance and saved-version failures.
+
 ## Limits and cost
 
 This operation covers shape changes of whole contiguous float32 storage in
 the frontend/device domains stated above.
 It does not provide dtype reinterpretation, reshape with copy fallback,
-`view_as`, transpose, slicing, offsets, arbitrary strides or mutation.
+`view_as`, transpose, slicing, offsets, arbitrary strides. Equal-shape CPU mutation through
+[`copy_`](tensor-copy.md) updates the shared alias family; GPU views remain
+read-only.
 There is no public storage-pointer interface.
 
 Admission costs are proportional to source and target rank, not payload size

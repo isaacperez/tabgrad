@@ -174,7 +174,10 @@ callbacks. The wrapper owns context syntax; the runtime owns recording mode.
 Managed-entry completion does not reset that mode. Closing or reattaching a
 binding cannot redirect an old context to the new session. The
 [scope reference](../reference/gradient-recording.md) defines restoration and
-the special tracking behavior of immutable views.
+the special tracking behavior of views. `Tensor.copy_` validates Python call
+forms then uses the same runtime transaction, returning the identical wrapper.
+It owns no separate mutable numeric cache; the [copy reference](../reference/tensor-copy.md)
+defines versions and recording-dependent guards.
 
 ## What the evidence establishes
 

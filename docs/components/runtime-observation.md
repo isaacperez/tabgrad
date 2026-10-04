@@ -34,6 +34,11 @@ are accounted for, on success or failure.
 and returns executable structure separately from invocation bindings. It does
 not execute numerical work or change semantic ownership.
 
+Captured writer outcomes are checked before every observation fast path.
+Mandatory CPU copy effects use this same queue and keep source Q pins until
+retirement; closing a handle cannot cancel them. Successful publication checks
+backend generation and predecessor/source outcomes.
+
 Ready CPU host data takes a shorter route inside this same owner. It already has
 numerical storage, so the runtime copies that storage directly rather than
 uploading it into WebAssembly and immediately downloading it. Neither the
@@ -126,8 +131,9 @@ allocation handoff, scratch reclamation and rollback boundary.
 The binding owns a registered `PythonRuntimeBridge` and activates its
 observation context around the accepted interpreter call and cleanup of its
 owned result proxy. A finalizer triggered by that cleanup can still observe
-tensors before entry completion. A `finally` restores inactive state after
-success or failure. Nested Python functions and
+tensors before entry completion. Managed completion joins mandatory effects after script/result cleanup,
+preserving both script and effect failures if necessary. A `finally` restores
+inactive state after success or failure. Nested Python functions and
 permitted callbacks remain inside that entry; explicit Python await points do
 not end its ownership. This relies on the cooperating-host and joined-task
 contract, not on inspecting every Python coroutine or securing private bridge
@@ -149,7 +155,11 @@ does not retain a completed program merely because another tensor uses it.
 Session close stops admission, releases public handles and awaits request drain
 before releasing backend resources. Drain is fulfilled when accepted requests
 have retired, including failed requests. The request caller owns its failure;
-close does not replay that failure as a cleanup error. A failed GPU readback
+close does not replay that failure as a cleanup error. Mandatory writer errors
+have separate finite undelivered responsibility: observations, managed entry
+completion or close deliver it once. Failed-snapshot observations still fail
+repeatedly. A committed failure rejects new writes and causally fails already
+admitted ordered successors, while independent pure observations remain usable. A failed GPU readback
 can publish before its copy and mapping finish; the backend's ticket retains
 those obligations. Queue emptiness alone does not complete session close.
 

@@ -1,3 +1,7 @@
+import { TensorValue, OperationRecord, type StorageState, type TensorMetadata, type NumericalOperationDefinition } from "./tensor-value.js";
+import { TensorState } from "./tensor-family.js";
+import { WriterOutcome, WriterOutcomeLedger, type EffectFailure, captureWriterOutcomes, retainWriterOutcomes,
+  releaseWriterOutcomes, failedWriterOutcome } from "./writer-outcome.js";
 import {
   type WasmVariant,
   WebAssemblyCpuBackend,
@@ -14,7 +18,7 @@ import type { ExecutionBackend, ResidentAllocation, TensorDevice } from "../exec
 import { WebGpuBackend, type WebGpuDiagnostics, type WebGpuExecutionBackend } from "../backends/webgpu/webgpu-backend.js";
 export type { TensorDevice } from "../execution/backend.js";
 import { DerivativeHistory, type DerivativeNode, type DerivativeRecipe } from "./autograd/derivative-history.js";
-import { IDENTITY_DERIVATIVE, MUL_DERIVATIVE, SUM_DERIVATIVE } from "./autograd/derivative-recipes.js";
+import { COPY_DERIVATIVE, COPY_SLICES_DERIVATIVE, IDENTITY_DERIVATIVE, MUL_DERIVATIVE, SUM_DERIVATIVE } from "./autograd/derivative-recipes.js";
 import { copyTensorShape, equalTensorShapes, inferViewShape, tensorElementCount } from "./tensor-shape.js";
 import {
   ExecutableProgram,
@@ -76,23 +80,9 @@ export interface RuntimeDiagnostics {
   readonly liveSavedValues: number;
 }
 
-interface TensorMetadata {
-  readonly shape: readonly number[];
-  readonly dtype: TensorDType;
-  readonly device: TensorDevice;
-  readonly layout: TensorLayout;
-}
-
 interface AdmittedOperation {
   readonly record: OperationRecord;
   readonly outputMetadata: TensorMetadata;
-}
-
-interface NumericalOperationDefinition {
-  readonly name: "add" | "mul" | "sum" | "expand";
-  readonly provenanceSource: "Tensor.add" | "Tensor.mul" | "Tensor.sum" | "DerivativeHistory.sum";
-  readonly loweredKind: "add-f32" | "mul-f32" | "sum-f32" | "expand-f32";
-  readonly pure: true;
 }
 
 function invalidTensorData(cause?: unknown): TabgradError {
@@ -193,70 +183,6 @@ function retainProgramFailureContext(
   });
 }
 
-class TensorValue {
-  readonly shape: readonly number[];
-  readonly dtype: TensorDType;
-  readonly device: TensorDevice;
-  readonly layout: TensorLayout;
-  // Shape and provenance belong to this value; payload and producer ownership
-  // are shared by every whole-storage alias.
-  readonly storage: StorageState;
-  readonly provenance: ProgramProvenance;
-  references = 1;
-
-  constructor(metadata: TensorMetadata, producer: OperationRecord | null, storage?: StorageState) {
-    this.shape = Object.freeze([...metadata.shape]);
-    this.dtype = metadata.dtype;
-    this.device = metadata.device;
-    this.layout = metadata.layout;
-    this.storage = storage ?? new StorageState(this, producer);
-    this.provenance = storage !== undefined ? Object.freeze({ operation: "view", source: "Tensor.view" }) : producer?.provenance ?? Object.freeze({
-      operation: "tensor",
-      source: "RuntimeSession.tensor",
-    });
-  }
-
-  get storageValue(): TensorValue { return this.storage.value; }
-  get producer(): OperationRecord | null { return this.storage.producer; }
-}
-
-/** Shared whole-storage lifetime; the origin descriptor preserves producer metadata. */
-class StorageState {
-  references = 1;
-  constructor(readonly value: TensorValue, public producer: OperationRecord | null) {}
-}
-
-class OperationRecord {
-  readonly definition: NumericalOperationDefinition;
-  readonly inputs: readonly TensorValue[];
-  readonly provenance: ProgramProvenance;
-
-  constructor(
-    definition: NumericalOperationDefinition,
-    inputs: readonly TensorValue[],
-  ) {
-    this.definition = definition;
-    this.inputs = Object.freeze([...inputs]);
-    this.provenance = Object.freeze({
-      operation: definition.name,
-      source: definition.provenanceSource,
-    });
-    Object.freeze(this);
-  }
-}
-
-class TensorState {
-  readonly session: RuntimeSession;
-  readonly value: TensorValue;
-  closed = false;
-
-  constructor(session: RuntimeSession, value: TensorValue, readonly history: DerivativeNode<TensorValue> | null,
-    readonly requiresGrad: boolean = history !== null) {
-    this.session = session;
-    this.value = value;
-  }
-}
-
 class MaterializationTable {
   readonly #entries = new Map<StorageState, Materialization>();
 
@@ -308,10 +234,24 @@ class MaterializationTable {
   }
 }
 
+/** Fixed production update capacities; smaller test capacities exercise the same admission. */
+interface UpdateLimits {
+  readonly pendingCopies: number;
+  readonly owners: number;
+  readonly backingBytes: number;
+}
+const DEFAULT_UPDATE_LIMITS: UpdateLimits = Object.freeze({
+  pendingCopies: 1024,
+  owners: 65536,
+  backingBytes: 64 * 1024 * 1024,
+});
+
 interface RuntimeSessionTestConfiguration {
   readonly forceVariant: WasmVariant;
   readonly onProgramFormed?: (program: ExecutableProgram) => void;
   readonly beforeReadback?: () => void;
+  readonly beforeCopyPublication?: () => void;
+  readonly updateLimits?: Partial<UpdateLimits>;
 }
 
 const RUNTIME_SESSION_TEST_CONFIGURATION = Symbol("RuntimeSessionTestConfiguration");
@@ -322,13 +262,28 @@ interface InternalRuntimeSessionOptions extends RuntimeSessionOptions {
   readonly [RUNTIME_SESSION_GPU_BACKEND]?: WebGpuExecutionBackend;
 }
 
+interface RuntimeOwnership {
+  readonly families: number;
+  readonly backings: number;
+  readonly backingBytes: number;
+  readonly valueReferences: number;
+  readonly derivativeReferences: number;
+  readonly writerOutcomes: number;
+  readonly controlReferences: number;
+  readonly pendingCopies: number;
+  readonly undeliveredEffects: number;
+}
+
 interface RuntimeSessionAccess {
   readonly recordingMode: () => boolean;
   readonly enterNoGrad: () => boolean;
   readonly restoreRecording: (previous: boolean) => void;
   readonly prepare: () => Promise<void>;
+  readonly complete: () => Promise<void>;
   readonly observeSynchronously: (state: TensorState) => Float32Array;
   readonly binary: (definition: EqualShapeBinaryOperationDefinition, left: TensorState, rightHandle: unknown) => Tensor;
+  readonly ownership: () => RuntimeOwnership;
+  readonly copy: (destination: TensorState, source: unknown) => void;
   readonly sum: (source: TensorState) => Tensor;
   readonly view: (source: TensorState, shape: unknown) => Tensor;
   readonly observe: (state: TensorState) => Promise<Float32Array>;
@@ -457,6 +412,14 @@ export class Tensor {
   view(shape: readonly number[]): Tensor {
     const state = requireTensorState(this);
     return runtimeSessionAccess(state.session).view(state, shape);
+  }
+
+  /** Replace this alias family's current CPU value and return the same handle. */
+  copy_(source: Tensor): this {
+    if (arguments.length !== 1) throw new TypeError("copy_ requires exactly one tensor.");
+    const state = requireTensorState(this);
+    runtimeSessionAccess(state.session).copy(state, source);
+    return this;
   }
 
   toArray(): Promise<Float32Array> {
@@ -639,8 +602,19 @@ export class RuntimeSession {
   readonly #gpuBackend: WebGpuExecutionBackend | undefined;
   readonly #history = new DerivativeHistory<TensorValue>(
     (value) => this.#retainValue(value), (value) => this.#releaseValue(value),
+    (value) => this.#validateSavedValue(value),
+    (value) => value.outcomes,
   );
   #cleanupFailures: unknown[] | undefined;
+  readonly #undeliveredEffects = new Set<EffectFailure>();
+  #mutationFailure: EffectFailure | undefined;
+  readonly #writers = new WriterOutcomeLedger();
+  #valueReferences = 0;
+  #liveBackingBytes = 0;
+  #pendingCopies = 0;
+  #copyCompletion: { readonly promise: Promise<void>; readonly resolve: () => void } | undefined;
+  readonly #updateLimits: UpdateLimits;
+  readonly #beforeCopyPublication: (() => void) | undefined;
   readonly #materializations = new MaterializationTable();
   readonly #states = new Set<TensorState>();
   readonly #values = new Set<TensorValue>();
@@ -674,15 +648,23 @@ export class RuntimeSession {
     );
     this.#onProgramFormed = testConfiguration?.onProgramFormed;
     this.#beforeReadback = testConfiguration?.beforeReadback;
+    this.#beforeCopyPublication = testConfiguration?.beforeCopyPublication;
+    this.#updateLimits = Object.freeze({ ...DEFAULT_UPDATE_LIMITS, ...testConfiguration?.updateLimits });
+    for (const limit of Object.values(this.#updateLimits)) {
+      if (!Number.isSafeInteger(limit) || limit < 0) throw new TypeError("Update limits must be nonnegative safe integers.");
+    }
     RUNTIME_SESSION_ACCESS.set(this, Object.freeze({
       recordingMode: () => { this.#assertOpen(); return this.#recording; },
       enterNoGrad: () => this.#enterNoGrad(),
       restoreRecording: (previous: boolean) => { this.#recording = previous; },
       prepare: () => this.#prepare(),
+      complete: () => this.#complete(),
       observeSynchronously: (state: TensorState) => this.#observeSynchronously(state),
       binary: (definition: EqualShapeBinaryOperationDefinition, left: TensorState, rightHandle: unknown) => (
         this.#binary(definition, left, rightHandle)
       ),
+      ownership: () => this.#ownership(),
+      copy: (destination: TensorState, source: unknown) => this.#copy(destination, source),
       sum: (source: TensorState) => this.#sum(source),
       view: (source: TensorState, shape: unknown) => this.#view(source, shape),
       observe: (state: TensorState) => this.#observe(state),
@@ -800,17 +782,35 @@ export class RuntimeSession {
       throw new TabgradError("UNUSED_INPUT", "A requested input has no derivative accumulator.");
     }
     const plan = this.#history.plan(result.history, requested.map((input) => input.history!));
+    const outcomes = captureWriterOutcomes([result.value.outcomes, ...plan.outcomes, explicitSeed?.value.outcomes ?? []]);
+    if (outcomes.length !== 0) {
+      // Reserve a conservative bound for all contributions before seed admission
+      // or consumption. Each binary recipe emits at most two contributions and
+      // their additions; counting all of them also bounds the transient peak.
+      const additionalBytes = (explicitSeed === undefined ? 4 : 0)
+        + plan.order.reduce((bytes, node) => bytes + tensorElementCount(node.shape) * 20, 0);
+      this.#checkUpdateCapacity((plan.order.length * 20 + requested.length * 4 + 10) * (outcomes.length + 1), additionalBytes);
+    }
     const seed = explicitSeed === undefined
       ? this.tensor([1], { shape: result.value.shape }) : this.#borrowValue(explicitSeed.value);
     try {
-      return this.#history.execute(plan, seed, {
+      const gradients = this.#history.execute(plan, seed, {
         borrow: (value) => this.#borrowValue(value),
         add: (left, right) => left.add(right),
         mul: (left, right) => left.mul(right),
         view: (value, shape) => value.view(shape),
         expand: (value, shape) => this.#expand(value, shape),
+        zeros: (shape) => this.tensor(new Float32Array(tensorElementCount(shape)), { shape }),
         close: (value) => value.close(),
       });
+      for (const gradient of gradients) {
+        const value = requireTensorState(gradient).family.current;
+        const combined = captureWriterOutcomes([value.outcomes, outcomes]);
+        retainWriterOutcomes(combined);
+        releaseWriterOutcomes(value.outcomes);
+        value.outcomes = combined;
+      }
+      return gradients;
     } finally { seed.close(); }
   }
 
@@ -852,15 +852,180 @@ export class RuntimeSession {
     }
   }
 
+  #resolveHistory(state: TensorState): DerivativeNode<TensorValue> | null {
+    if (!state.isView) return state.family.history;
+    if (state.specialView && state.requiresGrad && state.historyVersion !== state.family.version) {
+      throw new TabgradError("INPLACE_VIEW", "A view created in no_grad was modified in place, or its base was modified while recording.");
+    }
+    // Creation provenance survives an active child view and is independent
+    // of its bound derivative entry. Keep the original epoch even while plain.
+    if (state.specialView) return state.viewHistory;
+    if (state.historyVersion === state.family.version) return state.viewHistory;
+    const previous = state.viewHistory;
+    state.viewHistory = state.requiresGrad
+      ? this.#history.record(state.shape, IDENTITY_DERIVATIVE, [state.family.history], [state.value])
+      : null;
+    state.historyVersion = state.family.version;
+    if (previous !== null) this.#history.release(previous);
+    return state.viewHistory;
+  }
+
+  #validateSavedValue(value: TensorValue): void {
+    if (value.versionCounter !== null && value.versionCounter.value !== value.version) {
+      throw new TabgradError("SAVED_VERSION_MISMATCH", "A tensor saved for differentiation was modified in place.", {
+        expectedVersion: value.version, actualVersion: value.versionCounter!.value,
+      });
+    }
+  }
+
   #borrowValue(value: TensorValue): Tensor {
-    this.#retainValue(value);
-    return this.#createHandle(value);
+    const captured = new TensorValue(value, null, value.storage);
+    captured.storage.references += 1;
+    captured.outcomes = captureWriterOutcomes([value.outcomes]);
+    retainWriterOutcomes(captured.outcomes);
+    this.#values.add(captured);
+    this.#valueReferences += 1;
+    return this.#createHandle(captured);
+  }
+
+  #copy(destination: TensorState, sourceHandle: unknown): void {
+    assertTensorOpen(destination);
+    const source = requireTensorState(sourceHandle);
+    assertTensorOpen(source);
+    if (source.session !== this) throw new TabgradError("DIFFERENT_SESSION", "Copy tensors must belong to this session.");
+    if (destination.value.device !== "cpu" || source.value.device !== "cpu") {
+      throw new TabgradError("UNSUPPORTED_DEVICE", "Persistent copy requires CPU tensors.");
+    }
+    if (this.#recording && destination.specialView && (destination.requiresGrad || source.requiresGrad)) {
+      throw new TabgradError("INPLACE_VIEW", "A view created in no_grad cannot be updated while recording gradients.");
+    }
+    if (this.#recording && destination.family.requiresGrad && destination.family.history?.recipe === null) {
+      throw new TabgradError("INPLACE_GRADIENT", "A leaf requiring gradients, or its view, cannot be updated while recording.");
+    }
+    if (this.#mutationFailure !== undefined) {
+      throw new TabgradError("MUTATION_FAILED", "A failed write prevents further updates in this session.", {}, this.#mutationFailure.error);
+    }
+    if (!equalTensorShapes(destination.shape, source.shape)) {
+      throw new TabgradError("SHAPE_MISMATCH", "Copy requires equal tensor shapes.");
+    }
+    const previous = destination.family.current;
+    const captured = source.value;
+    const prerequisites = captureWriterOutcomes([previous.outcomes, captured.outcomes]);
+    this.#checkUpdateCapacity(9 + prerequisites.length * 2);
+    if (this.#pendingCopies >= this.#updateLimits.pendingCopies || destination.family.version >= Number.MAX_SAFE_INTEGER) {
+      throw new TabgradError("RESOURCE_EXHAUSTED", "Persistent copy admission exceeds its pending-count or version capacity.");
+    }
+    const outcome = this.#writers.create();
+    const previousHistory = destination.family.history;
+    const history = this.#recording && (destination.requiresGrad || source.requiresGrad)
+      ? this.#history.record(previous.shape, destination.isView ? COPY_SLICES_DERIVATIVE : COPY_DERIVATIVE, [previousHistory, source.history], [previous, captured], [outcome])
+      : previousHistory;
+    const next = new TensorValue({ ...previous, shape: previous.shape }, null, captured.storage);
+    next.storage.references += 1;
+    next.versionCounter = destination.family.versionCounter;
+    next.version = destination.family.version + 1;
+    next.outcomes = [outcome];
+    retainWriterOutcomes(next.outcomes);
+    this.#retainValue(captured);
+    retainWriterOutcomes(prerequisites);
+    this.#values.add(next);
+    this.#valueReferences += 1;
+    this.#pendingCopies += 1;
+    if (history !== previousHistory) {
+      destination.family.history = history;
+      destination.family.requiresGrad = destination.requiresGrad || source.requiresGrad;
+    }
+    destination.family.current = next;
+    destination.family.version = next.version;
+    this.#enqueue(this.#copyEffect(captured, prerequisites, outcome), () => {
+      this.#pendingCopies -= 1;
+      if (this.#pendingCopies === 0) {
+        this.#copyCompletion?.resolve();
+        this.#copyCompletion = undefined;
+      }
+      let failures: unknown[] | undefined;
+      try { this.#releaseValue(captured); } catch (error) { (failures ??= []).push(error); }
+      try { releaseWriterOutcomes(prerequisites); } catch (error) { (failures ??= []).push(error); }
+      throwCleanupFailures(failures, "Copy effect retirement failed.");
+    });
+    let failures: unknown[] | undefined;
+    if (history !== previousHistory && previousHistory !== null) {
+      try { this.#history.release(previousHistory); } catch (error) { (failures ??= []).push(error); }
+    }
+    try { this.#releaseValue(previous); } catch (error) { (failures ??= []).push(error); }
+    throwCleanupFailures(failures, "Committed copy predecessor retirement failed.");
+  }
+
+  #checkUpdateCapacity(additionalOwners: number, additionalBytes = 0): void {
+    const owners = this.#valueReferences + this.#history.references + this.#writers.references
+      + this.#requestLeases + this.#undeliveredEffects.size;
+    if (owners + additionalOwners > this.#updateLimits.owners || this.#liveBackingBytes + additionalBytes > this.#updateLimits.backingBytes) {
+      throw new TabgradError("RESOURCE_EXHAUSTED", "Persistent update captures exceed the session capacity.", {
+        owners, additionalOwners, maximumOwners: this.#updateLimits.owners,
+        backingBytes: this.#liveBackingBytes, additionalBytes, maximumBackingBytes: this.#updateLimits.backingBytes,
+      });
+    }
+  }
+
+  *#copyEffect(source: TensorValue, prerequisites: readonly WriterOutcome[], outcome: WriterOutcome): Generator<ExecutionStep, void, unknown> {
+    const priorFailure = failedWriterOutcome(prerequisites) ?? this.#mutationFailure;
+    if (priorFailure !== undefined) {
+      outcome.state = { kind: "failure", failure: priorFailure };
+      return;
+    }
+    try {
+      const formed = this.#formProgram(source);
+      const backend = this.#backendFor(source.device, "copy_");
+      if (this.#materializations.get(source)?.kind !== "host") {
+        yield* this.#prepareBackend(backend, formed.program);
+        yield* this.#materialize(source, formed, backend);
+      }
+      backend.assertAvailable();
+      this.#beforeCopyPublication?.();
+      outcome.state = { kind: "success" };
+    } catch (error) {
+      const failure: EffectFailure = { error, delivered: false };
+      outcome.state = { kind: "failure", failure };
+      this.#undeliveredEffects.add(failure);
+      this.#mutationFailure ??= failure;
+    }
+  }
+
+  #deliverFailure(failure: EffectFailure): void {
+    failure.delivered = true;
+    this.#undeliveredEffects.delete(failure);
+  }
+
+  async #complete(): Promise<void> {
+    // Managed entry must join its mandatory CPU effects, while an unrelated
+    // failed GPU observation may still own a separately supervised drain lease.
+    if (this.#pendingCopies !== 0) {
+      if (this.#copyCompletion === undefined) {
+        let resolve!: () => void;
+        const promise = new Promise<void>((completed) => { resolve = completed; });
+        this.#copyCompletion = { promise, resolve };
+      }
+      await this.#copyCompletion.promise;
+    }
+    const failures = [...this.#undeliveredEffects];
+    for (const failure of failures) this.#deliverFailure(failure);
+    throwCleanupFailures(failures.map((failure) => failure.error), "Runtime effects failed.");
+  }
+
+  #checkCapturedAdmission(values: readonly TensorValue[], shape?: readonly number[], extraOwners = 0): void {
+    if (this.#writers.references === 0) return;
+    const outcomes = captureWriterOutcomes(values.map(value => value.outcomes));
+    if (outcomes.length !== 0) {
+      this.#checkUpdateCapacity((values.length * 10 + extraOwners + 2) * (outcomes.length + 1),
+        shape === undefined ? 0 : tensorElementCount(shape) * 4);
+    }
   }
 
   #sum(source: TensorState): Tensor {
     assertTensorOpen(source);
     this.#requireComputation(source.value, SUM_OPERATION);
     const admitted = SUM_OPERATION.admit(source);
+    this.#checkCapturedAdmission([source.value], admitted.outputMetadata.shape);
     const history = !this.#recording || !source.requiresGrad ? null
       : this.#history.record(admitted.outputMetadata.shape, SUM_OPERATION.derivative, [source.history], [source.value]);
     return this.#recordOperation(admitted, history);
@@ -871,6 +1036,7 @@ export class RuntimeSession {
     if (tensorElementCount(value.shape) !== 1) {
       throw new TabgradError("INVALID_GRADIENT", "Scalar expansion requires a one-element input.");
     }
+    this.#checkCapturedAdmission([value], shape);
     return this.#recordOperation({
       record: new OperationRecord(EXPAND_OPERATION, [value]),
       outputMetadata: { shape, dtype: value.dtype, device: value.device, layout: value.layout },
@@ -882,6 +1048,7 @@ export class RuntimeSession {
     const admitted = definition.admit(this, left, rightHandle);
     this.#requireComputation(left.value, definition);
     const right = requireTensorState(rightHandle);
+    this.#checkCapturedAdmission(admitted.record.inputs, admitted.outputMetadata.shape);
     const history = !this.#recording || (!left.requiresGrad && !right.requiresGrad) ? null
       : this.#history.record(admitted.outputMetadata.shape, definition.derivative,
         [left.history, right.history], [left.value, right.value]);
@@ -893,6 +1060,7 @@ export class RuntimeSession {
       this.#retainValue(input);
     }
     const result = new TensorValue(admitted.outputMetadata, admitted.record);
+    result.outcomes = captureWriterOutcomes(admitted.record.inputs.map((input) => input.outcomes));
     this.#registerValue(result);
     return this.#createHandle(result, history);
   }
@@ -900,12 +1068,19 @@ export class RuntimeSession {
   #view(source: TensorState, shape: unknown): Tensor {
     const metadata = VIEW_OPERATION.admit(source, shape);
     this.#backendFor(source.value.device, "view");
-    const value = new TensorValue(metadata, null, source.value.storage);
-    value.storage.references += 1;
-    this.#values.add(value);
+    const captured = source.value;
+    this.#checkCapturedAdmission([captured], undefined, 4);
+    const value = new TensorValue(metadata, null, captured.storage);
+    value.references = 0;
+    value.versionCounter = source.family.versionCounter;
+    value.version = source.family.version;
+    value.outcomes = captured.outcomes;
     const history = !this.#recording || !source.requiresGrad ? null
-      : this.#history.record(value.shape, VIEW_OPERATION.derivative, [source.history], [source.value]);
-    return this.#createHandle(value, history, source.requiresGrad);
+      : this.#history.record(value.shape, VIEW_OPERATION.derivative, [source.history], [captured]);
+    source.family.handles += 1;
+    const state = new TensorState(this, value, history, source.requiresGrad, source.family, !this.#recording || source.specialView, (state) => this.#resolveHistory(state));
+    this.#states.add(state);
+    return createTensorHandle(state);
   }
 
   #prepare(): Promise<void> {
@@ -923,8 +1098,10 @@ export class RuntimeSession {
 
   #observe(state: TensorState): Promise<Float32Array> {
     this.#assertOpen();
-    this.#retainValue(state.value);
-    return this.#enqueue(this.#observation(state.value), () => this.#releaseValue(state.value)).asPromise();
+    const captured = state.value;
+    this.#checkCapturedAdmission([captured]);
+    this.#retainValue(captured);
+    return this.#enqueue(this.#observation(captured), () => this.#releaseValue(captured)).asPromise();
   }
 
   #observeSynchronously(state: TensorState): Float32Array {
@@ -937,13 +1114,20 @@ export class RuntimeSession {
         "Synchronous observation requires local readiness and no pending asynchronous predecessor.",
       );
     }
-    this.#retainValue(state.value);
-    return this.#enqueue(this.#observation(state.value), () => this.#releaseValue(state.value)).read();
+    const captured = state.value;
+    this.#checkCapturedAdmission([captured]);
+    this.#retainValue(captured);
+    return this.#enqueue(this.#observation(captured), () => this.#releaseValue(captured)).read();
   }
 
   *#observation(value: TensorValue): Generator<ExecutionStep, Float32Array, unknown> {
     const formed = this.#formProgram(value);
     try {
+      const writerFailure = failedWriterOutcome(value.outcomes);
+      if (writerFailure !== undefined) {
+        this.#deliverFailure(writerFailure);
+        throw writerFailure.error;
+      }
       const backend = this.#backendFor(value.device, "observe");
       const host = this.#materializations.get(value);
       if (host?.kind === "host" && value.device === "cpu") {
@@ -973,6 +1157,20 @@ export class RuntimeSession {
     } catch (error) {
       throw retainProgramFailureContext(error, formed.program, "execution");
     }
+  }
+
+  #ownership(): RuntimeOwnership {
+    const families = new Set([...this.#states].map((state) => state.family));
+    const backings = new Set([...this.#values].map((value) => value.storage));
+    const valueReferences = [...this.#values].reduce((total, value) => total + value.references, 0);
+    const backingBytes = [...backings].reduce((total, backing) => total + tensorElementCount(backing.value.shape) * 4, 0);
+    const controlReferences = [...this.#writers.live].reduce((total, outcome) => total + outcome.references, 0);
+    if (valueReferences !== this.#valueReferences || backingBytes !== this.#liveBackingBytes || controlReferences !== this.#writers.references) {
+      throw new TabgradError("BACKEND_STATUS_ERROR", "Live ownership and its admission accounting disagree.");
+    }
+    return { families: families.size, backings: backings.size, backingBytes, valueReferences,
+      derivativeReferences: this.#history.references, writerOutcomes: this.#writers.live.size,
+      controlReferences, pendingCopies: this.#pendingCopies, undeliveredEffects: this.#undeliveredEffects.size };
   }
 
   diagnostics(): RuntimeDiagnostics {
@@ -1014,6 +1212,8 @@ export class RuntimeSession {
 
   async #finishClose(failures: unknown[]): Promise<void> {
     await this.#drainRequests();
+    for (const failure of this.#undeliveredEffects) { failures.push(failure.error); failure.delivered = true; }
+    this.#undeliveredEffects.clear();
     for (const materialization of this.#materializations.values()) {
       if (materialization.kind === "resident") {
         try { materialization.backend.release(materialization.allocation); }
@@ -1037,31 +1237,45 @@ export class RuntimeSession {
   #releaseHandle(state: TensorState): void {
     this.#states.delete(state);
     let failures: unknown[] | undefined;
-    if (state.history !== null) {
-      try { this.#history.release(state.history); }
+    if (state.viewHistory !== null) {
+      try { this.#history.release(state.viewHistory); }
       catch (error) { (failures ??= []).push(error); }
     }
-    try { this.#releaseValue(state.value); }
-    catch (error) { (failures ??= []).push(error); }
+    state.family.handles -= 1;
+    if (state.family.handles === 0) {
+      if (state.family.history !== null) {
+        try { this.#history.release(state.family.history); }
+        catch (error) { (failures ??= []).push(error); }
+      }
+      try { this.#releaseValue(state.family.current); }
+      catch (error) { (failures ??= []).push(error); }
+    }
     throwCleanupFailures(failures, "Tensor handle cleanup failed.");
   }
 
   #createHandle(value: TensorValue, history: DerivativeNode<TensorValue> | null = null,
     requiresGrad: boolean = history !== null): Tensor {
-    const state = new TensorState(this, value, history, requiresGrad);
+    const state = new TensorState(this, value, history, requiresGrad, undefined, false, (state) => this.#resolveHistory(state));
     this.#states.add(state);
     return createTensorHandle(state);
   }
 
   #registerValue(value: TensorValue): void {
     this.#values.add(value);
+    this.#valueReferences += 1;
+    if (value.storage.value === value && value.storage.references === 1) {
+      this.#liveBackingBytes += tensorElementCount(value.shape) * 4;
+    }
+    retainWriterOutcomes(value.outcomes);
     if (value.producer !== null) {
       this.#operationRecords += 1;
     }
   }
 
   #retainValue(value: TensorValue): void {
+    if (value.references === 0) { this.#values.add(value); retainWriterOutcomes(value.outcomes); }
     value.references += 1;
+    this.#valueReferences += 1;
     value.storage.references += 1;
   }
 
@@ -1073,6 +1287,7 @@ export class RuntimeSession {
     while (pending.length > 0) {
       const current = pending.pop()!;
       current.references -= 1;
+      this.#valueReferences -= 1;
       current.storage.references -= 1;
       if (current.references < 0) {
         throw new TabgradError(
@@ -1080,8 +1295,9 @@ export class RuntimeSession {
           "A tensor value was released more times than it was retained.",
         );
       }
-      if (current.references === 0) this.#values.delete(current);
+      if (current.references === 0) { this.#values.delete(current); releaseWriterOutcomes(current.outcomes); }
       if (current.storage.references > 0) continue;
+      this.#liveBackingBytes -= tensorElementCount(current.storage.value.shape) * 4;
       const materialization = this.#materializations.delete(current);
       if (materialization?.kind === "resident") {
         try { materialization.backend.release(materialization.allocation); }
@@ -1298,6 +1514,11 @@ export function prepareRuntimeSession(session: RuntimeSession): Promise<void> {
   return runtimeSessionAccess(session).prepare();
 }
 
+/** @internal Join mandatory effects at managed entry completion. */
+export function completeRuntimeSession(session: RuntimeSession): Promise<void> {
+  return runtimeSessionAccess(session).complete();
+}
+
 /** @internal Attach a library-owned physical connection, not a public backend SPI. */
 export function createConnectedRuntimeSession(backend: WebGpuExecutionBackend): RuntimeSession {
   return new RuntimeSession({ [RUNTIME_SESSION_GPU_BACKEND]: backend } as InternalRuntimeSessionOptions);
@@ -1318,11 +1539,15 @@ export function createRuntimeSessionForTesting(
   options: RuntimeSessionOptions & { readonly forceVariant: WasmVariant },
   onProgramFormed?: (program: ExecutableProgram) => void,
   beforeReadback?: () => void,
+  beforeCopyPublication?: () => void,
+  updateLimits?: Partial<UpdateLimits>,
 ): RuntimeSession {
   const testConfiguration: RuntimeSessionTestConfiguration = {
     forceVariant: options.forceVariant,
     ...(onProgramFormed === undefined ? {} : { onProgramFormed }),
     ...(beforeReadback === undefined ? {} : { beforeReadback }),
+    ...(beforeCopyPublication === undefined ? {} : { beforeCopyPublication }),
+    ...(updateLimits === undefined ? {} : { updateLimits }),
   };
   return new RuntimeSession({
     ...options,
@@ -1358,4 +1583,36 @@ export function inspectTensorAncestryForTesting(handle: Tensor): {
     }
   }
   return { values: seen.size, operations, releasedValues };
+}
+
+/** @internal Inspect actual descriptor reachability, beyond live-owner counters. */
+export function inspectTensorReachabilityForTesting(handle: Tensor): { readonly values: number; readonly families: number } {
+  const pending: object[] = [requireTensorState(handle).value];
+  const seen = new Set<object>();
+  let values = 0;
+  let families = 0;
+  while (pending.length !== 0) {
+    const object = pending.pop()!;
+    if (seen.has(object)) continue;
+    seen.add(object);
+    if (object instanceof TensorValue) values += 1;
+    if ("current" in object && "handles" in object) families += 1;
+    for (const key of Object.keys(object)) {
+      // Control outcomes and causal diagnostics are separate from numeric reachability.
+      if (key === "outcomes" || key === "provenance") continue;
+      const child: unknown = Reflect.get(object, key);
+      if (typeof child === "object" && child !== null) pending.push(child);
+    }
+  }
+  return { values, families };
+}
+
+/** @internal Inspect production owners, without retaining inspected objects. */
+export function inspectRuntimeOwnershipForTesting(session: RuntimeSession): RuntimeOwnership {
+  return runtimeSessionAccess(session).ownership();
+}
+
+/** @internal Native version-counter diagnostic, outside the supported public API. */
+export function inspectTensorVersionForTesting(handle: Tensor): number {
+  return requireTensorState(handle).family.version;
 }

@@ -10,16 +10,21 @@ to calling the public tensor API.
 
 The [semantic architecture](../architecture/semantic-state.md) distinguishes a
 public tensor identity, a logical value and its physical storage. Here those
-roles are represented by a handle's `TensorState`, its immutable `TensorValue`
-metadata and a shared `StorageState`. The session's `MaterializationTable` keys
+roles are represented by a handle's `TensorState`, its mutable `TensorFamily`,
+captured `TensorValue` metadata and a shared `StorageState`. The private
+`tensor-family.ts` and `tensor-value.ts` separate current identity from captured
+numbers. Numeric descriptors retain only a shared version counter, not a family
+or its newer current value. The session's `MaterializationTable` keys
 host or resident data by storage identity. Its backend allocation has a separate
 release obligation.
 
 ## Who keeps a value alive?
 
-The session accounts for an open handle, an uncompleted producer that consumes
-the value, an accepted observation request and an independently saved derivative
-operand. A [history pin](derivative-history.md) protects the same logical value
+The session accounts for one current numeric pin per live alias family (F),
+each pure input occurrence or saved operand (R), and each accepted observation
+or mandatory effect capture (Q). Multiple views share F; they do not add
+independent numeric current pins. Captured values independently retain storage.
+Payload-free writer outcomes (C) are separate control owners. A [history pin](derivative-history.md) protects the same logical value
 and storage while owning no physical allocation. An
 operation may consume the same input more than once; each input position owns
 its corresponding reference. Releasing a handle ends only that handle's
@@ -123,10 +128,10 @@ its public handle closes before completion.
 
 ## Costs and extension boundary
 
-Every handle, numerical input occurrence and accepted observation owns a value
-reference and contributes one shared-storage reference. A shape-only alias adds
-one owner directly to `StorageState`; it has no numerical producer or owning
-edge to the preceding view. Closing a base therefore cannot destroy a sibling,
+Every family current, numerical input occurrence and accepted request owns a
+value reference and contributes one shared-storage reference. A shape-only alias
+adds a family handle and optional derivative entry; it has no additional F pin,
+numerical producer or owning edge to the preceding view. Closing a base therefore cannot destroy a sibling,
 and a long metadata chain need not retain its intermediate handles or shapes.
 Storage retains its original value descriptor to preserve the producing
 operation's shape and provenance during formation, even when that original
@@ -137,9 +142,9 @@ Shared producer dependencies detach once after successful publication, even
 when several aliases remain. No alias scan is needed to publish materialization
 or determine whether the last storage owner has disappeared. Saved derivative
 operands add references at these same semantic owners; physical allocation and
-completion remain backend responsibilities. Mutation would additionally require
-logical storage versions, which the contiguous shape-only contract does not
-implement.
+completion remain backend responsibilities. CPU copy moves the family current/version once at admission while older R/Q
+pins retain immutable backing. Publication releases no second F pin. The
+[copy reference](../reference/tensor-copy.md) defines the finite capture budgets.
 
 For a release that reaches `V` newly unowned values and `E` input references,
 semantic bookkeeping takes `O(V + E)` work. Each producer detaches once, and

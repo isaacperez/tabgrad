@@ -55,6 +55,7 @@ test("the JavaScript package entry point exposes only the supported runtime surf
         "add",
         "close",
         "constructor",
+        "copy_",
         "device",
         "dtype",
         "mul",
@@ -86,6 +87,7 @@ test("the public declarations do not expose runtime-to-backend plumbing", async 
   assert.match(declarations, /sum\(\): Tensor/);
   assert.match(declarations, /mul\(right: Tensor\): Tensor/);
   assert.match(declarations, /get requiresGrad\(\): boolean/);
+  assert.match(declarations, /copy_\(source: Tensor\): this/);
   assert.match(declarations, /grad\(output: Tensor, inputs: readonly Tensor\[\], gradient\?: Tensor\): Tensor\[\]/);
 
   for (const internalName of [

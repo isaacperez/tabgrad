@@ -2031,3 +2031,27 @@ test("managed results do not destroy a host-owned JavaScript object", {
     interpreter.runPython("import sys; sys.modules.pop('_binding_test_result', None); None");
   }
 });
+
+test("Python persistent CPU copies match pinned native workflows and binding", { timeout: 20_000 }, async (context) => {
+  const oracle = JSON.parse(await readFile(new URL("../../fixtures/python-tensor-oracle.json", import.meta.url), "utf8"));
+  const { attachPython } = await import("../../../dist/python.js");
+  const interpreter = await getInterpreter();
+  const binding = await attachPython(interpreter);
+  try {
+    for (const fixture of oracle.copyCases) {
+      await context.test(fixture.name, async () => {
+        await binding.runPythonAsync(`
+import torch, json, gc
+def check_copy_fixture():
+${fixture.source.trimEnd().split("\n").map((line) => `    ${line}`).join("\n")}
+    assert report == json.loads(${JSON.stringify(JSON.stringify(fixture.expected))}), ${JSON.stringify(fixture.name)}
+check_copy_fixture()
+gc.collect()
+`);
+      });
+    }
+  } finally {
+    await binding.close();
+    interpreter.runPython("[globals().pop(name, None) for name in ('check_copy_fixture', 'torch', 'json', 'gc')]; None");
+  }
+});
