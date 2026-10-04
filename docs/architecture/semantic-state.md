@@ -176,6 +176,10 @@ An optimizer update can replace the current `TensorValue` of a parameter.
 `TensorState` and the differentiable leaf identity remain stable, so gradients
 and optimizer state continue to attach to the parameter the user knows.
 
+[Persistent CPU tensor updates](cpu-tensor-updates.md) defines the bounded
+specialization: independent alias versions can share immutable numerical
+backings while captured reads and writer outcomes retain separate ownership.
+
 ## The incremental semantic graph
 
 The collection of `TensorValue` and `OperationRecord` objects plus dependency

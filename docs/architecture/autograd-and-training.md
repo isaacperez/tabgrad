@@ -104,6 +104,10 @@ drains.
 This separation allows a completed forward to release ordinary records while
 retaining exactly the saved logical state that backward still needs.
 
+The [persistent CPU update contract](cpu-tensor-updates.md) specializes these
+rules for active and no-grad copies, current versus bound derivative entries,
+consumable state and causal outcomes carried by payload-free derivatives.
+
 ## Branching and accumulation
 
 A tensor may contribute to several later paths. Its gradient is ready only

@@ -160,6 +160,9 @@ Read the documents in this order when learning the architecture:
    and device loss.
 9. [Automatic differentiation and training](autograd-and-training.md) shows how
    backward computation and optimizer effects reuse the ordinary path.
+   [Persistent CPU tensor updates](cpu-tensor-updates.md) specializes identity,
+   version, derivative and effect ownership for a bounded update, including
+   immutable backing sharing and failure recovery.
 10. [Reusable programs and compiled callables](reusable-programs.md) explains how
    stable repeated work avoids repeated formation while retaining fresh runtime
    state.
