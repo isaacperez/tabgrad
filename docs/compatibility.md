@@ -17,6 +17,41 @@ specified inputs, and tested environments. Passing a few examples does not
 establish general compatibility. Differences must be explicit and must not be
 hidden behind silent fallback behavior.
 
+### Preserve observable PyTorch behavior throughout the work
+
+For a PyTorch-facing operation, establish the reference behavior before choosing
+its design or implementation. The internal representation, execution strategy
+and backend may differ; the covered user-visible behavior may not be replaced
+with a simpler or more convenient contract.
+
+Record the relevant signatures, defaults and calling forms; return types and
+identity; numerical comparison rules; shapes, dtypes and devices; aliasing and
+mutation; gradient recording and connectivity; state transitions; and error
+categories and observable validation boundaries. Include composition and mode
+interactions when they can change those facts. Use versioned official sources
+and the prepared native oracle for unresolved behavior. Missing evidence is an
+unresolved question, not permission to invent semantics.
+
+Define the intended subset before evaluating alternatives. A new exclusion or
+Tabgrad-specific requirement that rejects a valid reference call needs an
+explicit scope decision under [CONTRIBUTING.md](../CONTRIBUTING.md) and
+[project management](project-management.md), with its consequence explained;
+implementation convenience or documenting the difference afterward does not
+establish that decision. Existing documented exclusions remain bounded
+exclusions, not evidence that PyTorch rejects the call. This rule does not claim
+the entire PyTorch surface or turn Tabgrad integration/lifecycle extensions
+into native PyTorch behavior.
+
+Carry that observable contract and its contrary cases through research,
+implementation and independent verification. Compare the same covered calls
+against the pinned reference, with declared numerical tolerances and explicit
+environment limits. A discrepancy requires correction or an unresolved scope
+decision; do not change a reference-backed expected result to accommodate the
+implementation, silently narrow the domain or declare compatibility merely
+because Tabgrad's own tests agree. An internal architectural alternative that
+changes covered observable semantics does not qualify as a compatible
+alternative.
+
 Use these statuses:
 
 | Status | Meaning |

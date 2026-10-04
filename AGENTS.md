@@ -8,6 +8,10 @@ repository work.
 Read the relevant documentation under `docs/` before changing behavior,
 public APIs, compatibility guarantees, or architecture.
 
+Before researching, designing, implementing, reviewing or verifying a
+PyTorch-facing operation, apply the
+[observable-behavior rule](docs/compatibility.md#preserve-observable-pytorch-behavior-throughout-the-work).
+
 Keep project identity and normative documentation independent of implementation
 phase or roadmap status. Apply the durable-document and work-tracking boundary
 defined in `docs/documentation.md`.
