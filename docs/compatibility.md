@@ -200,28 +200,6 @@ to native rejection. Official references are
 [PyTorch 2.14 functional gradients](https://docs.pytorch.org/docs/2.14/generated/torch.autograd.grad.html)
 and [autograd mechanics](https://docs.pytorch.org/docs/2.14/notes/autograd.html).
 
-### Functional failure progress
-
-At integrated revision `7177488b66db00629e3737cee8b36495534d4d89`, functional
-CPU differentiation prevalidates every selected save and consumes history only
-after complete derivative construction. This is a known observable discrepancy
-from native PyTorch 2.14.0, not a native argument restriction or a compatible
-atomicity guarantee. With a newer good multiplication before an older branch
-whose saved operand was mutated, native executes and consumes the good recipe
-before the later saved-version error. Retrying or separately requesting the
-good branch then fails with consumed history. Current Tabgrad scalar/SIMD
-instead reports saved-version failure again and can still return the separate
-good gradient (`[10, 14]` in the pinned control).
-
-The [native matrix](https://github.com/isaacperez/tabgrad/issues/167#issuecomment-5996427284)
-and [production reproduction](https://github.com/isaacperez/tabgrad/issues/167#issuecomment-5996430687)
-record environments, frozen sources and complete failure/retry observations.
-The accepted [per-node design](architecture/cpu-gradient-state.md#progress-and-failure-belong-to-executing-nodes)
-requires the correction for functional and accumulating differentiation.
-Documenting that contract changes no runtime behavior and qualifies no
-`backward`, `.grad` or training support. Existing successful gradient fixtures
-remain evidence for their own cases, not for native failure-progress parity.
-
 Real Pyodide tests also consume those numerical fixtures through `tolist()` and
 check independent lists of Python floats, nested control flow, common demand
 with JavaScript, entry-context rejection and failure ownership. Browser
@@ -251,6 +229,28 @@ admission. This scope excludes native broadcasting, number sources, conversion,
 GPU mutation and broader gradients. Deferred backend failure is a Tabgrad
 integration contract. Existing read-only GPU consumers retain their separate
 qualification; CPU mutation does not expand that GPU domain.
+
+### Functional failure progress
+
+At integrated revision `7177488b66db00629e3737cee8b36495534d4d89`, functional
+CPU differentiation prevalidates every selected save and consumes history only
+after complete derivative construction. This is a known observable discrepancy
+from native PyTorch 2.14.0, not a native argument restriction or a compatible
+atomicity guarantee. With a newer good multiplication before an older branch
+whose saved operand was mutated, native executes and consumes the good recipe
+before the later saved-version error. Retrying or separately requesting the
+good branch then fails with consumed history. Current Tabgrad scalar/SIMD
+instead reports saved-version failure again and can still return the separate
+good gradient (`[10, 14]` in the pinned control).
+
+The [native matrix](https://github.com/isaacperez/tabgrad/issues/167#issuecomment-5996427284)
+and [production reproduction](https://github.com/isaacperez/tabgrad/issues/167#issuecomment-5996430687)
+record environments, frozen sources and complete failure/retry observations.
+The accepted [per-node design](architecture/cpu-gradient-state.md#progress-and-failure-belong-to-executing-nodes)
+requires the correction for functional and accumulating differentiation.
+Documenting that contract changes no runtime behavior and qualifies no
+`backward`, `.grad` or training support. Existing successful gradient fixtures
+remain evidence for their own cases, not for native failure-progress parity.
 
 ### Contents of a release record
 
