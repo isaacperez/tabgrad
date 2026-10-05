@@ -124,8 +124,8 @@ executes before an older multiplication with a mutated save, native functional
 differentiation consumes the good recipe before the later saved-version error.
 Retrying, or requesting the good branch separately, can then fail with consumed
 history. Leaving the good branch reusable would change user-visible behavior.
-The [versioned compatibility limitation](../compatibility.md#functional-failure-progress)
-records the existing implementation's different result. The per-node rule here
+The [versioned compatibility evidence](../compatibility.md#functional-failure-progress)
+records the historical discrepancy and bounds qualified functional behavior. The per-node rule here
 supersedes the former whole-selected saved-preflight/no-partial-derivative
 architectural guarantee for both functional and accumulating differentiation.
 
