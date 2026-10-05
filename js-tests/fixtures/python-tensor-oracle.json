@@ -4950,6 +4950,2907 @@
       ]
     }
   ],
+  "backwardCases": [
+    {
+      "name": "binding-default",
+      "kind": "binding",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\n\nx = tensor([2., 3.])\nunused = tensor([4., 5.])\nplain = tensor([1., 1.], False)\nmid = x*x\nout = (mid+x).sum()\ncall=attempt(lambda: out.backward())\n\nreport = {'call': call, 'x': state(x.grad), 'unused': state(unused.grad), 'mid': state(mid.grad), 'out': state(out.grad)}\n",
+      "expected": {
+        "call": {
+          "none": true
+        },
+        "x": {
+          "values": [
+            5.0,
+            7.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "unused": null,
+        "mid": null,
+        "out": null
+      }
+    },
+    {
+      "name": "binding-positional",
+      "kind": "binding",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\n\nx = tensor([2., 3.])\nunused = tensor([4., 5.])\nplain = tensor([1., 1.], False)\nmid = x*x\nout = (mid+x).sum()\ncall=attempt(lambda: out.backward(None, False, False, [x]))\n\nreport = {'call': call, 'x': state(x.grad), 'unused': state(unused.grad), 'mid': state(mid.grad), 'out': state(out.grad)}\n",
+      "expected": {
+        "call": {
+          "none": true
+        },
+        "x": {
+          "values": [
+            5.0,
+            7.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "unused": null,
+        "mid": null,
+        "out": null
+      }
+    },
+    {
+      "name": "binding-integers",
+      "kind": "binding",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\n\nx = tensor([2., 3.])\nunused = tensor([4., 5.])\nplain = tensor([1., 1.], False)\nmid = x*x\nout = (mid+x).sum()\ncall=attempt(lambda: out.backward(None, 0, 0, [x]))\n\nreport = {'call': call, 'x': state(x.grad), 'unused': state(unused.grad), 'mid': state(mid.grad), 'out': state(out.grad)}\n",
+      "expected": {
+        "call": {
+          "none": true
+        },
+        "x": {
+          "values": [
+            5.0,
+            7.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "unused": null,
+        "mid": null,
+        "out": null
+      }
+    },
+    {
+      "name": "binding-tensor",
+      "kind": "binding",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\n\nx = tensor([2., 3.])\nunused = tensor([4., 5.])\nplain = tensor([1., 1.], False)\nmid = x*x\nout = (mid+x).sum()\ncall=attempt(lambda: out.backward(inputs=x))\n\nreport = {'call': call, 'x': state(x.grad), 'unused': state(unused.grad), 'mid': state(mid.grad), 'out': state(out.grad)}\n",
+      "expected": {
+        "call": {
+          "none": true
+        },
+        "x": {
+          "values": [
+            5.0,
+            7.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "unused": null,
+        "mid": null,
+        "out": null
+      }
+    },
+    {
+      "name": "binding-tuple",
+      "kind": "binding",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\n\nx = tensor([2., 3.])\nunused = tensor([4., 5.])\nplain = tensor([1., 1.], False)\nmid = x*x\nout = (mid+x).sum()\ncall=attempt(lambda: out.backward(inputs=(x,)))\n\nreport = {'call': call, 'x': state(x.grad), 'unused': state(unused.grad), 'mid': state(mid.grad), 'out': state(out.grad)}\n",
+      "expected": {
+        "call": {
+          "none": true
+        },
+        "x": {
+          "values": [
+            5.0,
+            7.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "unused": null,
+        "mid": null,
+        "out": null
+      }
+    },
+    {
+      "name": "binding-dictionary",
+      "kind": "binding",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\n\nx = tensor([2., 3.])\nunused = tensor([4., 5.])\nplain = tensor([1., 1.], False)\nmid = x*x\nout = (mid+x).sum()\ncall=attempt(lambda: out.backward(inputs={'x': x}))\n\nreport = {'call': call, 'x': state(x.grad), 'unused': state(unused.grad), 'mid': state(mid.grad), 'out': state(out.grad)}\n",
+      "expected": {
+        "call": {
+          "none": true
+        },
+        "x": {
+          "values": [
+            5.0,
+            7.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "unused": null,
+        "mid": null,
+        "out": null
+      }
+    },
+    {
+      "name": "binding-generator",
+      "kind": "binding",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\n\nx = tensor([2., 3.])\nunused = tensor([4., 5.])\nplain = tensor([1., 1.], False)\nmid = x*x\nout = (mid+x).sum()\ncall=attempt(lambda: out.backward(inputs=(item for item in [x])))\n\nreport = {'call': call, 'x': state(x.grad), 'unused': state(unused.grad), 'mid': state(mid.grad), 'out': state(out.grad)}\n",
+      "expected": {
+        "call": {
+          "none": true
+        },
+        "x": {
+          "values": [
+            5.0,
+            7.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "unused": null,
+        "mid": null,
+        "out": null
+      }
+    },
+    {
+      "name": "binding-unused",
+      "kind": "binding",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\n\nx = tensor([2., 3.])\nunused = tensor([4., 5.])\nplain = tensor([1., 1.], False)\nmid = x*x\nout = (mid+x).sum()\ncall=attempt(lambda: out.backward(inputs=[unused]))\n\nreport = {'call': call, 'x': state(x.grad), 'unused': state(unused.grad), 'mid': state(mid.grad), 'out': state(out.grad)}\n",
+      "expected": {
+        "call": {
+          "none": true
+        },
+        "x": null,
+        "unused": null,
+        "mid": null,
+        "out": null
+      }
+    },
+    {
+      "name": "binding-used-unused",
+      "kind": "binding",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\n\nx = tensor([2., 3.])\nunused = tensor([4., 5.])\nplain = tensor([1., 1.], False)\nmid = x*x\nout = (mid+x).sum()\ncall=attempt(lambda: out.backward(inputs=[x, unused]))\n\nreport = {'call': call, 'x': state(x.grad), 'unused': state(unused.grad), 'mid': state(mid.grad), 'out': state(out.grad)}\n",
+      "expected": {
+        "call": {
+          "none": true
+        },
+        "x": {
+          "values": [
+            5.0,
+            7.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "unused": null,
+        "mid": null,
+        "out": null
+      }
+    },
+    {
+      "name": "binding-repeated",
+      "kind": "binding",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\n\nx = tensor([2., 3.])\nunused = tensor([4., 5.])\nplain = tensor([1., 1.], False)\nmid = x*x\nout = (mid+x).sum()\ncall=attempt(lambda: out.backward(inputs=[x, x]))\n\nreport = {'call': call, 'x': state(x.grad), 'unused': state(unused.grad), 'mid': state(mid.grad), 'out': state(out.grad)}\n",
+      "expected": {
+        "call": {
+          "none": true
+        },
+        "x": {
+          "values": [
+            5.0,
+            7.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "unused": null,
+        "mid": null,
+        "out": null
+      }
+    },
+    {
+      "name": "binding-nonleaf",
+      "kind": "binding",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\n\nx = tensor([2., 3.])\nunused = tensor([4., 5.])\nplain = tensor([1., 1.], False)\nmid = x*x\nout = (mid+x).sum()\ncall=attempt(lambda: out.backward(inputs=[mid]))\n\nreport = {'call': call, 'x': state(x.grad), 'unused': state(unused.grad), 'mid': state(mid.grad), 'out': state(out.grad)}\n",
+      "expected": {
+        "call": {
+          "none": true
+        },
+        "x": null,
+        "unused": null,
+        "mid": {
+          "values": [
+            1.0,
+            1.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "out": null
+      }
+    },
+    {
+      "name": "binding-nonleaf-leaf",
+      "kind": "binding",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\n\nx = tensor([2., 3.])\nunused = tensor([4., 5.])\nplain = tensor([1., 1.], False)\nmid = x*x\nout = (mid+x).sum()\ncall=attempt(lambda: out.backward(inputs=[mid, x]))\n\nreport = {'call': call, 'x': state(x.grad), 'unused': state(unused.grad), 'mid': state(mid.grad), 'out': state(out.grad)}\n",
+      "expected": {
+        "call": {
+          "none": true
+        },
+        "x": {
+          "values": [
+            5.0,
+            7.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "unused": null,
+        "mid": {
+          "values": [
+            1.0,
+            1.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "out": null
+      }
+    },
+    {
+      "name": "binding-root",
+      "kind": "binding",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\n\nx = tensor([2., 3.])\nunused = tensor([4., 5.])\nplain = tensor([1., 1.], False)\nmid = x*x\nout = (mid+x).sum()\ncall=attempt(lambda: out.backward(inputs=[out]))\n\nreport = {'call': call, 'x': state(x.grad), 'unused': state(unused.grad), 'mid': state(mid.grad), 'out': state(out.grad)}\n",
+      "expected": {
+        "call": {
+          "none": true
+        },
+        "x": null,
+        "unused": null,
+        "mid": null,
+        "out": {
+          "values": 1.0,
+          "shape": [],
+          "tracking": false
+        }
+      }
+    },
+    {
+      "name": "binding-empty",
+      "kind": "binding",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\n\nx = tensor([2., 3.])\nunused = tensor([4., 5.])\nplain = tensor([1., 1.], False)\nmid = x*x\nout = (mid+x).sum()\ncall=attempt(lambda: out.backward(inputs=[]))\n\nreport = {'call': call, 'x': state(x.grad), 'unused': state(unused.grad), 'mid': state(mid.grad), 'out': state(out.grad)}\n",
+      "expected": {
+        "call": {
+          "error": "RuntimeError"
+        },
+        "x": null,
+        "unused": null,
+        "mid": null,
+        "out": null
+      }
+    },
+    {
+      "name": "binding-empty-dict",
+      "kind": "binding",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\n\nx = tensor([2., 3.])\nunused = tensor([4., 5.])\nplain = tensor([1., 1.], False)\nmid = x*x\nout = (mid+x).sum()\ncall=attempt(lambda: out.backward(inputs={}))\n\nreport = {'call': call, 'x': state(x.grad), 'unused': state(unused.grad), 'mid': state(mid.grad), 'out': state(out.grad)}\n",
+      "expected": {
+        "call": {
+          "error": "RuntimeError"
+        },
+        "x": null,
+        "unused": null,
+        "mid": null,
+        "out": null
+      }
+    },
+    {
+      "name": "binding-untracked",
+      "kind": "binding",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\n\nx = tensor([2., 3.])\nunused = tensor([4., 5.])\nplain = tensor([1., 1.], False)\nmid = x*x\nout = (mid+x).sum()\ncall=attempt(lambda: out.backward(inputs=[plain]))\n\nreport = {'call': call, 'x': state(x.grad), 'unused': state(unused.grad), 'mid': state(mid.grad), 'out': state(out.grad)}\n",
+      "expected": {
+        "call": {
+          "error": "RuntimeError"
+        },
+        "x": null,
+        "unused": null,
+        "mid": null,
+        "out": null
+      }
+    },
+    {
+      "name": "binding-invalid",
+      "kind": "binding",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\n\nx = tensor([2., 3.])\nunused = tensor([4., 5.])\nplain = tensor([1., 1.], False)\nmid = x*x\nout = (mid+x).sum()\ncall=attempt(lambda: out.backward(inputs=[1]))\n\nreport = {'call': call, 'x': state(x.grad), 'unused': state(unused.grad), 'mid': state(mid.grad), 'out': state(out.grad)}\n",
+      "expected": {
+        "call": {
+          "error": "RuntimeError"
+        },
+        "x": null,
+        "unused": null,
+        "mid": null,
+        "out": null
+      }
+    },
+    {
+      "name": "binding-bad-dict",
+      "kind": "binding",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\n\nx = tensor([2., 3.])\nunused = tensor([4., 5.])\nplain = tensor([1., 1.], False)\nmid = x*x\nout = (mid+x).sum()\ncall=attempt(lambda: out.backward(inputs={'x': 1}))\n\nreport = {'call': call, 'x': state(x.grad), 'unused': state(unused.grad), 'mid': state(mid.grad), 'out': state(out.grad)}\n",
+      "expected": {
+        "call": {
+          "error": "RuntimeError"
+        },
+        "x": null,
+        "unused": null,
+        "mid": null,
+        "out": null
+      }
+    },
+    {
+      "name": "binding-string",
+      "kind": "binding",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\n\nx = tensor([2., 3.])\nunused = tensor([4., 5.])\nplain = tensor([1., 1.], False)\nmid = x*x\nout = (mid+x).sum()\ncall=attempt(lambda: out.backward(inputs='x'))\n\nreport = {'call': call, 'x': state(x.grad), 'unused': state(unused.grad), 'mid': state(mid.grad), 'out': state(out.grad)}\n",
+      "expected": {
+        "call": {
+          "error": "RuntimeError"
+        },
+        "x": null,
+        "unused": null,
+        "mid": null,
+        "out": null
+      }
+    },
+    {
+      "name": "binding-bad-gradient",
+      "kind": "binding",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\n\nx = tensor([2., 3.])\nunused = tensor([4., 5.])\nplain = tensor([1., 1.], False)\nmid = x*x\nout = (mid+x).sum()\ncall=attempt(lambda: out.backward(gradient=1))\n\nreport = {'call': call, 'x': state(x.grad), 'unused': state(unused.grad), 'mid': state(mid.grad), 'out': state(out.grad)}\n",
+      "expected": {
+        "call": {
+          "error": "TypeError"
+        },
+        "x": null,
+        "unused": null,
+        "mid": null,
+        "out": null
+      }
+    },
+    {
+      "name": "binding-bad-shape",
+      "kind": "binding",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\n\nx = tensor([2., 3.])\nunused = tensor([4., 5.])\nplain = tensor([1., 1.], False)\nmid = x*x\nout = (mid+x).sum()\ncall=attempt(lambda: out.backward(gradient=plain))\n\nreport = {'call': call, 'x': state(x.grad), 'unused': state(unused.grad), 'mid': state(mid.grad), 'out': state(out.grad)}\n",
+      "expected": {
+        "call": {
+          "error": "RuntimeError"
+        },
+        "x": null,
+        "unused": null,
+        "mid": null,
+        "out": null
+      }
+    },
+    {
+      "name": "binding-create-none",
+      "kind": "binding",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\n\nx = tensor([2., 3.])\nunused = tensor([4., 5.])\nplain = tensor([1., 1.], False)\nmid = x*x\nout = (mid+x).sum()\ncall=attempt(lambda: out.backward(create_graph=None))\n\nreport = {'call': call, 'x': state(x.grad), 'unused': state(unused.grad), 'mid': state(mid.grad), 'out': state(out.grad)}\n",
+      "expected": {
+        "call": {
+          "error": "TypeError"
+        },
+        "x": null,
+        "unused": null,
+        "mid": null,
+        "out": null
+      }
+    },
+    {
+      "name": "binding-retain-string",
+      "kind": "binding",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\n\nx = tensor([2., 3.])\nunused = tensor([4., 5.])\nplain = tensor([1., 1.], False)\nmid = x*x\nout = (mid+x).sum()\ncall=attempt(lambda: out.backward(retain_graph='false'))\n\nreport = {'call': call, 'x': state(x.grad), 'unused': state(unused.grad), 'mid': state(mid.grad), 'out': state(out.grad)}\n",
+      "expected": {
+        "call": {
+          "error": "TypeError"
+        },
+        "x": null,
+        "unused": null,
+        "mid": null,
+        "out": null
+      }
+    },
+    {
+      "name": "binding-unknown-keyword",
+      "kind": "binding",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\n\nx = tensor([2., 3.])\nunused = tensor([4., 5.])\nplain = tensor([1., 1.], False)\nmid = x*x\nout = (mid+x).sum()\ncall=attempt(lambda: out.backward(foo=False))\n\nreport = {'call': call, 'x': state(x.grad), 'unused': state(unused.grad), 'mid': state(mid.grad), 'out': state(out.grad)}\n",
+      "expected": {
+        "call": {
+          "error": "TypeError"
+        },
+        "x": null,
+        "unused": null,
+        "mid": null,
+        "out": null
+      }
+    },
+    {
+      "name": "binding-too-many",
+      "kind": "binding",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\n\nx = tensor([2., 3.])\nunused = tensor([4., 5.])\nplain = tensor([1., 1.], False)\nmid = x*x\nout = (mid+x).sum()\ncall=attempt(lambda: out.backward(None, False, False, [x], 1))\n\nreport = {'call': call, 'x': state(x.grad), 'unused': state(unused.grad), 'mid': state(mid.grad), 'out': state(out.grad)}\n",
+      "expected": {
+        "call": {
+          "error": "TypeError"
+        },
+        "x": null,
+        "unused": null,
+        "mid": null,
+        "out": null
+      }
+    },
+    {
+      "name": "binding-duplicate-gradient",
+      "kind": "binding",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\n\nx = tensor([2., 3.])\nunused = tensor([4., 5.])\nplain = tensor([1., 1.], False)\nmid = x*x\nout = (mid+x).sum()\ncall=attempt(lambda: out.backward(None, gradient=None))\n\nreport = {'call': call, 'x': state(x.grad), 'unused': state(unused.grad), 'mid': state(mid.grad), 'out': state(out.grad)}\n",
+      "expected": {
+        "call": {
+          "error": "TypeError"
+        },
+        "x": null,
+        "unused": null,
+        "mid": null,
+        "out": null
+      }
+    },
+    {
+      "name": "binding-none-sequence",
+      "kind": "binding",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\n\nx = tensor([2., 3.])\nunused = tensor([4., 5.])\nplain = tensor([1., 1.], False)\nmid = x*x\nout = (mid+x).sum()\ncall=attempt(lambda: out.backward([None]))\n\nreport = {'call': call, 'x': state(x.grad), 'unused': state(unused.grad), 'mid': state(mid.grad), 'out': state(out.grad)}\n",
+      "expected": {
+        "call": {
+          "none": true
+        },
+        "x": {
+          "values": [
+            5.0,
+            7.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "unused": null,
+        "mid": null,
+        "out": null
+      }
+    },
+    {
+      "name": "accumulation-reset",
+      "kind": "transition",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\n\nx = tensor([2., 3.])\nfirst = (x*x).sum().backward()\ng = x.grad\nalias = g.view(1, 2)\ninitial = state(g)\n(x*x).sum().backward()\nsecond = state(g)\nsame = x.grad is g\nwith torch.no_grad():\n    g.copy_(tensor([0., 0.], False))\n(x*x).sum().backward()\nreset = state(g)\nx.grad = None\n(x*x).sum().backward()\nreport = {'none': first is None, 'initial': initial, 'second': second, 'same': same, 'reset': reset, 'new': state(x.grad), 'old': state(g), 'alias': state(alias), 'different': x.grad is not g}\n",
+      "expected": {
+        "none": true,
+        "initial": {
+          "values": [
+            4.0,
+            6.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "second": {
+          "values": [
+            8.0,
+            12.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "same": true,
+        "reset": {
+          "values": [
+            4.0,
+            6.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "new": {
+          "values": [
+            4.0,
+            6.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "old": {
+          "values": [
+            4.0,
+            6.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "alias": {
+          "values": [
+            [
+              4.0,
+              6.0
+            ]
+          ],
+          "shape": [
+            1,
+            2
+          ],
+          "tracking": false
+        },
+        "different": true
+      }
+    },
+    {
+      "name": "assigned-tracked",
+      "kind": "transition",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\n\nx = tensor([2., 3.])\ng = tensor([10., 20.])\nx.grad = g\n(x*x).sum().backward()\nreport = {'same': x.grad is g, 'gradient': state(g)}\n",
+      "expected": {
+        "same": true,
+        "gradient": {
+          "values": [
+            14.0,
+            26.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": true
+        }
+      }
+    },
+    {
+      "name": "shared-slot",
+      "kind": "transition",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\n\nx = tensor([2., 3.]); y = tensor([5., 7.]); g = tensor([10., 20.], False)\nx.grad = g; y.grad = g\n(x+y+y).sum().backward()\nreport = {'xSame': x.grad is g, 'ySame': y.grad is g, 'gradient': state(g)}\n",
+      "expected": {
+        "xSame": true,
+        "ySame": true,
+        "gradient": {
+          "values": [
+            13.0,
+            23.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        }
+      }
+    },
+    {
+      "name": "assigned-own-view",
+      "kind": "transition",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\n\nx = tensor([2., 3.]); g = x.view(2); x.grad = g\n(x*x).sum().backward()\nreport = {'same': x.grad is g, 'parameter': state(x), 'gradient': state(g)}\n",
+      "expected": {
+        "same": true,
+        "parameter": {
+          "values": [
+            6.0,
+            9.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": true
+        },
+        "gradient": {
+          "values": [
+            6.0,
+            9.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": true
+        }
+      }
+    },
+    {
+      "name": "nonleaf-replacement",
+      "kind": "transition",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\n\nx = tensor([2., 3.]); mid=x+x; out=mid.sum()\nout.backward(inputs=[mid]); old=mid.grad\nout.backward(inputs=[mid])\nreport = {'different': mid.grad is not old, 'old': state(old), 'new': state(mid.grad), 'leaf': state(x.grad)}\n",
+      "expected": {
+        "different": true,
+        "old": {
+          "values": [
+            1.0,
+            1.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "new": {
+          "values": [
+            2.0,
+            2.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "leaf": null
+      }
+    },
+    {
+      "name": "functional-retained",
+      "kind": "transition",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\n\nx=tensor([2., 3.]); mid=x+x; mid.sum().backward(inputs=[mid]); old=mid.grad\nreturned,=torch.autograd.grad((mid+mid).sum(), x)\nreport={'different':mid.grad is not old, 'old':state(old), 'new':state(mid.grad), 'returned':state(returned), 'leaf':state(x.grad)}\n",
+      "expected": {
+        "different": true,
+        "old": {
+          "values": [
+            1.0,
+            1.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "new": {
+          "values": [
+            3.0,
+            3.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "returned": {
+          "values": [
+            4.0,
+            4.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "leaf": null
+      }
+    },
+    {
+      "name": "functional-cutoff",
+      "kind": "transition",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\n\nx=tensor([2., 3.]); mid=x*x; mid.sum().backward(inputs=[mid]); old=mid.grad\nwith torch.no_grad(): x.copy_(tensor([4., 5.],False))\nreturned,=torch.autograd.grad(mid.sum(),mid)\nreport={'different':mid.grad is not old, 'old':state(old), 'new':state(mid.grad), 'returned':state(returned), 'leaf':state(x.grad)}\n",
+      "expected": {
+        "different": true,
+        "old": {
+          "values": [
+            1.0,
+            1.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "new": {
+          "values": [
+            2.0,
+            2.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "returned": {
+          "values": [
+            1.0,
+            1.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "leaf": null
+      }
+    },
+    {
+      "name": "selected-failure",
+      "kind": "transition",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\n\nx=tensor([2.,3.]); mid=x*x\nwith torch.no_grad(): x.copy_(tensor([4.,5.],False))\ncall=attempt(lambda: mid.backward(tensor([1.,1.],False),inputs=[mid]))\nreport={'call':call,'retained':state(mid.grad),'leaf':state(x.grad)}\n",
+      "expected": {
+        "call": {
+          "error": "RuntimeError"
+        },
+        "retained": {
+          "values": [
+            1.0,
+            1.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "leaf": null
+      }
+    },
+    {
+      "name": "validation-retention",
+      "kind": "transition",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\n\nx=tensor([2.,3.]); mid=x+x; out=mid.sum(); plain=tensor([1.,1.],False)\ncall=attempt(lambda:out.backward(inputs=[mid,plain]))\nout.backward()\nreport={'call':call,'retained':state(mid.grad),'leaf':state(x.grad)}\n",
+      "expected": {
+        "call": {
+          "error": "RuntimeError"
+        },
+        "retained": {
+          "values": [
+            1.0,
+            1.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "leaf": {
+          "values": [
+            2.0,
+            2.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        }
+      }
+    },
+    {
+      "name": "partial-retry",
+      "kind": "transition",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\n\nx=tensor([2.,3.]);y=tensor([5.,7.]);bad=x*x;good=y+y;out=(bad+good).sum()\nwith torch.no_grad():x.copy_(tensor([4.,5.],False))\nfirst=attempt(lambda:out.backward());initial=state(y.grad)\nsecond=attempt(lambda:out.backward());later=state(y.grad)\n(x+y).sum().backward()\nreport={'first':first,'initial':initial,'second':second,'later':later,'x':state(x.grad),'y':state(y.grad)}\n",
+      "expected": {
+        "first": {
+          "error": "RuntimeError"
+        },
+        "initial": {
+          "values": [
+            2.0,
+            2.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "second": {
+          "error": "RuntimeError"
+        },
+        "later": {
+          "values": [
+            4.0,
+            4.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "x": {
+          "values": [
+            1.0,
+            1.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "y": {
+          "values": [
+            5.0,
+            5.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        }
+      }
+    },
+    {
+      "name": "shape-scalar-False",
+      "kind": "shape",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\nx=tensor(2.);seed=tensor(2.,False);out=x*x\ncall=attempt(lambda:out.backward(seed))\nreport={'call':call,'gradient':state(x.grad),'seed':state(seed)}\n",
+      "expected": {
+        "call": {
+          "none": true
+        },
+        "gradient": {
+          "values": 8.0,
+          "shape": [],
+          "tracking": false
+        },
+        "seed": {
+          "values": 2.0,
+          "shape": [],
+          "tracking": false
+        }
+      }
+    },
+    {
+      "name": "shape-scalar-True",
+      "kind": "shape",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\nx=tensor(2.);seed=tensor(2.,True);out=x*x\ncall=attempt(lambda:out.backward(seed))\nreport={'call':call,'gradient':state(x.grad),'seed':state(seed)}\n",
+      "expected": {
+        "call": {
+          "none": true
+        },
+        "gradient": {
+          "values": 8.0,
+          "shape": [],
+          "tracking": false
+        },
+        "seed": {
+          "values": 2.0,
+          "shape": [],
+          "tracking": true
+        }
+      }
+    },
+    {
+      "name": "shape-singleton-False",
+      "kind": "shape",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\nx=tensor([[2.]]);seed=tensor([[2.]],False);out=x*x\ncall=attempt(lambda:out.backward(seed))\nreport={'call':call,'gradient':state(x.grad),'seed':state(seed)}\n",
+      "expected": {
+        "call": {
+          "none": true
+        },
+        "gradient": {
+          "values": [
+            [
+              8.0
+            ]
+          ],
+          "shape": [
+            1,
+            1
+          ],
+          "tracking": false
+        },
+        "seed": {
+          "values": [
+            [
+              2.0
+            ]
+          ],
+          "shape": [
+            1,
+            1
+          ],
+          "tracking": false
+        }
+      }
+    },
+    {
+      "name": "shape-singleton-True",
+      "kind": "shape",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\nx=tensor([[2.]]);seed=tensor([[2.]],True);out=x*x\ncall=attempt(lambda:out.backward(seed))\nreport={'call':call,'gradient':state(x.grad),'seed':state(seed)}\n",
+      "expected": {
+        "call": {
+          "none": true
+        },
+        "gradient": {
+          "values": [
+            [
+              8.0
+            ]
+          ],
+          "shape": [
+            1,
+            1
+          ],
+          "tracking": false
+        },
+        "seed": {
+          "values": [
+            [
+              2.0
+            ]
+          ],
+          "shape": [
+            1,
+            1
+          ],
+          "tracking": true
+        }
+      }
+    },
+    {
+      "name": "shape-matrix-False",
+      "kind": "shape",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\nx=tensor([[1.,2.],[3.,4.]]);seed=tensor([[1.,2.],[3.,4.]],False);out=x*x\ncall=attempt(lambda:out.backward(seed))\nreport={'call':call,'gradient':state(x.grad),'seed':state(seed)}\n",
+      "expected": {
+        "call": {
+          "none": true
+        },
+        "gradient": {
+          "values": [
+            [
+              2.0,
+              8.0
+            ],
+            [
+              18.0,
+              32.0
+            ]
+          ],
+          "shape": [
+            2,
+            2
+          ],
+          "tracking": false
+        },
+        "seed": {
+          "values": [
+            [
+              1.0,
+              2.0
+            ],
+            [
+              3.0,
+              4.0
+            ]
+          ],
+          "shape": [
+            2,
+            2
+          ],
+          "tracking": false
+        }
+      }
+    },
+    {
+      "name": "shape-matrix-True",
+      "kind": "shape",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\nx=tensor([[1.,2.],[3.,4.]]);seed=tensor([[1.,2.],[3.,4.]],True);out=x*x\ncall=attempt(lambda:out.backward(seed))\nreport={'call':call,'gradient':state(x.grad),'seed':state(seed)}\n",
+      "expected": {
+        "call": {
+          "none": true
+        },
+        "gradient": {
+          "values": [
+            [
+              2.0,
+              8.0
+            ],
+            [
+              18.0,
+              32.0
+            ]
+          ],
+          "shape": [
+            2,
+            2
+          ],
+          "tracking": false
+        },
+        "seed": {
+          "values": [
+            [
+              1.0,
+              2.0
+            ],
+            [
+              3.0,
+              4.0
+            ]
+          ],
+          "shape": [
+            2,
+            2
+          ],
+          "tracking": true
+        }
+      }
+    },
+    {
+      "name": "shape-empty-False",
+      "kind": "shape",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\nx=tensor([]);seed=tensor([],False);out=x*x\ncall=attempt(lambda:out.backward(seed))\nreport={'call':call,'gradient':state(x.grad),'seed':state(seed)}\n",
+      "expected": {
+        "call": {
+          "none": true
+        },
+        "gradient": {
+          "values": [],
+          "shape": [
+            0
+          ],
+          "tracking": false
+        },
+        "seed": {
+          "values": [],
+          "shape": [
+            0
+          ],
+          "tracking": false
+        }
+      }
+    },
+    {
+      "name": "shape-empty-True",
+      "kind": "shape",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\nx=tensor([]);seed=tensor([],True);out=x*x\ncall=attempt(lambda:out.backward(seed))\nreport={'call':call,'gradient':state(x.grad),'seed':state(seed)}\n",
+      "expected": {
+        "call": {
+          "none": true
+        },
+        "gradient": {
+          "values": [],
+          "shape": [
+            0
+          ],
+          "tracking": false
+        },
+        "seed": {
+          "values": [],
+          "shape": [
+            0
+          ],
+          "tracking": true
+        }
+      }
+    },
+    {
+      "name": "seed-alias-False-False",
+      "kind": "seed-alias",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\nx=tensor([2.,3.]);seed=tensor([5.,7.],False);out=x if False else x.view(2)\nout.backward(seed);g=x.grad\nwith torch.no_grad():seed.copy_(tensor([9.,11.],False))\nafter=state(g)\nwith torch.no_grad():g.copy_(tensor([13.,17.],False))\nreport={'afterSeed':after,'gradient':state(g),'seed':state(seed),'same':x.grad is g}\n",
+      "expected": {
+        "afterSeed": {
+          "values": [
+            9.0,
+            11.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "gradient": {
+          "values": [
+            13.0,
+            17.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "seed": {
+          "values": [
+            13.0,
+            17.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "same": true
+      }
+    },
+    {
+      "name": "seed-alias-False-True",
+      "kind": "seed-alias",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\nx=tensor([2.,3.]);seed=tensor([5.,7.],True);out=x if False else x.view(2)\nout.backward(seed);g=x.grad\nwith torch.no_grad():seed.copy_(tensor([9.,11.],False))\nafter=state(g)\nwith torch.no_grad():g.copy_(tensor([13.,17.],False))\nreport={'afterSeed':after,'gradient':state(g),'seed':state(seed),'same':x.grad is g}\n",
+      "expected": {
+        "afterSeed": {
+          "values": [
+            9.0,
+            11.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "gradient": {
+          "values": [
+            13.0,
+            17.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "seed": {
+          "values": [
+            13.0,
+            17.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": true
+        },
+        "same": true
+      }
+    },
+    {
+      "name": "seed-alias-True-False",
+      "kind": "seed-alias",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\nx=tensor([2.,3.]);seed=tensor([5.,7.],False);out=x if True else x.view(2)\nout.backward(seed);g=x.grad\nwith torch.no_grad():seed.copy_(tensor([9.,11.],False))\nafter=state(g)\nwith torch.no_grad():g.copy_(tensor([13.,17.],False))\nreport={'afterSeed':after,'gradient':state(g),'seed':state(seed),'same':x.grad is g}\n",
+      "expected": {
+        "afterSeed": {
+          "values": [
+            5.0,
+            7.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "gradient": {
+          "values": [
+            13.0,
+            17.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "seed": {
+          "values": [
+            9.0,
+            11.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "same": true
+      }
+    },
+    {
+      "name": "seed-alias-True-True",
+      "kind": "seed-alias",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\nx=tensor([2.,3.]);seed=tensor([5.,7.],True);out=x if True else x.view(2)\nout.backward(seed);g=x.grad\nwith torch.no_grad():seed.copy_(tensor([9.,11.],False))\nafter=state(g)\nwith torch.no_grad():g.copy_(tensor([13.,17.],False))\nreport={'afterSeed':after,'gradient':state(g),'seed':state(seed),'same':x.grad is g}\n",
+      "expected": {
+        "afterSeed": {
+          "values": [
+            5.0,
+            7.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "gradient": {
+          "values": [
+            13.0,
+            17.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "seed": {
+          "values": [
+            9.0,
+            11.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": true
+        },
+        "same": true
+      }
+    },
+    {
+      "name": "rebase-directactive",
+      "kind": "rebase",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\nx=tensor([2.,3.]);y=tensor([5.,7.]);base=x+x;mid=base.view(2) if False else base\nold=(mid+mid).sum();mid.sum().backward(inputs=[mid]);initial=state(mid.grad)\nbase.copy_(y)\nafterCopy=state(mid.grad);oldCall=attempt(lambda:old.backward());afterOld=state(mid.grad)\nfreshCall=attempt(lambda:mid.sum().backward())\nreport={'initial':initial,'afterCopy':afterCopy,'oldCall':oldCall,'afterOld':afterOld,'freshCall':freshCall,'afterFresh':state(mid.grad),'leaf':state(x.grad),'source':state(y.grad)}\n",
+      "expected": {
+        "initial": {
+          "values": [
+            1.0,
+            1.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "afterCopy": {
+          "values": [
+            1.0,
+            1.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "oldCall": {
+          "none": true
+        },
+        "afterOld": {
+          "values": [
+            1.0,
+            1.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "freshCall": {
+          "none": true
+        },
+        "afterFresh": {
+          "values": [
+            2.0,
+            2.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "leaf": {
+          "values": [
+            4.0,
+            4.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "source": {
+          "values": [
+            1.0,
+            1.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        }
+      }
+    },
+    {
+      "name": "rebase-directnograd",
+      "kind": "rebase",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\nx=tensor([2.,3.]);y=tensor([5.,7.]);base=x+x;mid=base.view(2) if False else base\nold=(mid+mid).sum();mid.sum().backward(inputs=[mid]);initial=state(mid.grad)\nwith torch.no_grad(): base.copy_(y)\nafterCopy=state(mid.grad);oldCall=attempt(lambda:old.backward());afterOld=state(mid.grad)\nfreshCall=attempt(lambda:mid.sum().backward())\nreport={'initial':initial,'afterCopy':afterCopy,'oldCall':oldCall,'afterOld':afterOld,'freshCall':freshCall,'afterFresh':state(mid.grad),'leaf':state(x.grad),'source':state(y.grad)}\n",
+      "expected": {
+        "initial": {
+          "values": [
+            1.0,
+            1.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "afterCopy": {
+          "values": [
+            1.0,
+            1.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "oldCall": {
+          "none": true
+        },
+        "afterOld": {
+          "values": [
+            3.0,
+            3.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "freshCall": {
+          "none": true
+        },
+        "afterFresh": {
+          "values": [
+            4.0,
+            4.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "leaf": {
+          "values": [
+            6.0,
+            6.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "source": null
+      }
+    },
+    {
+      "name": "rebase-viewactive",
+      "kind": "rebase",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\nx=tensor([2.,3.]);y=tensor([5.,7.]);base=x+x;mid=base.view(2) if True else base\nold=(mid+mid).sum();mid.sum().backward(inputs=[mid]);initial=state(mid.grad)\nbase.copy_(y)\nafterCopy=state(mid.grad);oldCall=attempt(lambda:old.backward());afterOld=state(mid.grad)\nfreshCall=attempt(lambda:mid.sum().backward())\nreport={'initial':initial,'afterCopy':afterCopy,'oldCall':oldCall,'afterOld':afterOld,'freshCall':freshCall,'afterFresh':state(mid.grad),'leaf':state(x.grad),'source':state(y.grad)}\n",
+      "expected": {
+        "initial": {
+          "values": [
+            1.0,
+            1.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "afterCopy": {
+          "values": [
+            1.0,
+            1.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "oldCall": {
+          "none": true
+        },
+        "afterOld": {
+          "values": [
+            3.0,
+            3.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "freshCall": {
+          "none": true
+        },
+        "afterFresh": {
+          "values": [
+            4.0,
+            4.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "leaf": {
+          "values": [
+            4.0,
+            4.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "source": {
+          "values": [
+            1.0,
+            1.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        }
+      }
+    },
+    {
+      "name": "rebase-viewnograd",
+      "kind": "rebase",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\nx=tensor([2.,3.]);y=tensor([5.,7.]);base=x+x;mid=base.view(2) if True else base\nold=(mid+mid).sum();mid.sum().backward(inputs=[mid]);initial=state(mid.grad)\nwith torch.no_grad(): base.copy_(y)\nafterCopy=state(mid.grad);oldCall=attempt(lambda:old.backward());afterOld=state(mid.grad)\nfreshCall=attempt(lambda:mid.sum().backward())\nreport={'initial':initial,'afterCopy':afterCopy,'oldCall':oldCall,'afterOld':afterOld,'freshCall':freshCall,'afterFresh':state(mid.grad),'leaf':state(x.grad),'source':state(y.grad)}\n",
+      "expected": {
+        "initial": {
+          "values": [
+            1.0,
+            1.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "afterCopy": {
+          "values": [
+            1.0,
+            1.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "oldCall": {
+          "none": true
+        },
+        "afterOld": {
+          "values": [
+            3.0,
+            3.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "freshCall": {
+          "none": true
+        },
+        "afterFresh": {
+          "values": [
+            4.0,
+            4.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "leaf": {
+          "values": [
+            6.0,
+            6.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "source": null
+      }
+    },
+    {
+      "name": "rebase-viewwrite",
+      "kind": "rebase",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\nx=tensor([2.,3.]);y=tensor([5.,7.]);base=x+x;mid=base.view(2) if True else base\nold=(mid+mid).sum();mid.sum().backward(inputs=[mid]);initial=state(mid.grad)\nmid.copy_(y)\nafterCopy=state(mid.grad);oldCall=attempt(lambda:old.backward());afterOld=state(mid.grad)\nfreshCall=attempt(lambda:mid.sum().backward())\nreport={'initial':initial,'afterCopy':afterCopy,'oldCall':oldCall,'afterOld':afterOld,'freshCall':freshCall,'afterFresh':state(mid.grad),'leaf':state(x.grad),'source':state(y.grad)}\n",
+      "expected": {
+        "initial": {
+          "values": [
+            1.0,
+            1.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "afterCopy": {
+          "values": [
+            1.0,
+            1.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "oldCall": {
+          "none": true
+        },
+        "afterOld": {
+          "values": [
+            1.0,
+            1.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "freshCall": {
+          "none": true
+        },
+        "afterFresh": {
+          "values": [
+            2.0,
+            2.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "leaf": {
+          "values": [
+            4.0,
+            4.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "source": {
+          "values": [
+            1.0,
+            1.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        }
+      }
+    },
+    {
+      "name": "rebase-viewactiveforced",
+      "kind": "rebase",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\nx=tensor([2.,3.]);y=tensor([5.,7.]);base=x+x;mid=base.view(2) if True else base\nold=(mid+mid).sum();mid.sum().backward(inputs=[mid]);initial=state(mid.grad)\nbase.copy_(y)\nmarker=mid+mid\nafterCopy=state(mid.grad);oldCall=attempt(lambda:old.backward());afterOld=state(mid.grad)\nfreshCall=attempt(lambda:mid.sum().backward())\nreport={'initial':initial,'afterCopy':afterCopy,'oldCall':oldCall,'afterOld':afterOld,'freshCall':freshCall,'afterFresh':state(mid.grad),'leaf':state(x.grad),'source':state(y.grad)}\n",
+      "expected": {
+        "initial": {
+          "values": [
+            1.0,
+            1.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "afterCopy": {
+          "values": [
+            1.0,
+            1.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "oldCall": {
+          "none": true
+        },
+        "afterOld": {
+          "values": [
+            1.0,
+            1.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "freshCall": {
+          "none": true
+        },
+        "afterFresh": {
+          "values": [
+            2.0,
+            2.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "leaf": {
+          "values": [
+            4.0,
+            4.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "source": {
+          "values": [
+            1.0,
+            1.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        }
+      }
+    },
+    {
+      "name": "acquisition-add-False",
+      "kind": "acquisition",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\nx=tensor([2.,3.]);y=tensor([5.,7.]);seed=tensor([5.,7.],False);out=x+y\nout.backward(seed);gx=x.grad;gy=y.grad;initialX=state(gx);initialY=state(gy)\nwith torch.no_grad():seed.copy_(tensor([9.,9.],False))\nafterSeedX=state(gx);afterSeedY=state(gy)\nwith torch.no_grad():gx.copy_(tensor([13.,13.],False))\nreport={'initialX':initialX,'initialY':initialY,'afterSeedX':afterSeedX,'afterSeedY':afterSeedY,'afterX':state(gx),'afterY':state(gy),'seed':state(seed)}\n",
+      "expected": {
+        "initialX": {
+          "values": [
+            5.0,
+            7.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "initialY": {
+          "values": [
+            5.0,
+            7.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "afterSeedX": {
+          "values": [
+            5.0,
+            7.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "afterSeedY": {
+          "values": [
+            5.0,
+            7.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "afterX": {
+          "values": [
+            13.0,
+            13.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "afterY": {
+          "values": [
+            5.0,
+            7.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "seed": {
+          "values": [
+            9.0,
+            9.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        }
+      }
+    },
+    {
+      "name": "acquisition-add-True",
+      "kind": "acquisition",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\nx=tensor([2.,3.]);y=tensor([5.,7.]);seed=tensor([5.,7.],True);out=x+y\nout.backward(seed);gx=x.grad;gy=y.grad;initialX=state(gx);initialY=state(gy)\nwith torch.no_grad():seed.copy_(tensor([9.,9.],False))\nafterSeedX=state(gx);afterSeedY=state(gy)\nwith torch.no_grad():gx.copy_(tensor([13.,13.],False))\nreport={'initialX':initialX,'initialY':initialY,'afterSeedX':afterSeedX,'afterSeedY':afterSeedY,'afterX':state(gx),'afterY':state(gy),'seed':state(seed)}\n",
+      "expected": {
+        "initialX": {
+          "values": [
+            5.0,
+            7.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "initialY": {
+          "values": [
+            5.0,
+            7.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "afterSeedX": {
+          "values": [
+            5.0,
+            7.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "afterSeedY": {
+          "values": [
+            5.0,
+            7.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "afterX": {
+          "values": [
+            13.0,
+            13.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "afterY": {
+          "values": [
+            5.0,
+            7.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "seed": {
+          "values": [
+            9.0,
+            9.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": true
+        }
+      }
+    },
+    {
+      "name": "acquisition-repeated-False",
+      "kind": "acquisition",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\nx=tensor([2.,3.]);y=tensor([5.,7.]);seed=tensor([5.,7.],False);out=x+x\nout.backward(seed);gx=x.grad;gy=y.grad;initialX=state(gx);initialY=state(gy)\nwith torch.no_grad():seed.copy_(tensor([9.,9.],False))\nafterSeedX=state(gx);afterSeedY=state(gy)\nwith torch.no_grad():gx.copy_(tensor([13.,13.],False))\nreport={'initialX':initialX,'initialY':initialY,'afterSeedX':afterSeedX,'afterSeedY':afterSeedY,'afterX':state(gx),'afterY':state(gy),'seed':state(seed)}\n",
+      "expected": {
+        "initialX": {
+          "values": [
+            10.0,
+            14.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "initialY": null,
+        "afterSeedX": {
+          "values": [
+            10.0,
+            14.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "afterSeedY": null,
+        "afterX": {
+          "values": [
+            13.0,
+            13.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "afterY": null,
+        "seed": {
+          "values": [
+            9.0,
+            9.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        }
+      }
+    },
+    {
+      "name": "acquisition-repeated-True",
+      "kind": "acquisition",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\nx=tensor([2.,3.]);y=tensor([5.,7.]);seed=tensor([5.,7.],True);out=x+x\nout.backward(seed);gx=x.grad;gy=y.grad;initialX=state(gx);initialY=state(gy)\nwith torch.no_grad():seed.copy_(tensor([9.,9.],False))\nafterSeedX=state(gx);afterSeedY=state(gy)\nwith torch.no_grad():gx.copy_(tensor([13.,13.],False))\nreport={'initialX':initialX,'initialY':initialY,'afterSeedX':afterSeedX,'afterSeedY':afterSeedY,'afterX':state(gx),'afterY':state(gy),'seed':state(seed)}\n",
+      "expected": {
+        "initialX": {
+          "values": [
+            10.0,
+            14.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "initialY": null,
+        "afterSeedX": {
+          "values": [
+            10.0,
+            14.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "afterSeedY": null,
+        "afterX": {
+          "values": [
+            13.0,
+            13.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "afterY": null,
+        "seed": {
+          "values": [
+            9.0,
+            9.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": true
+        }
+      }
+    },
+    {
+      "name": "acquisition-triple-False",
+      "kind": "acquisition",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\nx=tensor([2.,3.]);y=tensor([5.,7.]);seed=tensor([5.,7.],False);out=x+x+x\nout.backward(seed);gx=x.grad;gy=y.grad;initialX=state(gx);initialY=state(gy)\nwith torch.no_grad():seed.copy_(tensor([9.,9.],False))\nafterSeedX=state(gx);afterSeedY=state(gy)\nwith torch.no_grad():gx.copy_(tensor([13.,13.],False))\nreport={'initialX':initialX,'initialY':initialY,'afterSeedX':afterSeedX,'afterSeedY':afterSeedY,'afterX':state(gx),'afterY':state(gy),'seed':state(seed)}\n",
+      "expected": {
+        "initialX": {
+          "values": [
+            15.0,
+            21.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "initialY": null,
+        "afterSeedX": {
+          "values": [
+            15.0,
+            21.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "afterSeedY": null,
+        "afterX": {
+          "values": [
+            13.0,
+            13.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "afterY": null,
+        "seed": {
+          "values": [
+            9.0,
+            9.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        }
+      }
+    },
+    {
+      "name": "acquisition-triple-True",
+      "kind": "acquisition",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\nx=tensor([2.,3.]);y=tensor([5.,7.]);seed=tensor([5.,7.],True);out=x+x+x\nout.backward(seed);gx=x.grad;gy=y.grad;initialX=state(gx);initialY=state(gy)\nwith torch.no_grad():seed.copy_(tensor([9.,9.],False))\nafterSeedX=state(gx);afterSeedY=state(gy)\nwith torch.no_grad():gx.copy_(tensor([13.,13.],False))\nreport={'initialX':initialX,'initialY':initialY,'afterSeedX':afterSeedX,'afterSeedY':afterSeedY,'afterX':state(gx),'afterY':state(gy),'seed':state(seed)}\n",
+      "expected": {
+        "initialX": {
+          "values": [
+            15.0,
+            21.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "initialY": null,
+        "afterSeedX": {
+          "values": [
+            15.0,
+            21.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "afterSeedY": null,
+        "afterX": {
+          "values": [
+            13.0,
+            13.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "afterY": null,
+        "seed": {
+          "values": [
+            9.0,
+            9.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": true
+        }
+      }
+    },
+    {
+      "name": "acquisition-multiply-False",
+      "kind": "acquisition",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\nx=tensor([2.,3.]);y=tensor([5.,7.]);seed=tensor([5.,7.],False);out=x*y\nout.backward(seed);gx=x.grad;gy=y.grad;initialX=state(gx);initialY=state(gy)\nwith torch.no_grad():seed.copy_(tensor([9.,9.],False))\nafterSeedX=state(gx);afterSeedY=state(gy)\nwith torch.no_grad():gx.copy_(tensor([13.,13.],False))\nreport={'initialX':initialX,'initialY':initialY,'afterSeedX':afterSeedX,'afterSeedY':afterSeedY,'afterX':state(gx),'afterY':state(gy),'seed':state(seed)}\n",
+      "expected": {
+        "initialX": {
+          "values": [
+            25.0,
+            49.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "initialY": {
+          "values": [
+            10.0,
+            21.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "afterSeedX": {
+          "values": [
+            25.0,
+            49.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "afterSeedY": {
+          "values": [
+            10.0,
+            21.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "afterX": {
+          "values": [
+            13.0,
+            13.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "afterY": {
+          "values": [
+            10.0,
+            21.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "seed": {
+          "values": [
+            9.0,
+            9.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        }
+      }
+    },
+    {
+      "name": "acquisition-multiply-True",
+      "kind": "acquisition",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\nx=tensor([2.,3.]);y=tensor([5.,7.]);seed=tensor([5.,7.],True);out=x*y\nout.backward(seed);gx=x.grad;gy=y.grad;initialX=state(gx);initialY=state(gy)\nwith torch.no_grad():seed.copy_(tensor([9.,9.],False))\nafterSeedX=state(gx);afterSeedY=state(gy)\nwith torch.no_grad():gx.copy_(tensor([13.,13.],False))\nreport={'initialX':initialX,'initialY':initialY,'afterSeedX':afterSeedX,'afterSeedY':afterSeedY,'afterX':state(gx),'afterY':state(gy),'seed':state(seed)}\n",
+      "expected": {
+        "initialX": {
+          "values": [
+            25.0,
+            49.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "initialY": {
+          "values": [
+            10.0,
+            21.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "afterSeedX": {
+          "values": [
+            25.0,
+            49.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "afterSeedY": {
+          "values": [
+            10.0,
+            21.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "afterX": {
+          "values": [
+            13.0,
+            13.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "afterY": {
+          "values": [
+            10.0,
+            21.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "seed": {
+          "values": [
+            9.0,
+            9.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": true
+        }
+      }
+    },
+    {
+      "name": "acquisition-square-False",
+      "kind": "acquisition",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\nx=tensor([2.,3.]);y=tensor([5.,7.]);seed=tensor([5.,7.],False);out=x*x\nout.backward(seed);gx=x.grad;gy=y.grad;initialX=state(gx);initialY=state(gy)\nwith torch.no_grad():seed.copy_(tensor([9.,9.],False))\nafterSeedX=state(gx);afterSeedY=state(gy)\nwith torch.no_grad():gx.copy_(tensor([13.,13.],False))\nreport={'initialX':initialX,'initialY':initialY,'afterSeedX':afterSeedX,'afterSeedY':afterSeedY,'afterX':state(gx),'afterY':state(gy),'seed':state(seed)}\n",
+      "expected": {
+        "initialX": {
+          "values": [
+            20.0,
+            42.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "initialY": null,
+        "afterSeedX": {
+          "values": [
+            20.0,
+            42.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "afterSeedY": null,
+        "afterX": {
+          "values": [
+            13.0,
+            13.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "afterY": null,
+        "seed": {
+          "values": [
+            9.0,
+            9.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        }
+      }
+    },
+    {
+      "name": "acquisition-square-True",
+      "kind": "acquisition",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\nx=tensor([2.,3.]);y=tensor([5.,7.]);seed=tensor([5.,7.],True);out=x*x\nout.backward(seed);gx=x.grad;gy=y.grad;initialX=state(gx);initialY=state(gy)\nwith torch.no_grad():seed.copy_(tensor([9.,9.],False))\nafterSeedX=state(gx);afterSeedY=state(gy)\nwith torch.no_grad():gx.copy_(tensor([13.,13.],False))\nreport={'initialX':initialX,'initialY':initialY,'afterSeedX':afterSeedX,'afterSeedY':afterSeedY,'afterX':state(gx),'afterY':state(gy),'seed':state(seed)}\n",
+      "expected": {
+        "initialX": {
+          "values": [
+            20.0,
+            42.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "initialY": null,
+        "afterSeedX": {
+          "values": [
+            20.0,
+            42.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "afterSeedY": null,
+        "afterX": {
+          "values": [
+            13.0,
+            13.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "afterY": null,
+        "seed": {
+          "values": [
+            9.0,
+            9.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": true
+        }
+      }
+    },
+    {
+      "name": "acquisition-add-view-False",
+      "kind": "acquisition",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\nx=tensor([2.,3.]);y=tensor([5.,7.]);seed=tensor([5.,7.],False);out=(x+y).view(2)\nout.backward(seed);gx=x.grad;gy=y.grad;initialX=state(gx);initialY=state(gy)\nwith torch.no_grad():seed.copy_(tensor([9.,9.],False))\nafterSeedX=state(gx);afterSeedY=state(gy)\nwith torch.no_grad():gx.copy_(tensor([13.,13.],False))\nreport={'initialX':initialX,'initialY':initialY,'afterSeedX':afterSeedX,'afterSeedY':afterSeedY,'afterX':state(gx),'afterY':state(gy),'seed':state(seed)}\n",
+      "expected": {
+        "initialX": {
+          "values": [
+            5.0,
+            7.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "initialY": {
+          "values": [
+            5.0,
+            7.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "afterSeedX": {
+          "values": [
+            5.0,
+            7.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "afterSeedY": {
+          "values": [
+            9.0,
+            9.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "afterX": {
+          "values": [
+            13.0,
+            13.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "afterY": {
+          "values": [
+            9.0,
+            9.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "seed": {
+          "values": [
+            9.0,
+            9.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        }
+      }
+    },
+    {
+      "name": "acquisition-add-view-True",
+      "kind": "acquisition",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\nx=tensor([2.,3.]);y=tensor([5.,7.]);seed=tensor([5.,7.],True);out=(x+y).view(2)\nout.backward(seed);gx=x.grad;gy=y.grad;initialX=state(gx);initialY=state(gy)\nwith torch.no_grad():seed.copy_(tensor([9.,9.],False))\nafterSeedX=state(gx);afterSeedY=state(gy)\nwith torch.no_grad():gx.copy_(tensor([13.,13.],False))\nreport={'initialX':initialX,'initialY':initialY,'afterSeedX':afterSeedX,'afterSeedY':afterSeedY,'afterX':state(gx),'afterY':state(gy),'seed':state(seed)}\n",
+      "expected": {
+        "initialX": {
+          "values": [
+            5.0,
+            7.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "initialY": {
+          "values": [
+            5.0,
+            7.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "afterSeedX": {
+          "values": [
+            5.0,
+            7.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "afterSeedY": {
+          "values": [
+            9.0,
+            9.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "afterX": {
+          "values": [
+            13.0,
+            13.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "afterY": {
+          "values": [
+            9.0,
+            9.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "seed": {
+          "values": [
+            9.0,
+            9.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": true
+        }
+      }
+    },
+    {
+      "name": "acquisition-views-add-False",
+      "kind": "acquisition",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\nx=tensor([2.,3.]);y=tensor([5.,7.]);seed=tensor([5.,7.],False);out=x.view(2)+y.view(2)\nout.backward(seed);gx=x.grad;gy=y.grad;initialX=state(gx);initialY=state(gy)\nwith torch.no_grad():seed.copy_(tensor([9.,9.],False))\nafterSeedX=state(gx);afterSeedY=state(gy)\nwith torch.no_grad():gx.copy_(tensor([13.,13.],False))\nreport={'initialX':initialX,'initialY':initialY,'afterSeedX':afterSeedX,'afterSeedY':afterSeedY,'afterX':state(gx),'afterY':state(gy),'seed':state(seed)}\n",
+      "expected": {
+        "initialX": {
+          "values": [
+            5.0,
+            7.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "initialY": {
+          "values": [
+            5.0,
+            7.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "afterSeedX": {
+          "values": [
+            9.0,
+            9.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "afterSeedY": {
+          "values": [
+            9.0,
+            9.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "afterX": {
+          "values": [
+            13.0,
+            13.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "afterY": {
+          "values": [
+            13.0,
+            13.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "seed": {
+          "values": [
+            13.0,
+            13.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        }
+      }
+    },
+    {
+      "name": "acquisition-views-add-True",
+      "kind": "acquisition",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\nx=tensor([2.,3.]);y=tensor([5.,7.]);seed=tensor([5.,7.],True);out=x.view(2)+y.view(2)\nout.backward(seed);gx=x.grad;gy=y.grad;initialX=state(gx);initialY=state(gy)\nwith torch.no_grad():seed.copy_(tensor([9.,9.],False))\nafterSeedX=state(gx);afterSeedY=state(gy)\nwith torch.no_grad():gx.copy_(tensor([13.,13.],False))\nreport={'initialX':initialX,'initialY':initialY,'afterSeedX':afterSeedX,'afterSeedY':afterSeedY,'afterX':state(gx),'afterY':state(gy),'seed':state(seed)}\n",
+      "expected": {
+        "initialX": {
+          "values": [
+            5.0,
+            7.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "initialY": {
+          "values": [
+            5.0,
+            7.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "afterSeedX": {
+          "values": [
+            9.0,
+            9.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "afterSeedY": {
+          "values": [
+            9.0,
+            9.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "afterX": {
+          "values": [
+            13.0,
+            13.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "afterY": {
+          "values": [
+            13.0,
+            13.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "seed": {
+          "values": [
+            13.0,
+            13.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": true
+        }
+      }
+    },
+    {
+      "name": "acquisition-sum-False",
+      "kind": "acquisition",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\nx=tensor([2.,3.]);y=tensor([5.,7.]);seed=tensor(5.,False);out=x.sum()\nout.backward(seed);gx=x.grad;gy=y.grad;initialX=state(gx);initialY=state(gy)\nwith torch.no_grad():seed.copy_(tensor(9.,False))\nafterSeedX=state(gx);afterSeedY=state(gy)\nwith torch.no_grad():gx.copy_(tensor([13.,13.],False))\nreport={'initialX':initialX,'initialY':initialY,'afterSeedX':afterSeedX,'afterSeedY':afterSeedY,'afterX':state(gx),'afterY':state(gy),'seed':state(seed)}\n",
+      "expected": {
+        "initialX": {
+          "values": [
+            5.0,
+            5.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "initialY": null,
+        "afterSeedX": {
+          "values": [
+            5.0,
+            5.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "afterSeedY": null,
+        "afterX": {
+          "values": [
+            13.0,
+            13.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "afterY": null,
+        "seed": {
+          "values": 9.0,
+          "shape": [],
+          "tracking": false
+        }
+      }
+    },
+    {
+      "name": "acquisition-sum-True",
+      "kind": "acquisition",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\nx=tensor([2.,3.]);y=tensor([5.,7.]);seed=tensor(5.,True);out=x.sum()\nout.backward(seed);gx=x.grad;gy=y.grad;initialX=state(gx);initialY=state(gy)\nwith torch.no_grad():seed.copy_(tensor(9.,False))\nafterSeedX=state(gx);afterSeedY=state(gy)\nwith torch.no_grad():gx.copy_(tensor([13.,13.],False))\nreport={'initialX':initialX,'initialY':initialY,'afterSeedX':afterSeedX,'afterSeedY':afterSeedY,'afterX':state(gx),'afterY':state(gy),'seed':state(seed)}\n",
+      "expected": {
+        "initialX": {
+          "values": [
+            5.0,
+            5.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "initialY": null,
+        "afterSeedX": {
+          "values": [
+            5.0,
+            5.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "afterSeedY": null,
+        "afterX": {
+          "values": [
+            13.0,
+            13.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "afterY": null,
+        "seed": {
+          "values": 9.0,
+          "shape": [],
+          "tracking": true
+        }
+      }
+    },
+    {
+      "name": "acquisition-singleton-sum-False",
+      "kind": "acquisition",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\nx=tensor([2.]);y=tensor([5.]);seed=tensor(5.,False);out=x.sum()\nout.backward(seed);gx=x.grad;gy=y.grad;initialX=state(gx);initialY=state(gy)\nwith torch.no_grad():seed.copy_(tensor(9.,False))\nafterSeedX=state(gx);afterSeedY=state(gy)\nwith torch.no_grad():gx.copy_(tensor([13.],False))\nreport={'initialX':initialX,'initialY':initialY,'afterSeedX':afterSeedX,'afterSeedY':afterSeedY,'afterX':state(gx),'afterY':state(gy),'seed':state(seed)}\n",
+      "expected": {
+        "initialX": {
+          "values": [
+            5.0
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": false
+        },
+        "initialY": null,
+        "afterSeedX": {
+          "values": [
+            5.0
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": false
+        },
+        "afterSeedY": null,
+        "afterX": {
+          "values": [
+            13.0
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": false
+        },
+        "afterY": null,
+        "seed": {
+          "values": 9.0,
+          "shape": [],
+          "tracking": false
+        }
+      }
+    },
+    {
+      "name": "acquisition-singleton-sum-True",
+      "kind": "acquisition",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\nx=tensor([2.]);y=tensor([5.]);seed=tensor(5.,True);out=x.sum()\nout.backward(seed);gx=x.grad;gy=y.grad;initialX=state(gx);initialY=state(gy)\nwith torch.no_grad():seed.copy_(tensor(9.,False))\nafterSeedX=state(gx);afterSeedY=state(gy)\nwith torch.no_grad():gx.copy_(tensor([13.],False))\nreport={'initialX':initialX,'initialY':initialY,'afterSeedX':afterSeedX,'afterSeedY':afterSeedY,'afterX':state(gx),'afterY':state(gy),'seed':state(seed)}\n",
+      "expected": {
+        "initialX": {
+          "values": [
+            5.0
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": false
+        },
+        "initialY": null,
+        "afterSeedX": {
+          "values": [
+            5.0
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": false
+        },
+        "afterSeedY": null,
+        "afterX": {
+          "values": [
+            13.0
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": false
+        },
+        "afterY": null,
+        "seed": {
+          "values": 9.0,
+          "shape": [],
+          "tracking": true
+        }
+      }
+    },
+    {
+      "name": "special-view-False-False",
+      "kind": "special-view",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\nx=tensor([2.,3.])\nwith torch.no_grad():v=x.view(2)\nout=v if False else v.sum()\ncall=attempt(lambda:out.backward(tensor([1.,1.],False) if False else None,inputs=[v] if False else None))\nreport={'call':call,'base':state(x.grad),'view':state(v.grad),'tracking':v.requires_grad}\n",
+      "expected": {
+        "call": {
+          "none": true
+        },
+        "base": null,
+        "view": null,
+        "tracking": true
+      }
+    },
+    {
+      "name": "special-view-False-True",
+      "kind": "special-view",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\nx=tensor([2.,3.])\nwith torch.no_grad():v=x.view(2)\nout=v if False else v.sum()\ncall=attempt(lambda:out.backward(tensor([1.,1.],False) if False else None,inputs=[v] if True else None))\nreport={'call':call,'base':state(x.grad),'view':state(v.grad),'tracking':v.requires_grad}\n",
+      "expected": {
+        "call": {
+          "none": true
+        },
+        "base": null,
+        "view": null,
+        "tracking": true
+      }
+    },
+    {
+      "name": "special-view-True-False",
+      "kind": "special-view",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\nx=tensor([2.,3.])\nwith torch.no_grad():v=x.view(2)\nout=v if True else v.sum()\ncall=attempt(lambda:out.backward(tensor([1.,1.],False) if True else None,inputs=[v] if False else None))\nreport={'call':call,'base':state(x.grad),'view':state(v.grad),'tracking':v.requires_grad}\n",
+      "expected": {
+        "call": {
+          "error": "RuntimeError"
+        },
+        "base": null,
+        "view": null,
+        "tracking": true
+      }
+    },
+    {
+      "name": "special-view-True-True",
+      "kind": "special-view",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\nx=tensor([2.,3.])\nwith torch.no_grad():v=x.view(2)\nout=v if True else v.sum()\ncall=attempt(lambda:out.backward(tensor([1.,1.],False) if True else None,inputs=[v] if True else None))\nreport={'call':call,'base':state(x.grad),'view':state(v.grad),'tracking':v.requires_grad}\n",
+      "expected": {
+        "call": {
+          "error": "RuntimeError"
+        },
+        "base": null,
+        "view": null,
+        "tracking": true
+      }
+    },
+    {
+      "name": "setup-invalid-target",
+      "kind": "setup",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\nx=tensor([2.,3.]);mid=x+x;out=mid.sum()\nwith torch.no_grad():plain=mid.sum()\ncall=attempt(lambda:out.backward(inputs=[mid,1]))\nmid.sum().backward()\nreport={'call':call,'retained':state(mid.grad),'leaf':state(x.grad)}\n",
+      "expected": {
+        "call": {
+          "error": "RuntimeError"
+        },
+        "retained": {
+          "values": [
+            1.0,
+            1.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "leaf": {
+          "values": [
+            2.0,
+            2.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        }
+      }
+    },
+    {
+      "name": "setup-seed-shape",
+      "kind": "setup",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\nx=tensor([2.,3.]);mid=x+x;out=mid.sum()\nwith torch.no_grad():plain=mid.sum()\ncall=attempt(lambda:out.backward(tensor([1.,1.],False),inputs=[mid]))\nmid.sum().backward()\nreport={'call':call,'retained':state(mid.grad),'leaf':state(x.grad)}\n",
+      "expected": {
+        "call": {
+          "error": "RuntimeError"
+        },
+        "retained": null,
+        "leaf": {
+          "values": [
+            2.0,
+            2.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        }
+      }
+    },
+    {
+      "name": "setup-create-none",
+      "kind": "setup",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\nx=tensor([2.,3.]);mid=x+x;out=mid.sum()\nwith torch.no_grad():plain=mid.sum()\ncall=attempt(lambda:out.backward(create_graph=None,inputs=[mid]))\nmid.sum().backward()\nreport={'call':call,'retained':state(mid.grad),'leaf':state(x.grad)}\n",
+      "expected": {
+        "call": {
+          "error": "TypeError"
+        },
+        "retained": null,
+        "leaf": {
+          "values": [
+            2.0,
+            2.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        }
+      }
+    },
+    {
+      "name": "setup-root-tracking",
+      "kind": "setup",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\nx=tensor([2.,3.]);mid=x+x;out=mid.sum()\nwith torch.no_grad():plain=mid.sum()\ncall=attempt(lambda:plain.backward(tensor(1.,False),inputs=[mid]))\nmid.sum().backward()\nreport={'call':call,'retained':state(mid.grad),'leaf':state(x.grad)}\n",
+      "expected": {
+        "call": {
+          "error": "RuntimeError"
+        },
+        "retained": null,
+        "leaf": {
+          "values": [
+            2.0,
+            2.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        }
+      }
+    }
+  ],
   "copyCases": [
     {
       "name": "stale-child-bypasses-parent-new-child-binds-parent",

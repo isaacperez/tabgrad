@@ -7,6 +7,10 @@ behavior Tabgrad accepts. The package runs inside a host-supplied Pyodide
 interpreter attached through the [script binding](../components/python-script-binding.md).
 It is not the official PyTorch runtime.
 
+CPU first-order `Tensor.backward()` and read/write `Tensor.grad` are specified
+in the [backward reference](backward-gradients.md), including calling forms,
+warning categories, identity, reset and lifetime.
+
 The [wrapper component](../components/python-tensor-wrappers.md) explains the
 owners behind these calls. This page covers creation, metadata, addition
 admission and ordinary observation, not general PyTorch support. GPU use

@@ -1,6 +1,8 @@
 // Application-owned worker bootstrap used by the real-artifact integration check.
 import { attachPython, servePythonWorker } from "/python.js";
 import { selectCpuProfile } from "/helpers/cpu-profile.mjs";
+import { pythonBackwardChecks } from "/helpers/backward-cases.mjs";
+import { pythonBackwardLifetimeChecks, checkPythonBackwardFaults, checkPythonBackwardAliasFault, checkPythonFinalizationFault } from "/helpers/backward-lifetime.mjs";
 
 async function start(event) {
   const { port, disableJspi, gate, variant } = event.data;
@@ -68,7 +70,18 @@ except JsException as error:
 else:
     raise AssertionError('A stale wrapper acquired the new managed context')
 `);
+      const backwardOracle = await (await fetch('/helpers/python-copy-oracle.json')).json();
+      await replacement.runPythonAsync(pythonBackwardChecks(backwardOracle));
+      await replacement.runPythonAsync(pythonBackwardLifetimeChecks);
+      const { WebAssemblyCpuBackend } = await import('/backends/cpu/cpu-backend.js');
+      await checkPythonBackwardFaults(replacement, WebAssemblyCpuBackend);
     } finally { await replacement.close(); }
+    const { WebAssemblyCpuBackend } = await import('/backends/cpu/cpu-backend.js');
+    const aliasBinding = await attachPython(interpreter);
+    try { await checkPythonBackwardAliasFault(aliasBinding, WebAssemblyCpuBackend); }
+    finally { await aliasBinding.close(); }
+    const finalizationBinding = await attachPython(interpreter);
+    await checkPythonFinalizationFault(finalizationBinding, WebAssemblyCpuBackend);
     if (gate !== undefined) interpreter.unregisterJsModule("_test_worker_gate");
     postMessage({ kind: "finished", answer, diagnostics,
       selectedVariant: interpreter.runPython("selected_variant") });

@@ -66,7 +66,7 @@ checks in the same change as a registered generated path.
 ### Python tensor oracle fixtures
 
 - **Path:** `js-tests/fixtures/python-tensor-oracle.json`.
-- **Source/generator:** `scripts/generate_tensor_oracle.py`, with its maintained cases and comparison policy; not Tabgrad's implementation.
+- **Source/generator:** `scripts/generate_tensor_oracle.py` and its maintained `scripts/backward_oracle.py` case sources and comparison policy; not Tabgrad's implementation.
 - **Command:** `.venv/bin/python scripts/generate_tensor_oracle.py` from the repository root.
 - **Inputs:** the prepared native environment and hashed oracle lock in [Development](development.md#prepare-python-integration-and-its-compatibility-oracle); PyTorch 2.14.0 build revision `08187d9e0fba026dc8217405802ab5381dc88d90`. The generator rejects another version/revision and bounds both thread pools to one. No NumPy is needed; its known initialization warning is retained.
 - **Commit policy:** committed so CI and browser contributors can consume native expectations without installing the platform-specific development oracle. No native package is distributed.

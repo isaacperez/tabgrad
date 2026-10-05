@@ -1,5 +1,5 @@
 import { TensorValue, OperationRecord, type StorageState, type TensorMetadata, type NumericalOperationDefinition } from "./tensor-value.js";
-import { TensorState } from "./tensor-family.js";
+import { TensorFamily, TensorIdentity, TensorState } from "./tensor-family.js";
 import { WriterOutcome, WriterOutcomeLedger, type EffectFailure, captureWriterOutcomes, retainWriterOutcomes,
   releaseWriterOutcomes, failedWriterOutcome } from "./writer-outcome.js";
 import {
@@ -18,7 +18,7 @@ import type { ExecutionBackend, ResidentAllocation, TensorDevice } from "../exec
 import { WebGpuBackend, type WebGpuDiagnostics, type WebGpuExecutionBackend } from "../backends/webgpu/webgpu-backend.js";
 export type { TensorDevice } from "../execution/backend.js";
 import { DerivativeHistory, type DerivativeNode, type DerivativeRecipe } from "./autograd/derivative-history.js";
-import { COPY_DERIVATIVE, COPY_SLICES_DERIVATIVE, IDENTITY_DERIVATIVE, MUL_DERIVATIVE, SUM_DERIVATIVE } from "./autograd/derivative-recipes.js";
+import { COPY_DERIVATIVE, COPY_SLICES_DERIVATIVE, IDENTITY_DERIVATIVE, PASS_DERIVATIVE, MUL_DERIVATIVE, SUM_DERIVATIVE } from "./autograd/derivative-recipes.js";
 import { copyTensorShape, equalTensorShapes, inferViewShape, tensorElementCount } from "./tensor-shape.js";
 import {
   ExecutableProgram,
@@ -274,7 +274,24 @@ interface RuntimeOwnership {
   readonly undeliveredEffects: number;
 }
 
+interface RuntimeSemanticOwnership {
+  readonly identities: number;
+  readonly identityReferences: number;
+  readonly gradientAssociations: number;
+  readonly viewBaseReferences: number;
+  readonly leafEndpointOwners: number;
+  readonly nonleafEntryOwners: number;
+  readonly publicExposures: number;
+  readonly collectorPasses: number;
+  readonly collectorVisitedIdentities: number;
+  readonly collectorVisitedHistoryNodes: number;
+  readonly collectorVisitedEdges: number;
+}
+
 interface RuntimeSessionAccess {
+  readonly gradient: (state: TensorState) => Tensor | null;
+  readonly assignGradient: (state: TensorState, value: unknown) => void;
+  readonly backward: (state: TensorState, gradient: unknown, options: unknown) => void;
   readonly recordingMode: () => boolean;
   readonly enterNoGrad: () => boolean;
   readonly restoreRecording: (previous: boolean) => void;
@@ -283,12 +300,14 @@ interface RuntimeSessionAccess {
   readonly observeSynchronously: (state: TensorState) => Float32Array;
   readonly binary: (definition: EqualShapeBinaryOperationDefinition, left: TensorState, rightHandle: unknown) => Tensor;
   readonly ownership: () => RuntimeOwnership;
+  readonly semanticOwnership: () => RuntimeSemanticOwnership;
   readonly copy: (destination: TensorState, source: unknown) => void;
   readonly sum: (source: TensorState) => Tensor;
   readonly view: (source: TensorState, shape: unknown) => Tensor;
   readonly observe: (state: TensorState) => Promise<Float32Array>;
   readonly assertOpen: () => void;
   readonly releaseHandle: (state: TensorState) => void;
+  readonly finalizeHandle: (state: TensorState) => void;
   readonly countResidentProgramReferences: () => number;
 }
 
@@ -308,6 +327,12 @@ function runtimeSessionAccess(session: RuntimeSession): RuntimeSessionAccess {
 let constructTensorHandle: ((state: TensorState) => Tensor) | undefined;
 const TENSOR_CONSTRUCTION_TOKEN = Symbol("TensorConstructionToken");
 const TENSOR_STATES = new WeakMap<Tensor, TensorState>();
+const TENSOR_FINALIZER = new FinalizationRegistry<TensorState>((state) => {
+  if (!state.closed) {
+    state.closed = true;
+    runtimeSessionAccess(state.session).finalizeHandle(state);
+  }
+});
 
 function createTensorHandle(state: TensorState): Tensor {
   if (constructTensorHandle === undefined) {
@@ -345,6 +370,14 @@ function assertTensorOpen(state: TensorState): void {
   runtimeSessionAccess(state.session).assertOpen();
 }
 
+/** @internal Inspect grad-read metadata without resolving a dirty view entry. */
+export function shouldWarnUnretainedGradient(handle: Tensor): boolean {
+  const state = requireTensorState(handle);
+  assertTensorOpen(state);
+  const identity = state.identity;
+  return identity.gradient === null && !identity.retained && identity.entry?.recipe != null;
+}
+
 export class Tensor {
   private constructor(state: TensorState, token: symbol) {
     if (token !== TENSOR_CONSTRUCTION_TOKEN) {
@@ -354,6 +387,7 @@ export class Tensor {
       );
     }
     TENSOR_STATES.set(this, state);
+    TENSOR_FINALIZER.register(this, state, state);
   }
 
   static {
@@ -383,6 +417,25 @@ export class Tensor {
     const state = requireTensorState(this);
     assertTensorOpen(state);
     return state.requiresGrad;
+  }
+
+  get grad(): Tensor | null {
+    const state = requireTensorState(this);
+    assertTensorOpen(state);
+    return runtimeSessionAccess(state.session).gradient(state);
+  }
+
+  set grad(value: Tensor | null) {
+    const state = requireTensorState(this);
+    assertTensorOpen(state);
+    runtimeSessionAccess(state.session).assignGradient(state, value);
+  }
+
+  /** Accumulate first-order CPU gradients, preserving accepted lazy effects. */
+  backward(gradient?: Tensor, options?: BackwardOptions): void {
+    if (arguments.length > 2) throw new TypeError("backward accepts a seed and options.");
+    const state = requireTensorState(this);
+    runtimeSessionAccess(state.session).backward(state, gradient, options);
   }
 
   add(right: Tensor): Tensor {
@@ -432,9 +485,16 @@ export class Tensor {
     const state = requireTensorState(this);
     if (!state.closed) {
       state.closed = true;
+      TENSOR_FINALIZER.unregister(state);
       runtimeSessionAccess(state.session).releaseHandle(state);
     }
   }
+}
+
+export interface BackwardOptions {
+  readonly inputs?: readonly Tensor[];
+  readonly retainGraph?: boolean;
+  readonly createGraph?: boolean;
 }
 
 class EqualShapeBinaryOperationDefinition implements NumericalOperationDefinition {
@@ -546,7 +606,7 @@ class EqualShapeBinaryOperationDefinition implements NumericalOperationDefinitio
 }
 
 const ADD_OPERATION = Object.freeze(new EqualShapeBinaryOperationDefinition(
-  "add", "Tensor.add", "add-f32", "addition", IDENTITY_DERIVATIVE,
+  "add", "Tensor.add", "add-f32", "addition", PASS_DERIVATIVE,
 ));
 const MUL_OPERATION = Object.freeze(new EqualShapeBinaryOperationDefinition(
   "mul", "Tensor.mul", "mul-f32", "multiplication", MUL_DERIVATIVE,
@@ -604,6 +664,8 @@ export class RuntimeSession {
     (value) => this.#retainValue(value), (value) => this.#releaseValue(value),
     (value) => this.#validateSavedValue(value),
     (value) => value.outcomes,
+    (owner) => this.#retainIdentity(owner as TensorIdentity),
+    (owner) => this.#releaseIdentity(owner as TensorIdentity),
   );
   #cleanupFailures: unknown[] | undefined;
   readonly #undeliveredEffects = new Set<EffectFailure>();
@@ -617,6 +679,17 @@ export class RuntimeSession {
   readonly #beforeCopyPublication: (() => void) | undefined;
   readonly #materializations = new MaterializationTable();
   readonly #states = new Set<TensorState>();
+  readonly #identities = new Set<TensorIdentity>();
+  readonly #retainedEntries = new WeakMap<DerivativeNode<TensorValue>, WeakRef<TensorIdentity>>();
+  #associationOwners = 0;
+  #identityReferences = 0;
+  #collectorPasses = 0;
+  #collectorVisitedIdentities = 0;
+  #collectorVisitedHistoryNodes = 0;
+  #collectorVisitedEdges = 0;
+  #collectionScheduled = false;
+  #retiring = false;
+  readonly #retirementQueue: (TensorIdentity | TensorValue)[] = [];
   readonly #values = new Set<TensorValue>();
   #requestHead: QueuedExecutionRequest | undefined;
   #requestTail: QueuedExecutionRequest | undefined;
@@ -654,6 +727,9 @@ export class RuntimeSession {
       if (!Number.isSafeInteger(limit) || limit < 0) throw new TypeError("Update limits must be nonnegative safe integers.");
     }
     RUNTIME_SESSION_ACCESS.set(this, Object.freeze({
+      gradient: (state: TensorState) => state.identity.gradient === null ? null : this.#expose(state.identity.gradient),
+      assignGradient: (state: TensorState, value: unknown) => this.#assignGradient(state, value),
+      backward: (state: TensorState, gradient: unknown, options: unknown) => this.#backward(state, gradient, options),
       recordingMode: () => { this.#assertOpen(); return this.#recording; },
       enterNoGrad: () => this.#enterNoGrad(),
       restoreRecording: (previous: boolean) => { this.#recording = previous; },
@@ -664,12 +740,17 @@ export class RuntimeSession {
         this.#binary(definition, left, rightHandle)
       ),
       ownership: () => this.#ownership(),
+      semanticOwnership: () => this.#semanticOwnership(),
       copy: (destination: TensorState, source: unknown) => this.#copy(destination, source),
       sum: (source: TensorState) => this.#sum(source),
       view: (source: TensorState, shape: unknown) => this.#view(source, shape),
       observe: (state: TensorState) => this.#observe(state),
       assertOpen: () => this.#assertOpen(),
       releaseHandle: (state: TensorState) => this.#releaseHandle(state),
+      finalizeHandle: (state: TensorState) => {
+        try { this.#releaseHandle(state); }
+        catch (error) { (this.#cleanupFailures ??= []).push(error); }
+      },
       countResidentProgramReferences: () => (
         this.#materializations.countResidentProgramReferences()
       ),
@@ -752,10 +833,15 @@ export class RuntimeSession {
     }, null);
     this.#registerValue(value);
     this.#materializations.setHost(value, payload);
-    return this.#createHandle(value, options.requiresGrad === true ? this.#history.leaf(value.shape) : null);
+    const handle = this.#createHandle(value, null, options.requiresGrad === true);
+    if (options.requiresGrad === true) {
+      const identity = requireTensorState(handle).identity;
+      identity.entry = this.#history.leaf(value.shape, identity);
+    }
+    return handle;
   }
 
-  /** Return lazy first-order gradients in input order, without persistent accumulation. */
+  /** Return lazy first-order gradients without automatic leaf accumulation. */
   grad(output: Tensor, inputs: readonly Tensor[], gradient?: Tensor): Tensor[] {
     this.#assertOpen();
     if (arguments.length < 2 || arguments.length > 3 || !Array.isArray(inputs) || inputs.length === 0) {
@@ -782,33 +868,26 @@ export class RuntimeSession {
       throw new TabgradError("UNUSED_INPUT", "A requested input has no derivative accumulator.");
     }
     const plan = this.#history.plan(result.history, requested.map((input) => input.history!));
+    const destinations = new Set<TensorIdentity>();
+    const effects = this.#reserveGradientEffects(plan.order, destinations);
+    const effectControls = this.#gradientControlBound(plan.order, destinations, effects);
     const outcomes = captureWriterOutcomes([result.value.outcomes, ...plan.outcomes, explicitSeed?.value.outcomes ?? []]);
-    if (outcomes.length !== 0) {
+    if (outcomes.length !== 0 || effects !== 0) {
       // Reserve a conservative bound for all contributions before seed admission
       // or consumption. Each binary recipe emits at most two contributions and
       // their additions; counting all of them also bounds the transient peak.
       const additionalBytes = (explicitSeed === undefined ? 4 : 0)
         + plan.order.reduce((bytes, node) => bytes + tensorElementCount(node.shape) * 20, 0);
-      this.#checkUpdateCapacity((plan.order.length * 20 + requested.length * 4 + 10) * (outcomes.length + 1), additionalBytes);
+      this.#checkUpdateCapacity((plan.order.length * 20 + requested.length * 4 + 10) * (outcomes.length + effectControls + 1), additionalBytes);
     }
     const seed = explicitSeed === undefined
       ? this.tensor([1], { shape: result.value.shape }) : this.#borrowValue(explicitSeed.value);
+    this.#attachTensorControls(seed, [result.value.outcomes, explicitSeed?.value.outcomes ?? []]);
     try {
-      const gradients = this.#history.execute(plan, seed, {
-        borrow: (value) => this.#borrowValue(value),
-        add: (left, right) => left.add(right),
-        mul: (left, right) => left.mul(right),
-        view: (value, shape) => value.view(shape),
-        expand: (value, shape) => this.#expand(value, shape),
-        zeros: (shape) => this.tensor(new Float32Array(tensorElementCount(shape)), { shape }),
-        close: (value) => value.close(),
-      });
+      const gradients = this.#history.execute(plan, seed, this.#derivativeOperations(),
+        (node, incoming, traversed) => this.#receiveGradient(node, incoming, traversed, destinations));
       for (const gradient of gradients) {
-        const value = requireTensorState(gradient).family.current;
-        const combined = captureWriterOutcomes([value.outcomes, outcomes]);
-        retainWriterOutcomes(combined);
-        releaseWriterOutcomes(value.outcomes);
-        value.outcomes = combined;
+        this.#attachTensorControls(gradient, [outcomes]);
       }
       return gradients;
     } finally { seed.close(); }
@@ -822,6 +901,256 @@ export class RuntimeSession {
     }
     this.#requireGradients(this.#backendFor(state.value.device, "grad"), "grad");
     return state;
+  }
+
+  #assignGradient(owner: TensorState, handle: unknown): void {
+    let assigned: TensorIdentity | null = null;
+    if (handle !== null) {
+      const state = this.#gradientInput(handle);
+      if (state.identity === owner.identity) throw new TabgradError("INVALID_GRADIENT", "A tensor cannot be its own gradient.");
+      if (!equalTensorShapes(owner.shape, state.shape)) throw new TabgradError("SHAPE_MISMATCH", "Assigned gradient must match its owner's shape.");
+      assigned = state.identity;
+    }
+    if (assigned !== null && assigned !== owner.identity.gradient) this.#checkUpdateCapacity(1);
+    this.#replaceGradient(owner.identity, assigned);
+  }
+
+  #replaceGradient(owner: TensorIdentity, assigned: TensorIdentity | null): void {
+    const previous = owner.gradient;
+    if (previous === assigned) return;
+    if (assigned !== null) { this.#retainIdentity(assigned); this.#associationOwners += 1; }
+    owner.gradient = assigned;
+    if (previous !== null) {
+      this.#associationOwners -= 1;
+      try { this.#releaseIdentity(previous); }
+      finally { this.#scheduleCollection(); }
+    }
+  }
+
+  #moveRetention(identity: TensorIdentity, previous: DerivativeNode<TensorValue> | null,
+    next: DerivativeNode<TensorValue> | null): void {
+    if (!identity.retained || previous === next) return;
+    if (previous !== null) this.#retainedEntries.delete(previous);
+    if (next !== null) this.#retainedEntries.set(next, new WeakRef(identity));
+  }
+
+  #backward(result: TensorState, seedHandle: unknown, options: unknown): void {
+    assertTensorOpen(result);
+    this.#requireGradients(this.#backendFor(result.value.device, "backward"), "backward");
+    if (options !== undefined && (options === null || typeof options !== "object" || Array.isArray(options))) {
+      throw new TypeError("backward options must be an object.");
+    }
+    const selected = options as BackwardOptions | undefined;
+    if (selected !== undefined) {
+      for (const key of Object.keys(selected)) {
+        if (!["inputs", "retainGraph", "createGraph"].includes(key)) throw new TypeError("Unknown backward option.");
+      }
+      for (const mode of [selected.retainGraph, selected.createGraph]) {
+        if (mode !== undefined && typeof mode !== "boolean") throw new TypeError("Backward mode options must be booleans.");
+        if (mode === true) throw new TabgradError("UNSUPPORTED_GRADIENT", "Retained and higher-order backward are unsupported.");
+      }
+      if (selected.inputs !== undefined && (!Array.isArray(selected.inputs) || selected.inputs.length === 0)) {
+        throw new TypeError("backward inputs must be a nonempty array.");
+      }
+    }
+    const explicitSeed = seedHandle === undefined ? undefined : this.#gradientInput(seedHandle);
+    if (explicitSeed !== undefined && !equalTensorShapes(result.shape, explicitSeed.shape)) {
+      throw new TabgradError("SHAPE_MISMATCH", "Gradient seed must match output shape.");
+    }
+    if (explicitSeed === undefined && tensorElementCount(result.shape) !== 1) {
+      throw new TabgradError("INVALID_GRADIENT", "An implicit gradient requires an output with exactly one element.");
+    }
+    const output = result.history;
+    if (output === null) throw new TabgradError("GRADIENT_NOT_TRACKED", "Output must require gradients and have derivative history.");
+    const requested: TensorIdentity[] = [];
+    if (selected?.inputs !== undefined) {
+      for (const handle of selected.inputs) {
+        const state = this.#gradientInput(handle);
+        if (!state.requiresGrad) throw new TabgradError("GRADIENT_NOT_TRACKED", "Requested input must require gradients.");
+        const entry = state.history;
+        if (!state.identity.trueLeaf && entry !== null) {
+          state.identity.retained = true;
+          this.#retainedEntries.set(entry, new WeakRef(state.identity));
+        }
+        if (!requested.includes(state.identity)) requested.push(state.identity);
+      }
+    }
+    if (selected?.inputs === undefined) {
+      const seen = new Set<DerivativeNode<TensorValue>>();
+      const pending = [output];
+      while (pending.length !== 0) {
+        const node = pending.pop()!;
+        if (seen.has(node)) continue;
+        seen.add(node);
+        if (node.leafOwner instanceof TensorIdentity) requested.push(node.leafOwner);
+        for (const input of node.inputs) if (input !== null) pending.push(input);
+      }
+    }
+    const plan = this.#history.plan(output, requested.map(identity => identity.entry).filter(entry => entry !== null), true);
+    if (plan.order.length === 0) return;
+    if (this.#mutationFailure !== undefined) {
+      throw new TabgradError("MUTATION_FAILED", "A failed write prevents further updates in this session.", {}, this.#mutationFailure.error);
+    }
+    const destinations = new Set(requested);
+    const effects = this.#reserveGradientEffects(plan.order, destinations);
+    const controls = captureWriterOutcomes([result.value.outcomes, explicitSeed?.value.outcomes ?? []]).length
+      + this.#gradientControlBound(plan.order, destinations, effects);
+    const additionalBytes = (explicitSeed === undefined ? 4 : 0)
+      + plan.order.reduce((bytes, node) => bytes + tensorElementCount(node.shape) * 20, 0);
+    this.#checkUpdateCapacity((plan.order.length * 20 + requested.length * 10 + 10) * (controls + 1), additionalBytes);
+    const seed = explicitSeed === undefined ? this.tensor([1], { shape: result.shape }) : this.#borrowValue(explicitSeed.value);
+    if (explicitSeed !== undefined) {
+      const identity = requireTensorState(seed).identity;
+      this.#bindIncomingIdentity(identity, explicitSeed.identity);
+      identity.acquisitionFamily = explicitSeed.family;
+    }
+    this.#attachTensorControls(seed, [result.value.outcomes, explicitSeed?.value.outcomes ?? []]);
+    try {
+      const returned = this.#history.execute(plan, seed, this.#derivativeOperations(),
+        (node, incoming, traversed) => this.#receiveGradient(node, incoming, traversed, destinations), true, false);
+      for (const handle of returned) handle.close();
+    } finally { seed.close(); }
+  }
+
+  #reserveGradientEffects(nodes: readonly DerivativeNode<TensorValue>[], destinations: ReadonlySet<TensorIdentity>): number {
+    const effects = nodes.filter(node => this.#gradientReceiver(node, destinations) !== undefined).length;
+    if (this.#pendingCopies + effects > this.#updateLimits.pendingCopies) {
+      throw new TabgradError("RESOURCE_EXHAUSTED", "Differentiation exceeds pending-effect capacity.");
+    }
+    return effects;
+  }
+
+  #gradientControlBound(nodes: readonly DerivativeNode<TensorValue>[], destinations: ReadonlySet<TensorIdentity>, effects: number): number {
+    // Include existing node/prior-gradient controls and one new writer per
+    // destination. Each recipe admits at most two contributions plus combines;
+    // twenty owner slots per node bound their captures at the transient peak.
+    const groups = nodes.flatMap(node => [node.outcomes, this.#gradientReceiver(node, destinations)?.gradient?.value.outcomes ?? []]);
+    return captureWriterOutcomes(groups).length + effects;
+  }
+
+  #receiveGradient(node: DerivativeNode<TensorValue>, incoming: Tensor, traversed: boolean,
+    destinations: ReadonlySet<TensorIdentity>): void {
+    if (traversed) this.#attachTensorControls(incoming, [node.outcomes]);
+    const owner = this.#gradientReceiver(node, destinations);
+    if (owner !== undefined && !owner.retired) this.#accumulateGradient(owner, incoming,
+      owner.trueLeaf && this.#canAcquireIncoming(requireTensorState(incoming).identity));
+  }
+
+  #gradientReceiver(node: DerivativeNode<TensorValue>, destinations: ReadonlySet<TensorIdentity>): TensorIdentity | undefined {
+    return node.leafOwner instanceof TensorIdentity && destinations.has(node.leafOwner)
+      ? node.leafOwner : this.#retainedEntries.get(node)?.deref();
+  }
+
+  #detachedAlias(source: TensorIdentity, acquire = false): Tensor {
+    const family = acquire ? source.acquisitionFamily ?? source.family : source.family;
+    family.identities += 1;
+    const identity = new TensorIdentity(family, source.value, null, false, null, false, false);
+    if (acquire) this.#setIdentityControls(identity, source.value.outcomes);
+    this.#identities.add(identity);
+    return this.#expose(identity);
+  }
+
+  #derivativeOperations() {
+    return {
+      borrow: (value: TensorValue) => this.#borrowValue(value),
+      add: (left: Tensor, right: Tensor) => this.#combineIncoming(left, right),
+      mul: (left: Tensor, right: Tensor) => this.noGrad(() => left.mul(right)),
+      view: (value: Tensor, shape: readonly number[]) => this.noGrad(() => value.view(shape)),
+      pass: (value: Tensor, _shape: readonly number[]) => {
+        const source = requireTensorState(value).identity;
+        const result = this.#detachedAlias(source);
+        const identity = requireTensorState(result).identity;
+        this.#bindIncomingIdentity(identity, source);
+        identity.incomingDense = source.incomingDense;
+        identity.acquisitionFamily = source.acquisitionFamily;
+        return result;
+      },
+      expand: (value: Tensor, shape: readonly number[]) => this.#expand(value, shape),
+      zeros: (shape: readonly number[]) => this.tensor(new Float32Array(tensorElementCount(shape)), { shape }),
+      close: (value: Tensor) => value.close(),
+      inherit: (value: Tensor, source: Tensor) => this.#attachTensorControls(value, [requireTensorState(source).value.outcomes]),
+    };
+  }
+
+  #bindIncomingIdentity(identity: TensorIdentity, source: TensorIdentity): void {
+    identity.incomingIdentity.owners -= identity.references;
+    identity.incomingIdentity = source.incomingIdentity;
+    identity.incomingIdentity.owners += identity.references;
+  }
+
+  #canAcquireIncoming(identity: TensorIdentity): boolean {
+    return identity.incomingDense && identity.incomingIdentity.owners === 1;
+  }
+
+  #combineIncoming(left: Tensor, right: Tensor): Tensor {
+    const source = requireTensorState(left).identity;
+    const reusable = this.#canAcquireIncoming(source) && source.family.identities === 1;
+    const result = this.noGrad(() => left.add(right));
+    if (reusable) {
+      const identity = requireTensorState(result).identity;
+      identity.family.version = source.family.version + 1;
+      identity.family.current.version = identity.family.version;
+    }
+    return result;
+  }
+
+  #attachTensorControls(handle: Tensor, groups: readonly (readonly WriterOutcome[])[]): void {
+    const identity = requireTensorState(handle).identity;
+    this.#setIdentityControls(identity, captureWriterOutcomes([identity.controls, ...groups]));
+  }
+
+  #setIdentityControls(identity: TensorIdentity, controls: readonly WriterOutcome[]): void {
+    const next = captureWriterOutcomes([controls]);
+    retainWriterOutcomes(next);
+    releaseWriterOutcomes(identity.controls);
+    identity.controls = next;
+  }
+
+  #accumulateGradient(owner: TensorIdentity, incoming: Tensor, share: boolean): void {
+    if (this.#mutationFailure !== undefined) {
+      throw new TabgradError("MUTATION_FAILED", "A failed write prevents further updates in this session.", {}, this.#mutationFailure.error);
+    }
+    let acquired: Tensor;
+    const prior = owner.gradient;
+    if (prior !== null && owner.trueLeaf) {
+      const state = new TensorState(this, prior, (state) => this.#resolveHistory(state));
+      const next = this.noGrad(() => this.#binary(ADD_OPERATION, state, incoming));
+      try { this.noGrad(() => this.#copy(state, next)); }
+      finally { next.close(); }
+      return;
+    }
+    if (prior !== null) {
+      const state = new TensorState(this, prior, (state) => this.#resolveHistory(state));
+      acquired = this.noGrad(() => this.#binary(ADD_OPERATION, state, incoming));
+    } else if (share) {
+      acquired = this.#detachedAlias(requireTensorState(incoming).identity, true);
+    } else {
+      acquired = this.#borrowValue(requireTensorState(incoming).value);
+      // Leaf detached-clone acquisition starts at one; retained nonleaf
+      // cloning starts at zero. Captured metadata must match its new counter.
+      const version = owner.trueLeaf ? 1 : 0;
+      requireTensorState(acquired).family.version = version;
+      requireTensorState(acquired).family.current.version = version;
+    }
+    try {
+      // Acquisition is mandatory too: clearing the slot cannot cancel it.
+      const source = requireTensorState(acquired).value;
+      const prerequisites = captureWriterOutcomes([source.outcomes]);
+      const outcome = this.#writers.create();
+      this.#retainValue(source);
+      retainWriterOutcomes(prerequisites);
+      this.#setIdentityControls(requireTensorState(acquired).identity,
+        captureWriterOutcomes([requireTensorState(acquired).identity.controls, [outcome]]));
+      this.#pendingCopies += 1;
+      this.#enqueue(this.#copyEffect(source, prerequisites, outcome), () => {
+        this.#pendingCopies -= 1;
+        if (this.#pendingCopies === 0) { this.#copyCompletion?.resolve(); this.#copyCompletion = undefined; }
+        let failures: unknown[] | undefined;
+        try { this.#releaseValue(source); } catch (error) { (failures ??= []).push(error); }
+        try { releaseWriterOutcomes(prerequisites); } catch (error) { (failures ??= []).push(error); }
+        throwCleanupFailures(failures, "Gradient acquisition retirement failed.");
+      }, () => this.#replaceGradient(owner, requireTensorState(acquired).identity));
+    } finally { acquired.close(); }
   }
 
   #backendFor(device: TensorDevice, operation: string): ExecutionBackend {
@@ -853,7 +1182,7 @@ export class RuntimeSession {
   }
 
   #resolveHistory(state: TensorState): DerivativeNode<TensorValue> | null {
-    if (!state.isView) return state.family.history;
+    if (!state.isView) return state.identity.entry;
     if (state.specialView && state.requiresGrad && state.historyVersion !== state.family.version) {
       throw new TabgradError("INPLACE_VIEW", "A view created in no_grad was modified in place, or its base was modified while recording.");
     }
@@ -863,9 +1192,10 @@ export class RuntimeSession {
     if (state.historyVersion === state.family.version) return state.viewHistory;
     const previous = state.viewHistory;
     state.viewHistory = state.requiresGrad
-      ? this.#history.record(state.shape, IDENTITY_DERIVATIVE, [state.family.history], [state.value])
+      ? this.#history.record(state.shape, IDENTITY_DERIVATIVE, [this.#familyBase(state.identity).entry], [state.value])
       : null;
     state.historyVersion = state.family.version;
+    this.#moveRetention(state.identity, previous, state.viewHistory);
     if (previous !== null) this.#history.release(previous);
     return state.viewHistory;
   }
@@ -899,7 +1229,7 @@ export class RuntimeSession {
     if (this.#recording && destination.specialView && (destination.requiresGrad || source.requiresGrad)) {
       throw new TabgradError("INPLACE_VIEW", "A view created in no_grad cannot be updated while recording gradients.");
     }
-    if (this.#recording && destination.family.requiresGrad && destination.family.history?.recipe === null) {
+    if (this.#recording && destination.requiresGrad && this.#familyBase(destination.identity).entry?.recipe === null) {
       throw new TabgradError("INPLACE_GRADIENT", "A leaf requiring gradients, or its view, cannot be updated while recording.");
     }
     if (this.#mutationFailure !== undefined) {
@@ -910,13 +1240,14 @@ export class RuntimeSession {
     }
     const previous = destination.family.current;
     const captured = source.value;
-    const prerequisites = captureWriterOutcomes([previous.outcomes, captured.outcomes]);
+    const prerequisites = captureWriterOutcomes([previous.outcomes, destination.identity.controls, captured.outcomes]);
     this.#checkUpdateCapacity(9 + prerequisites.length * 2);
     if (this.#pendingCopies >= this.#updateLimits.pendingCopies || destination.family.version >= Number.MAX_SAFE_INTEGER) {
       throw new TabgradError("RESOURCE_EXHAUSTED", "Persistent copy admission exceeds its pending-count or version capacity.");
     }
     const outcome = this.#writers.create();
-    const previousHistory = destination.family.history;
+    const base = this.#familyBase(destination.identity);
+    const previousHistory = base.entry;
     const history = this.#recording && (destination.requiresGrad || source.requiresGrad)
       ? this.#history.record(previous.shape, destination.isView ? COPY_SLICES_DERIVATIVE : COPY_DERIVATIVE, [previousHistory, source.history], [previous, captured], [outcome])
       : previousHistory;
@@ -932,11 +1263,14 @@ export class RuntimeSession {
     this.#valueReferences += 1;
     this.#pendingCopies += 1;
     if (history !== previousHistory) {
-      destination.family.history = history;
-      destination.family.requiresGrad = destination.requiresGrad || source.requiresGrad;
+      base.entry = history;
+      base.requiresGrad = destination.requiresGrad || source.requiresGrad;
+      this.#moveRetention(base, previousHistory, history);
     }
     destination.family.current = next;
     destination.family.version = next.version;
+    this.#setIdentityControls(destination.identity, []);
+    if (destination.isView && this.#recording) this.#resolveHistory(destination);
     this.#enqueue(this.#copyEffect(captured, prerequisites, outcome), () => {
       this.#pendingCopies -= 1;
       if (this.#pendingCopies === 0) {
@@ -957,7 +1291,7 @@ export class RuntimeSession {
   }
 
   #checkUpdateCapacity(additionalOwners: number, additionalBytes = 0): void {
-    const owners = this.#valueReferences + this.#history.references + this.#writers.references
+    const owners = this.#identityReferences + this.#valueReferences + this.#history.references + this.#writers.references
       + this.#requestLeases + this.#undeliveredEffects.size;
     if (owners + additionalOwners > this.#updateLimits.owners || this.#liveBackingBytes + additionalBytes > this.#updateLimits.backingBytes) {
       throw new TabgradError("RESOURCE_EXHAUSTED", "Persistent update captures exceed the session capacity.", {
@@ -1037,10 +1371,12 @@ export class RuntimeSession {
       throw new TabgradError("INVALID_GRADIENT", "Scalar expansion requires a one-element input.");
     }
     this.#checkCapturedAdmission([value], shape);
-    return this.#recordOperation({
+    const result = this.#recordOperation({
       record: new OperationRecord(EXPAND_OPERATION, [value]),
       outputMetadata: { shape, dtype: value.dtype, device: value.device, layout: value.layout },
     });
+    requireTensorState(result).identity.incomingDense = false;
+    return result;
   }
 
   #binary(definition: EqualShapeBinaryOperationDefinition, left: TensorState, rightHandle: unknown): Tensor {
@@ -1077,10 +1413,15 @@ export class RuntimeSession {
     value.outcomes = captured.outcomes;
     const history = !this.#recording || !source.requiresGrad ? null
       : this.#history.record(value.shape, VIEW_OPERATION.derivative, [source.history], [captured]);
-    source.family.handles += 1;
-    const state = new TensorState(this, value, history, source.requiresGrad, source.family, !this.#recording || source.specialView, (state) => this.#resolveHistory(state));
-    this.#states.add(state);
-    return createTensorHandle(state);
+    source.family.identities += 1;
+    this.#retainIdentity(source.identity);
+    const identity = new TensorIdentity(source.family, value, history, source.requiresGrad,
+      source.identity, !this.#recording || source.specialView, false);
+    this.#setIdentityControls(identity, source.identity.controls);
+    identity.incomingDense = source.identity.incomingDense;
+    identity.acquisitionFamily = source.identity.acquisitionFamily;
+    this.#identities.add(identity);
+    return this.#expose(identity);
   }
 
   #prepare(): Promise<void> {
@@ -1159,8 +1500,31 @@ export class RuntimeSession {
     }
   }
 
+  #semanticOwnership(): RuntimeSemanticOwnership {
+    this.#collectCycles();
+    const identities = [...this.#identities];
+    const identityReferences = identities.reduce((total, identity) => total + identity.references, 0);
+    const gradientAssociations = identities.filter(identity => identity.gradient !== null).length;
+    const viewBaseReferences = identities.filter(identity => identity.base !== null).length;
+    const leafEndpointOwners = this.#history.leafOwners;
+    const nonleafEntryOwners = identities.filter(identity => !identity.trueLeaf && identity.entry !== null).length;
+    const publicExposures = this.#states.size;
+    const incoming = new Set(identities.map(identity => identity.incomingIdentity));
+    const incomingReferences = [...incoming].reduce((total, token) => total + token.owners, 0);
+    if (identityReferences !== this.#identityReferences || incomingReferences !== identityReferences ||
+      gradientAssociations !== this.#associationOwners ||
+      identityReferences !== publicExposures + gradientAssociations + viewBaseReferences + leafEndpointOwners) {
+      throw new TabgradError("BACKEND_STATUS_ERROR", "Semantic ownership and its occurrence accounting disagree.");
+    }
+    return { identities: identities.length, identityReferences, gradientAssociations, viewBaseReferences,
+      leafEndpointOwners, nonleafEntryOwners, publicExposures,
+      collectorPasses: this.#collectorPasses, collectorVisitedIdentities: this.#collectorVisitedIdentities,
+      collectorVisitedHistoryNodes: this.#collectorVisitedHistoryNodes, collectorVisitedEdges: this.#collectorVisitedEdges };
+  }
+
   #ownership(): RuntimeOwnership {
-    const families = new Set([...this.#states].map((state) => state.family));
+    this.#collectCycles();
+    const families = new Set([...this.#identities].map((identity) => identity.family));
     const backings = new Set([...this.#values].map((value) => value.storage));
     const valueReferences = [...this.#values].reduce((total, value) => total + value.references, 0);
     const backingBytes = [...backings].reduce((total, backing) => total + tensorElementCount(backing.value.shape) * 4, 0);
@@ -1174,6 +1538,7 @@ export class RuntimeSession {
   }
 
   diagnostics(): RuntimeDiagnostics {
+    this.#collectCycles();
     return Object.freeze({
       ...this.#backend.diagnostics(),
       webgpu: this.#gpuBackend?.diagnostics() ?? null,
@@ -1202,10 +1567,13 @@ export class RuntimeSession {
     for (const state of [...this.#states]) {
       if (!state.closed) {
         state.closed = true;
+        TENSOR_FINALIZER.unregister(state);
         try { this.#releaseHandle(state); }
         catch (error) { failures.push(error); }
       }
     }
+    try { this.#collectCycles(); }
+    catch (error) { failures.push(error); }
     void this.#finishClose(failures).then(resolve, reject);
     return this.#closePromise;
   }
@@ -1236,28 +1604,143 @@ export class RuntimeSession {
 
   #releaseHandle(state: TensorState): void {
     this.#states.delete(state);
-    let failures: unknown[] | undefined;
-    if (state.viewHistory !== null) {
-      try { this.#history.release(state.viewHistory); }
-      catch (error) { (failures ??= []).push(error); }
-    }
-    state.family.handles -= 1;
-    if (state.family.handles === 0) {
-      if (state.family.history !== null) {
-        try { this.#history.release(state.family.history); }
-        catch (error) { (failures ??= []).push(error); }
-      }
-      try { this.#releaseValue(state.family.current); }
-      catch (error) { (failures ??= []).push(error); }
-    }
-    throwCleanupFailures(failures, "Tensor handle cleanup failed.");
+    state.identity.exposures -= 1;
+    try { this.#releaseIdentity(state.identity); }
+    finally { this.#scheduleCollection(); }
   }
 
   #createHandle(value: TensorValue, history: DerivativeNode<TensorValue> | null = null,
     requiresGrad: boolean = history !== null): Tensor {
-    const state = new TensorState(this, value, history, requiresGrad, undefined, false, (state) => this.#resolveHistory(state));
+    const identity = new TensorIdentity(new TensorFamily(value), value, history, requiresGrad,
+      null, false, requiresGrad && history === null);
+    this.#identities.add(identity);
+    return this.#expose(identity);
+  }
+
+  #expose(identity: TensorIdentity): Tensor {
+    const existing = identity.canonical?.deref();
+    if (existing !== undefined && !requireTensorState(existing).closed) return existing;
+    const state = new TensorState(this, identity, (state) => this.#resolveHistory(state));
+    this.#retainIdentity(identity);
+    identity.exposures += 1;
     this.#states.add(state);
-    return createTensorHandle(state);
+    const handle = createTensorHandle(state);
+    identity.canonical = new WeakRef(handle);
+    return handle;
+  }
+
+  #familyBase(identity: TensorIdentity): TensorIdentity {
+    while (identity.base !== null) identity = identity.base;
+    return identity;
+  }
+
+  #releaseIdentity(identity: TensorIdentity): void {
+    if (identity.retired) return;
+    identity.references -= 1;
+    identity.incomingIdentity.owners -= 1;
+    this.#identityReferences -= 1;
+    if (identity.references < 0) throw new TabgradError("BACKEND_STATUS_ERROR", "A semantic tensor owner was released twice.");
+    if (identity.references !== 0) return;
+    this.#retirementQueue.push(identity);
+    if (this.#retiring) return;
+    this.#retiring = true;
+    let failures: unknown[] | undefined;
+    try {
+      let current: TensorIdentity | TensorValue | undefined;
+      while ((current = this.#retirementQueue.pop()) !== undefined) {
+        if (current instanceof TensorValue) {
+          try { this.#releaseValue(current); } catch (error) { (failures ??= []).push(error); }
+          continue;
+        }
+        if (current.retired) continue;
+        const pendingOffset = this.#retirementQueue.length;
+        current.retired = true;
+        this.#identities.delete(current);
+        const gradient = current.gradient;
+        current.gradient = null;
+        if (gradient !== null) {
+          this.#associationOwners -= 1;
+          try { this.#releaseIdentity(gradient); } catch (error) { (failures ??= []).push(error); }
+        }
+        if (current.base !== null) {
+          try { this.#releaseIdentity(current.base); } catch (error) { (failures ??= []).push(error); }
+        }
+        if (current.entry !== null && !current.trueLeaf) {
+          this.#retainedEntries.delete(current.entry);
+          try { this.#history.release(current.entry); } catch (error) { (failures ??= []).push(error); }
+        }
+        current.entry = null;
+        releaseWriterOutcomes(current.controls);
+        current.controls = [];
+        current.family.identities -= 1;
+        // Retire children in the order their owning releases were scheduled,
+        // before this identity's final numerical pin. Keep constant stack depth.
+        const children = this.#retirementQueue.splice(pendingOffset);
+        if (current.family.identities === 0) {
+          this.#retirementQueue.push(current.family.current);
+        }
+        for (let index = children.length - 1; index >= 0; index -= 1) this.#retirementQueue.push(children[index]!);
+      }
+    } finally { this.#retiring = false; }
+    throwCleanupFailures(failures, "Semantic tensor retirement failed.");
+  }
+
+  #retainIdentity(identity: TensorIdentity): void {
+    identity.references += 1;
+    identity.incomingIdentity.owners += 1;
+    this.#identityReferences += 1;
+  }
+
+  #scheduleCollection(): void {
+    if (this.#associationOwners === 0 || this.#collectionScheduled) return;
+    this.#collectionScheduled = true;
+    queueMicrotask(() => {
+      try { this.#collectCycles(); }
+      catch (error) { (this.#cleanupFailures ??= []).push(error); }
+    });
+  }
+
+  /** Mark actual semantic roots; retire logical owners before fallible payload cleanup. */
+  #collectCycles(): void {
+    if (!this.#collectionScheduled && !this.#closed) return;
+    this.#collectionScheduled = false;
+    this.#collectorPasses += 1;
+    const live = new Set<TensorIdentity>();
+    const histories = new Set<DerivativeNode<TensorValue>>();
+    const pending: (TensorIdentity | DerivativeNode<TensorValue>)[] = [...this.#states].map(state => state.identity);
+    while (pending.length !== 0) {
+      const owner = pending.pop()!;
+      if (owner instanceof TensorIdentity) {
+        if (live.has(owner) || owner.retired) continue;
+        live.add(owner);
+        this.#collectorVisitedIdentities += 1;
+        if (owner.gradient !== null) { pending.push(owner.gradient); this.#collectorVisitedEdges += 1; }
+        if (owner.base !== null) { pending.push(owner.base); this.#collectorVisitedEdges += 1; }
+        if (!owner.trueLeaf && owner.entry !== null) { pending.push(owner.entry); this.#collectorVisitedEdges += 1; }
+      } else {
+        if (histories.has(owner)) continue;
+        histories.add(owner);
+        this.#collectorVisitedHistoryNodes += 1;
+        if (owner.leafOwner instanceof TensorIdentity) { pending.push(owner.leafOwner); this.#collectorVisitedEdges += 1; }
+        for (const input of owner.inputs) if (input !== null) { pending.push(input); this.#collectorVisitedEdges += 1; }
+      }
+    }
+    const unreachable = [...this.#identities].filter(identity => !live.has(identity));
+    // Break every association occurrence first. Other releases use ordinary
+    // reference ownership; requests continue owning their captured values.
+    const released: TensorIdentity[] = [];
+    for (const identity of unreachable) {
+      if (identity.gradient !== null) {
+        released.push(identity.gradient);
+        identity.gradient = null;
+        this.#associationOwners -= 1;
+      }
+    }
+    let failures: unknown[] | undefined;
+    for (const identity of released) {
+      try { this.#releaseIdentity(identity); } catch (error) { (failures ??= []).push(error); }
+    }
+    throwCleanupFailures(failures, "Semantic cycle retirement failed.");
   }
 
   #registerValue(value: TensorValue): void {
@@ -1407,7 +1890,8 @@ export class RuntimeSession {
     throwCleanupFailures(failures, "Completed program dependency cleanup failed.");
   }
 
-  #enqueue<T>(steps: Generator<ExecutionStep, T, unknown>, release?: () => void): ExecutionRequest<T> {
+  #enqueue<T>(steps: Generator<ExecutionStep, T, unknown>, release?: () => void,
+    admit?: () => void): ExecutionRequest<T> {
     const request = new ExecutionRequest(
       steps,
       () => this.#advanceRequests(),
@@ -1428,7 +1912,10 @@ export class RuntimeSession {
     if (this.#requestTail === undefined) this.#requestHead = request;
     else this.#requestTail.next = request;
     this.#requestTail = request;
-    this.#advanceRequests();
+    // Register mandatory work before logical publication can retire an old
+    // owner. Its physical cleanup may fail, but cannot cancel accepted work.
+    try { admit?.(); }
+    finally { this.#advanceRequests(); }
     return request;
   }
 
@@ -1519,6 +2006,15 @@ export function completeRuntimeSession(session: RuntimeSession): Promise<void> {
   return runtimeSessionAccess(session).complete();
 }
 
+/** @internal Automatic frontend retirement preserves fallible cleanup for close. */
+export function finalizeTensorExposure(handle: Tensor): void {
+  const state = requireTensorState(handle);
+  if (state.closed) return;
+  state.closed = true;
+  TENSOR_FINALIZER.unregister(state);
+  runtimeSessionAccess(state.session).finalizeHandle(state);
+}
+
 /** @internal Attach a library-owned physical connection, not a public backend SPI. */
 export function createConnectedRuntimeSession(backend: WebGpuExecutionBackend): RuntimeSession {
   return new RuntimeSession({ [RUNTIME_SESSION_GPU_BACKEND]: backend } as InternalRuntimeSessionOptions);
@@ -1596,7 +2092,7 @@ export function inspectTensorReachabilityForTesting(handle: Tensor): { readonly 
     if (seen.has(object)) continue;
     seen.add(object);
     if (object instanceof TensorValue) values += 1;
-    if ("current" in object && "handles" in object) families += 1;
+    if (object instanceof TensorFamily) families += 1;
     for (const key of Object.keys(object)) {
       // Control outcomes and causal diagnostics are separate from numeric reachability.
       if (key === "outcomes" || key === "provenance") continue;
@@ -1610,6 +2106,11 @@ export function inspectTensorReachabilityForTesting(handle: Tensor): { readonly 
 /** @internal Inspect production owners, without retaining inspected objects. */
 export function inspectRuntimeOwnershipForTesting(session: RuntimeSession): RuntimeOwnership {
   return runtimeSessionAccess(session).ownership();
+}
+
+/** @internal Snapshot semantic owning occurrences and cumulative collector work. */
+export function inspectRuntimeSemanticOwnershipForTesting(session: RuntimeSession): RuntimeSemanticOwnership {
+  return runtimeSessionAccess(session).semanticOwnership();
 }
 
 /** @internal Native version-counter diagnostic, outside the supported public API. */

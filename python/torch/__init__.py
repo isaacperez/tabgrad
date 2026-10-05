@@ -8,15 +8,17 @@ from math import prod
 from operator import index
 from types import NotImplementedType, TracebackType
 from typing import SupportsIndex, TypeAlias, cast, overload
-from weakref import finalize
+from warnings import warn
+from weakref import WeakValueDictionary, finalize
 
 # JavaScript registers this module; its checked .pyi has no Python source file.
 import _tabgrad_runtime_bridge as _bridge  # pyright: ignore[reportMissingModuleSource]
-from pyodide.ffi import JsException, to_js
+from pyodide.ffi import JsException, JsNull, jsnull, to_js
 
 _runtime_session = _bridge.session
 
 TensorList: TypeAlias = float | list["TensorList"]
+_live_wrappers: WeakValueDictionary[int, Tensor] = WeakValueDictionary()
 
 
 class no_grad:
@@ -187,6 +189,64 @@ class Tensor:
     def requires_grad(self) -> bool:
         return self._handle.requiresGrad
 
+    @property
+    def grad(self) -> Tensor | None:
+        if _bridge.shouldWarnGradient(self._handle):
+            warn(
+                "The .grad attribute of a Tensor that is not a leaf is being accessed. Its .grad attribute will not be populated unless retained by backward inputs.",
+                UserWarning,
+                stacklevel=2,
+            )
+        handle = self._handle.grad
+        return (
+            None
+            if handle is None or isinstance(handle, JsNull)
+            else Tensor._from_handle(handle)
+        )
+
+    @grad.setter
+    def grad(self, value: object) -> None:
+        if value is not None and not isinstance(value, Tensor):
+            raise TypeError("assigned grad must be a Tensor or None")
+        try:
+            self._handle.grad = jsnull if value is None else value._handle
+        except JsException as error:
+            _raise_gradient_failure(error)
+
+    def backward(
+        self,
+        gradient: object = None,
+        retain_graph: object = None,
+        create_graph: object = False,
+        inputs: object = None,
+    ) -> None:
+        """Accumulate first-order CPU gradients through the shared semantic runtime."""
+        _backward_mode("retain_graph", retain_graph, optional=True)
+        _backward_mode("create_graph", create_graph)
+        requested = _backward_inputs(inputs)
+        seed = _backward_seed(gradient)
+        try:
+            _bridge.backward(
+                self._handle,
+                None
+                if requested is None
+                else to_js(
+                    [
+                        value._handle if isinstance(value, Tensor) else None
+                        for value in requested
+                    ]
+                ),
+                None if seed is None else seed._handle,
+            )
+        except JsException as error:
+            if requested is not None and any(
+                not isinstance(value, Tensor) for value in requested
+            ):
+                failure = cast("_bridge.RuntimeException", error)
+                if failure.js_error.code == "INVALID_TENSOR":
+                    raise RuntimeError("inputs must contain Tensors") from error
+            _raise_gradient_failure(error)
+
     def add(self, other: object, *, alpha: object = 1) -> Tensor:
         if not isinstance(other, Tensor):
             raise TypeError("Tabgrad addition requires two tensors.")
@@ -292,14 +352,74 @@ class Tensor:
     @staticmethod
     def _from_handle(handle: _bridge.RuntimeTensor) -> Tensor:
         try:
+            key = _bridge.exposureKey(handle)
+            existing = _live_wrappers.get(key)
+            if existing is not None:
+                return existing
             result = object.__new__(Tensor)
             result._handle = handle
             # The callback retains the JS handle, never its Python wrapper.
-            finalize(result, handle.close)
+            finalize(result, _bridge.releaseExposure, handle)
+            _live_wrappers[key] = result
             return result
         except BaseException:
             handle.close()
             raise
+
+
+def _backward_mode(name: str, value: object, optional: bool = False) -> None:
+    if optional and value is None:
+        return
+    if type(value) not in (bool, int):
+        raise TypeError(f"{name} must be bool")
+    if value:
+        raise RuntimeError(f"Tabgrad does not support enabled {name}.")
+
+
+def _backward_inputs(value: object) -> tuple[object, ...] | None:
+    if value is None:
+        return None
+    if isinstance(value, Tensor):
+        return (value,)
+    if type(value) is dict:
+        items = tuple(cast("dict[object, object]", value).values())
+    else:
+        try:
+            items = tuple(cast("Iterable[object]", value))
+        except TypeError as error:
+            raise TypeError("inputs must be a Tensor or tensor iterable") from error
+    if not items:
+        raise RuntimeError("inputs must be a nonempty iterable of Tensors")
+    return items
+
+
+def _backward_seed(value: object) -> Tensor | None:
+    if value is None or isinstance(value, Tensor):
+        return value
+    try:
+        items = tuple(cast("Iterable[object]", value))
+    except TypeError as error:
+        raise TypeError(
+            "gradient must be a Tensor, None, or one-element sequence"
+        ) from error
+    if len(items) == 1 and (items[0] is None or isinstance(items[0], Tensor)):
+        return items[0]
+    raise TypeError("gradient must be a Tensor, None, or one-element sequence")
+
+
+def _raise_gradient_failure(error: JsException) -> None:
+    failure = cast("_bridge.RuntimeException", error)
+    if failure.js_error.code in {
+        "INVALID_GRADIENT",
+        "SHAPE_MISMATCH",
+        "GRADIENT_NOT_TRACKED",
+        "CONSUMED_HISTORY",
+        "SAVED_VERSION_MISMATCH",
+        "INPLACE_VIEW",
+        "UNSUPPORTED_GRADIENT",
+    }:
+        raise RuntimeError(str(error)) from error
+    raise error
 
 
 def _raise_view_history_failure(error: JsException) -> None:

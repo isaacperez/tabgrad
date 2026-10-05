@@ -15,6 +15,7 @@ export interface DerivativeRecipe {
 export class DerivativeNode<Value> {
   references = 1;
   consumed = false;
+  leafOwner: object | undefined;
   constructor(
     readonly shape: readonly number[],
     readonly recipe: DerivativeRecipe | null,
@@ -34,7 +35,7 @@ class ReadyDerivativeNodes<Value> {
     this.#heap.push(node);
     while (index > 0) {
       const parent = (index - 1) >>> 1;
-      if (this.#heap[parent]!.sequence >= node.sequence) break;
+      if (derivativePriority(this.#heap[parent]!) >= derivativePriority(node)) break;
       this.#heap[index] = this.#heap[parent]!;
       index = parent;
     }
@@ -48,8 +49,8 @@ class ReadyDerivativeNodes<Value> {
       let index = 0;
       while (index * 2 + 1 < this.#heap.length) {
         let child = index * 2 + 1;
-        if (child + 1 < this.#heap.length && this.#heap[child + 1]!.sequence > this.#heap[child]!.sequence) child += 1;
-        if (last!.sequence >= this.#heap[child]!.sequence) break;
+        if (child + 1 < this.#heap.length && derivativePriority(this.#heap[child + 1]!) > derivativePriority(this.#heap[child]!)) child += 1;
+        if (derivativePriority(last!) >= derivativePriority(this.#heap[child]!)) break;
         this.#heap[index] = this.#heap[child]!;
         index = child;
       }
@@ -59,12 +60,19 @@ class ReadyDerivativeNodes<Value> {
   }
 }
 
+/** Native CPU leaf accumulators outrank ready recipes once all contributions arrive. */
+function derivativePriority<Value>(node: DerivativeNode<Value>): number {
+  return node.recipe === null ? Number.MAX_SAFE_INTEGER : node.sequence;
+}
+
 /** Numerical and handle ownership stays with the runtime's ordinary admission path. */
 export interface DerivativeOperations<Value, Gradient> {
   borrow(value: Value): Gradient;
   add(left: Gradient, right: Gradient): Gradient;
   mul(left: Gradient, right: Gradient): Gradient;
   view(value: Gradient, shape: readonly number[]): Gradient;
+  pass?(value: Gradient, shape: readonly number[]): Gradient;
+  inherit?(value: Gradient, source: Gradient): void;
   expand(value: Gradient, shape: readonly number[]): Gradient;
   zeros(shape: readonly number[]): Gradient;
   close(value: Gradient): void;
@@ -107,16 +115,26 @@ export class DerivativeHistory<Value> {
   #references = 0;
   #sequence = 0;
   get references(): number { return this.#references; }
+  get leafOwners(): number { return [...this.#nodes].filter(node => node.leafOwner !== undefined).length; }
 
   constructor(
     private readonly retainValue: (value: Value) => void,
     private readonly releaseValue: (value: Value) => void,
     private readonly validateValue: (value: Value) => void = () => {},
     private readonly valueOutcomes: (value: Value) => readonly WriterOutcome[] = () => [],
+    private readonly retainLeafOwner: (owner: object) => void = () => {},
+    private readonly releaseLeafOwner: (owner: object) => void = () => {},
   ) {}
 
-  leaf(shape: readonly number[]): DerivativeNode<Value> {
-    return this.#create(shape, null, [], []);
+  leaf(shape: readonly number[], owner?: object): DerivativeNode<Value> {
+    const node = this.#create(shape, null, [], []);
+    if (owner !== undefined) {
+      node.leafOwner = owner;
+      node.references = 0;
+      this.#references -= 1;
+      this.#nodes.delete(node);
+    }
+    return node;
   }
 
   record(
@@ -130,7 +148,14 @@ export class DerivativeHistory<Value> {
       const operands = input === null ? [] : recipe.savedOperands(position);
       return operands.map((operand) => values[operand]!);
     });
-    for (const input of inputs) if (input !== null) { input.references += 1; this.#references += 1; }
+    for (const input of inputs) if (input !== null) {
+      if (input.references === 0) {
+        this.#nodes.add(input);
+        if (input.leafOwner !== undefined) this.retainLeafOwner(input.leafOwner);
+      }
+      input.references += 1;
+      this.#references += 1;
+    }
     for (const operands of saved) {
       for (const value of operands) {
         this.retainValue(value);
@@ -167,6 +192,10 @@ export class DerivativeHistory<Value> {
       catch (error) { (failures ??= []).push(error); }
       for (const input of current.inputs) if (input !== null) pending.push(input);
       current.inputs = [];
+      if (current.leafOwner !== undefined) {
+        try { this.releaseLeafOwner(current.leafOwner); }
+        catch (error) { (failures ??= []).push(error); }
+      }
     }
     throwCleanupFailures(failures, "Derivative history cleanup failed.");
   }
@@ -186,7 +215,7 @@ export class DerivativeHistory<Value> {
   }
 
   /** Validate connectivity and select ancestry without executing or checking saved state. */
-  plan(output: DerivativeNode<Value>, requested: readonly DerivativeNode<Value>[]): DerivativePlan<Value> {
+  plan(output: DerivativeNode<Value>, requested: readonly DerivativeNode<Value>[], allowUnused = false): DerivativePlan<Value> {
     const targets = new Set(requested);
     const visited = new Set<DerivativeNode<Value>>();
     const needed = new Set<DerivativeNode<Value>>();
@@ -207,10 +236,10 @@ export class DerivativeHistory<Value> {
       visited.add(node);
       frames.pop();
     }
-    if (requested.some((node) => !visited.has(node))) {
+    if (!allowUnused && requested.some((node) => !visited.has(node))) {
       throw new TabgradError("UNUSED_INPUT", "A requested input was not used to compute the output.");
     }
-    return { order, needed, requested, outcomes: order
+    return { order, needed, requested: requested.filter(node => needed.has(node)), outcomes: order
       .filter((node) => node.inputs.some((input) => input !== null && needed.has(input)))
       .map((node) => node.outcomes) };
   }
@@ -218,10 +247,13 @@ export class DerivativeHistory<Value> {
   /** Each contribution is an ordinary untracked tensor; repeated requests own distinct handles. */
   execute<Gradient>(
     plan: DerivativePlan<Value>, seed: Gradient, operations: DerivativeOperations<Value, Gradient>,
+    receive: (node: DerivativeNode<Value>, incoming: Gradient, traversed: boolean) => void = () => {},
+    executeSelectedRecipes = false,
+    collectResults = true,
   ): Gradient[] {
     const gradients = new Map<DerivativeNode<Value>, Gradient>();
     const temporaries = new Set<Gradient>();
-    const requested = new Set(plan.requested);
+    const requested = new Set(collectResults ? plan.requested : []);
     const results: Gradient[] = [];
     const pending = new Map<DerivativeNode<Value>, number>();
     const ready = new ReadyDerivativeNodes<Value>();
@@ -239,7 +271,8 @@ export class DerivativeHistory<Value> {
       let node: DerivativeNode<Value> | undefined;
       while ((node = ready.pop()) !== undefined) {
         const incoming = gradients.get(node)!;
-        const traversed = node.inputs.some((input) => input !== null && plan.needed.has(input));
+        const traversed = node.inputs.some((input) => input !== null && (executeSelectedRecipes || plan.needed.has(input)));
+        receive(node, incoming, traversed);
         if (traversed) {
           if (node.consumed) throw new TabgradError("CONSUMED_HISTORY", "Saved derivative values have already been consumed.");
           // Native checks every required save of this executing recipe, including
@@ -251,6 +284,7 @@ export class DerivativeHistory<Value> {
           if (input === null || !plan.needed.has(input)) continue;
           let contribution = node.recipe!.apply(incoming, node.saved[position] ?? [], input.shape, operations, position);
           temporaries.add(contribution);
+          operations.inherit?.(contribution, incoming);
           const previous = gradients.get(input);
           if (previous !== undefined) {
             const combined = operations.add(previous, contribution);
@@ -274,7 +308,7 @@ export class DerivativeHistory<Value> {
           releaseTemporary(incoming, temporaries, operations);
         }
       }
-      for (const node of plan.requested) results.push(operations.view(gradients.get(node)!, node.shape));
+      if (collectResults) for (const node of plan.requested) results.push(operations.view(gradients.get(node)!, node.shape));
     } catch (error) {
       failures = [error];
     }

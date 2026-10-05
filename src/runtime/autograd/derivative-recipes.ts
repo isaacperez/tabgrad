@@ -10,6 +10,15 @@ export const IDENTITY_DERIVATIVE: DerivativeRecipe = Object.freeze({
   },
 });
 
+/** Add and copy pass the native incoming identity; a view creates a new identity. */
+export const PASS_DERIVATIVE: DerivativeRecipe = Object.freeze({
+  savedOperands: () => [],
+  apply<Value, Gradient>(incoming: Gradient, _saved: readonly Value[], shape: readonly number[],
+    operations: DerivativeOperations<Value, Gradient>): Gradient {
+    return operations.pass?.(incoming, shape) ?? operations.view(incoming, shape);
+  },
+});
+
 export const MUL_DERIVATIVE: DerivativeRecipe = Object.freeze({
   savedOperands: (position: number) => [1 - position],
   apply<Value, Gradient>(incoming: Gradient, saved: readonly Value[], _shape: readonly number[],
@@ -34,7 +43,7 @@ export const COPY_DERIVATIVE: DerivativeRecipe = Object.freeze({
   savedOperands: () => [],
   apply<Value, Gradient>(incoming: Gradient, _saved: readonly Value[], shape: readonly number[],
     operations: DerivativeOperations<Value, Gradient>, position: number): Gradient {
-    return position === 0 ? operations.zeros(shape) : operations.view(incoming, shape);
+    return position === 0 ? operations.zeros(shape) : (operations.pass?.(incoming, shape) ?? operations.view(incoming, shape));
   },
 });
 

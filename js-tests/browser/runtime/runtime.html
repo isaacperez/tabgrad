@@ -7,6 +7,8 @@
   <body>
     <script type="module">
       import { checkGradientProgress, loadGradientProgressOracle } from "/helpers/gradient-progress-cases.mjs";
+      import { checkBackwardCase, isDirectBackwardCase } from "/helpers/backward-cases.mjs";
+      import { checkBackwardLifetime, checkBackwardFaults, checkBackwardCleanup } from "/helpers/backward-lifetime.mjs";
       const parameters = new URLSearchParams(location.search);
       const token = parameters.get("token");
       const forceVariant = parameters.get("variant");
@@ -237,7 +239,7 @@
 
       try {
         await reportPhase("application-started");
-        const [{ createRuntimeSession }, { createTestRuntimeSession }] = await Promise.all([
+        const [{ createRuntimeSession }, { createTestRuntimeSession, getTestRuntimeSemanticOwnership, getTestTensorVersion }] = await Promise.all([
           import("/index.js"),
           import("/testing.js"),
         ]);
@@ -265,6 +267,18 @@
         for (const fixture of (await loadGradientProgressOracle()).gradientProgressCases) {
           await checkGradientProgress(session, fixture);
         }
+        const backwardOracle = await (await fetch('/helpers/python-copy-oracle.json')).json();
+        for (const fixture of backwardOracle.backwardCases.filter(isDirectBackwardCase)) {
+          await checkBackwardCase(session, fixture, getTestTensorVersion);
+        }
+        await checkBackwardLifetime(session, getTestRuntimeSemanticOwnership);
+        await checkBackwardFaults(options => createTestRuntimeSession({ manifestUrl,
+          forceVariant: forceVariant === 'auto' ? 'simd128' : forceVariant, ...options }));
+        const [{ WebAssemblyCpuBackend }, { ExecutionTicket }] = await Promise.all([
+          import('/backends/cpu/cpu-backend.js'), import('/execution/execution-ticket.js'),
+        ]);
+        await checkBackwardCleanup(options => createTestRuntimeSession({ manifestUrl,
+          forceVariant: forceVariant === 'auto' ? 'simd128' : forceVariant, ...options }), WebAssemblyCpuBackend, ExecutionTicket, getTestRuntimeSemanticOwnership);
         await checkNoGrad(session);
         await checkCopy(session);
         await session.close();

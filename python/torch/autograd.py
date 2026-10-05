@@ -62,7 +62,8 @@ def grad(
 
     Seeds must match the output shape and must not require gradients. Omitting
     the seed requires a one-element output. Saved multiplication history is
-    consumed once; no persistent gradients or higher-order graph are created.
+    consumed once. Leaves do not accumulate; already retained nonleaves can
+    receive contributions. No higher-order graph is created.
     """
     _mode("retain_graph", retain_graph, False, optional=True)
     _mode("create_graph", create_graph, False)

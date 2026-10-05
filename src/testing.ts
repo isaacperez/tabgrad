@@ -3,6 +3,7 @@ import { inspectExecutionFailureContext } from "./shared/errors.js";
 import { ExecutableProgram } from "./execution/executable-program.js";
 import {
   inspectRuntimeOwnershipForTesting,
+  inspectRuntimeSemanticOwnershipForTesting,
   inspectTensorVersionForTesting,
   inspectTensorReachabilityForTesting,
   countResidentProgramReferencesForTesting,
@@ -70,5 +71,6 @@ export function getTestTensorAncestry(handle: Tensor): {
 
 /** Snapshot actual family, numerical, history and control owners. */
 export const getTestRuntimeOwnership = inspectRuntimeOwnershipForTesting;
+export const getTestRuntimeSemanticOwnership = inspectRuntimeSemanticOwnershipForTesting;
 export const getTestTensorVersion = inspectTensorVersionForTesting;
 export const getTestTensorReachability = inspectTensorReachabilityForTesting;

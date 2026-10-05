@@ -53,11 +53,13 @@ test("the JavaScript package entry point exposes only the supported runtime surf
       tensorConstructor: ["length", "name", "prototype"],
       tensorPrototype: [
         "add",
+        "backward",
         "close",
         "constructor",
         "copy_",
         "device",
         "dtype",
+        "grad",
         "mul",
         "requiresGrad",
         "shape",
@@ -88,6 +90,9 @@ test("the public declarations do not expose runtime-to-backend plumbing", async 
   assert.match(declarations, /mul\(right: Tensor\): Tensor/);
   assert.match(declarations, /get requiresGrad\(\): boolean/);
   assert.match(declarations, /copy_\(source: Tensor\): this/);
+  assert.match(declarations, /backward\(gradient\?: Tensor, options\?: BackwardOptions\): void/);
+  assert.match(declarations, /get grad\(\): Tensor \| null/);
+  assert.match(declarations, /set grad\(value: Tensor \| null\)/);
   assert.match(declarations, /grad\(output: Tensor, inputs: readonly Tensor\[\], gradient\?: Tensor\): Tensor\[\]/);
 
   for (const internalName of [
@@ -103,6 +108,9 @@ test("the public declarations do not expose runtime-to-backend plumbing", async 
     "enterNoGradScope",
     "getRecordingMode",
     "restoreRecordingMode",
+    "finalizeTensorExposure",
+    "TensorIdentity",
+    "RuntimeSemanticOwnership",
   ]) {
     assert.doesNotMatch(declarations, new RegExp(internalName.replace("(", "\\(")));
   }
@@ -126,10 +134,10 @@ test("the package entry point does not export executable or failure internals", 
   }
 });
 
-test("noGrad emitted declarations preserve synchronous and Promise result types", () => {
+test("emitted declarations preserve scope result and typed backward contracts", () => {
   const filename = fileURLToPath(new URL("no-grad-consumer.ts", import.meta.url));
   const source = `
-import { RuntimeSession } from '../../../dist/index.js';
+import { RuntimeSession, Tensor, type BackwardOptions } from '../../../dist/index.js';
 const session = new RuntimeSession();
 const sync: number = session.noGrad(() => 17);
 const asynchronous: Promise<number> = session.noGrad(async () => 23);
@@ -141,6 +149,21 @@ session.noGrad();
 session.noGrad(17);
 // @ts-expect-error A Promise callback does not synchronously return its value.
 const incorrect: number = session.noGrad(async () => 1);
+const x = session.tensor([2], { requiresGrad: true });
+const y = session.tensor([3]);
+const options: BackwardOptions = { inputs: [x], retainGraph: false, createGraph: false };
+const returned: void = x.backward(y, options);
+x.grad = y;
+const slot: Tensor | null = x.grad;
+x.grad = null;
+// @ts-expect-error Gradient assignment requires a tensor or null.
+x.grad = 3;
+// @ts-expect-error Direct modes are actual booleans.
+x.backward(undefined, { retainGraph: 0 });
+// @ts-expect-error Direct inputs are arrays.
+x.backward(undefined, { inputs: x });
+// @ts-expect-error No public retention-hook option exists.
+x.backward(undefined, { retain: false });
 `;
   const options = { strict: true, noEmit: true, skipLibCheck: false, types: [],
     target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.NodeNext,

@@ -158,6 +158,9 @@ remain bounded by the underlying operation references. Oracle cases use small,
 exactly representable values to establish derivative semantics rather than
 claiming bitwise equivalence for every floating-point graph.
 
-No persistent `.grad` field, `backward()`, gradient reset, optimizer, higher-order graph, JVP, public broadcasting, axis reduction or
-broader dtype/device/layout is included. These exclusions do not change
+Functional calls do not automatically accumulate leaf gradients. Already
+retained nonleaves can receive contributions, including at input cutoffs; the
+[backward reference](backward-gradients.md) owns persistent slot behavior.
+Optimizers, higher-order graphs, JVP, public broadcasting, axis reduction and
+broader dtype/device/layout remain excluded. These exclusions do not change
 ordinary nontracking computation or introduce a backend fallback.

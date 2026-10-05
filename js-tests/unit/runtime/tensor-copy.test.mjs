@@ -424,7 +424,8 @@ test('finite owner capacity rejects pending C views, arithmetic and observations
   let release;
   fixtures.virtualResponses.set('/copy-owner-limit.json', { body: await readFile(new URL('../../../dist/manifest.json', import.meta.url)),
     contentType: 'application/json', waitFor: new Promise(resolve => { release = resolve; }) });
-  const session = createTestRuntimeSession({ manifestUrl: new URL('copy-owner-limit.json', distributionUrl), forceVariant: 'scalar', updateLimits: { owners: 16 } });
+  // The three public semantic exposures are now separate owning occurrences.
+  const session = createTestRuntimeSession({ manifestUrl: new URL('copy-owner-limit.json', distributionUrl), forceVariant: 'scalar', updateLimits: { owners: 19 } });
   const input = session.tensor([2]);
   const source = input.add(input);
   const destination = session.tensor([0]);

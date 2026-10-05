@@ -10,9 +10,10 @@ to calling the public tensor API.
 
 The [semantic architecture](../architecture/semantic-state.md) distinguishes a
 public tensor identity, a logical value and its physical storage. Here those
-roles are represented by a handle's `TensorState`, its mutable `TensorFamily`,
+roles are represented by a public exposure's `TensorState`, its independently
+owned `TensorIdentity`, a mutable numerical `TensorFamily`,
 captured `TensorValue` metadata and a shared `StorageState`. The private
-`tensor-family.ts` and `tensor-value.ts` separate current identity from captured
+`tensor-family.ts` and `tensor-value.ts` separate semantic identity from captured
 numbers. Numeric descriptors retain only a shared version counter, not a family
 or its newer current value. The session's `MaterializationTable` keys
 host or resident data by storage identity. Its backend allocation has a separate
@@ -130,9 +131,10 @@ its public handle closes before completion.
 
 Every family current, numerical input occurrence and accepted request owns a
 value reference and contributes one shared-storage reference. A shape-only alias
-adds a family handle and optional derivative entry; it has no additional F pin,
-numerical producer or owning edge to the preceding view. Closing a base therefore cannot destroy a sibling,
-and a long metadata chain need not retain its intermediate handles or shapes.
+adds a semantic identity with a strong base-identity occurrence and optional
+derivative entry; it has no additional F pin or numerical producer. Closing a
+base exposure therefore cannot destroy a sibling. Semantic base identities can
+remain owned even after their public exposures close.
 Storage retains its original value descriptor to preserve the producing
 operation's shape and provenance during formation, even when that original
 value has no owners. This is one descriptor per live storage, not a retained
@@ -155,12 +157,28 @@ the traversal does not descend into its still-owned producer. The worklist is
 local to the release call and is discarded when that call ends; it is not a
 session history or a numerical allocation cache.
 
-Release does not scan unrelated session values, move numerical data or
+Numerical reference release does not scan unrelated session values, move numerical data or
 dispatch a kernel. These bounds describe semantic traversal, not the backend's
 physical deallocation cost or the time the JavaScript garbage collector takes
 to reclaim unreachable objects. Materialization release is
 still delegated to the backend; this lifetime rule does not implement
 within-program allocation reuse or make a claim about total process memory.
+
+Gradient associations add owning identity occurrences and can form cycles
+through views, history or other associations. The runtime coalesces collection
+after exposure/association retirement only while associations exist, and flushes
+scheduled work at diagnostics and shutdown. It marks public exposure roots,
+strong base/gradient occurrences, nonleaf history owners, history input edges
+and strong leaf endpoints; weak nonleaf hooks and canonical lookups are excluded.
+It then scans identities and breaks unreachable associations before ordinary
+iterative retirement. A pass costs `O(I + H + E)` for the identity registry,
+reachable history and owning edges. Persistent associations can therefore add
+global traversal to repeated temporary retirement; coalescing is not a promise
+of constant work per backward call. Plain inference without associations has no
+scheduled pass. Request/effect pins remain independent until physical drain.
+The internal semantic diagnostic reconciles identity references with exposure,
+base, association and leaf-endpoint occurrences and reports cumulative collector
+work separately. It does not change historical public diagnostic fields.
 
 The rule follows ownership rather than an operation name or input shape. Other
 semantic owners, such as derivative history, must retain the values and facts
