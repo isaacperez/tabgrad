@@ -91,6 +91,7 @@ ARCHITECTURE_DOCUMENTS = {
     "docs/architecture/computation-inspection.md",
     "docs/architecture/cpu-gradient-state.md",
     "docs/architecture/cpu-intermediate-reuse.md",
+    "docs/architecture/cpu-sgd.md",
     "docs/architecture/cpu-tensor-updates.md",
     "docs/architecture/execution-lifecycle.md",
     "docs/architecture/frontends-runtime-backends.md",
