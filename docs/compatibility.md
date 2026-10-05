@@ -189,8 +189,8 @@ do not independently qualify mutation, decorators, inference mode or GPU gradien
 not establish a speed or total-memory claim. The official reference is
 [PyTorch 2.14 no-grad](https://docs.pytorch.org/docs/2.14/generated/torch.no_grad.html).
 
-Direct scalar/SIMD runtime and raw expansion tests additionally cover admission
-atomicity, saved pins, iterative deep traversal/release, dropped results, backend
+Direct scalar/SIMD runtime and raw expansion tests additionally cover current
+Tabgrad admission atomicity, saved pins, iterative deep traversal/release, dropped results, backend
 failure and shutdown. Browser fixtures exercise direct scalar/SIMD derivatives
 and managed Python observation with native and controlled-absent JSPI. Exact
 tested browser versions belong in verification evidence. Tracking seeds,
@@ -199,6 +199,28 @@ intentional subset exclusions tested as Tabgrad restrictions, not attributed
 to native rejection. Official references are
 [PyTorch 2.14 functional gradients](https://docs.pytorch.org/docs/2.14/generated/torch.autograd.grad.html)
 and [autograd mechanics](https://docs.pytorch.org/docs/2.14/notes/autograd.html).
+
+### Functional failure progress
+
+At integrated revision `7177488b66db00629e3737cee8b36495534d4d89`, functional
+CPU differentiation prevalidates every selected save and consumes history only
+after complete derivative construction. This is a known observable discrepancy
+from native PyTorch 2.14.0, not a native argument restriction or a compatible
+atomicity guarantee. With a newer good multiplication before an older branch
+whose saved operand was mutated, native executes and consumes the good recipe
+before the later saved-version error. Retrying or separately requesting the
+good branch then fails with consumed history. Current Tabgrad scalar/SIMD
+instead reports saved-version failure again and can still return the separate
+good gradient (`[10, 14]` in the pinned control).
+
+The [native matrix](https://github.com/isaacperez/tabgrad/issues/167#issuecomment-5996427284)
+and [production reproduction](https://github.com/isaacperez/tabgrad/issues/167#issuecomment-5996430687)
+record environments, frozen sources and complete failure/retry observations.
+The accepted [per-node design](architecture/cpu-gradient-state.md#progress-and-failure-belong-to-executing-nodes)
+requires the correction for functional and accumulating differentiation.
+Documenting that contract changes no runtime behavior and qualifies no
+`backward`, `.grad` or training support. Existing successful gradient fixtures
+remain evidence for their own cases, not for native failure-progress parity.
 
 Real Pyodide tests also consume those numerical fixtures through `tolist()` and
 check independent lists of Python floats, nested control flow, common demand

@@ -114,14 +114,18 @@ After source traversal consumes it, another source traversal fails, while a
 current base/destination cutoff can succeed without executing that history.
 Source-only requests can likewise avoid an old consumed multiplication.
 
-Before admitting seeds or derivative operations, differentiation resolves
-native-required current entries, identifies executed nodes and validates their
-consumable state and every saved operand against its expected alias version.
-This includes plain saves and saved positions whose requested contribution is
-mathematically pruned. Unexecuted cutoff/connectivity-only nodes need no such
-save validation. Failure admits no partial derivative operations and consumes
-no saves. Successfully admitted derivative operations own their captured
-numeric inputs independently after the history releases its saves.
+Differentiation validates handles, tracking and argument forms and resolves
+native-required current entries. Saved-version and consumable-state validation
+follow the executing node, including saved positions whose requested
+contribution is pruned. Unexecuted cutoff/connectivity-only nodes need no such
+save validation. Successful earlier recipes and gradient commits can survive a
+later semantic error; the whole traversal is not transactional. The
+[CPU gradient-state contract](cpu-gradient-state.md#progress-and-failure-belong-to-executing-nodes)
+owns this rule for functional and accumulating differentiation. The
+[compatibility record](../compatibility.md#functional-failure-progress) identifies
+the existing functional implementation's whole-selected preflight discrepancy.
+Admitted derivative operations own their captured numeric inputs independently
+after the history releases its saves.
 
 ## Account for numeric ownership exactly once
 

@@ -68,6 +68,14 @@ aliases continue to use the ordinary
 
 ## Validate, traverse and transfer ownership
 
+This section describes the existing functional implementation. Its
+whole-selected saved-state preflight and consumption after complete construction
+differ from native per-node progress on a later recipe error. The
+[versioned limitation](../compatibility.md#functional-failure-progress) records
+the demonstrated discrepancy; the accepted
+[CPU gradient-state contract](../architecture/cpu-gradient-state.md#progress-and-failure-belong-to-executing-nodes)
+defines the correction for functional and accumulating differentiation.
+
 The runtime first validates handles, session, tracking, argument forms and seed
 shape. History then builds an iterative input-before-output order and marks
 nodes that can lead to requested inputs. It checks connectivity and consumed
@@ -137,4 +145,6 @@ stable parameter state and must respect alias-visible mutation and version
 order. Pure addition inside one functional request establishes no such effect.
 The accepted architecture keeps that state at the semantic tensor/effect
 owners while reusing the numerical execution path. The supported CPU copy updates stable state; persistent gradient accumulation
-is a separate excluded API.
+is a separate excluded API. Its accepted identity, retention and cycle
+requirements live in the [CPU gradient-state contract](../architecture/cpu-gradient-state.md);
+this component description does not claim they are implemented.

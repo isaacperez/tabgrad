@@ -26,6 +26,14 @@ Tabgrad separates them:
 - `StorageState` is the shared logical storage and mutation-version identity
   used by aliases.
 
+Semantic tensor identity is distinct from the public object that exposes it.
+Closing an exposure retires its public lease; an assigned gradient or live true
+leaf endpoint can still own that identity. Numerical aliases can share value
+and version state while their tracking, history and gradient associations differ.
+The [CPU gradient-state contract](cpu-gradient-state.md) specializes those
+distinctions, canonical exposure and cycle responsibility without prescribing
+one implemented class for each semantic record.
+
 ```mermaid
 flowchart LR
     Handle[Public tensor handle] --> State[TensorState<br/>stable identity]

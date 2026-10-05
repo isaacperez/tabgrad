@@ -25,6 +25,12 @@ The participants below exchange logical records until an ordinary observation
 requests numerical execution. The seed is the incoming gradient, which weights
 the output; for a scalar loss its implicit value is one.
 
+This sequence describes the existing functional implementation. Global selected
+saved-state validation and consumption only after complete construction have a
+[demonstrated native failure-progress discrepancy](../compatibility.md#functional-failure-progress).
+The accepted [per-node contract](../architecture/cpu-gradient-state.md#progress-and-failure-belong-to-executing-nodes)
+does not make that correction an implemented capability.
+
 ```mermaid
 sequenceDiagram
     participant Frontend
