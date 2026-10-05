@@ -25,12 +25,6 @@ The participants below exchange logical records until an ordinary observation
 requests numerical execution. The seed is the incoming gradient, which weights
 the output; for a scalar loss its implicit value is one.
 
-This sequence describes the existing functional implementation. Global selected
-saved-state validation and consumption only after complete construction have a
-[demonstrated native failure-progress discrepancy](../compatibility.md#functional-failure-progress).
-The accepted [per-node contract](../architecture/cpu-gradient-state.md#progress-and-failure-belong-to-executing-nodes)
-does not make that correction an implemented capability.
-
 ```mermaid
 sequenceDiagram
     participant Frontend
@@ -40,10 +34,13 @@ sequenceDiagram
     Frontend->>Runtime: grad(loss, [x, y])
     Runtime->>Runtime: Validate handles, modes and seed
     Runtime->>History: Plan all requested ancestry
-    History->>History: Validate connectivity and saved state
+    History->>History: Validate connectivity and select paths
     Runtime->>History: Traverse with untracked seed
-    History->>Runtime: Admit expansion, products, views and contribution sums
-    History->>Runtime: Release consumed saved pins
+    loop Dependency-ready recipe, newest creation first
+        History->>History: Validate this recipe's consumed state and all saves
+        History->>Runtime: Admit expansion, products, views and contribution sums
+        History->>Runtime: Consume this successful recipe and release its saved pins
+    end
     Runtime-->>Frontend: Lazy gradient handles
     Frontend->>Runtime: Observe a gradient
     Runtime->>CPU: Execute ordinary demanded program
@@ -65,10 +62,17 @@ handle. Dropping every result before observation releases the derivative work
 without running it. Python wrapper finalizers and explicit JavaScript close
 meet the same runtime owner.
 
-Validation failure occurs before this ownership transfer, so correcting a
+Global argument validation failure occurs before this ownership transfer, so correcting a
 seed or removing a disconnected requested input can reuse the intact history.
-Saved-state consumption occurs at successful derivative construction, not at
-observation. Consequently a backend failure does not make the original
+Saved-state consumption occurs after each successful recipe's derivative
+construction. A later recipe's saved-version error leaves earlier successful
+recipes consumed and closes the request's temporary results. The failing
+recipe retains its state, while cutoffs avoid checks and consumption of
+ancestors they do not execute. The pinned
+[failure-progress matrix](../compatibility.md#functional-failure-progress)
+observes retries and separate branch requests.
+
+Consumption does not wait for observation. Consequently a backend failure does not make the original
 multiplication history reusable. The failed result instead follows normal
 [observation failure and request cleanup](../components/runtime-observation.md).
 An already accepted observation remains pinned when its result or session

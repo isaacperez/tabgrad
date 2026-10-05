@@ -68,58 +68,65 @@ aliases continue to use the ordinary
 
 ## Validate, traverse and transfer ownership
 
-This section describes the existing functional implementation. Its
-whole-selected saved-state preflight and consumption after complete construction
-differ from native per-node progress on a later recipe error. The
-[versioned limitation](../compatibility.md#functional-failure-progress) records
-the demonstrated discrepancy; the accepted
-[CPU gradient-state contract](../architecture/cpu-gradient-state.md#progress-and-failure-belong-to-executing-nodes)
-defines the correction for functional and accumulating differentiation.
+Functional differentiation follows the
+[CPU per-node contract](../architecture/cpu-gradient-state.md#progress-and-failure-belong-to-executing-nodes).
+The [versioned evidence](../compatibility.md#functional-failure-progress) bounds
+its correspondence with native scheduling and failure progress.
 
 The runtime first validates handles, session, tracking, argument forms and seed
 shape. History then builds an iterative input-before-output order and marks
-nodes that can lead to requested inputs. It checks connectivity and consumed
-saved state over that complete selection before any derivative admission.
+nodes that can lead to requested inputs. It checks connectivity before any
+derivative admission; saved-state checks wait until the owning recipe executes.
 An intermediate can be a requested result and still forward contributions to
 another requested ancestor. Merely reaching a requested node does not imply
 that every ancestor must execute.
 
-Reverse traversal asks each bound recipe to produce one contribution for each
+Selected incoming edge occurrences establish readiness counts. A private
+maximum heap chooses the newest created ready node, matching the pinned native
+sequence priority without executing a shared predecessor too early. Node
+sequence is session-local metadata, not a numerical or storage owner.
+Traversal asks each bound recipe to produce one contribution for each
 needed input edge. Contributions meet through ordinary pure addition. Every
 temporary and returned tensor is nontracking. Temporary handles retire when
 their traversal use ends; admitted numerical producers keep the values needed
 for later execution. Repeated requested inputs receive independently owned
 result views, so closing one cannot invalidate another.
 
-After successful construction, every traversed multiplication releases all its
+After its successful construction, each traversed multiplication releases all its
 saved pins and marks its saved state consumed. The new pending derivative
 operations now own their numerical operands. Payload-free pure/direct-copy history remains usable; traversed view-copy
 history is consumable without saved payload. Every save of an executed node is
-version validated before any seed/admission, including pruned input positions.
+version validated before its recipe admits work, including pruned input positions.
 Cutoffs do not execute their ancestors. Node controls capture relevant writers
 and every returned gradient also retains root/history/seed controls, separately
-from numeric saves. A construction failure closes newly created handles without consuming
-saved state. A later backend failure belongs to ordinary observation: retained
+from numeric saves. A construction failure closes newly created handles while
+preserving consumption by earlier successful recipes. The failing recipe keeps
+its saved state. A later backend failure belongs to ordinary observation: retained
 results keep retry dependencies, and closing results releases them. Session
 close also releases handles and history before draining accepted numerical
 requests, whose own pins preserve work already admitted.
 
 Saved-pin retirement first removes each pin from history accounting, then
 attempts its ordinary value release. A release failure does not abandon other
-saved pins or history edges. Once derivative construction has completed and
-saved-state consumption starts, every selected saved owner is retired and
-marked consumed even if physical release fails. Already retired pins must not
+saved pins or history edges. When one recipe succeeds, all of its saved owners
+are logically retired and the recipe is marked consumed even if physical
+release fails. Independent work and cleanup still receive their attempts.
+Already retired pins must not
 be reused as though construction had failed before consumption began. The
 cleanup failure is reported, and newly constructed result handles are closed
-instead of being returned. This is distinct from a construction failure before
-consumption, which leaves the original saved state usable.
+instead of being returned. When a later semantic error also occurs, that error
+precedes collected cleanup failures in the aggregate. Temporary and result
+handles are retired per occurrence, including repeated operands and requests.
 
 ## Costs and extension boundary
 
 For `V` history nodes and `E` edges reachable from the output, planning uses
 `O(V + E)` work and metadata. It traverses history metadata to establish
 connectivity but admits numerical work only on paths to requested inputs.
-Reverse traversal admits a bounded number of operations per selected edge.
+Traversal admits a bounded number of operations per selected edge. Readiness
+counts use `O(V + E)` metadata; selecting ready nodes costs `O(V log R)` for
+at most `R` simultaneously ready nodes. No global sequence sort replaces
+dependency readiness, and the worklists do not survive the request.
 Saved payload scales with the operands required by live multiplication recipes,
 not with every historical tensor. Aliased saved operands may share storage;
 pin counts are not byte counts. Release uses constant host call-stack depth.

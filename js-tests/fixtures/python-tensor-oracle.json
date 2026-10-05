@@ -3673,6 +3673,1283 @@
       "type": "RuntimeError"
     }
   ],
+  "gradientProgressCases": [
+    {
+      "name": "newer-good",
+      "config": {
+        "kind": "ordinary",
+        "good_first": false,
+        "good_saved": true,
+        "swap_operands": false,
+        "repeated": false,
+        "x_data": [
+          2.0,
+          3.0
+        ],
+        "y_data": [
+          5.0,
+          7.0
+        ],
+        "seed_data": [
+          1.0,
+          1.0
+        ],
+        "calls": [
+          [
+            "root",
+            [
+              "x",
+              "y"
+            ]
+          ],
+          [
+            "root",
+            [
+              "x",
+              "y"
+            ]
+          ],
+          [
+            "good",
+            [
+              "y"
+            ]
+          ],
+          [
+            "bad",
+            [
+              "x"
+            ]
+          ],
+          [
+            "bad",
+            [
+              "bad"
+            ]
+          ]
+        ]
+      },
+      "source": "kind = 'ordinary'\ngood_first = False\ngood_saved = True\nswap_operands = False\nrepeated = False\nx_data = [2.0, 3.0]\ny_data = [5.0, 7.0]\nseed_data = [1.0, 1.0]\ncalls = [('root', ['x', 'y']), ('root', ['x', 'y']), ('good', ['y']), ('bad', ['x']), ('bad', ['bad'])]\nx = torch.tensor(x_data, dtype=torch.float32, requires_grad=True)\ny = torch.tensor(y_data, dtype=torch.float32, requires_grad=True)\nshared = x * x if kind == 'shared' else y\nif good_first:\n    good = shared * shared if good_saved else shared + shared\nbad = shared * y if kind == 'shared' else x * y if kind == 'pruned-save' else x * x\nif not good_first:\n    good = shared * shared if good_saved else shared + shared\nif kind in ('view-copy', 'direct-copy'):\n    good = y + y\n    if kind == 'view-copy':\n        good = good.view(tuple(good.shape))\n    good.copy_(y)\nroot = (good + bad if swap_operands else bad + good)\nif repeated:\n    root = root + good\nroot = root.sum()\nwith torch.no_grad():\n    changed = y if kind == 'shared' else x\n    changed.copy_(torch.tensor(changed.tolist(), dtype=torch.float32))\ntensors = {'root': root, 'good': good, 'bad': bad, 'shared': shared, 'x': x, 'y': y}\nreport = []\nfor output_name, input_names in calls:\n    try:\n        result = torch.autograd.grad(tensors[output_name], [tensors[name] for name in input_names],\n                                     None if output_name == 'root' else torch.tensor(seed_data, dtype=torch.float32))\n        report.append({'values': [value.tolist() for value in result],\n                       'shapes': [list(value.shape) for value in result],\n                       'tracking': [value.requires_grad for value in result]})\n    except RuntimeError as error:\n        message = str(error).lower()\n        if 'modified' in message:\n            category = 'SAVED_VERSION_MISMATCH'\n        elif 'second time' in message or 'consumed' in message:\n            category = 'CONSUMED_HISTORY'\n        else:\n            raise\n        report.append({'error': category, 'type': type(error).__name__})\n",
+      "expected": [
+        {
+          "error": "SAVED_VERSION_MISMATCH",
+          "type": "RuntimeError"
+        },
+        {
+          "error": "CONSUMED_HISTORY",
+          "type": "RuntimeError"
+        },
+        {
+          "error": "CONSUMED_HISTORY",
+          "type": "RuntimeError"
+        },
+        {
+          "error": "SAVED_VERSION_MISMATCH",
+          "type": "RuntimeError"
+        },
+        {
+          "values": [
+            [
+              1.0,
+              1.0
+            ]
+          ],
+          "shapes": [
+            [
+              2
+            ]
+          ],
+          "tracking": [
+            false
+          ]
+        }
+      ]
+    },
+    {
+      "name": "operand-swap",
+      "config": {
+        "kind": "ordinary",
+        "good_first": false,
+        "good_saved": true,
+        "swap_operands": true,
+        "repeated": false,
+        "x_data": [
+          2.0,
+          3.0
+        ],
+        "y_data": [
+          5.0,
+          7.0
+        ],
+        "seed_data": [
+          1.0,
+          1.0
+        ],
+        "calls": [
+          [
+            "root",
+            [
+              "x",
+              "y"
+            ]
+          ],
+          [
+            "root",
+            [
+              "x",
+              "y"
+            ]
+          ],
+          [
+            "good",
+            [
+              "y"
+            ]
+          ],
+          [
+            "bad",
+            [
+              "x"
+            ]
+          ],
+          [
+            "bad",
+            [
+              "bad"
+            ]
+          ]
+        ]
+      },
+      "source": "kind = 'ordinary'\ngood_first = False\ngood_saved = True\nswap_operands = True\nrepeated = False\nx_data = [2.0, 3.0]\ny_data = [5.0, 7.0]\nseed_data = [1.0, 1.0]\ncalls = [('root', ['x', 'y']), ('root', ['x', 'y']), ('good', ['y']), ('bad', ['x']), ('bad', ['bad'])]\nx = torch.tensor(x_data, dtype=torch.float32, requires_grad=True)\ny = torch.tensor(y_data, dtype=torch.float32, requires_grad=True)\nshared = x * x if kind == 'shared' else y\nif good_first:\n    good = shared * shared if good_saved else shared + shared\nbad = shared * y if kind == 'shared' else x * y if kind == 'pruned-save' else x * x\nif not good_first:\n    good = shared * shared if good_saved else shared + shared\nif kind in ('view-copy', 'direct-copy'):\n    good = y + y\n    if kind == 'view-copy':\n        good = good.view(tuple(good.shape))\n    good.copy_(y)\nroot = (good + bad if swap_operands else bad + good)\nif repeated:\n    root = root + good\nroot = root.sum()\nwith torch.no_grad():\n    changed = y if kind == 'shared' else x\n    changed.copy_(torch.tensor(changed.tolist(), dtype=torch.float32))\ntensors = {'root': root, 'good': good, 'bad': bad, 'shared': shared, 'x': x, 'y': y}\nreport = []\nfor output_name, input_names in calls:\n    try:\n        result = torch.autograd.grad(tensors[output_name], [tensors[name] for name in input_names],\n                                     None if output_name == 'root' else torch.tensor(seed_data, dtype=torch.float32))\n        report.append({'values': [value.tolist() for value in result],\n                       'shapes': [list(value.shape) for value in result],\n                       'tracking': [value.requires_grad for value in result]})\n    except RuntimeError as error:\n        message = str(error).lower()\n        if 'modified' in message:\n            category = 'SAVED_VERSION_MISMATCH'\n        elif 'second time' in message or 'consumed' in message:\n            category = 'CONSUMED_HISTORY'\n        else:\n            raise\n        report.append({'error': category, 'type': type(error).__name__})\n",
+      "expected": [
+        {
+          "error": "SAVED_VERSION_MISMATCH",
+          "type": "RuntimeError"
+        },
+        {
+          "error": "CONSUMED_HISTORY",
+          "type": "RuntimeError"
+        },
+        {
+          "error": "CONSUMED_HISTORY",
+          "type": "RuntimeError"
+        },
+        {
+          "error": "SAVED_VERSION_MISMATCH",
+          "type": "RuntimeError"
+        },
+        {
+          "values": [
+            [
+              1.0,
+              1.0
+            ]
+          ],
+          "shapes": [
+            [
+              2
+            ]
+          ],
+          "tracking": [
+            false
+          ]
+        }
+      ]
+    },
+    {
+      "name": "older-good",
+      "config": {
+        "kind": "ordinary",
+        "good_first": true,
+        "good_saved": true,
+        "swap_operands": false,
+        "repeated": false,
+        "x_data": [
+          2.0,
+          3.0
+        ],
+        "y_data": [
+          5.0,
+          7.0
+        ],
+        "seed_data": [
+          1.0,
+          1.0
+        ],
+        "calls": [
+          [
+            "root",
+            [
+              "x",
+              "y"
+            ]
+          ],
+          [
+            "root",
+            [
+              "x",
+              "y"
+            ]
+          ],
+          [
+            "good",
+            [
+              "y"
+            ]
+          ],
+          [
+            "bad",
+            [
+              "x"
+            ]
+          ],
+          [
+            "bad",
+            [
+              "bad"
+            ]
+          ]
+        ]
+      },
+      "source": "kind = 'ordinary'\ngood_first = True\ngood_saved = True\nswap_operands = False\nrepeated = False\nx_data = [2.0, 3.0]\ny_data = [5.0, 7.0]\nseed_data = [1.0, 1.0]\ncalls = [('root', ['x', 'y']), ('root', ['x', 'y']), ('good', ['y']), ('bad', ['x']), ('bad', ['bad'])]\nx = torch.tensor(x_data, dtype=torch.float32, requires_grad=True)\ny = torch.tensor(y_data, dtype=torch.float32, requires_grad=True)\nshared = x * x if kind == 'shared' else y\nif good_first:\n    good = shared * shared if good_saved else shared + shared\nbad = shared * y if kind == 'shared' else x * y if kind == 'pruned-save' else x * x\nif not good_first:\n    good = shared * shared if good_saved else shared + shared\nif kind in ('view-copy', 'direct-copy'):\n    good = y + y\n    if kind == 'view-copy':\n        good = good.view(tuple(good.shape))\n    good.copy_(y)\nroot = (good + bad if swap_operands else bad + good)\nif repeated:\n    root = root + good\nroot = root.sum()\nwith torch.no_grad():\n    changed = y if kind == 'shared' else x\n    changed.copy_(torch.tensor(changed.tolist(), dtype=torch.float32))\ntensors = {'root': root, 'good': good, 'bad': bad, 'shared': shared, 'x': x, 'y': y}\nreport = []\nfor output_name, input_names in calls:\n    try:\n        result = torch.autograd.grad(tensors[output_name], [tensors[name] for name in input_names],\n                                     None if output_name == 'root' else torch.tensor(seed_data, dtype=torch.float32))\n        report.append({'values': [value.tolist() for value in result],\n                       'shapes': [list(value.shape) for value in result],\n                       'tracking': [value.requires_grad for value in result]})\n    except RuntimeError as error:\n        message = str(error).lower()\n        if 'modified' in message:\n            category = 'SAVED_VERSION_MISMATCH'\n        elif 'second time' in message or 'consumed' in message:\n            category = 'CONSUMED_HISTORY'\n        else:\n            raise\n        report.append({'error': category, 'type': type(error).__name__})\n",
+      "expected": [
+        {
+          "error": "SAVED_VERSION_MISMATCH",
+          "type": "RuntimeError"
+        },
+        {
+          "error": "SAVED_VERSION_MISMATCH",
+          "type": "RuntimeError"
+        },
+        {
+          "values": [
+            [
+              10.0,
+              14.0
+            ]
+          ],
+          "shapes": [
+            [
+              2
+            ]
+          ],
+          "tracking": [
+            false
+          ]
+        },
+        {
+          "error": "SAVED_VERSION_MISMATCH",
+          "type": "RuntimeError"
+        },
+        {
+          "values": [
+            [
+              1.0,
+              1.0
+            ]
+          ],
+          "shapes": [
+            [
+              2
+            ]
+          ],
+          "tracking": [
+            false
+          ]
+        }
+      ]
+    },
+    {
+      "name": "unsaved-good",
+      "config": {
+        "kind": "ordinary",
+        "good_first": false,
+        "good_saved": false,
+        "swap_operands": false,
+        "repeated": false,
+        "x_data": [
+          2.0,
+          3.0
+        ],
+        "y_data": [
+          5.0,
+          7.0
+        ],
+        "seed_data": [
+          1.0,
+          1.0
+        ],
+        "calls": [
+          [
+            "root",
+            [
+              "x",
+              "y"
+            ]
+          ],
+          [
+            "root",
+            [
+              "x",
+              "y"
+            ]
+          ],
+          [
+            "good",
+            [
+              "y"
+            ]
+          ],
+          [
+            "bad",
+            [
+              "x"
+            ]
+          ],
+          [
+            "bad",
+            [
+              "bad"
+            ]
+          ]
+        ]
+      },
+      "source": "kind = 'ordinary'\ngood_first = False\ngood_saved = False\nswap_operands = False\nrepeated = False\nx_data = [2.0, 3.0]\ny_data = [5.0, 7.0]\nseed_data = [1.0, 1.0]\ncalls = [('root', ['x', 'y']), ('root', ['x', 'y']), ('good', ['y']), ('bad', ['x']), ('bad', ['bad'])]\nx = torch.tensor(x_data, dtype=torch.float32, requires_grad=True)\ny = torch.tensor(y_data, dtype=torch.float32, requires_grad=True)\nshared = x * x if kind == 'shared' else y\nif good_first:\n    good = shared * shared if good_saved else shared + shared\nbad = shared * y if kind == 'shared' else x * y if kind == 'pruned-save' else x * x\nif not good_first:\n    good = shared * shared if good_saved else shared + shared\nif kind in ('view-copy', 'direct-copy'):\n    good = y + y\n    if kind == 'view-copy':\n        good = good.view(tuple(good.shape))\n    good.copy_(y)\nroot = (good + bad if swap_operands else bad + good)\nif repeated:\n    root = root + good\nroot = root.sum()\nwith torch.no_grad():\n    changed = y if kind == 'shared' else x\n    changed.copy_(torch.tensor(changed.tolist(), dtype=torch.float32))\ntensors = {'root': root, 'good': good, 'bad': bad, 'shared': shared, 'x': x, 'y': y}\nreport = []\nfor output_name, input_names in calls:\n    try:\n        result = torch.autograd.grad(tensors[output_name], [tensors[name] for name in input_names],\n                                     None if output_name == 'root' else torch.tensor(seed_data, dtype=torch.float32))\n        report.append({'values': [value.tolist() for value in result],\n                       'shapes': [list(value.shape) for value in result],\n                       'tracking': [value.requires_grad for value in result]})\n    except RuntimeError as error:\n        message = str(error).lower()\n        if 'modified' in message:\n            category = 'SAVED_VERSION_MISMATCH'\n        elif 'second time' in message or 'consumed' in message:\n            category = 'CONSUMED_HISTORY'\n        else:\n            raise\n        report.append({'error': category, 'type': type(error).__name__})\n",
+      "expected": [
+        {
+          "error": "SAVED_VERSION_MISMATCH",
+          "type": "RuntimeError"
+        },
+        {
+          "error": "SAVED_VERSION_MISMATCH",
+          "type": "RuntimeError"
+        },
+        {
+          "values": [
+            [
+              2.0,
+              2.0
+            ]
+          ],
+          "shapes": [
+            [
+              2
+            ]
+          ],
+          "tracking": [
+            false
+          ]
+        },
+        {
+          "error": "SAVED_VERSION_MISMATCH",
+          "type": "RuntimeError"
+        },
+        {
+          "values": [
+            [
+              1.0,
+              1.0
+            ]
+          ],
+          "shapes": [
+            [
+              2
+            ]
+          ],
+          "tracking": [
+            false
+          ]
+        }
+      ]
+    },
+    {
+      "name": "repeated-good",
+      "config": {
+        "kind": "ordinary",
+        "good_first": false,
+        "good_saved": true,
+        "swap_operands": false,
+        "repeated": true,
+        "x_data": [
+          2.0,
+          3.0
+        ],
+        "y_data": [
+          5.0,
+          7.0
+        ],
+        "seed_data": [
+          1.0,
+          1.0
+        ],
+        "calls": [
+          [
+            "root",
+            [
+              "x",
+              "y"
+            ]
+          ],
+          [
+            "root",
+            [
+              "x",
+              "y"
+            ]
+          ],
+          [
+            "good",
+            [
+              "y"
+            ]
+          ],
+          [
+            "bad",
+            [
+              "x"
+            ]
+          ],
+          [
+            "bad",
+            [
+              "bad"
+            ]
+          ]
+        ]
+      },
+      "source": "kind = 'ordinary'\ngood_first = False\ngood_saved = True\nswap_operands = False\nrepeated = True\nx_data = [2.0, 3.0]\ny_data = [5.0, 7.0]\nseed_data = [1.0, 1.0]\ncalls = [('root', ['x', 'y']), ('root', ['x', 'y']), ('good', ['y']), ('bad', ['x']), ('bad', ['bad'])]\nx = torch.tensor(x_data, dtype=torch.float32, requires_grad=True)\ny = torch.tensor(y_data, dtype=torch.float32, requires_grad=True)\nshared = x * x if kind == 'shared' else y\nif good_first:\n    good = shared * shared if good_saved else shared + shared\nbad = shared * y if kind == 'shared' else x * y if kind == 'pruned-save' else x * x\nif not good_first:\n    good = shared * shared if good_saved else shared + shared\nif kind in ('view-copy', 'direct-copy'):\n    good = y + y\n    if kind == 'view-copy':\n        good = good.view(tuple(good.shape))\n    good.copy_(y)\nroot = (good + bad if swap_operands else bad + good)\nif repeated:\n    root = root + good\nroot = root.sum()\nwith torch.no_grad():\n    changed = y if kind == 'shared' else x\n    changed.copy_(torch.tensor(changed.tolist(), dtype=torch.float32))\ntensors = {'root': root, 'good': good, 'bad': bad, 'shared': shared, 'x': x, 'y': y}\nreport = []\nfor output_name, input_names in calls:\n    try:\n        result = torch.autograd.grad(tensors[output_name], [tensors[name] for name in input_names],\n                                     None if output_name == 'root' else torch.tensor(seed_data, dtype=torch.float32))\n        report.append({'values': [value.tolist() for value in result],\n                       'shapes': [list(value.shape) for value in result],\n                       'tracking': [value.requires_grad for value in result]})\n    except RuntimeError as error:\n        message = str(error).lower()\n        if 'modified' in message:\n            category = 'SAVED_VERSION_MISMATCH'\n        elif 'second time' in message or 'consumed' in message:\n            category = 'CONSUMED_HISTORY'\n        else:\n            raise\n        report.append({'error': category, 'type': type(error).__name__})\n",
+      "expected": [
+        {
+          "error": "SAVED_VERSION_MISMATCH",
+          "type": "RuntimeError"
+        },
+        {
+          "error": "CONSUMED_HISTORY",
+          "type": "RuntimeError"
+        },
+        {
+          "error": "CONSUMED_HISTORY",
+          "type": "RuntimeError"
+        },
+        {
+          "error": "SAVED_VERSION_MISMATCH",
+          "type": "RuntimeError"
+        },
+        {
+          "values": [
+            [
+              1.0,
+              1.0
+            ]
+          ],
+          "shapes": [
+            [
+              2
+            ]
+          ],
+          "tracking": [
+            false
+          ]
+        }
+      ]
+    },
+    {
+      "name": "shared-ready",
+      "config": {
+        "kind": "shared",
+        "good_first": false,
+        "good_saved": true,
+        "swap_operands": false,
+        "repeated": true,
+        "x_data": [
+          2.0,
+          3.0
+        ],
+        "y_data": [
+          5.0,
+          7.0
+        ],
+        "seed_data": [
+          1.0,
+          1.0
+        ],
+        "calls": [
+          [
+            "root",
+            [
+              "x"
+            ]
+          ],
+          [
+            "root",
+            [
+              "x"
+            ]
+          ],
+          [
+            "good",
+            [
+              "shared"
+            ]
+          ],
+          [
+            "bad",
+            [
+              "shared"
+            ]
+          ],
+          [
+            "bad",
+            [
+              "bad"
+            ]
+          ],
+          [
+            "shared",
+            [
+              "x"
+            ]
+          ]
+        ]
+      },
+      "source": "kind = 'shared'\ngood_first = False\ngood_saved = True\nswap_operands = False\nrepeated = True\nx_data = [2.0, 3.0]\ny_data = [5.0, 7.0]\nseed_data = [1.0, 1.0]\ncalls = [('root', ['x']), ('root', ['x']), ('good', ['shared']), ('bad', ['shared']), ('bad', ['bad']), ('shared', ['x'])]\nx = torch.tensor(x_data, dtype=torch.float32, requires_grad=True)\ny = torch.tensor(y_data, dtype=torch.float32, requires_grad=True)\nshared = x * x if kind == 'shared' else y\nif good_first:\n    good = shared * shared if good_saved else shared + shared\nbad = shared * y if kind == 'shared' else x * y if kind == 'pruned-save' else x * x\nif not good_first:\n    good = shared * shared if good_saved else shared + shared\nif kind in ('view-copy', 'direct-copy'):\n    good = y + y\n    if kind == 'view-copy':\n        good = good.view(tuple(good.shape))\n    good.copy_(y)\nroot = (good + bad if swap_operands else bad + good)\nif repeated:\n    root = root + good\nroot = root.sum()\nwith torch.no_grad():\n    changed = y if kind == 'shared' else x\n    changed.copy_(torch.tensor(changed.tolist(), dtype=torch.float32))\ntensors = {'root': root, 'good': good, 'bad': bad, 'shared': shared, 'x': x, 'y': y}\nreport = []\nfor output_name, input_names in calls:\n    try:\n        result = torch.autograd.grad(tensors[output_name], [tensors[name] for name in input_names],\n                                     None if output_name == 'root' else torch.tensor(seed_data, dtype=torch.float32))\n        report.append({'values': [value.tolist() for value in result],\n                       'shapes': [list(value.shape) for value in result],\n                       'tracking': [value.requires_grad for value in result]})\n    except RuntimeError as error:\n        message = str(error).lower()\n        if 'modified' in message:\n            category = 'SAVED_VERSION_MISMATCH'\n        elif 'second time' in message or 'consumed' in message:\n            category = 'CONSUMED_HISTORY'\n        else:\n            raise\n        report.append({'error': category, 'type': type(error).__name__})\n",
+      "expected": [
+        {
+          "error": "SAVED_VERSION_MISMATCH",
+          "type": "RuntimeError"
+        },
+        {
+          "error": "CONSUMED_HISTORY",
+          "type": "RuntimeError"
+        },
+        {
+          "error": "CONSUMED_HISTORY",
+          "type": "RuntimeError"
+        },
+        {
+          "error": "SAVED_VERSION_MISMATCH",
+          "type": "RuntimeError"
+        },
+        {
+          "values": [
+            [
+              1.0,
+              1.0
+            ]
+          ],
+          "shapes": [
+            [
+              2
+            ]
+          ],
+          "tracking": [
+            false
+          ]
+        },
+        {
+          "values": [
+            [
+              4.0,
+              6.0
+            ]
+          ],
+          "shapes": [
+            [
+              2
+            ]
+          ],
+          "tracking": [
+            false
+          ]
+        }
+      ]
+    },
+    {
+      "name": "pruned-save",
+      "config": {
+        "kind": "pruned-save",
+        "good_first": false,
+        "good_saved": true,
+        "swap_operands": false,
+        "repeated": false,
+        "x_data": [
+          2.0,
+          3.0
+        ],
+        "y_data": [
+          5.0,
+          7.0
+        ],
+        "seed_data": [
+          1.0,
+          1.0
+        ],
+        "calls": [
+          [
+            "root",
+            [
+              "x"
+            ]
+          ],
+          [
+            "root",
+            [
+              "x"
+            ]
+          ],
+          [
+            "good",
+            [
+              "y"
+            ]
+          ],
+          [
+            "bad",
+            [
+              "x"
+            ]
+          ],
+          [
+            "bad",
+            [
+              "bad"
+            ]
+          ]
+        ]
+      },
+      "source": "kind = 'pruned-save'\ngood_first = False\ngood_saved = True\nswap_operands = False\nrepeated = False\nx_data = [2.0, 3.0]\ny_data = [5.0, 7.0]\nseed_data = [1.0, 1.0]\ncalls = [('root', ['x']), ('root', ['x']), ('good', ['y']), ('bad', ['x']), ('bad', ['bad'])]\nx = torch.tensor(x_data, dtype=torch.float32, requires_grad=True)\ny = torch.tensor(y_data, dtype=torch.float32, requires_grad=True)\nshared = x * x if kind == 'shared' else y\nif good_first:\n    good = shared * shared if good_saved else shared + shared\nbad = shared * y if kind == 'shared' else x * y if kind == 'pruned-save' else x * x\nif not good_first:\n    good = shared * shared if good_saved else shared + shared\nif kind in ('view-copy', 'direct-copy'):\n    good = y + y\n    if kind == 'view-copy':\n        good = good.view(tuple(good.shape))\n    good.copy_(y)\nroot = (good + bad if swap_operands else bad + good)\nif repeated:\n    root = root + good\nroot = root.sum()\nwith torch.no_grad():\n    changed = y if kind == 'shared' else x\n    changed.copy_(torch.tensor(changed.tolist(), dtype=torch.float32))\ntensors = {'root': root, 'good': good, 'bad': bad, 'shared': shared, 'x': x, 'y': y}\nreport = []\nfor output_name, input_names in calls:\n    try:\n        result = torch.autograd.grad(tensors[output_name], [tensors[name] for name in input_names],\n                                     None if output_name == 'root' else torch.tensor(seed_data, dtype=torch.float32))\n        report.append({'values': [value.tolist() for value in result],\n                       'shapes': [list(value.shape) for value in result],\n                       'tracking': [value.requires_grad for value in result]})\n    except RuntimeError as error:\n        message = str(error).lower()\n        if 'modified' in message:\n            category = 'SAVED_VERSION_MISMATCH'\n        elif 'second time' in message or 'consumed' in message:\n            category = 'CONSUMED_HISTORY'\n        else:\n            raise\n        report.append({'error': category, 'type': type(error).__name__})\n",
+      "expected": [
+        {
+          "error": "SAVED_VERSION_MISMATCH",
+          "type": "RuntimeError"
+        },
+        {
+          "error": "SAVED_VERSION_MISMATCH",
+          "type": "RuntimeError"
+        },
+        {
+          "values": [
+            [
+              10.0,
+              14.0
+            ]
+          ],
+          "shapes": [
+            [
+              2
+            ]
+          ],
+          "tracking": [
+            false
+          ]
+        },
+        {
+          "error": "SAVED_VERSION_MISMATCH",
+          "type": "RuntimeError"
+        },
+        {
+          "values": [
+            [
+              1.0,
+              1.0
+            ]
+          ],
+          "shapes": [
+            [
+              2
+            ]
+          ],
+          "tracking": [
+            false
+          ]
+        }
+      ]
+    },
+    {
+      "name": "view-copy",
+      "config": {
+        "kind": "view-copy",
+        "good_first": false,
+        "good_saved": true,
+        "swap_operands": false,
+        "repeated": false,
+        "x_data": [
+          2.0,
+          3.0
+        ],
+        "y_data": [
+          5.0,
+          7.0
+        ],
+        "seed_data": [
+          1.0,
+          1.0
+        ],
+        "calls": [
+          [
+            "root",
+            [
+              "x",
+              "y"
+            ]
+          ],
+          [
+            "root",
+            [
+              "x",
+              "y"
+            ]
+          ],
+          [
+            "good",
+            [
+              "y"
+            ]
+          ],
+          [
+            "bad",
+            [
+              "x"
+            ]
+          ],
+          [
+            "bad",
+            [
+              "bad"
+            ]
+          ]
+        ]
+      },
+      "source": "kind = 'view-copy'\ngood_first = False\ngood_saved = True\nswap_operands = False\nrepeated = False\nx_data = [2.0, 3.0]\ny_data = [5.0, 7.0]\nseed_data = [1.0, 1.0]\ncalls = [('root', ['x', 'y']), ('root', ['x', 'y']), ('good', ['y']), ('bad', ['x']), ('bad', ['bad'])]\nx = torch.tensor(x_data, dtype=torch.float32, requires_grad=True)\ny = torch.tensor(y_data, dtype=torch.float32, requires_grad=True)\nshared = x * x if kind == 'shared' else y\nif good_first:\n    good = shared * shared if good_saved else shared + shared\nbad = shared * y if kind == 'shared' else x * y if kind == 'pruned-save' else x * x\nif not good_first:\n    good = shared * shared if good_saved else shared + shared\nif kind in ('view-copy', 'direct-copy'):\n    good = y + y\n    if kind == 'view-copy':\n        good = good.view(tuple(good.shape))\n    good.copy_(y)\nroot = (good + bad if swap_operands else bad + good)\nif repeated:\n    root = root + good\nroot = root.sum()\nwith torch.no_grad():\n    changed = y if kind == 'shared' else x\n    changed.copy_(torch.tensor(changed.tolist(), dtype=torch.float32))\ntensors = {'root': root, 'good': good, 'bad': bad, 'shared': shared, 'x': x, 'y': y}\nreport = []\nfor output_name, input_names in calls:\n    try:\n        result = torch.autograd.grad(tensors[output_name], [tensors[name] for name in input_names],\n                                     None if output_name == 'root' else torch.tensor(seed_data, dtype=torch.float32))\n        report.append({'values': [value.tolist() for value in result],\n                       'shapes': [list(value.shape) for value in result],\n                       'tracking': [value.requires_grad for value in result]})\n    except RuntimeError as error:\n        message = str(error).lower()\n        if 'modified' in message:\n            category = 'SAVED_VERSION_MISMATCH'\n        elif 'second time' in message or 'consumed' in message:\n            category = 'CONSUMED_HISTORY'\n        else:\n            raise\n        report.append({'error': category, 'type': type(error).__name__})\n",
+      "expected": [
+        {
+          "error": "SAVED_VERSION_MISMATCH",
+          "type": "RuntimeError"
+        },
+        {
+          "error": "CONSUMED_HISTORY",
+          "type": "RuntimeError"
+        },
+        {
+          "error": "CONSUMED_HISTORY",
+          "type": "RuntimeError"
+        },
+        {
+          "error": "SAVED_VERSION_MISMATCH",
+          "type": "RuntimeError"
+        },
+        {
+          "values": [
+            [
+              1.0,
+              1.0
+            ]
+          ],
+          "shapes": [
+            [
+              2
+            ]
+          ],
+          "tracking": [
+            false
+          ]
+        }
+      ]
+    },
+    {
+      "name": "direct-copy",
+      "config": {
+        "kind": "direct-copy",
+        "good_first": false,
+        "good_saved": true,
+        "swap_operands": false,
+        "repeated": false,
+        "x_data": [
+          2.0,
+          3.0
+        ],
+        "y_data": [
+          5.0,
+          7.0
+        ],
+        "seed_data": [
+          1.0,
+          1.0
+        ],
+        "calls": [
+          [
+            "root",
+            [
+              "x",
+              "y"
+            ]
+          ],
+          [
+            "root",
+            [
+              "x",
+              "y"
+            ]
+          ],
+          [
+            "good",
+            [
+              "y"
+            ]
+          ],
+          [
+            "bad",
+            [
+              "x"
+            ]
+          ],
+          [
+            "bad",
+            [
+              "bad"
+            ]
+          ]
+        ]
+      },
+      "source": "kind = 'direct-copy'\ngood_first = False\ngood_saved = True\nswap_operands = False\nrepeated = False\nx_data = [2.0, 3.0]\ny_data = [5.0, 7.0]\nseed_data = [1.0, 1.0]\ncalls = [('root', ['x', 'y']), ('root', ['x', 'y']), ('good', ['y']), ('bad', ['x']), ('bad', ['bad'])]\nx = torch.tensor(x_data, dtype=torch.float32, requires_grad=True)\ny = torch.tensor(y_data, dtype=torch.float32, requires_grad=True)\nshared = x * x if kind == 'shared' else y\nif good_first:\n    good = shared * shared if good_saved else shared + shared\nbad = shared * y if kind == 'shared' else x * y if kind == 'pruned-save' else x * x\nif not good_first:\n    good = shared * shared if good_saved else shared + shared\nif kind in ('view-copy', 'direct-copy'):\n    good = y + y\n    if kind == 'view-copy':\n        good = good.view(tuple(good.shape))\n    good.copy_(y)\nroot = (good + bad if swap_operands else bad + good)\nif repeated:\n    root = root + good\nroot = root.sum()\nwith torch.no_grad():\n    changed = y if kind == 'shared' else x\n    changed.copy_(torch.tensor(changed.tolist(), dtype=torch.float32))\ntensors = {'root': root, 'good': good, 'bad': bad, 'shared': shared, 'x': x, 'y': y}\nreport = []\nfor output_name, input_names in calls:\n    try:\n        result = torch.autograd.grad(tensors[output_name], [tensors[name] for name in input_names],\n                                     None if output_name == 'root' else torch.tensor(seed_data, dtype=torch.float32))\n        report.append({'values': [value.tolist() for value in result],\n                       'shapes': [list(value.shape) for value in result],\n                       'tracking': [value.requires_grad for value in result]})\n    except RuntimeError as error:\n        message = str(error).lower()\n        if 'modified' in message:\n            category = 'SAVED_VERSION_MISMATCH'\n        elif 'second time' in message or 'consumed' in message:\n            category = 'CONSUMED_HISTORY'\n        else:\n            raise\n        report.append({'error': category, 'type': type(error).__name__})\n",
+      "expected": [
+        {
+          "error": "SAVED_VERSION_MISMATCH",
+          "type": "RuntimeError"
+        },
+        {
+          "error": "SAVED_VERSION_MISMATCH",
+          "type": "RuntimeError"
+        },
+        {
+          "values": [
+            [
+              1.0,
+              1.0
+            ]
+          ],
+          "shapes": [
+            [
+              2
+            ]
+          ],
+          "tracking": [
+            false
+          ]
+        },
+        {
+          "error": "SAVED_VERSION_MISMATCH",
+          "type": "RuntimeError"
+        },
+        {
+          "values": [
+            [
+              1.0,
+              1.0
+            ]
+          ],
+          "shapes": [
+            [
+              2
+            ]
+          ],
+          "tracking": [
+            false
+          ]
+        }
+      ]
+    },
+    {
+      "name": "scalar",
+      "config": {
+        "kind": "ordinary",
+        "good_first": false,
+        "good_saved": true,
+        "swap_operands": false,
+        "repeated": false,
+        "x_data": 2.0,
+        "y_data": 5.0,
+        "seed_data": 1.0,
+        "calls": [
+          [
+            "root",
+            [
+              "x",
+              "y"
+            ]
+          ],
+          [
+            "root",
+            [
+              "x",
+              "y"
+            ]
+          ],
+          [
+            "good",
+            [
+              "y"
+            ]
+          ],
+          [
+            "bad",
+            [
+              "x"
+            ]
+          ],
+          [
+            "bad",
+            [
+              "bad"
+            ]
+          ]
+        ]
+      },
+      "source": "kind = 'ordinary'\ngood_first = False\ngood_saved = True\nswap_operands = False\nrepeated = False\nx_data = 2.0\ny_data = 5.0\nseed_data = 1.0\ncalls = [('root', ['x', 'y']), ('root', ['x', 'y']), ('good', ['y']), ('bad', ['x']), ('bad', ['bad'])]\nx = torch.tensor(x_data, dtype=torch.float32, requires_grad=True)\ny = torch.tensor(y_data, dtype=torch.float32, requires_grad=True)\nshared = x * x if kind == 'shared' else y\nif good_first:\n    good = shared * shared if good_saved else shared + shared\nbad = shared * y if kind == 'shared' else x * y if kind == 'pruned-save' else x * x\nif not good_first:\n    good = shared * shared if good_saved else shared + shared\nif kind in ('view-copy', 'direct-copy'):\n    good = y + y\n    if kind == 'view-copy':\n        good = good.view(tuple(good.shape))\n    good.copy_(y)\nroot = (good + bad if swap_operands else bad + good)\nif repeated:\n    root = root + good\nroot = root.sum()\nwith torch.no_grad():\n    changed = y if kind == 'shared' else x\n    changed.copy_(torch.tensor(changed.tolist(), dtype=torch.float32))\ntensors = {'root': root, 'good': good, 'bad': bad, 'shared': shared, 'x': x, 'y': y}\nreport = []\nfor output_name, input_names in calls:\n    try:\n        result = torch.autograd.grad(tensors[output_name], [tensors[name] for name in input_names],\n                                     None if output_name == 'root' else torch.tensor(seed_data, dtype=torch.float32))\n        report.append({'values': [value.tolist() for value in result],\n                       'shapes': [list(value.shape) for value in result],\n                       'tracking': [value.requires_grad for value in result]})\n    except RuntimeError as error:\n        message = str(error).lower()\n        if 'modified' in message:\n            category = 'SAVED_VERSION_MISMATCH'\n        elif 'second time' in message or 'consumed' in message:\n            category = 'CONSUMED_HISTORY'\n        else:\n            raise\n        report.append({'error': category, 'type': type(error).__name__})\n",
+      "expected": [
+        {
+          "error": "SAVED_VERSION_MISMATCH",
+          "type": "RuntimeError"
+        },
+        {
+          "error": "CONSUMED_HISTORY",
+          "type": "RuntimeError"
+        },
+        {
+          "error": "CONSUMED_HISTORY",
+          "type": "RuntimeError"
+        },
+        {
+          "error": "SAVED_VERSION_MISMATCH",
+          "type": "RuntimeError"
+        },
+        {
+          "values": [
+            1.0
+          ],
+          "shapes": [
+            []
+          ],
+          "tracking": [
+            false
+          ]
+        }
+      ]
+    },
+    {
+      "name": "singleton",
+      "config": {
+        "kind": "ordinary",
+        "good_first": false,
+        "good_saved": true,
+        "swap_operands": false,
+        "repeated": false,
+        "x_data": [
+          [
+            [
+              2.0
+            ]
+          ]
+        ],
+        "y_data": [
+          [
+            [
+              5.0
+            ]
+          ]
+        ],
+        "seed_data": [
+          [
+            [
+              1.0
+            ]
+          ]
+        ],
+        "calls": [
+          [
+            "root",
+            [
+              "x",
+              "y"
+            ]
+          ],
+          [
+            "root",
+            [
+              "x",
+              "y"
+            ]
+          ],
+          [
+            "good",
+            [
+              "y"
+            ]
+          ],
+          [
+            "bad",
+            [
+              "x"
+            ]
+          ],
+          [
+            "bad",
+            [
+              "bad"
+            ]
+          ]
+        ]
+      },
+      "source": "kind = 'ordinary'\ngood_first = False\ngood_saved = True\nswap_operands = False\nrepeated = False\nx_data = [[[2.0]]]\ny_data = [[[5.0]]]\nseed_data = [[[1.0]]]\ncalls = [('root', ['x', 'y']), ('root', ['x', 'y']), ('good', ['y']), ('bad', ['x']), ('bad', ['bad'])]\nx = torch.tensor(x_data, dtype=torch.float32, requires_grad=True)\ny = torch.tensor(y_data, dtype=torch.float32, requires_grad=True)\nshared = x * x if kind == 'shared' else y\nif good_first:\n    good = shared * shared if good_saved else shared + shared\nbad = shared * y if kind == 'shared' else x * y if kind == 'pruned-save' else x * x\nif not good_first:\n    good = shared * shared if good_saved else shared + shared\nif kind in ('view-copy', 'direct-copy'):\n    good = y + y\n    if kind == 'view-copy':\n        good = good.view(tuple(good.shape))\n    good.copy_(y)\nroot = (good + bad if swap_operands else bad + good)\nif repeated:\n    root = root + good\nroot = root.sum()\nwith torch.no_grad():\n    changed = y if kind == 'shared' else x\n    changed.copy_(torch.tensor(changed.tolist(), dtype=torch.float32))\ntensors = {'root': root, 'good': good, 'bad': bad, 'shared': shared, 'x': x, 'y': y}\nreport = []\nfor output_name, input_names in calls:\n    try:\n        result = torch.autograd.grad(tensors[output_name], [tensors[name] for name in input_names],\n                                     None if output_name == 'root' else torch.tensor(seed_data, dtype=torch.float32))\n        report.append({'values': [value.tolist() for value in result],\n                       'shapes': [list(value.shape) for value in result],\n                       'tracking': [value.requires_grad for value in result]})\n    except RuntimeError as error:\n        message = str(error).lower()\n        if 'modified' in message:\n            category = 'SAVED_VERSION_MISMATCH'\n        elif 'second time' in message or 'consumed' in message:\n            category = 'CONSUMED_HISTORY'\n        else:\n            raise\n        report.append({'error': category, 'type': type(error).__name__})\n",
+      "expected": [
+        {
+          "error": "SAVED_VERSION_MISMATCH",
+          "type": "RuntimeError"
+        },
+        {
+          "error": "CONSUMED_HISTORY",
+          "type": "RuntimeError"
+        },
+        {
+          "error": "CONSUMED_HISTORY",
+          "type": "RuntimeError"
+        },
+        {
+          "error": "SAVED_VERSION_MISMATCH",
+          "type": "RuntimeError"
+        },
+        {
+          "values": [
+            [
+              [
+                [
+                  1.0
+                ]
+              ]
+            ]
+          ],
+          "shapes": [
+            [
+              1,
+              1,
+              1
+            ]
+          ],
+          "tracking": [
+            false
+          ]
+        }
+      ]
+    },
+    {
+      "name": "matrix",
+      "config": {
+        "kind": "ordinary",
+        "good_first": false,
+        "good_saved": true,
+        "swap_operands": false,
+        "repeated": false,
+        "x_data": [
+          [
+            2.0,
+            3.0
+          ],
+          [
+            4.0,
+            5.0
+          ]
+        ],
+        "y_data": [
+          [
+            5.0,
+            7.0
+          ],
+          [
+            9.0,
+            11.0
+          ]
+        ],
+        "seed_data": [
+          [
+            1.0,
+            1.0
+          ],
+          [
+            1.0,
+            1.0
+          ]
+        ],
+        "calls": [
+          [
+            "root",
+            [
+              "x",
+              "y"
+            ]
+          ],
+          [
+            "root",
+            [
+              "x",
+              "y"
+            ]
+          ],
+          [
+            "good",
+            [
+              "y"
+            ]
+          ],
+          [
+            "bad",
+            [
+              "x"
+            ]
+          ],
+          [
+            "bad",
+            [
+              "bad"
+            ]
+          ]
+        ]
+      },
+      "source": "kind = 'ordinary'\ngood_first = False\ngood_saved = True\nswap_operands = False\nrepeated = False\nx_data = [[2.0, 3.0], [4.0, 5.0]]\ny_data = [[5.0, 7.0], [9.0, 11.0]]\nseed_data = [[1.0, 1.0], [1.0, 1.0]]\ncalls = [('root', ['x', 'y']), ('root', ['x', 'y']), ('good', ['y']), ('bad', ['x']), ('bad', ['bad'])]\nx = torch.tensor(x_data, dtype=torch.float32, requires_grad=True)\ny = torch.tensor(y_data, dtype=torch.float32, requires_grad=True)\nshared = x * x if kind == 'shared' else y\nif good_first:\n    good = shared * shared if good_saved else shared + shared\nbad = shared * y if kind == 'shared' else x * y if kind == 'pruned-save' else x * x\nif not good_first:\n    good = shared * shared if good_saved else shared + shared\nif kind in ('view-copy', 'direct-copy'):\n    good = y + y\n    if kind == 'view-copy':\n        good = good.view(tuple(good.shape))\n    good.copy_(y)\nroot = (good + bad if swap_operands else bad + good)\nif repeated:\n    root = root + good\nroot = root.sum()\nwith torch.no_grad():\n    changed = y if kind == 'shared' else x\n    changed.copy_(torch.tensor(changed.tolist(), dtype=torch.float32))\ntensors = {'root': root, 'good': good, 'bad': bad, 'shared': shared, 'x': x, 'y': y}\nreport = []\nfor output_name, input_names in calls:\n    try:\n        result = torch.autograd.grad(tensors[output_name], [tensors[name] for name in input_names],\n                                     None if output_name == 'root' else torch.tensor(seed_data, dtype=torch.float32))\n        report.append({'values': [value.tolist() for value in result],\n                       'shapes': [list(value.shape) for value in result],\n                       'tracking': [value.requires_grad for value in result]})\n    except RuntimeError as error:\n        message = str(error).lower()\n        if 'modified' in message:\n            category = 'SAVED_VERSION_MISMATCH'\n        elif 'second time' in message or 'consumed' in message:\n            category = 'CONSUMED_HISTORY'\n        else:\n            raise\n        report.append({'error': category, 'type': type(error).__name__})\n",
+      "expected": [
+        {
+          "error": "SAVED_VERSION_MISMATCH",
+          "type": "RuntimeError"
+        },
+        {
+          "error": "CONSUMED_HISTORY",
+          "type": "RuntimeError"
+        },
+        {
+          "error": "CONSUMED_HISTORY",
+          "type": "RuntimeError"
+        },
+        {
+          "error": "SAVED_VERSION_MISMATCH",
+          "type": "RuntimeError"
+        },
+        {
+          "values": [
+            [
+              [
+                1.0,
+                1.0
+              ],
+              [
+                1.0,
+                1.0
+              ]
+            ]
+          ],
+          "shapes": [
+            [
+              2,
+              2
+            ]
+          ],
+          "tracking": [
+            false
+          ]
+        }
+      ]
+    },
+    {
+      "name": "empty",
+      "config": {
+        "kind": "ordinary",
+        "good_first": false,
+        "good_saved": true,
+        "swap_operands": false,
+        "repeated": false,
+        "x_data": [
+          [],
+          []
+        ],
+        "y_data": [
+          [],
+          []
+        ],
+        "seed_data": [
+          [],
+          []
+        ],
+        "calls": [
+          [
+            "root",
+            [
+              "x",
+              "y"
+            ]
+          ],
+          [
+            "root",
+            [
+              "x",
+              "y"
+            ]
+          ],
+          [
+            "good",
+            [
+              "y"
+            ]
+          ],
+          [
+            "bad",
+            [
+              "x"
+            ]
+          ],
+          [
+            "bad",
+            [
+              "bad"
+            ]
+          ]
+        ]
+      },
+      "source": "kind = 'ordinary'\ngood_first = False\ngood_saved = True\nswap_operands = False\nrepeated = False\nx_data = [[], []]\ny_data = [[], []]\nseed_data = [[], []]\ncalls = [('root', ['x', 'y']), ('root', ['x', 'y']), ('good', ['y']), ('bad', ['x']), ('bad', ['bad'])]\nx = torch.tensor(x_data, dtype=torch.float32, requires_grad=True)\ny = torch.tensor(y_data, dtype=torch.float32, requires_grad=True)\nshared = x * x if kind == 'shared' else y\nif good_first:\n    good = shared * shared if good_saved else shared + shared\nbad = shared * y if kind == 'shared' else x * y if kind == 'pruned-save' else x * x\nif not good_first:\n    good = shared * shared if good_saved else shared + shared\nif kind in ('view-copy', 'direct-copy'):\n    good = y + y\n    if kind == 'view-copy':\n        good = good.view(tuple(good.shape))\n    good.copy_(y)\nroot = (good + bad if swap_operands else bad + good)\nif repeated:\n    root = root + good\nroot = root.sum()\nwith torch.no_grad():\n    changed = y if kind == 'shared' else x\n    changed.copy_(torch.tensor(changed.tolist(), dtype=torch.float32))\ntensors = {'root': root, 'good': good, 'bad': bad, 'shared': shared, 'x': x, 'y': y}\nreport = []\nfor output_name, input_names in calls:\n    try:\n        result = torch.autograd.grad(tensors[output_name], [tensors[name] for name in input_names],\n                                     None if output_name == 'root' else torch.tensor(seed_data, dtype=torch.float32))\n        report.append({'values': [value.tolist() for value in result],\n                       'shapes': [list(value.shape) for value in result],\n                       'tracking': [value.requires_grad for value in result]})\n    except RuntimeError as error:\n        message = str(error).lower()\n        if 'modified' in message:\n            category = 'SAVED_VERSION_MISMATCH'\n        elif 'second time' in message or 'consumed' in message:\n            category = 'CONSUMED_HISTORY'\n        else:\n            raise\n        report.append({'error': category, 'type': type(error).__name__})\n",
+      "expected": [
+        {
+          "error": "SAVED_VERSION_MISMATCH",
+          "type": "RuntimeError"
+        },
+        {
+          "error": "CONSUMED_HISTORY",
+          "type": "RuntimeError"
+        },
+        {
+          "error": "CONSUMED_HISTORY",
+          "type": "RuntimeError"
+        },
+        {
+          "error": "SAVED_VERSION_MISMATCH",
+          "type": "RuntimeError"
+        },
+        {
+          "values": [
+            [
+              [],
+              []
+            ]
+          ],
+          "shapes": [
+            [
+              2,
+              0
+            ]
+          ],
+          "tracking": [
+            false
+          ]
+        }
+      ]
+    }
+  ],
   "copyCases": [
     {
       "name": "stale-child-bypasses-parent-new-child-binds-parent",

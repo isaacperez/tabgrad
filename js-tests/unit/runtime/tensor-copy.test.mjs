@@ -64,7 +64,7 @@ test("active copy promotes/replaces history and keeps connected positive destina
   assert.equal(session.diagnostics().liveDerivativeNodes, 0);
 });
 
-test("copy guards and saved-version gradient preflight are transactional", async () => {
+test("copy admission guards and a failing saved-value recipe preserve history", async () => {
   const session = createTestRuntimeSession({ manifestUrl: new URL("manifest.json", distributionUrl), forceVariant: "scalar" });
   try {
     const x = session.tensor([2], { requiresGrad: true });

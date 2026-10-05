@@ -6,6 +6,7 @@
   </head>
   <body>
     <script type="module">
+      import { checkGradientProgress, loadGradientProgressOracle } from "/helpers/gradient-progress-cases.mjs";
       const parameters = new URLSearchParams(location.search);
       const token = parameters.get("token");
       const forceVariant = parameters.get("variant");
@@ -261,6 +262,9 @@
         await checkTotalSum(session);
         await checkMultiplication(session);
         await checkFunctionalGradients(session);
+        for (const fixture of (await loadGradientProgressOracle()).gradientProgressCases) {
+          await checkGradientProgress(session, fixture);
+        }
         await checkNoGrad(session);
         await checkCopy(session);
         await session.close();

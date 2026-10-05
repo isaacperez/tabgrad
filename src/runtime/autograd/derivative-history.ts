@@ -21,7 +21,42 @@ export class DerivativeNode<Value> {
     public inputs: readonly (DerivativeNode<Value> | null)[],
     public saved: readonly (readonly Value[])[],
     readonly outcomes: readonly WriterOutcome[] = [],
+    readonly sequence: number = 0,
   ) {}
+}
+
+/** Highest construction priority among ready nodes, never among blocked ancestors. */
+class ReadyDerivativeNodes<Value> {
+  readonly #heap: DerivativeNode<Value>[] = [];
+
+  push(node: DerivativeNode<Value>): void {
+    let index = this.#heap.length;
+    this.#heap.push(node);
+    while (index > 0) {
+      const parent = (index - 1) >>> 1;
+      if (this.#heap[parent]!.sequence >= node.sequence) break;
+      this.#heap[index] = this.#heap[parent]!;
+      index = parent;
+    }
+    this.#heap[index] = node;
+  }
+
+  pop(): DerivativeNode<Value> | undefined {
+    const first = this.#heap[0];
+    const last = this.#heap.pop();
+    if (this.#heap.length !== 0) {
+      let index = 0;
+      while (index * 2 + 1 < this.#heap.length) {
+        let child = index * 2 + 1;
+        if (child + 1 < this.#heap.length && this.#heap[child + 1]!.sequence > this.#heap[child]!.sequence) child += 1;
+        if (last!.sequence >= this.#heap[child]!.sequence) break;
+        this.#heap[index] = this.#heap[child]!;
+        index = child;
+      }
+      this.#heap[index] = last!;
+    }
+    return first;
+  }
 }
 
 /** Numerical and handle ownership stays with the runtime's ordinary admission path. */
@@ -70,6 +105,7 @@ export class DerivativeHistory<Value> {
   readonly #nodes = new Set<DerivativeNode<Value>>();
   #savedValues = 0;
   #references = 0;
+  #sequence = 0;
   get references(): number { return this.#references; }
 
   constructor(
@@ -110,7 +146,7 @@ export class DerivativeHistory<Value> {
     inputs: readonly (DerivativeNode<Value> | null)[], saved: readonly (readonly Value[])[],
     outcomes: readonly WriterOutcome[] = [],
   ): DerivativeNode<Value> {
-    const node = new DerivativeNode(shape, recipe, inputs, saved, outcomes);
+    const node = new DerivativeNode(shape, recipe, inputs, saved, outcomes, this.#sequence++);
     retainWriterOutcomes(outcomes);
     this.#nodes.add(node);
     this.#references += 1;
@@ -149,7 +185,7 @@ export class DerivativeHistory<Value> {
     throwCleanupFailures(failures, "Saved derivative value cleanup failed.");
   }
 
-  /** Validate the entire selected ancestry before numerical admission or consumption. */
+  /** Validate connectivity and select ancestry without executing or checking saved state. */
   plan(output: DerivativeNode<Value>, requested: readonly DerivativeNode<Value>[]): DerivativePlan<Value> {
     const targets = new Set(requested);
     const visited = new Set<DerivativeNode<Value>>();
@@ -174,13 +210,6 @@ export class DerivativeHistory<Value> {
     if (requested.some((node) => !visited.has(node))) {
       throw new TabgradError("UNUSED_INPUT", "A requested input was not used to compute the output.");
     }
-    for (const node of order) {
-      const executes = node.inputs.some((input) => input !== null && needed.has(input));
-      if (executes) for (const operands of node.saved) for (const value of operands) this.validateValue(value);
-      if (node.consumed && executes) {
-        throw new TabgradError("CONSUMED_HISTORY", "Saved derivative values have already been consumed.");
-      }
-    }
     return { order, needed, requested, outcomes: order
       .filter((node) => node.inputs.some((input) => input !== null && needed.has(input)))
       .map((node) => node.outcomes) };
@@ -194,18 +223,32 @@ export class DerivativeHistory<Value> {
     const temporaries = new Set<Gradient>();
     const requested = new Set(plan.requested);
     const results: Gradient[] = [];
-    const consumed: DerivativeNode<Value>[] = [];
+    const pending = new Map<DerivativeNode<Value>, number>();
+    const ready = new ReadyDerivativeNodes<Value>();
+    for (const node of plan.order) {
+      for (const input of node.inputs) {
+        if (input !== null && plan.needed.has(input)) pending.set(input, (pending.get(input) ?? 0) + 1);
+      }
+    }
+    const output = plan.order[plan.order.length - 1]!;
+    ready.push(output);
+    let consumptionFailures: unknown[] | undefined;
     let failures: unknown[] | undefined;
-    gradients.set(plan.order[plan.order.length - 1]!, seed);
+    gradients.set(output, seed);
     try {
-      for (let index = plan.order.length - 1; index >= 0; index -= 1) {
-        const node = plan.order[index]!;
+      let node: DerivativeNode<Value> | undefined;
+      while ((node = ready.pop()) !== undefined) {
         const incoming = gradients.get(node)!;
-        let traversed = false;
+        const traversed = node.inputs.some((input) => input !== null && plan.needed.has(input));
+        if (traversed) {
+          if (node.consumed) throw new TabgradError("CONSUMED_HISTORY", "Saved derivative values have already been consumed.");
+          // Native checks every required save of this executing recipe, including
+          // saves whose numerical input contribution is pruned by the selection.
+          for (const operands of node.saved) for (const value of operands) this.validateValue(value);
+        }
         for (let position = 0; position < node.inputs.length; position += 1) {
           const input = node.inputs[position]!;
           if (input === null || !plan.needed.has(input)) continue;
-          traversed = true;
           let contribution = node.recipe!.apply(incoming, node.saved[position] ?? [], input.shape, operations, position);
           temporaries.add(contribution);
           const previous = gradients.get(input);
@@ -217,24 +260,25 @@ export class DerivativeHistory<Value> {
             contribution = combined;
           }
           gradients.set(input, contribution);
+          const remaining = pending.get(input)! - 1;
+          pending.set(input, remaining);
+          if (remaining === 0) ready.push(input);
         }
-        if (traversed && (node.saved.length !== 0 || node.recipe?.consumesHistory === true)) consumed.push(node);
+        if (traversed && (node.saved.length !== 0 || node.recipe?.consumesHistory === true)) {
+          node.consumed = true;
+          try { this.#releaseSaved(node); }
+          catch (error) { (consumptionFailures ??= []).push(error); }
+        }
         if (!requested.has(node)) {
           gradients.delete(node);
           releaseTemporary(incoming, temporaries, operations);
         }
       }
       for (const node of plan.requested) results.push(operations.view(gradients.get(node)!, node.shape));
-      let consumptionFailures: unknown[] | undefined;
-      for (const node of consumed) {
-        node.consumed = true;
-        try { this.#releaseSaved(node); }
-        catch (error) { (consumptionFailures ??= []).push(error); }
-      }
-      throwCleanupFailures(consumptionFailures, "Consumed derivative history cleanup failed.");
     } catch (error) {
       failures = [error];
     }
+    if (consumptionFailures !== undefined) failures = [...(failures ?? []), ...consumptionFailures];
     failures = releaseGradients(temporaries, operations, failures);
     if (failures !== undefined) failures = releaseGradients(results, operations, failures);
     throwCleanupFailures(failures, "Derivative construction or cleanup failed.");

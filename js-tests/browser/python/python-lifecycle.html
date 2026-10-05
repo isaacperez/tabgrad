@@ -4,6 +4,7 @@
   <body>
     <script type="module">
       import { pythonCopyChecks } from "/helpers/python-copy-cases.mjs";
+      import { pythonGradientProgressChecks, loadGradientProgressOracle } from "/helpers/gradient-progress-cases.mjs";
       import { pythonNoGradChecks } from "/helpers/python-no-grad-cases.mjs";
       const token = new URLSearchParams(location.search).get("token");
       async function send(endpoint, value) {
@@ -115,6 +116,7 @@ assert old_session.diagnostics().liveDerivativeNodes == 0
 assert old_session.diagnostics().liveSavedValues == 0
 `);
           await binding.runPythonAsync(await pythonCopyChecks());
+          await binding.runPythonAsync(pythonGradientProgressChecks(await loadGradientProgressOracle()));
           const result = await binding.runPythonAsync(`
 import weakref
 class ScriptResult:

@@ -91,19 +91,20 @@ result under the ordinary [session lifetime](../javascript-api.md) contract.
 
 ## History consumption and validation
 
-The existing implementation validates the whole request before admitting any
-derivative operation or consuming saved values. Wrong shapes, unused/nontracking inputs,
+Global argument validation occurs before admitting any derivative operation
+or consuming saved values. Wrong shapes, unused/nontracking inputs,
 unsupported modes, foreign handles and closed handles leave existing history
 available for a corrected request. After admission, results remain lazy;
 differentiation itself performs no numerical readback.
 
-Whole-selected saved-state preflight also leaves every branch reusable after
-a saved-version failure. This differs from native PyTorch when a good recipe
-has already executed before a later bad save: native consumes that successful
-recipe, and a retry can fail with consumed history. See the exact
-[compatibility limitation](../compatibility.md#functional-failure-progress).
-The accepted [CPU per-node contract](../architecture/cpu-gradient-state.md#progress-and-failure-belong-to-executing-nodes)
-requires correcting this behavior; this reference describes the existing API.
+Saved-state checks and consumption belong to each executing recipe. A recipe
+that succeeds before a later saved-version failure remains consumed; retrying
+the request or separately requesting that branch can therefore report consumed
+history. The failing recipe retains its saved state. Selected dependencies must
+be ready before execution, and ready recipes use creation sequence priority
+for the pinned native cases. This is not a universal ordering guarantee for
+arbitrary PyTorch graphs; see the bounded
+[compatibility evidence](../compatibility.md#functional-failure-progress).
 
 Multiplication saves the operand needed by each tracked input's derivative.
 Traversing that multiplication consumes its saved values once. Repeating a
@@ -111,11 +112,11 @@ request that needs those values fails, even if the first returned gradient was
 closed without observation. Addition, sum and views need only metadata, so
 their histories can be reused. Direct copy is also reusable; traversed
 whole-storage view copy is consumable independently of numeric saves.
-Every save of an executed node is version checked before seed admission,
+Every save of an executed node is version checked before that recipe's admission,
 including saves for pruned positions. The [copy reference](tensor-copy.md) owns
 rebasing, special-view guards and captured writer outcomes. The successful
-history/cutoff distinctions follow the pinned native oracle; the global failure
-preflight discrepancy above remains. It is not a blanket rule that every derivative request consumes every
+history/cutoff and failure-progress distinctions follow the pinned native oracle.
+It is not a blanket rule that every derivative request consumes every
 ancestor.
 
 Requesting a gradient with respect to the output itself does not traverse its
