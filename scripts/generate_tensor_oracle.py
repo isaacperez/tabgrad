@@ -261,6 +261,235 @@ def gradient_errors(oracle: _OracleModule) -> list[dict[str, str]]:
     return cases
 
 
+GRAD_PROGRESS_SETUP = """x = torch.tensor(x_data, dtype=torch.float32, requires_grad=True)
+y = torch.tensor(y_data, dtype=torch.float32, requires_grad=True)
+shared = x * x if kind == 'shared' else y
+if good_first:
+    good = shared * shared if good_saved else shared + shared
+bad = shared * y if kind == 'shared' else x * y if kind == 'pruned-save' else x * x
+if not good_first:
+    good = shared * shared if good_saved else shared + shared
+if kind in ('view-copy', 'direct-copy'):
+    good = y + y
+    if kind == 'view-copy':
+        good = good.view(tuple(good.shape))
+    good.copy_(y)
+root = (good + bad if swap_operands else bad + good)
+if repeated:
+    root = root + good
+root = root.sum()
+with torch.no_grad():
+    changed = y if kind == 'shared' else x
+    changed.copy_(torch.tensor(changed.tolist(), dtype=torch.float32))
+tensors = {'root': root, 'good': good, 'bad': bad, 'shared': shared, 'x': x, 'y': y}
+report = []
+for output_name, input_names in calls:
+    try:
+        result = torch.autograd.grad(tensors[output_name], [tensors[name] for name in input_names],
+                                     None if output_name == 'root' else torch.tensor(seed_data, dtype=torch.float32))
+        report.append({'values': [value.tolist() for value in result],
+                       'shapes': [list(value.shape) for value in result],
+                       'tracking': [value.requires_grad for value in result]})
+    except RuntimeError as error:
+        message = str(error).lower()
+        if 'modified' in message:
+            category = 'SAVED_VERSION_MISMATCH'
+        elif 'second time' in message or 'consumed' in message:
+            category = 'CONSUMED_HISTORY'
+        else:
+            raise
+        report.append({'error': category, 'type': type(error).__name__})
+"""
+
+
+def gradient_progress_cases(oracle: _OracleModule) -> list[dict[str, object]]:
+    """Freeze partial progress against native CPU, independently of Tabgrad scheduling."""
+    cases: list[dict[str, object]] = []
+    empty_data: list[list[float]] = [[], []]
+    variants: tuple[
+        tuple[str, str, bool, bool, bool, bool, object, object, object], ...
+    ] = (
+        (
+            "newer-good",
+            "ordinary",
+            False,
+            True,
+            False,
+            False,
+            [2.0, 3.0],
+            [5.0, 7.0],
+            [1.0, 1.0],
+        ),
+        (
+            "operand-swap",
+            "ordinary",
+            False,
+            True,
+            True,
+            False,
+            [2.0, 3.0],
+            [5.0, 7.0],
+            [1.0, 1.0],
+        ),
+        (
+            "older-good",
+            "ordinary",
+            True,
+            True,
+            False,
+            False,
+            [2.0, 3.0],
+            [5.0, 7.0],
+            [1.0, 1.0],
+        ),
+        (
+            "unsaved-good",
+            "ordinary",
+            False,
+            False,
+            False,
+            False,
+            [2.0, 3.0],
+            [5.0, 7.0],
+            [1.0, 1.0],
+        ),
+        (
+            "repeated-good",
+            "ordinary",
+            False,
+            True,
+            False,
+            True,
+            [2.0, 3.0],
+            [5.0, 7.0],
+            [1.0, 1.0],
+        ),
+        (
+            "shared-ready",
+            "shared",
+            False,
+            True,
+            False,
+            True,
+            [2.0, 3.0],
+            [5.0, 7.0],
+            [1.0, 1.0],
+        ),
+        (
+            "pruned-save",
+            "pruned-save",
+            False,
+            True,
+            False,
+            False,
+            [2.0, 3.0],
+            [5.0, 7.0],
+            [1.0, 1.0],
+        ),
+        (
+            "view-copy",
+            "view-copy",
+            False,
+            True,
+            False,
+            False,
+            [2.0, 3.0],
+            [5.0, 7.0],
+            [1.0, 1.0],
+        ),
+        (
+            "direct-copy",
+            "direct-copy",
+            False,
+            True,
+            False,
+            False,
+            [2.0, 3.0],
+            [5.0, 7.0],
+            [1.0, 1.0],
+        ),
+        ("scalar", "ordinary", False, True, False, False, 2.0, 5.0, 1.0),
+        (
+            "singleton",
+            "ordinary",
+            False,
+            True,
+            False,
+            False,
+            [[[2.0]]],
+            [[[5.0]]],
+            [[[1.0]]],
+        ),
+        (
+            "matrix",
+            "ordinary",
+            False,
+            True,
+            False,
+            False,
+            [[2.0, 3.0], [4.0, 5.0]],
+            [[5.0, 7.0], [9.0, 11.0]],
+            [[1.0, 1.0], [1.0, 1.0]],
+        ),
+        (
+            "empty",
+            "ordinary",
+            False,
+            True,
+            False,
+            False,
+            empty_data,
+            empty_data,
+            empty_data,
+        ),
+    )
+    for (
+        name,
+        kind,
+        good_first,
+        good_saved,
+        swap,
+        repeated,
+        x_data,
+        y_data,
+        seed_data,
+    ) in variants:
+        inputs = ["x"] if kind in ("shared", "pruned-save") else ["x", "y"]
+        calls = [
+            ("root", inputs),
+            ("root", inputs),
+            ("good", ["shared"] if kind == "shared" else ["y"]),
+            ("bad", ["shared"] if kind == "shared" else ["x"]),
+            ("bad", ["bad"]),
+        ]
+        if kind == "shared":
+            calls.append(("shared", ["x"]))
+        config = {
+            "kind": kind,
+            "good_first": good_first,
+            "good_saved": good_saved,
+            "swap_operands": swap,
+            "repeated": repeated,
+            "x_data": x_data,
+            "y_data": y_data,
+            "seed_data": seed_data,
+            "calls": calls,
+        }
+        prefix = "\n".join(f"{key} = {value!r}" for key, value in config.items()) + "\n"
+        source = prefix + GRAD_PROGRESS_SETUP
+        namespace: dict[str, object] = {"torch": oracle}
+        exec(source, namespace)
+        cases.append(
+            {
+                "name": name,
+                "config": config,
+                "source": source,
+                "expected": namespace["report"],
+            }
+        )
+    return cases
+
+
 NO_GRAD_CASES = (
     (
         "entry-binding-order",
@@ -995,6 +1224,7 @@ def generate() -> str:
                 "sumCases": sum_cases(oracle),
                 "gradientCases": gradient_cases(oracle),
                 "gradientErrors": gradient_errors(oracle),
+                "gradientProgressCases": gradient_progress_cases(oracle),
                 "copyCases": copy_cases(oracle),
                 "noGradCases": no_grad_cases(oracle),
                 "noGradViewCases": no_grad_view_cases(oracle),

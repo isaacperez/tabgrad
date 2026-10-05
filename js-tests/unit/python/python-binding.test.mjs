@@ -7,6 +7,7 @@ import { RuntimeSession } from "../../../dist/index.js";
 import { getTestExecutionFailureContext } from "../../../dist/testing.js";
 import { assertSumFixture } from "../../fixtures/sum-oracle.mjs";
 import { float32FromBits } from "../../fixtures/sum-oracle.mjs";
+import { pythonGradientProgressChecks } from "../../browser/helpers/gradient-progress-cases.mjs";
 
 let interpreterPromise;
 
@@ -205,6 +206,19 @@ assert torch._runtime_session.diagnostics().liveTensorHandles == 0
     await binding.close();
     assert.equal(interpreter.runPython("'torch.autograd' in __import__('sys').modules"), false);
     interpreter.runPython("[globals().pop(name, None) for name in ('torch', 'gc', 'check_grad')]; None");
+  }
+});
+
+test("Python functional failure progress matches pinned native calls and retries", { timeout: 20_000 }, async () => {
+  const oracle = JSON.parse(await readFile(new URL("../../fixtures/python-tensor-oracle.json", import.meta.url), "utf8"));
+  assert.equal(oracle.gradientProgressCases.length, 13);
+  const { attachPython } = await import("../../../dist/python.js");
+  const interpreter = await getInterpreter();
+  const binding = await attachPython(interpreter);
+  try { await binding.runPythonAsync(pythonGradientProgressChecks(oracle)); }
+  finally {
+    await binding.close();
+    interpreter.runPython("[globals().pop(name, None) for name in ('torch', 'json', 'gc', 'check_gradient_progress_fixture')]; None");
   }
 });
 

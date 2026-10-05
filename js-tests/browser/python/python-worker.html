@@ -4,6 +4,7 @@
   <body>
     <script type="module">
       import { pythonCopyChecks } from "/helpers/python-copy-cases.mjs";
+      import { pythonGradientProgressChecks, loadGradientProgressOracle } from "/helpers/gradient-progress-cases.mjs";
       import { pythonNoGradChecks } from "/helpers/python-no-grad-cases.mjs";
       import { connectPythonWorker } from "/python.js";
 
@@ -113,6 +114,7 @@ assert session.diagnostics().liveRequestLeases == 0
 `);
         await client.runPythonAsync(pythonNoGradChecks);
         await client.runPythonAsync(await pythonCopyChecks());
+        await client.runPythonAsync(pythonGradientProgressChecks(await loadGradientProgressOracle()));
         try {
           await client.runPythonAsync("raise ValueError('controlled script failure')");
           throw new Error("Python failure was reported as success.");
