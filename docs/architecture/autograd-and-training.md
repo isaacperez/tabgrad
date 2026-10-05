@@ -120,6 +120,12 @@ replace a parameter's current `TensorValue`, while gradient and optimizer state
 continue to attach to that stable parameter. Mutation advances logical storage
 versions and participates in the same effect order as other in-place work.
 
+The [CPU gradient-state contract](cpu-gradient-state.md) distinguishes leaf
+accumulation from retained nonleaf replacement. It separates semantic tensor
+identity and gradient association from public exposure and numerical aliases,
+and defines native per-node progress, partial effects and cycle responsibility.
+These obligations reuse the common path; they do not establish release support.
+
 ## Optimizers use the ordinary path
 
 Optimizer operations remain ordinary by default. This keeps dynamic training

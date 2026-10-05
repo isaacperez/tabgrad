@@ -163,6 +163,9 @@ Read the documents in this order when learning the architecture:
    [Persistent CPU tensor updates](cpu-tensor-updates.md) specializes identity,
    version, derivative and effect ownership for a bounded update, including
    immutable backing sharing and failure recovery.
+   [CPU backward and gradient state](cpu-gradient-state.md) defines persistent
+   gradient identity, leaf accumulation, nonleaf retention, per-node failure
+   progress and cycle responsibility over that same execution path.
 10. [Reusable programs and compiled callables](reusable-programs.md) explains how
    stable repeated work avoids repeated formation while retaining fresh runtime
    state.
