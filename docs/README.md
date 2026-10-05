@@ -73,6 +73,7 @@ link to its primary source, but they must not create a competing version.
 | CPU intermediate reuse decision, semantic retention and physical last-use boundary | [`architecture/cpu-intermediate-reuse.md`](architecture/cpu-intermediate-reuse.md) |
 | Persistent CPU updates, alias versions, derivative fidelity and effect ownership | [`architecture/cpu-tensor-updates.md`](architecture/cpu-tensor-updates.md) |
 | CPU backward, persistent gradient identity, partial progress and cycle responsibility | [`architecture/cpu-gradient-state.md`](architecture/cpu-gradient-state.md) |
+| Ordinary CPU SGD calls, reset/update ordering and optimizer ownership | [`architecture/cpu-sgd.md`](architecture/cpu-sgd.md) |
 | WebGPU device selection, readiness, application setup and connection ownership | [`architecture/webgpu-integration.md`](architecture/webgpu-integration.md) |
 | Managed WebGPU transport, shared completion and concrete supervision ownership | [`components/webgpu-worker-connection.md`](components/webgpu-worker-connection.md) |
 | WebGPU float32 addition numerical contract, alternatives and optimization constraints | [`architecture/webgpu-float32-addition.md`](architecture/webgpu-float32-addition.md) |

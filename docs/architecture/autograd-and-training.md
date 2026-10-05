@@ -128,6 +128,11 @@ These obligations reuse the common path; they do not establish release support.
 
 ## Optimizers use the ordinary path
 
+The [ordinary CPU SGD contract](cpu-sgd.md) defines the accepted basic call
+domain, native reset/update ordering and optimizer ownership requirements.
+Its numerical and lifecycle qualification requirements do not establish
+released support; the compatibility record remains the evidence authority.
+
 Optimizer operations remain ordinary by default. This keeps dynamic training
 code composable and avoids a special training engine. A user can explicitly
 place an entire stable training step inside a guarded compiled callable when its
