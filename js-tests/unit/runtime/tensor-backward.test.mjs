@@ -12,6 +12,18 @@ before(async () => { distributionUrl = await fixtures.start(); });
 after(async () => { await fixtures.close(); });
 const oracle = JSON.parse(await readFile(new URL("../../fixtures/python-tensor-oracle.json", import.meta.url), "utf8"));
 
+for (const forceVariant of ['scalar', 'simd128']) {
+  test(`existing view tracking follows promotion and lazy history epochs (${forceVariant})`, async () => {
+    const { checkTrackingEpochTransitions } = await import('../../browser/helpers/backward-lifetime.mjs');
+    const session = createTestRuntimeSession({ manifestUrl: new URL('manifest.json', distributionUrl), forceVariant });
+    try { await checkTrackingEpochTransitions(session); }
+    finally { await session.close(); }
+    for (const [key, count] of Object.entries(getTestRuntimeSemanticOwnership(session))) {
+      if (!key.startsWith('collector')) assert.equal(count, 0, key);
+    }
+  });
+}
+
 for (const forceVariant of ["scalar", "simd128"]) {
   for (const fixture of oracle.backwardCases.filter(isDirectBackwardCase)) {
     test(`native backward ${fixture.name} (${forceVariant})`, async () => {

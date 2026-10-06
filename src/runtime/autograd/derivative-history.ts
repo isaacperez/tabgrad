@@ -247,7 +247,7 @@ export class DerivativeHistory<Value> {
   /** Each contribution is an ordinary untracked tensor; repeated requests own distinct handles. */
   execute<Gradient>(
     plan: DerivativePlan<Value>, seed: Gradient, operations: DerivativeOperations<Value, Gradient>,
-    receive: (node: DerivativeNode<Value>, incoming: Gradient, traversed: boolean) => void = () => {},
+    receive?: (node: DerivativeNode<Value>, incoming: Gradient, traversed: boolean) => void,
     executeSelectedRecipes = false,
     collectResults = true,
   ): Gradient[] {
@@ -272,7 +272,7 @@ export class DerivativeHistory<Value> {
       while ((node = ready.pop()) !== undefined) {
         const incoming = gradients.get(node)!;
         const traversed = node.inputs.some((input) => input !== null && (executeSelectedRecipes || plan.needed.has(input)));
-        receive(node, incoming, traversed);
+        receive?.(node, incoming, traversed);
         if (traversed) {
           if (node.consumed) throw new TabgradError("CONSUMED_HISTORY", "Saved derivative values have already been consumed.");
           // Native checks every required save of this executing recipe, including

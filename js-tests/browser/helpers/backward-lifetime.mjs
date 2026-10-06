@@ -4,6 +4,7 @@ function equal(actual, expected, label) {
 }
 
 export async function checkBackwardLifetime(session, semanticOwnership) {
+  await checkTrackingEpochTransitions(session);
   const x = session.tensor([2, 3], { requiresGrad: true });
   const assigned = session.tensor([10, 20]); x.grad = assigned;
   const product = x.mul(x); const root = product.sum(); product.close(); x.close();
@@ -49,10 +50,57 @@ export async function checkBackwardLifetime(session, semanticOwnership) {
   equal([diagnostics.liveTensorHandles, diagnostics.liveTensorValues, diagnostics.liveDerivativeNodes, diagnostics.liveSavedValues, diagnostics.liveAllocationBytes], [0, 0, 0, 0, 0], 'semantic lifetime teardown');
 }
 
+/** Existing aliases observe base promotion, lazy resolution and special provenance. */
+export async function checkTrackingEpochTransitions(session) {
+  for (const throughView of [false, true]) {
+    const base = session.tensor([0, 0]); const ordinary = base.view([2]); const nested = ordinary.view([1, 2]);
+    const special = session.noGrad(() => base.view([2]));
+    const specialNested = session.noGrad(() => special.view([1, 2]));
+    const source = session.tensor([5, 7], { requiresGrad: true }); const handles = [base, ordinary, nested, special, specialNested];
+    equal(handles.map(handle => handle.requiresGrad), [false, false, false, false, false], 'initial plain tracking');
+    (throughView ? ordinary : base).copy_(source);
+    equal(handles.map(handle => handle.requiresGrad), [true, true, true, true, true], 'old aliases see active promotion');
+    const root = nested.sum(); const [gradient] = session.grad(root, [source]);
+    equal([...await gradient.toArray()], [1, 1], 'lazy ordinary rebase preserves source derivative');
+    equal(handles.map(handle => handle.requiresGrad), [true, true, true, true, true], 'tracking after lazy entry resolution');
+    for (const handle of [special, specialNested]) {
+      try { handle.sum(); throw new Error('dirty special view admitted an active operation'); }
+      catch (error) { if (error.code !== 'INPLACE_VIEW') throw error; }
+    }
+    const plain = session.tensor([9, 11]); session.noGrad(() => base.copy_(plain));
+    equal(handles.map(handle => handle.requiresGrad), [true, true, true, true, true], 'plain no-grad write preserves promoted tracking');
+    const child = nested.view([2]); equal(child.requiresGrad, true, 'new child of unresolved old ordinary alias');
+    base.close(); equal(nested.requiresGrad, true, 'closed base exposure preserves promoted tracking');
+    for (const handle of [child, plain, gradient, root, source, ...handles.toReversed()]) handle.close();
+  }
+}
+
 export const pythonBackwardLifetimeChecks = `
 import torch, gc, weakref
 
 def backward_lifetime_controls():
+    for through_view in (False, True):
+        base=torch.tensor([0.,0.],dtype=torch.float32)
+        ordinary=base.view(2);nested=ordinary.view(1,2)
+        with torch.no_grad():
+            special=base.view(2);special_nested=special.view(1,2)
+        source=torch.tensor([5.,7.],dtype=torch.float32,requires_grad=True)
+        aliases=(base,ordinary,nested,special,special_nested)
+        assert [v.requires_grad for v in aliases]==[False]*5
+        (ordinary if through_view else base).copy_(source)
+        assert [v.requires_grad for v in aliases]==[True]*5
+        gradient=torch.autograd.grad(nested.sum(),source)[0]
+        assert gradient.tolist()==[1.,1.]
+        assert [v.requires_grad for v in aliases]==[True]*5
+        for view in (special,special_nested):
+            try:view.sum()
+            except RuntimeError:pass
+            else:raise AssertionError('dirty special view admitted active operation')
+        with torch.no_grad():base.copy_(torch.tensor([9.,11.],dtype=torch.float32))
+        assert [v.requires_grad for v in aliases]==[True]*5
+        assert nested.view(2).requires_grad
+        del aliases,base,ordinary,nested,special,special_nested,source,gradient,view
+        gc.collect()
     leaf = torch.tensor([2., 3.], dtype=torch.float32, requires_grad=True)
     assigned = torch.tensor([10., 20.], dtype=torch.float32)
     leaf.grad = assigned

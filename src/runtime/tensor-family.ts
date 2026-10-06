@@ -22,7 +22,7 @@ export class TensorIdentity {
   incomingDense = true;
   acquisitionFamily: TensorFamily | undefined;
   controls: readonly WriterOutcome[] = [];
-  #snapshotControls: readonly WriterOutcome[] = [];
+  #snapshotControls: readonly WriterOutcome[] = this.controls;
   gradient: TensorIdentity | null = null;
   canonical: WeakRef<Tensor> | undefined;
   exposures = 0;
@@ -43,7 +43,8 @@ export class TensorIdentity {
   }
   get isView(): boolean { return this.base !== null; }
   get value(): TensorValue {
-    if (!this.isView && this.controls.length === 0 && equalTensorShapes(this.shape, this.family.current.shape)) return this.family.current;
+    if (!this.isView && this.controls.length === 0
+      && (this.shape === this.family.current.shape || equalTensorShapes(this.shape, this.family.current.shape))) return this.family.current;
     if (this.#snapshot.storage !== this.family.current.storage || this.#snapshot.version !== this.family.version
       || this.#snapshotControls !== this.controls || (this.controls.length === 0 && this.#snapshot.outcomes !== this.family.current.outcomes)) {
       const current = this.family.current;
@@ -74,6 +75,11 @@ export class TensorState {
   get value(): TensorValue { return this.identity.value; }
   get history(): DerivativeNode<TensorValue> | null { return this.resolveHistory(this); }
   get requiresGrad(): boolean {
+    // Tracking can change only with a family write. A clean epoch preserves
+    // creation tracking or the tracked entry installed by lazy view rebasing.
+    if (this.identity.requiresGrad) return true;
+    if (this.identity.base === null) return false;
+    if (this.identity.historyVersion === this.identity.family.version) return this.identity.entry !== null;
     let identity: TensorIdentity | null = this.identity;
     while (identity !== null) {
       if (identity.requiresGrad) return true;

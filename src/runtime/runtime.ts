@@ -539,19 +539,21 @@ class EqualShapeBinaryOperationDefinition implements NumericalOperationDefinitio
         { operation: this.name, contract: "same-session" },
       );
     }
-    if (left.value.dtype !== "float32" || right.value.dtype !== "float32") {
+    const leftValue = left.value;
+    const rightValue = right.value;
+    if (leftValue.dtype !== "float32" || rightValue.dtype !== "float32") {
       throw new TabgradError(
         "UNSUPPORTED_DTYPE",
         `Float32 ${this.description} requires float32 inputs.`,
         {
           operation: this.name,
           contract: "float32-inputs",
-          leftDType: left.value.dtype,
-          rightDType: right.value.dtype,
+          leftDType: leftValue.dtype,
+          rightDType: rightValue.dtype,
         },
       );
     }
-    if (left.value.device !== right.value.device) {
+    if (leftValue.device !== rightValue.device) {
       throw new TabgradError(
         "UNSUPPORTED_DEVICE",
         `Both ${this.description} inputs must be on the same device.`,
@@ -559,47 +561,47 @@ class EqualShapeBinaryOperationDefinition implements NumericalOperationDefinitio
           operation: this.name,
           contract: "same-device",
           device: "webgpu",
-          leftDevice: left.value.device,
-          rightDevice: right.value.device,
+          leftDevice: leftValue.device,
+          rightDevice: rightValue.device,
         },
       );
     }
-    if (left.value.layout !== "contiguous" || right.value.layout !== "contiguous") {
+    if (leftValue.layout !== "contiguous" || rightValue.layout !== "contiguous") {
       throw new TabgradError(
         "UNSUPPORTED_LAYOUT",
         `This ${this.description} definition supports only contiguous inputs.`,
         {
           operation: this.name,
           contract: "contiguous-inputs",
-          leftLayout: left.value.layout,
-          rightLayout: right.value.layout,
+          leftLayout: leftValue.layout,
+          rightLayout: rightValue.layout,
         },
       );
     }
-    if (!equalTensorShapes(left.value.shape, right.value.shape)) {
+    if (!equalTensorShapes(leftValue.shape, rightValue.shape)) {
       throw new TabgradError(
         "SHAPE_MISMATCH",
         `Float32 ${this.description} requires equal shapes.`,
         {
           operation: this.name,
           contract: "equal-shape",
-          leftShape: left.value.shape,
-          rightShape: right.value.shape,
+          leftShape: leftValue.shape,
+          rightShape: rightValue.shape,
         },
       );
     }
 
     const inputs = [
-      left.value,
-      right.value,
+      leftValue,
+      rightValue,
     ];
     return Object.freeze({
       record: new OperationRecord(this, inputs),
       outputMetadata: Object.freeze({
-        shape: left.value.shape,
-        dtype: left.value.dtype,
-        device: left.value.device,
-        layout: left.value.layout,
+        shape: leftValue.shape,
+        dtype: leftValue.dtype,
+        device: leftValue.device,
+        layout: leftValue.layout,
       }),
     });
   }
@@ -621,12 +623,13 @@ class SumOperationDefinition implements NumericalOperationDefinition {
 
   admit(source: TensorState): AdmittedOperation {
     assertTensorOpen(source);
+    const value = source.value;
     // Backend support is checked by the session before recording this result.
     return Object.freeze({
-      record: new OperationRecord(this, [source.value]),
+      record: new OperationRecord(this, [value]),
       outputMetadata: Object.freeze({
-        shape: Object.freeze([]), dtype: source.value.dtype,
-        device: source.value.device, layout: source.value.layout,
+        shape: Object.freeze([]), dtype: value.dtype,
+        device: value.device, layout: value.layout,
       }),
     });
   }
@@ -643,9 +646,10 @@ class ViewOperationDefinition {
   readonly derivative = IDENTITY_DERIVATIVE;
   admit(source: TensorState, shape: unknown): TensorMetadata {
     assertTensorOpen(source);
+    const value = source.value;
     return {
-      shape: inferViewShape(shape, tensorElementCount(source.value.shape)),
-      dtype: source.value.dtype, device: source.value.device, layout: source.value.layout,
+      shape: inferViewShape(shape, tensorElementCount(value.shape)),
+      dtype: value.dtype, device: value.device, layout: value.layout,
     };
   }
 }
@@ -885,7 +889,8 @@ export class RuntimeSession {
     this.#attachTensorControls(seed, [result.value.outcomes, explicitSeed?.value.outcomes ?? []]);
     try {
       const gradients = this.#history.execute(plan, seed, this.#derivativeOperations(),
-        (node, incoming, traversed) => this.#receiveGradient(node, incoming, traversed, destinations));
+        effects === 0 && this.#writers.references === 0 ? undefined
+          : (node, incoming, traversed) => this.#receiveGradient(node, incoming, traversed, destinations));
       for (const gradient of gradients) {
         this.#attachTensorControls(gradient, [outcomes]);
       }
@@ -1013,7 +1018,8 @@ export class RuntimeSession {
   }
 
   #reserveGradientEffects(nodes: readonly DerivativeNode<TensorValue>[], destinations: ReadonlySet<TensorIdentity>): number {
-    const effects = nodes.filter(node => this.#gradientReceiver(node, destinations) !== undefined).length;
+    let effects = 0;
+    for (const node of nodes) if (this.#gradientReceiver(node, destinations) !== undefined) effects += 1;
     if (this.#pendingCopies + effects > this.#updateLimits.pendingCopies) {
       throw new TabgradError("RESOURCE_EXHAUSTED", "Differentiation exceeds pending-effect capacity.");
     }
@@ -1021,6 +1027,9 @@ export class RuntimeSession {
   }
 
   #gradientControlBound(nodes: readonly DerivativeNode<TensorValue>[], destinations: ReadonlySet<TensorIdentity>, effects: number): number {
+    // Live plan/gradient captures retain ledger references. Without any such
+    // captures, only the newly planned writers contribute to this bound.
+    if (this.#writers.references === 0) return effects;
     // Include existing node/prior-gradient controls and one new writer per
     // destination. Each recipe admits at most two contributions plus combines;
     // twenty owner slots per node bound their captures at the transient peak.
@@ -1096,10 +1105,12 @@ export class RuntimeSession {
 
   #attachTensorControls(handle: Tensor, groups: readonly (readonly WriterOutcome[])[]): void {
     const identity = requireTensorState(handle).identity;
+    if (identity.controls.length === 0 && groups.every(group => group.length === 0)) return;
     this.#setIdentityControls(identity, captureWriterOutcomes([identity.controls, ...groups]));
   }
 
   #setIdentityControls(identity: TensorIdentity, controls: readonly WriterOutcome[]): void {
+    if (identity.controls.length === 0 && controls.length === 0) return;
     const next = captureWriterOutcomes([controls]);
     retainWriterOutcomes(next);
     releaseWriterOutcomes(identity.controls);
@@ -1359,9 +1370,9 @@ export class RuntimeSession {
     assertTensorOpen(source);
     this.#requireComputation(source.value, SUM_OPERATION);
     const admitted = SUM_OPERATION.admit(source);
-    this.#checkCapturedAdmission([source.value], admitted.outputMetadata.shape);
+    this.#checkCapturedAdmission(admitted.record.inputs, admitted.outputMetadata.shape);
     const history = !this.#recording || !source.requiresGrad ? null
-      : this.#history.record(admitted.outputMetadata.shape, SUM_OPERATION.derivative, [source.history], [source.value]);
+      : this.#history.record(admitted.outputMetadata.shape, SUM_OPERATION.derivative, [source.history], admitted.record.inputs);
     return this.#recordOperation(admitted, history);
   }
 
@@ -1382,12 +1393,12 @@ export class RuntimeSession {
   #binary(definition: EqualShapeBinaryOperationDefinition, left: TensorState, rightHandle: unknown): Tensor {
     this.#assertOpen();
     const admitted = definition.admit(this, left, rightHandle);
-    this.#requireComputation(left.value, definition);
+    this.#requireComputation(admitted.record.inputs[0]!, definition);
     const right = requireTensorState(rightHandle);
     this.#checkCapturedAdmission(admitted.record.inputs, admitted.outputMetadata.shape);
     const history = !this.#recording || (!left.requiresGrad && !right.requiresGrad) ? null
       : this.#history.record(admitted.outputMetadata.shape, definition.derivative,
-        [left.history, right.history], [left.value, right.value]);
+        [left.history, right.history], admitted.record.inputs);
     return this.#recordOperation(admitted, history);
   }
 
@@ -1411,11 +1422,12 @@ export class RuntimeSession {
     value.versionCounter = source.family.versionCounter;
     value.version = source.family.version;
     value.outcomes = captured.outcomes;
-    const history = !this.#recording || !source.requiresGrad ? null
+    const requiresGrad = source.requiresGrad;
+    const history = !this.#recording || !requiresGrad ? null
       : this.#history.record(value.shape, VIEW_OPERATION.derivative, [source.history], [captured]);
     source.family.identities += 1;
     this.#retainIdentity(source.identity);
-    const identity = new TensorIdentity(source.family, value, history, source.requiresGrad,
+    const identity = new TensorIdentity(source.family, value, history, requiresGrad,
       source.identity, !this.#recording || source.specialView, false);
     this.#setIdentityControls(identity, source.identity.controls);
     identity.incomingDense = source.identity.incomingDense;
