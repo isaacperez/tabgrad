@@ -1354,14 +1354,9 @@ export class RuntimeSession {
       this.#setIdentityControls(requireTensorState(acquired).identity,
         captureWriterOutcomes([requireTensorState(acquired).identity.controls, [outcome]]));
       this.#pendingCopies += 1;
-      this.#enqueue(this.#copyEffect(source, prerequisites, outcome), () => {
-        this.#pendingCopies -= 1;
-        if (this.#pendingCopies === 0) { this.#copyCompletion?.resolve(); this.#copyCompletion = undefined; }
-        let failures: unknown[] | undefined;
-        try { this.#releaseValue(source); } catch (error) { (failures ??= []).push(error); }
-        try { releaseWriterOutcomes(prerequisites); } catch (error) { (failures ??= []).push(error); }
-        throwCleanupFailures(failures, "Gradient acquisition retirement failed.");
-      }, () => this.#replaceGradient(owner, requireTensorState(acquired).identity));
+      this.#enqueue(this.#copyEffect(source, prerequisites, outcome),
+        () => this.#retireCopyEffect(source, prerequisites, "Gradient acquisition retirement failed."),
+        () => this.#replaceGradient(owner, requireTensorState(acquired).identity));
     } finally { acquired.close(); }
   }
 
@@ -1488,17 +1483,8 @@ export class RuntimeSession {
     destination.family.version = next.version;
     this.#setIdentityControls(destination.identity, []);
     if (destination.isView && this.#recording) this.#resolveHistory(destination);
-    this.#enqueue(this.#copyEffect(captured, prerequisites, outcome), () => {
-      this.#pendingCopies -= 1;
-      if (this.#pendingCopies === 0) {
-        this.#copyCompletion?.resolve();
-        this.#copyCompletion = undefined;
-      }
-      let failures: unknown[] | undefined;
-      try { this.#releaseValue(captured); } catch (error) { (failures ??= []).push(error); }
-      try { releaseWriterOutcomes(prerequisites); } catch (error) { (failures ??= []).push(error); }
-      throwCleanupFailures(failures, "Copy effect retirement failed.");
-    });
+    this.#enqueue(this.#copyEffect(captured, prerequisites, outcome),
+      () => this.#retireCopyEffect(captured, prerequisites, "Copy effect retirement failed."));
     let failures: unknown[] | undefined;
     if (history !== previousHistory && previousHistory !== null) {
       try { this.#history.release(previousHistory); } catch (error) { (failures ??= []).push(error); }
@@ -1516,6 +1502,18 @@ export class RuntimeSession {
         backingBytes: this.#liveBackingBytes, additionalBytes, maximumBackingBytes: this.#updateLimits.backingBytes,
       });
     }
+  }
+
+  #retireCopyEffect(captured: TensorValue, prerequisites: readonly WriterOutcome[], context: string): void {
+    this.#pendingCopies -= 1;
+    if (this.#pendingCopies === 0) {
+      this.#copyCompletion?.resolve();
+      this.#copyCompletion = undefined;
+    }
+    let failures: unknown[] | undefined;
+    try { this.#releaseValue(captured); } catch (error) { (failures ??= []).push(error); }
+    try { releaseWriterOutcomes(prerequisites); } catch (error) { (failures ??= []).push(error); }
+    throwCleanupFailures(failures, context);
   }
 
   *#copyEffect(source: TensorValue, prerequisites: readonly WriterOutcome[], outcome: WriterOutcome): Generator<ExecutionStep, void, unknown> {
