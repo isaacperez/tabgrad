@@ -1,5 +1,5 @@
 import type { TensorDevice } from "../execution/backend.js";
-import type { ProgramProvenance } from "../execution/executable-program.js";
+import type { LoweredComputation, ProgramProvenance } from "../execution/executable-program.js";
 import type { WriterOutcome } from "./writer-outcome.js";
 
 /** Mutable version only: captured descriptors never retain a family current. */
@@ -15,7 +15,7 @@ export interface TensorMetadata {
 export interface NumericalOperationDefinition {
   readonly name: "add" | "mul" | "sum" | "expand";
   readonly provenanceSource: "Tensor.add" | "Tensor.mul" | "Tensor.sum" | "DerivativeHistory.sum" | "SGD.step";
-  readonly loweredKind: "add-f32" | "add-alpha-f32" | "mul-f32" | "sum-f32" | "expand-f32";
+  readonly loweredKind: LoweredComputation["kind"];
   readonly pure: true;
 }
 
