@@ -4,11 +4,104 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { RuntimeFixtureServer } from "../../fixtures/runtime-fixture-server.mjs";
 import { createTestRuntimeSession, getTestRuntimeOwnership, getTestTensorVersion, getTestTensorAncestry } from "../../../dist/testing.js";
+import { WebAssemblyCpuBackend } from "../../../dist/backends/cpu/cpu-backend.js";
+import { ExecutionTicket } from "../../../dist/execution/execution-ticket.js";
+import { completeRuntimeSession } from "../../../dist/runtime/runtime.js";
+import { WriterOutcomeLedger } from "../../../dist/runtime/writer-outcome.js";
 
 const fixtures = new RuntimeFixtureServer(fileURLToPath(new URL("../../../dist", import.meta.url)));
 let distributionUrl;
 before(async () => { distributionUrl = await fixtures.start(); });
 after(async () => { await fixtures.close(); });
+
+for (const forceVariant of ["scalar", "simd128"]) {
+  for (const acquisition of [false, true]) {
+    test(`${acquisition ? "gradient acquisition" : "copy"} retirement independently releases failed captures after final drain (${forceVariant})`, { timeout: 10_000 }, async () => {
+      const execute = WebAssemblyCpuBackend.prototype.execute;
+      const release = WebAssemblyCpuBackend.prototype.release;
+      const releaseWriter = WriterOutcomeLedger.prototype.release;
+      const drains = [];
+      let markPublished;
+      const published = new Promise(resolve => { markPublished = resolve; });
+      const writer = new Error("controlled final publication failure");
+      const cleanup = new Error("controlled captured-source retirement failure");
+      const writerCleanup = new Error("controlled prerequisite retirement failure");
+      let publications = 0, valueReleases = 0, writerReleases = 0;
+      let valueArmed = false, writerArmed = false;
+      const session = createTestRuntimeSession({
+        manifestUrl: new URL("manifest.json", distributionUrl), forceVariant,
+        beforeCopyPublication() {
+          if (++publications === 2) { markPublished(); throw writer; }
+        },
+      });
+      WebAssemblyCpuBackend.prototype.execute = function (...arguments_) {
+        const result = execute.apply(this, arguments_);
+        let resolve;
+        const drained = new Promise(onDrained => { resolve = onDrained; });
+        drains.push({ resolve, drained });
+        return new ExecutionTicket(Promise.resolve(result), drained);
+      };
+      WebAssemblyCpuBackend.prototype.release = function (allocation) {
+        release.call(this, allocation);
+        if (valueArmed) { valueArmed = false; valueReleases += 1; writerArmed = true; throw cleanup; }
+      };
+      WriterOutcomeLedger.prototype.release = function (outcome) {
+        releaseWriter.call(this, outcome);
+        if (writerArmed) { writerArmed = false; writerReleases += 1; throw writerCleanup; }
+      };
+      try {
+        const input = session.tensor([2]);
+        const source = input.add(input);
+        const owner = session.tensor([0], { requiresGrad: acquisition });
+        session.noGrad(() => owner.copy_(source));
+        const root = owner.mul(owner);
+        let destination;
+        if (acquisition) { root.backward(); owner.grad = null; }
+        else { destination = session.tensor([0]); destination.copy_(root); }
+        for (const handle of [input, source, root, owner, destination]) handle?.close();
+        await published;
+        assert.equal(publications, 2);
+        assert.equal(drains.length, 2);
+        assert.equal(getTestRuntimeOwnership(session).pendingCopies, 2);
+        let completed = false;
+        const completion = completeRuntimeSession(session).then(
+          () => { completed = true; return null; }, error => { completed = true; return error; },
+        );
+        const closing = session.close();
+        const closed = closing.then(() => null, error => error);
+        assert.equal(session.close(), closing);
+        drains[0].resolve();
+        await drains[0].drained;
+        assert.equal(getTestRuntimeOwnership(session).pendingCopies, 1);
+        assert.equal(completed, false, "managed completion must wait for the last effect's physical drain");
+        assert.equal(getTestRuntimeOwnership(session).controlReferences, 2);
+        valueArmed = true;
+        drains[1].resolve();
+        assert.equal(await completion, writer, "retirement must not replace the authoritative publication error");
+        const error = await closed;
+        assert.ok(error instanceof AggregateError);
+        assert.equal(error.message, acquisition ? "Gradient acquisition retirement failed." : "Copy effect retirement failed.");
+        assert.deepEqual(error.errors, [cleanup, writerCleanup]);
+        assert.equal(valueReleases, 1);
+        assert.equal(writerReleases, 1);
+        assert.equal(publications, 2, "cleanup cannot replay accepted writes");
+        await completeRuntimeSession(session);
+        assert.equal(session.close(), closing);
+        for (const count of Object.values(getTestRuntimeOwnership(session))) assert.equal(count, 0);
+        assert.equal(session.diagnostics().liveTensorValues, 0);
+        assert.equal(session.diagnostics().liveRequestLeases, 0);
+        assert.equal(session.diagnostics().liveAllocationBytes, 0);
+      } finally {
+        valueArmed = false; writerArmed = false;
+        for (const drain of drains) drain.resolve();
+        WebAssemblyCpuBackend.prototype.execute = execute;
+        WebAssemblyCpuBackend.prototype.release = release;
+        WriterOutcomeLedger.prototype.release = releaseWriter;
+        await session.close().catch(() => undefined);
+      }
+    });
+  }
+}
 
 for (const forceVariant of ["scalar", "simd128"]) {
   test(`copy_ preserves handles, whole-storage aliases and admitted snapshots (${forceVariant})`, async () => {
