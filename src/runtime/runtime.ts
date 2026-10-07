@@ -328,11 +328,48 @@ let constructTensorHandle: ((state: TensorState) => Tensor) | undefined;
 const TENSOR_CONSTRUCTION_TOKEN = Symbol("TensorConstructionToken");
 const TENSOR_STATES = new WeakMap<Tensor, TensorState>();
 const TENSOR_FINALIZER = new FinalizationRegistry<TensorState>((state) => {
+  state.finalizerRegistered = false;
   if (!state.closed) {
     state.closed = true;
     runtimeSessionAccess(state.session).finalizeHandle(state);
   }
 });
+
+let pendingTensorFinalizers: Array<readonly [Tensor, TensorState]> | undefined;
+
+function enrollTensorFinalizer(handle: Tensor, state: TensorState): void {
+  TENSOR_FINALIZER.register(handle, state, state);
+  state.finalizerRegistered = true;
+}
+
+function registerTensorFinalizer(handle: Tensor, state: TensorState): void {
+  if (pendingTensorFinalizers === undefined) enrollTensorFinalizer(handle, state);
+  else pendingTensorFinalizers.push([handle, state]);
+}
+
+function unregisterTensorFinalizer(state: TensorState): void {
+  if (!state.finalizerRegistered) return;
+  state.finalizerRegistered = false;
+  TENSOR_FINALIZER.unregister(state);
+}
+
+function withTensorFinalizerScope<T>(callback: () => T): T {
+  const previous = pendingTensorFinalizers;
+  const pending: Array<readonly [Tensor, TensorState]> = [];
+  pendingTensorFinalizers = pending;
+  try { return callback(); }
+  finally {
+    pendingTensorFinalizers = previous;
+    // Synchronous differentiation owns these strong references only until the
+    // outer call returns or throws. Reentrant calls transfer open survivors;
+    // every survivor is enrolled before control leaves the outermost call.
+    for (const [handle, state] of pending) {
+      if (state.closed) continue;
+      if (previous === undefined) enrollTensorFinalizer(handle, state);
+      else previous.push([handle, state]);
+    }
+  }
+}
 
 function createTensorHandle(state: TensorState): Tensor {
   if (constructTensorHandle === undefined) {
@@ -387,7 +424,7 @@ export class Tensor {
       );
     }
     TENSOR_STATES.set(this, state);
-    TENSOR_FINALIZER.register(this, state, state);
+    registerTensorFinalizer(this, state);
   }
 
   static {
@@ -485,7 +522,7 @@ export class Tensor {
     const state = requireTensorState(this);
     if (!state.closed) {
       state.closed = true;
-      TENSOR_FINALIZER.unregister(state);
+      unregisterTensorFinalizer(state);
       runtimeSessionAccess(state.session).releaseHandle(state);
     }
   }
@@ -847,8 +884,13 @@ export class RuntimeSession {
 
   /** Return lazy first-order gradients without automatic leaf accumulation. */
   grad(output: Tensor, inputs: readonly Tensor[], gradient?: Tensor): Tensor[] {
+    const argumentCount = arguments.length;
+    return withTensorFinalizerScope(() => this.#gradImpl(output, inputs, gradient, argumentCount));
+  }
+
+  #gradImpl(output: Tensor, inputs: readonly Tensor[], gradient: Tensor | undefined, argumentCount: number): Tensor[] {
     this.#assertOpen();
-    if (arguments.length < 2 || arguments.length > 3 || !Array.isArray(inputs) || inputs.length === 0) {
+    if (argumentCount < 2 || argumentCount > 3 || !Array.isArray(inputs) || inputs.length === 0) {
       throw new TypeError("grad requires one output and a nonempty array of input tensors, plus an optional seed.");
     }
     const result = this.#gradientInput(output);
@@ -940,6 +982,10 @@ export class RuntimeSession {
   }
 
   #backward(result: TensorState, seedHandle: unknown, options: unknown): void {
+    withTensorFinalizerScope(() => this.#backwardImpl(result, seedHandle, options));
+  }
+
+  #backwardImpl(result: TensorState, seedHandle: unknown, options: unknown): void {
     assertTensorOpen(result);
     this.#requireGradients(this.#backendFor(result.value.device, "backward"), "backward");
     if (options !== undefined && (options === null || typeof options !== "object" || Array.isArray(options))) {
@@ -1579,7 +1625,7 @@ export class RuntimeSession {
     for (const state of [...this.#states]) {
       if (!state.closed) {
         state.closed = true;
-        TENSOR_FINALIZER.unregister(state);
+        unregisterTensorFinalizer(state);
         try { this.#releaseHandle(state); }
         catch (error) { failures.push(error); }
       }
@@ -2023,7 +2069,7 @@ export function finalizeTensorExposure(handle: Tensor): void {
   const state = requireTensorState(handle);
   if (state.closed) return;
   state.closed = true;
-  TENSOR_FINALIZER.unregister(state);
+  unregisterTensorFinalizer(state);
   runtimeSessionAccess(state.session).finalizeHandle(state);
 }
 

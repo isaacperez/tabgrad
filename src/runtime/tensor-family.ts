@@ -62,6 +62,7 @@ export class TensorIdentity {
 /** One independently closeable exposure of an otherwise retained identity. */
 export class TensorState {
   closed = false;
+  finalizerRegistered = false;
   constructor(readonly session: RuntimeSession, readonly identity: TensorIdentity,
     readonly resolveHistory: (state: TensorState) => DerivativeNode<TensorValue> | null) {}
   get family(): TensorFamily { return this.identity.family; }
