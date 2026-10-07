@@ -17,6 +17,42 @@ or private skill repository as though it contained the project's current rules.
 Public contribution rules and CI remain usable without private access. An agent
 missing a required skill stops that workflow and reports the installation gap.
 
+## Keep evidence and reports proportionate
+
+Before generating or packaging evidence, identify the conclusion it must let
+another contributor inspect, reproduce or challenge. Reuse existing commits,
+fixtures, CI records and documents when they provide that evidence and remain
+available to the intended reader. Choose one authoritative location for each
+evidence record and identify its exact inputs and observed state. Local
+temporary files alone do not satisfy a required durable record.
+
+Create an external evidence bundle only when an identified requirement cannot
+be met adequately by those existing records. Explain its need and contents in
+the existing method or report; do not create another planning document for
+this explanation. Gists and other external archives are not routine workflow
+outputs, and a skill handoff does not require republishing unchanged evidence.
+
+Preserve the original observations needed to assess the conclusion, including
+relevant failed attempts, contrary results, warnings and deviations. A summary
+or regeneration recipe does not replace required observed results. Avoid
+redundant generated data, complete intermediate copies and administrative
+history that add no evidence. Size alone does not establish necessity or
+redundancy; do not impose arbitrary byte or word limits.
+
+Separate the evidence record from its outcome summary. Issues and reports
+state the result, reasoning, material limits and next action, with precise
+references to the underlying evidence. Required issue, template and report
+fields may use those references when their meaning remains inspectable. Keep
+required target identities, independent conclusions and unresolved findings
+explicit. Later comments add new evidence, corrections, decisions or state
+changes rather than repeating the full investigation.
+
+The existing independent verification and review check both evidence adequacy
+and avoidable duplication. These choices do not weaken experiment methods,
+publication confidentiality, content inspection or external-action authority.
+Apply this rule at the next active workflow handoff; it does not require
+rewriting historical records or deleting existing artifacts.
+
 ## Check content before publication
 
 [`SECURITY.md`](../SECURITY.md#publication-confidentiality) owns the
@@ -165,8 +201,9 @@ applicability remain established. Check changed rules when switching targets or
 when new evidence can alter their application; do not reread every unchanged
 document at each skill handoff. This does not waive a skill's first complete
 reading or let a new agent substitute the writer's summary for original rules.
-Keep reports concise and finding-driven, referring to original evidence instead
-of copying it or restating the whole project protocol.
+Keep reports concise and finding-driven under
+[the evidence and reporting rule](#keep-evidence-and-reports-proportionate),
+referring to original evidence instead of restating the whole project protocol.
 
 ## Classify concurrent work before running it in parallel
 
