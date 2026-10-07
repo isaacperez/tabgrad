@@ -26,6 +26,15 @@ Python tensors are added, Python can release their wrappers immediately after
 admission. The runtime keeps the input values needed by the surviving result.
 Keeping the values does not require keeping the input Python objects alive.
 
+Gradient slots belong to runtime semantic identities, not wrapper attributes.
+The bridge assigns each open exposure a private key; a weak Python wrapper cache
+preserves canonical `is` observations without retaining unused wrappers. Reusing
+an existing wrapper registers no second finalizer lease. The runtime separately
+uses weak canonical JavaScript exposure lookup. Python presents backward
+argument normalization and absent-unretained-nonleaf `UserWarning`; the shared
+runtime owns assignment, accumulation, retention and ordered effects. See the
+[backward reference](../reference/backward-gradients.md).
+
 ```mermaid
 flowchart LR
     PY["Python result wrapper"] --> H["Opaque runtime handle"]
@@ -133,8 +142,11 @@ another numerical type or perform a backend transfer.
 ## Release according to the actual owner
 
 `Tensor._from_handle` is the internal ownership-transfer point. It constructs
-the wrapper and registers `weakref.finalize(wrapper, handle.close)`. The
-callback captures the JavaScript handle, not the wrapper. Otherwise the
+the wrapper and registers `weakref.finalize(wrapper, bridge.releaseExposure, handle)`.
+The bridge uses the same runtime automatic-retirement channel as JavaScript
+finalization, preserving fallible cleanup for session close rather than an
+ignored Python finalizer exception. Explicit JavaScript close keeps its direct
+error contract. The callback captures the JavaScript handle, not the wrapper. Otherwise the
 finalizer itself would keep the object it was supposed to release alive.
 Failure to finish wrapper construction closes the unreturned handle.
 

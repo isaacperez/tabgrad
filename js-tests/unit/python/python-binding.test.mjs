@@ -8,6 +8,8 @@ import { getTestExecutionFailureContext } from "../../../dist/testing.js";
 import { assertSumFixture } from "../../fixtures/sum-oracle.mjs";
 import { float32FromBits } from "../../fixtures/sum-oracle.mjs";
 import { pythonGradientProgressChecks } from "../../browser/helpers/gradient-progress-cases.mjs";
+import { pythonBackwardChecks } from "../../browser/helpers/backward-cases.mjs";
+import { pythonBackwardLifetimeChecks } from "../../browser/helpers/backward-lifetime.mjs";
 
 let interpreterPromise;
 
@@ -169,7 +171,7 @@ def check_grad():
     assert isinstance((dx, dy), tuple)
     assert dx.tolist() == [9., 13.] and dy.tolist() == [2., 3.]
     assert repeated.tolist() == dx.tolist() and not dx.requires_grad
-    assert not hasattr(x, 'grad') and not hasattr(x, 'backward')
+    assert x.grad is None and callable(x.backward)
     seed = torch.tensor([2., 3.], dtype=torch.float32)
     v = x.view(2)
     assert torch.autograd.grad(v, x, seed)[0].tolist() == [2., 3.]
@@ -2068,4 +2070,140 @@ gc.collect()
     await binding.close();
     interpreter.runPython("[globals().pop(name, None) for name in ('check_copy_fixture', 'torch', 'json', 'gc')]; None");
   }
+});
+
+test("Python backward slots preserve canonical live wrappers and native valid calling forms", { timeout: 20_000 }, async () => {
+  const { attachPython } = await import("../../../dist/python.js");
+  const interpreter = await getInterpreter();
+  const binding = await attachPython(interpreter);
+  try {
+    await binding.runPythonAsync(`
+import torch, gc
+async def check_backward_identity():
+    x = torch.tensor([2., 3.], dtype=torch.float32, requires_grad=True)
+    assert x.grad is None
+    assert (x*x).sum().backward() is None
+    g = x.grad
+    assert x.grad is g
+    assert g.tolist() == [4., 6.]
+    (x*x).sum().backward(None, 0, 0, {'x': x})
+    assert x.grad is g and g.tolist() == [8., 12.]
+    assigned = torch.tensor([10., 20.], dtype=torch.float32, requires_grad=True)
+    x.grad = assigned
+    assert x.grad is assigned
+    (x+x).sum().backward(inputs=(value for value in [x, x]))
+    assert x.grad is assigned and assigned.requires_grad
+    assert assigned.tolist() == [12., 22.]
+    x.grad = None
+    assert x.grad is None and assigned.tolist() == [12., 22.]
+await check_backward_identity()
+gc.collect()
+assert torch._runtime_session.diagnostics().liveTensorHandles == 0
+`);
+  } finally {
+    await binding.close();
+    interpreter.runPython("[globals().pop(name, None) for name in ('check_backward_identity', 'torch', 'gc')]; None");
+  }
+});
+
+test("Python unretained nonleaf grad reads preserve native warning category", { timeout: 20_000 }, async () => {
+  const { attachPython } = await import("../../../dist/python.js");
+  const interpreter = await getInterpreter();
+  const binding = await attachPython(interpreter);
+  try {
+    await binding.runPythonAsync(`
+import torch, warnings
+def check_gradient_warnings():
+    x=torch.tensor([2.],dtype=torch.float32,requires_grad=True)
+    mid=x+x
+    with warnings.catch_warnings(record=True) as captured:
+        warnings.simplefilter('always')
+        assert mid.grad is None
+        assert [type(w.message).__name__ for w in captured] == ['UserWarning']
+    mid.sum().backward(inputs=[mid])
+    with warnings.catch_warnings(record=True) as captured:
+        warnings.simplefilter('always')
+        assert mid.grad.tolist() == [1.]
+        assert len(captured) == 0
+check_gradient_warnings()
+`);
+  } finally {
+    await binding.close();
+    interpreter.runPython("[globals().pop(name, None) for name in ('check_gradient_warnings', 'torch', 'warnings')]; None");
+  }
+});
+
+test("Python backward matches all frozen native call and state transitions", { timeout: 20_000 }, async () => {
+  const oracle = JSON.parse(await readFile(new URL("../../fixtures/python-tensor-oracle.json", import.meta.url), "utf8"));
+  const { attachPython } = await import("../../../dist/python.js");
+  const interpreter = await getInterpreter();
+  const binding = await attachPython(interpreter);
+  try {
+    for (const fixture of oracle.backwardCases) await binding.runPythonAsync(pythonBackwardChecks({ backwardCases: [fixture] }));
+  } finally {
+    await binding.close();
+    interpreter.runPython("[globals().pop(name, None) for name in ('check_backward_fixture', 'torch', 'json', 'gc')]; None");
+  }
+});
+
+test('real Python wrapper drop, strong endpoints, rooted cycles and repeated reset', { timeout: 20_000 }, async () => {
+  const { attachPython } = await import('../../../dist/python.js');
+  const interpreter = await getInterpreter(); const binding = await attachPython(interpreter);
+  try { await binding.runPythonAsync(pythonBackwardLifetimeChecks); }
+  finally { await binding.close(); }
+});
+
+test('real Python managed completion delivers dropped backward failure once', { timeout: 20_000 }, async () => {
+  const { attachPython } = await import('../../../dist/python.js');
+  const { WebAssemblyCpuBackend } = await import('../../../dist/backends/cpu/cpu-backend.js');
+  const { checkPythonBackwardFaults } = await import('../../browser/helpers/backward-lifetime.mjs');
+  const interpreter = await getInterpreter(); const binding = await attachPython(interpreter);
+  try { await checkPythonBackwardFaults(binding, WebAssemblyCpuBackend); }
+  finally { await binding.close(); }
+});
+
+test('real Python public gradient views retain failed acquisition qualification', { timeout: 20_000 }, async () => {
+  const { attachPython } = await import('../../../dist/python.js');
+  const { WebAssemblyCpuBackend } = await import('../../../dist/backends/cpu/cpu-backend.js');
+  const { checkPythonBackwardAliasFault } = await import('../../browser/helpers/backward-lifetime.mjs');
+  const binding = await attachPython(await getInterpreter());
+  try { await checkPythonBackwardAliasFault(binding, WebAssemblyCpuBackend); }
+  catch (error) {
+    throw new Error([String(error), ...(error.errors ?? []).map(String)].join('\n'), { cause: error });
+  }
+  finally { await binding.close(); }
+});
+
+test('Python backward invalid target installs earlier retention, while seed-shape rejection does not', { timeout: 20_000 }, async () => {
+  const { attachPython } = await import('../../../dist/python.js');
+  const interpreter = await getInterpreter(); const binding = await attachPython(interpreter);
+  try {
+    await binding.runPythonAsync(`
+import torch, gc, warnings
+def setup_order_controls():
+    for kind in ('invalid-target', 'seed-shape', 'create-none'):
+        x=torch.tensor([2.,3.],dtype=torch.float32,requires_grad=True)
+        mid=x+x;out=mid.sum()
+        try:
+            if kind=='invalid-target':out.backward(inputs=[mid,1])
+            elif kind=='seed-shape':out.backward(torch.tensor([1.,1.],dtype=torch.float32),inputs=[mid])
+            else:out.backward(create_graph=None,inputs=[mid])
+        except (RuntimeError,TypeError):pass
+        else:raise AssertionError('invalid setup accepted')
+        out.backward()
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            assert (None if mid.grad is None else mid.grad.tolist()) == ([1.,1.] if kind=='invalid-target' else None),kind
+setup_order_controls()
+gc.collect()
+`);
+  } finally { await binding.close(); }
+});
+
+test('actual Python finalization routes fallible release to session cleanup', { timeout: 20_000 }, async () => {
+  const { attachPython } = await import('../../../dist/python.js');
+  const { WebAssemblyCpuBackend } = await import('../../../dist/backends/cpu/cpu-backend.js');
+  const { checkPythonFinalizationFault } = await import('../../browser/helpers/backward-lifetime.mjs');
+  const interpreter = await getInterpreter(); const binding = await attachPython(interpreter);
+  await checkPythonFinalizationFault(binding, WebAssemblyCpuBackend);
 });

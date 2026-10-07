@@ -194,7 +194,7 @@ Tabgrad admission atomicity, saved pins, iterative deep traversal/release, dropp
 failure and shutdown. Browser fixtures exercise direct scalar/SIMD derivatives
 and managed Python observation with native and controlled-absent JSPI. Exact
 tested browser versions belong in verification evidence. Tracking seeds,
-retained/higher-order modes, persistent accumulation and unused-input modes are
+retained/higher-order modes and unused-input modes in the functional API are
 intentional subset exclusions tested as Tabgrad restrictions, not attributed
 to native rejection. Official references are
 [PyTorch 2.14 functional gradients](https://docs.pytorch.org/docs/2.14/generated/torch.autograd.grad.html)
@@ -323,3 +323,39 @@ and provide migration guidance when it is material.
 Update implementation, tests, API documentation, examples, the applicable
 release record, and release information together. Use the narrowest status
 supported by the recorded evidence.
+
+### CPU backward evidence
+
+The `backwardCases` field in the registered tensor oracle freezes native
+PyTorch 2.14.0 wheel revision `08187d9e0fba026dc8217405802ab5381dc88d90`
+with both thread pools fixed to one. Its maintained sources are
+`scripts/backward_oracle.py`; prior fixture fields remain unchanged. The corpus
+covers Python defaults, positional/keyword/container/error forms, assignment,
+leaf accumulation/reset, nonleaf replacement, retained functional reception,
+selected recipe failure, partial commits/retries, retained entry rebase, shapes,
+tracked seeds and conditional incoming acquisition across shared/repeated/view
+and sum paths. Special no-grad views distinguish advertised tracking from a
+true accumulator. Setup controls distinguish global seed/root rejection from
+incremental input retention before a later malformed target.
+
+Direct scalar/SIMD and browser consumers explicitly select semantically
+applicable rows; Python-only normalization rows run through real Pyodide and
+managed browser Python. Consumers compare public values, shape, tracking,
+identity observations and error classes. Internal version controls are
+separate from the public API: native leaf clone acquisition starts at version one,
+view-derived shared acquisition and retained nonleaf cloning at zero, and later leaf accumulation increments
+the existing gradient's shared counter. Native explanatory tagged sources have
+a different revision from the actual wheel and do not prove identical source.
+The [backward reference](reference/backward-gradients.md) defines support and
+explicit exclusions; the functional API keeps its narrower seed/input modes.
+
+Separate Tabgrad lifetime and controlled-fault tests exercise strong leaf
+endpoints, weak retained hooks, canonical wrappers, rooted/unreachable cycles,
+fixed live owning occurrences, cleared/replaced/dropped gradient effects,
+terminal write failure, independent cleanup errors and accepted read pins.
+These establish runtime ownership and error obligations, not native backend
+fault correspondence. Logical counters, pooled/reserved storage, Wasm memory
+and process RSS are different measurements. Passing numerical and lifecycle
+checks establish neither a speed comparison nor bounded total process memory.
+Exact distribution identities, browser versions, command outcomes and material
+cost measurements belong to the change's verification evidence.

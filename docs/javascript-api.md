@@ -4,7 +4,8 @@ This document is the user reference for calling the Tabgrad tensor runtime
 directly from JavaScript. It describes a deliberately narrow but complete
 execution path: contiguous `float32` tensors on CPU with
 out-of-place elementwise addition and multiplication, total sum and shape-only
-shared-storage views, persistent equal-shape copy, with functional first-order gradients. A narrow contract is useful here because it
+shared-storage views, persistent equal-shape copy, functional first-order gradients
+and backward with persistent gradient associations. A narrow contract is useful here because it
 lets a reader see the complete lifecycle—admission, lazy recording, WebAssembly
 execution, observation, and release—without implying support for tensor
 features that have not been established by tests. An explicitly acquired
@@ -29,6 +30,10 @@ equal-shape tensor and returns a deferred elementwise product.
 lazy untracked gradient handles, with independently closeable entries in input
 order. Creation accepts `requiresGrad: true`; read-only `Tensor.requiresGrad`
 reports tracking. Ordinary creation defaults to nontracking.
+
+`Tensor.backward(gradient?, options?)` and read/write `Tensor.grad` use the
+[backward reference](reference/backward-gradients.md). Gradient slots preserve
+semantic identity independently of numerical aliases and public exposure leases.
 
 `RuntimeSession.noGrad(callback)` disables new derivative recording for a
 synchronous or Promise-returning callback, preserving its result and restoring
@@ -259,7 +264,8 @@ WebAssembly memory, and separated manifest-fetch, module-fetch, integrity,
 compilation, and instantiation durations. It also reports the current number
 of public tensor handles, semantic tensor values, recorded operations,
 materialization records, accepted observation requests, owned derivative nodes
-and saved logical operand pins. `liveDerivativeNodes` includes tracked leaves;
+and saved logical operand pins. `liveDerivativeNodes` includes owned leaf endpoints,
+excluding dormant leaf entries without history-edge owners;
 `liveSavedValues` counts pins rather than distinct buffers or bytes. These semantic
 counters make it possible to distinguish a retained computation from
 WebAssembly memory growth and to check that explicit shutdown retires owned

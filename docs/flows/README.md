@@ -21,6 +21,9 @@ explains the design rather than serving as an installation tutorial.
 follows derivative admission, saved-value ownership, ordinary numerical
 execution and result cleanup across the frontends, runtime, history and CPU.
 
+[From backward to a persistent gradient](backward-gradients.md) follows
+retention setup, per-node commits, mandatory effects, observation and cleanup.
+
 [From a GPU tensor to an observed host array](webgpu-observation.md) follows
 direct JavaScript demand, shared formation, device residency, readback and
 the distinction between logical failure and physical resource retirement.

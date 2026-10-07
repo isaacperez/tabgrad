@@ -19,7 +19,9 @@ numerical memory. The runtime supplies ordinary operations and handle cleanup.
 
 ## Edges and saved values have different lifetimes
 
-An ordinary tracked public handle owns one history node. A tracked operation's node owns
+An ordinary nonleaf semantic identity owns one history node. Public exposures
+own that identity independently. A true leaf's dormant entry is non-owning;
+each live leaf endpoint strongly owns its accumulator identity. A tracked operation's node owns
 one edge for each tracked input occurrence. An edge preserves that input's
 derivative identity and shape, even after its public handle closes. It does
 not preserve the numerical input. Repeated operands own repeated references;
@@ -82,7 +84,7 @@ another requested ancestor. Merely reaching a requested node does not imply
 that every ancestor must execute.
 
 Selected incoming edge occurrences establish readiness counts. A private
-maximum heap chooses the newest created ready node, matching the pinned native
+maximum heap prioritizes ready leaf endpoints, then the newest created ready recipe, matching the pinned native
 sequence priority without executing a shared predecessor too early. Node
 sequence is session-local metadata, not a numerical or storage owner.
 Traversal asks each bound recipe to produce one contribution for each
@@ -131,7 +133,8 @@ Saved payload scales with the operands required by live multiplication recipes,
 not with every historical tensor. Aliased saved operands may share storage;
 pin counts are not byte counts. Release uses constant host call-stack depth.
 
-`liveDerivativeNodes` counts owned history nodes, including tracked leaves.
+`liveDerivativeNodes` counts owned history nodes, including live leaf endpoints;
+a dormant leaf entry without history-edge owners is excluded.
 `liveSavedValues` counts saved operand pins, including repeated occurrences.
 Neither counter is a cumulative log. `liveTensorValues`, materialization and
 allocation diagnostics continue to measure their respective runtime and CPU
@@ -147,11 +150,12 @@ backend capability profile; mutation versions use the independent shared counter
 [persistent update contract](../reference/tensor-copy.md). The supported specialization is described in the
 [functional API reference](../reference/functional-gradients.md).
 
-Persistent gradient accumulation has a different ownership need: it changes
-stable parameter state and must respect alias-visible mutation and version
-order. Pure addition inside one functional request establishes no such effect.
-The accepted architecture keeps that state at the semantic tensor/effect
-owners while reusing the numerical execution path. The supported CPU copy updates stable state; persistent gradient accumulation
-is a separate excluded API. Its accepted identity, retention and cycle
-requirements live in the [CPU gradient-state contract](../architecture/cpu-gradient-state.md);
-this component description does not claim they are implemented.
+Persistent gradient state belongs to the semantic tensor/effect owners under
+the [CPU gradient-state contract](../architecture/cpu-gradient-state.md).
+Traversal delivers each ready incoming contribution before validating its
+recipe. Backward validates selected nonleaf recipes even when ancestor numerical
+contributions are pruned; functional cutoffs do not. Retention hooks weakly refer
+to nonleaf identities and move only when the identity's derivative entry moves.
+The runtime owns native incoming identity/layout provenance, conditional
+acquisition, leaf mutation, nonleaf replacement and mandatory writer effects.
+Their public boundary is the [backward reference](../reference/backward-gradients.md).

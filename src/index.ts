@@ -11,4 +11,5 @@ export {
   type TensorDType,
   type TensorLayout,
   type TensorOptions,
+  type BackwardOptions,
 } from "./runtime/runtime.js";

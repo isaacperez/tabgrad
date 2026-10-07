@@ -1,5 +1,5 @@
 import { TabgradError, throwCleanupFailures } from "../../shared/errors.js";
-import { getRecordingMode, enterNoGradScope, restoreRecordingMode, observeTensorSynchronously, completeRuntimeSession, type RuntimeSession, type Tensor } from "../../runtime/runtime.js";
+import { getRecordingMode, enterNoGradScope, restoreRecordingMode, observeTensorSynchronously, completeRuntimeSession, shouldWarnUnretainedGradient, finalizeTensorExposure, type RuntimeSession, type Tensor } from "../../runtime/runtime.js";
 import type { TensorDevice } from "../../execution/backend.js";
 
 /** Structural subset of Pyodide's borrowed buffer protocol; no interpreter owner. */
@@ -33,6 +33,8 @@ function boundedFloat32View(view: PythonBufferView): Float32Array {
 /** @internal Translate buffer borrowing into an owned runtime tensor import. */
 export class PythonRuntimeBridge {
   #managedEntry = false;
+  readonly #exposureKeys = new WeakMap<Tensor, number>();
+  #nextExposureKey = 0;
   constructor(readonly session: RuntimeSession) {}
 
   getRecordingMode(): boolean {
@@ -45,6 +47,10 @@ export class PythonRuntimeBridge {
 
   exitNoGrad(previous: boolean): void {
     restoreRecordingMode(this.session, previous);
+  }
+
+  releaseExposure(handle: Tensor): void {
+    finalizeTensorExposure(handle);
   }
 
   async runManaged(execute: () => Promise<unknown>): Promise<unknown> {
@@ -75,6 +81,19 @@ export class PythonRuntimeBridge {
 
   grad(output: Tensor, inputs: readonly Tensor[], gradient: Tensor | null): Tensor[] {
     return this.session.grad(output, inputs, gradient === null ? undefined : gradient);
+  }
+
+  exposureKey(handle: Tensor): number {
+    let key = this.#exposureKeys.get(handle);
+    if (key === undefined) { key = this.#nextExposureKey++; this.#exposureKeys.set(handle, key); }
+    return key;
+  }
+
+  shouldWarnGradient(handle: Tensor): boolean { return shouldWarnUnretainedGradient(handle); }
+
+  backward(output: Tensor, inputs: readonly Tensor[] | null, gradient: Tensor | null): void {
+    output.backward(gradient === null ? undefined : gradient,
+      inputs === null ? undefined : { inputs });
   }
 
   tensorFromBuffer(buffer: PythonBuffer, shape?: readonly number[], requiresGrad = false, device: TensorDevice = "cpu"): Tensor {

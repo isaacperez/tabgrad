@@ -12,6 +12,8 @@ import struct
 from pathlib import Path
 from typing import Protocol, cast
 
+from backward_oracle import backward_cases
+
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "js-tests/fixtures/python-tensor-oracle.json"
 VERSION = "2.14.0"
@@ -1225,6 +1227,7 @@ def generate() -> str:
                 "gradientCases": gradient_cases(oracle),
                 "gradientErrors": gradient_errors(oracle),
                 "gradientProgressCases": gradient_progress_cases(oracle),
+                "backwardCases": backward_cases(oracle),
                 "copyCases": copy_cases(oracle),
                 "noGradCases": no_grad_cases(oracle),
                 "noGradViewCases": no_grad_view_cases(oracle),

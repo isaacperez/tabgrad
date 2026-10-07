@@ -11,7 +11,7 @@ float32 backward and persistent gradients. Read [semantic state](semantic-state.
 [automatic differentiation](autograd-and-training.md) and
 [persistent CPU updates](cpu-tensor-updates.md) for the shared foundations.
 The [compatibility record](../compatibility.md#python-tensor-evidence) and
-[functional API reference](../reference/functional-gradients.md) establish
+[backward API reference](../reference/backward-gradients.md) establish
 implemented public behavior; architectural acceptance alone establishes no
 released backward or training capability.
 
@@ -26,7 +26,7 @@ native positional-or-keyword signature and returns `None`:
 Tensor.backward(gradient=None, retain_graph=None, create_graph=False, inputs=None)
 ```
 
-This is an architectural API contract, not an executable Tabgrad tutorial.
+The executable call forms are recorded in the linked API reference.
 Ordinary first order with non-retained history is the bounded mode.
 `retain_graph=None/False` and `create_graph=False`, including native accepted
 integer false forms, preserve native binding behavior. Enabled retained or
