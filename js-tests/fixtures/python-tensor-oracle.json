@@ -10016,6 +10016,35 @@
       }
     },
     {
+      "name": "reset-functional-detachment-and-alias",
+      "kind": "reset",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([2.]); x = tensor([3.]); g = x*x; alias = g.view([1]); saved = g*x\np.grad = g\noptimizer = torch.optim.SGD([p]); optimizer.zero_grad(False)\nerror = attempt(lambda: torch.autograd.grad(saved, x))\nreport = {'gradient': state(g), 'alias': state(alias), 'associated': p.grad is g, 'error': error}\n",
+      "expected": {
+        "gradient": {
+          "bits": [
+            0
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": false,
+          "version": 1
+        },
+        "alias": {
+          "bits": [
+            0
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": true,
+          "version": 1
+        },
+        "associated": true,
+        "error": "RuntimeError"
+      }
+    },
+    {
       "name": "reset-view-progress",
       "kind": "reset",
       "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([2.]); q = tensor([4.]); x = tensor([3.]); first = tensor([7.], False); bad = (x*x).view([1])\np.grad = first; q.grad = bad\noptimizer = torch.optim.SGD([p, q]); error = attempt(lambda: optimizer.zero_grad(False))\nreport = {'error': error, 'first': state(first), 'bad': state(bad), 'first_same': p.grad is first, 'bad_same': q.grad is bad}\n",

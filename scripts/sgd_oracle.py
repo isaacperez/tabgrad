@@ -178,20 +178,24 @@ report = {{'gradient': state(g), 'associated': p.grad is g}}
                 "reset",
             )
         )
-    cases.append(
-        (
-            "reset-detachment-and-alias",
-            COMMON
-            + """
+    for name, differentiate in (
+        ("reset-detachment-and-alias", "saved.backward()"),
+        ("reset-functional-detachment-and-alias", "torch.autograd.grad(saved, x)"),
+    ):
+        cases.append(
+            (
+                name,
+                COMMON
+                + f"""
 p = tensor([2.]); x = tensor([3.]); g = x*x; alias = g.view([1]); saved = g*x
 p.grad = g
 optimizer = torch.optim.SGD([p]); optimizer.zero_grad(False)
-error = attempt(lambda: saved.backward())
-report = {'gradient': state(g), 'alias': state(alias), 'associated': p.grad is g, 'error': error}
+error = attempt(lambda: {differentiate})
+report = {{'gradient': state(g), 'alias': state(alias), 'associated': p.grad is g, 'error': error}}
 """,
-            "reset",
+                "reset",
+            )
         )
-    )
     cases.append(
         (
             "reset-view-progress",

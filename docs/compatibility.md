@@ -369,6 +369,8 @@ It covers repeated scalar/singleton/matrix/empty training, groups and repeats,
 crossed aliases, absent/present/empty gradients, zero/nonfinite/group-negative
 rates, integer midpoint neighbors, binding/validation phases, native false
 forms, closure identity/errors and reset/detachment/view/history interactions.
+Saved detachment after numeric reset is checked through both `backward()` and
+`torch.autograd.grad`, including the preserved gradient association and alias.
 Float32 bits, shape, tracking, mutation counters and Python exception classes
 compare exactly; NaN payloads remain excluded. Internal version inspection is
 test instrumentation, not a new public tensor property.

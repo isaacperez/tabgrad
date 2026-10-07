@@ -7,7 +7,7 @@ from collections.abc import Iterable, Iterator
 from math import prod
 from operator import index
 from types import NotImplementedType, TracebackType
-from typing import SupportsIndex, TypeAlias, cast, overload
+from typing import NoReturn, SupportsIndex, TypeAlias, cast, overload
 from warnings import warn
 from weakref import WeakValueDictionary, finalize
 
@@ -407,7 +407,7 @@ def _backward_seed(value: object) -> Tensor | None:
     raise TypeError("gradient must be a Tensor, None, or one-element sequence")
 
 
-def _raise_gradient_failure(error: JsException) -> None:
+def _raise_gradient_failure(error: JsException) -> NoReturn:
     failure = cast("_bridge.RuntimeException", error)
     if failure.js_error.code in {
         "INVALID_GRADIENT",

@@ -134,6 +134,7 @@ without consuming independently owned derivative history.
 | `UNSUPPORTED_GRADIENT` | Explicit seed tracks gradients | `RuntimeError` |
 | `SHAPE_MISMATCH` | Seed and output shapes differ | `RuntimeError` |
 | `SAVED_VERSION_MISMATCH`, `INPLACE_VIEW` | Changed numeric save or dirty special-view derivative entry | `RuntimeError` |
+| `SAVED_DETACHED` | Saved tensor detached in place, including by numeric SGD gradient reset | `RuntimeError` |
 | `CONSUMED_HISTORY` | Selected derivative needs already consumed saved values | `RuntimeError` |
 | `INVALID_TENSOR`, `CLOSED_TENSOR`, `CLOSED_SESSION`, `DIFFERENT_SESSION` | Invalid handle or lifetime/session mismatch | Existing `JsException` lifecycle contract |
 
