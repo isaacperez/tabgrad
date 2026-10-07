@@ -7,7 +7,11 @@ from typing import cast
 import _tabgrad_runtime_bridge as _bridge  # pyright: ignore[reportMissingModuleSource]
 from pyodide.ffi import JsException, to_js
 
-from . import Tensor
+# Sibling frontends share the package's internal derivative error presentation.
+from . import (
+    Tensor,
+    _raise_gradient_failure,  # pyright: ignore[reportPrivateUsage]
+)
 
 
 def _tensors(value: object, name: str) -> tuple[Tensor, ...]:
@@ -88,18 +92,9 @@ def grad(
         )
     except JsException as error:
         failure = cast("_bridge.RuntimeException", error)
-        if failure.js_error.code in {
-            "GRADIENT_NOT_TRACKED",
-            "UNSUPPORTED_GRADIENT",
-            "INVALID_GRADIENT",
-            "UNUSED_INPUT",
-            "CONSUMED_HISTORY",
-            "SAVED_VERSION_MISMATCH",
-            "INPLACE_VIEW",
-            "SHAPE_MISMATCH",
-        }:
+        if failure.js_error.code == "UNUSED_INPUT":
             raise RuntimeError(str(error)) from error
-        raise
+        _raise_gradient_failure(error)
     try:
         # Wrappers own the handles; conversion never observes numerical values.
         return tuple(Tensor._from_handle(handle) for handle in handles)  # pyright: ignore[reportPrivateUsage]

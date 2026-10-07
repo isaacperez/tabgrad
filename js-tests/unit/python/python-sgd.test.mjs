@@ -29,6 +29,46 @@ test("Python SGD host closures preserve close priority and original exceptions",
   finally { await binding.close(); }
 });
 
+test("Python derivatives preserve saved-detachment causes and lifetime categories after SGD reset", { timeout: 20_000 }, async () => {
+  const interpreter = await loadPyodide();
+  const binding = await attachPython(interpreter);
+  try {
+    await binding.runPythonAsync(`
+import torch, gc
+from pyodide.ffi import JsException
+def check_derivative_errors():
+    for differentiate in (lambda saved, x: saved.backward(), lambda saved, x: torch.autograd.grad(saved, x)):
+        p = torch.tensor([2.], dtype=torch.float32, requires_grad=True)
+        x = torch.tensor([3.], dtype=torch.float32, requires_grad=True)
+        g = x * x
+        saved = g * x
+        p.grad = g
+        optimizer = torch.optim.SGD([p])
+        optimizer.zero_grad(False)
+        assert not g.requires_grad and x.requires_grad and p.grad is g
+        try:
+            differentiate(saved, x)
+        except RuntimeError as error:
+            assert isinstance(error.__cause__, JsException)
+            assert error.__cause__.js_error.code == 'SAVED_DETACHED'
+        else:
+            raise AssertionError('saved detachment accepted')
+        saved._handle.close()
+        try:
+            differentiate(saved, x)
+        except JsException as error:
+            assert error.js_error.code == 'CLOSED_TENSOR'
+            assert error.__cause__ is None
+        else:
+            raise AssertionError('closed derivative output accepted')
+check_derivative_errors()
+del check_derivative_errors
+gc.collect()
+`);
+    assert.equal(interpreter.runPython("torch._runtime_session.diagnostics().liveTensorHandles"), 0);
+  } finally { await binding.close(); }
+});
+
 test("Python basic SGD preserves wrapper and gradient identity", { timeout: 20_000 }, async () => {
   const interpreter = await loadPyodide();
   const binding = await attachPython(interpreter);
