@@ -1072,12 +1072,7 @@ export class RuntimeSession {
     const effectControls = this.#gradientControlBound(plan.order, destinations, effects);
     const outcomes = captureWriterOutcomes([result.value.outcomes, ...plan.outcomes, explicitSeed?.value.outcomes ?? []]);
     if (outcomes.length !== 0 || effects !== 0) {
-      // Reserve a conservative bound for all contributions before seed admission
-      // or consumption. Each binary recipe emits at most two contributions and
-      // their additions; counting all of them also bounds the transient peak.
-      const additionalBytes = (explicitSeed === undefined ? 4 : 0)
-        + plan.order.reduce((bytes, node) => bytes + tensorElementCount(node.shape) * 20, 0);
-      this.#checkUpdateCapacity((plan.order.length * 20 + requested.length * 4 + 10) * (outcomes.length + effectControls + 1), additionalBytes);
+      this.#checkGradientCapacity(plan.order, explicitSeed === undefined, requested.length * 4, outcomes.length + effectControls);
     }
     const seed = explicitSeed === undefined
       ? this.tensor([1], { shape: result.value.shape }) : this.#borrowValue(explicitSeed.value);
@@ -1199,9 +1194,7 @@ export class RuntimeSession {
     const effects = this.#reserveGradientEffects(plan.order, destinations);
     const controls = captureWriterOutcomes([result.value.outcomes, explicitSeed?.value.outcomes ?? []]).length
       + this.#gradientControlBound(plan.order, destinations, effects);
-    const additionalBytes = (explicitSeed === undefined ? 4 : 0)
-      + plan.order.reduce((bytes, node) => bytes + tensorElementCount(node.shape) * 20, 0);
-    this.#checkUpdateCapacity((plan.order.length * 20 + requested.length * 10 + 10) * (controls + 1), additionalBytes);
+    this.#checkGradientCapacity(plan.order, explicitSeed === undefined, requested.length * 10, controls);
     const seed = explicitSeed === undefined ? this.tensor([1], { shape: result.shape }) : this.#borrowValue(explicitSeed.value);
     if (explicitSeed !== undefined) {
       const identity = requireTensorState(seed).identity;
@@ -1214,6 +1207,15 @@ export class RuntimeSession {
         (node, incoming, traversed) => this.#receiveGradient(node, incoming, traversed, destinations), true, false);
       for (const handle of returned) handle.close();
     } finally { seed.close(); }
+  }
+
+  #checkGradientCapacity(nodes: readonly DerivativeNode<TensorValue>[], implicitSeed: boolean, requestedOwners: number, controls: number): void {
+    // Bound contributions before seed admission or consumption. Each current
+    // binary recipe emits at most two contributions plus combines. The byte
+    // and owner factors have different units and both bound the transient peak.
+    const additionalBytes = (implicitSeed ? 4 : 0)
+      + nodes.reduce((bytes, node) => bytes + tensorElementCount(node.shape) * 20, 0);
+    this.#checkUpdateCapacity((nodes.length * 20 + requestedOwners + 10) * (controls + 1), additionalBytes);
   }
 
   #reserveGradientEffects(nodes: readonly DerivativeNode<TensorValue>[], destinations: ReadonlySet<TensorIdentity>): number {
