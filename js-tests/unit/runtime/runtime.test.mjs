@@ -2441,6 +2441,8 @@ test("executes a finite chain in dependency order and handles empty tensors", as
 
 for (const failureCase of [
   { name: "missing expansion export", code: "BACKEND_ABI_MISMATCH", moduleOptions: { omitExpandExport: true } },
+  { name: "missing coefficient addition export", code: "BACKEND_ABI_MISMATCH", moduleOptions: { omitAlphaAddExport: true } },
+  { name: "missing coefficient addition capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: 15 } },
   { name: "missing expansion capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: 7 } },
   { name: "missing mul export", code: "BACKEND_ABI_MISMATCH", moduleOptions: { omitMulExport: true } },
   { name: "missing mul capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: 3 } },

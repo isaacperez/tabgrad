@@ -19,6 +19,7 @@ export interface FormationValue<Value> {
     readonly definition: { readonly loweredKind: LoweredComputation["kind"] };
     readonly inputs: readonly Value[];
     readonly provenance: ProgramProvenance;
+    readonly alphaBits?: number | undefined;
   } | null;
 }
 
@@ -112,6 +113,7 @@ export function formExecutableProgram<Value extends FormationValue<Value>>(
     if (producer !== null) {
       computations.push({
         kind: producer.definition.loweredKind,
+        ...(producer.alphaBits === undefined ? {} : { alphaBits: producer.alphaBits }),
         inputs: producer.inputs.map((input) => slots.get(input)!),
         output: slot,
         provenance: producer.provenance,

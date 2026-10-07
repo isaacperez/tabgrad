@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const copyAssets = ["helpers/python-copy-cases.mjs", "helpers/python-copy-oracle.json", "helpers/gradient-progress-cases.mjs", "helpers/backward-cases.mjs", "helpers/backward-lifetime.mjs"];
+const copyAssets = ["helpers/python-copy-cases.mjs", "helpers/python-copy-oracle.json", "helpers/gradient-progress-cases.mjs", "helpers/backward-cases.mjs", "helpers/backward-lifetime.mjs", "helpers/sgd-cases.mjs", "helpers/sgd-lifetime.mjs"];
 function readCopyAsset(path, ...arguments_) {
   return String(path).endsWith("/helpers/python-copy-oracle.json")
     ? readFile(new URL("../js-tests/fixtures/python-tensor-oracle.json", import.meta.url), ...arguments_)

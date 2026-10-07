@@ -6,7 +6,7 @@ import ts from "typescript";
 
 import * as tabgrad from "../../../dist/index.js";
 
-const { RuntimeSession, Tensor } = tabgrad;
+const { RuntimeSession, Tensor, SGD } = tabgrad;
 
 test("the static Python entry selects only the supported runtime exports", async () => {
   const python = await import("../../../dist/python.js");
@@ -45,12 +45,14 @@ test("the JavaScript package entry point exposes only the supported runtime surf
       ).sort(),
       tensorConstructor: Object.getOwnPropertyNames(Tensor).sort(),
       tensorPrototype: Object.getOwnPropertyNames(Tensor.prototype).sort(),
+      optimizerPrototype: Object.getOwnPropertyNames(SGD.prototype).sort(),
     },
     {
-      exports: ["RuntimeSession", "TabgradError", "Tensor", "createRuntimeSession", "createWebGpuRuntimeSession"],
+      exports: ["RuntimeSession", "SGD", "TabgradError", "Tensor", "createRuntimeSession", "createWebGpuRuntimeSession"],
       runtimeSessionConstructor: ["length", "name", "prototype"],
-      runtimeSessionPrototype: ["close", "constructor", "diagnostics", "grad", "noGrad", "tensor"],
+      runtimeSessionPrototype: ["close", "constructor", "diagnostics", "grad", "noGrad", "sgd", "tensor"],
       tensorConstructor: ["length", "name", "prototype"],
+      optimizerPrototype: ["close", "constructor", "step", "zeroGrad"],
       tensorPrototype: [
         "add",
         "backward",
@@ -69,6 +71,11 @@ test("the JavaScript package entry point exposes only the supported runtime surf
       ],
     },
   );
+});
+
+test("JavaScript cannot forge an optimizer registration", () => {
+  assert.throws(() => Reflect.construct(SGD, []), TypeError);
+  assert.throws(() => Reflect.construct(SGD, [Symbol("SGDConstructionToken"), {}, [], {}]), TypeError);
 });
 
 test("JavaScript cannot construct a tensor handle outside a runtime session", () => {

@@ -1,6 +1,6 @@
 import { TabgradError } from "../../shared/errors.js";
 
-const SOURCE_PATHS = ["bootstrap.py", "torch/__init__.py", "torch/autograd.py"] as const;
+const SOURCE_PATHS = ["bootstrap.py", "torch/__init__.py", "torch/autograd.py", "torch/optim.py"] as const;
 
 interface SourceDescriptor {
   readonly path: string;
@@ -13,12 +13,13 @@ export interface PythonSources {
   readonly bootstrap: string;
   readonly package: string;
   readonly autograd: string;
+  readonly optim: string;
 }
 
 function parseManifest(value: unknown): SourceDescriptor[] {
   if (typeof value !== "object" || value === null) throw new Error("Invalid Python manifest.");
   const manifest = value as Record<string, unknown>;
-  if (manifest.schemaVersion !== 1 || manifest.bridgeVersion !== 1
+  if (manifest.schemaVersion !== 1 || manifest.bridgeVersion !== 2
     || manifest.pyodideVersion !== "314.0.6" || !Array.isArray(manifest.files)
     || manifest.files.length !== SOURCE_PATHS.length) {
     throw new Error("Incompatible Python artifact manifest.");
@@ -58,7 +59,7 @@ export async function loadPythonSources(manifestUrl: URL): Promise<PythonSources
     const response = await fetchResponse(manifestUrl);
     const descriptors = parseManifest(await response.json());
     const sources = await Promise.all(descriptors.map((entry) => readSource(entry, manifestUrl)));
-    return { bootstrap: sources[0]!, package: sources[1]!, autograd: sources[2]! };
+    return { bootstrap: sources[0]!, package: sources[1]!, autograd: sources[2]!, optim: sources[3]! };
   } catch (cause) {
     throw new TabgradError("PYTHON_ASSET_INVALID", "Python assets could not be validated.", {}, cause);
   }

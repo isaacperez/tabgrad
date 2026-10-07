@@ -415,6 +415,7 @@ def _raise_gradient_failure(error: JsException) -> None:
         "GRADIENT_NOT_TRACKED",
         "CONSUMED_HISTORY",
         "SAVED_VERSION_MISMATCH",
+        "SAVED_DETACHED",
         "INPLACE_VIEW",
         "UNSUPPORTED_GRADIENT",
     }:
@@ -575,7 +576,7 @@ def _require_sum_input(value: object) -> Tensor:
 
 
 # The submodule consumes the initialized Tensor class.
-from . import autograd  # noqa: E402
+from . import autograd, optim  # noqa: E402
 
 __all__ = [
     "Size",
@@ -587,6 +588,7 @@ __all__ = [
     "float32",
     "mul",
     "no_grad",
+    "optim",
     "sum",
     "tensor",
 ]

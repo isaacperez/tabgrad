@@ -13,6 +13,9 @@ features that have not been established by tests. An explicitly acquired
 creation, addition, total sum, views and asynchronous observation through this same API.
 Its operation domain and physical limits are separate from CPU support.
 
+`session.sgd(parameters, options?)` provides [basic CPU SGD](reference/sgd.md),
+including groups, closures, reset and independently owned optimizer lifetime.
+
 Python does not sit between this API and the runtime. Any Python compatibility
 layer uses the same TypeScript semantic runtime as this JavaScript interface;
 Tabgrad does not define a separate numerical engine for each frontend.
@@ -67,7 +70,7 @@ documented in [Development environment and commands](development.md).
 ## Create, compute, observe, and release
 
 The public module exports `createRuntimeSession`, `createWebGpuRuntimeSession`,
-`RuntimeSession`, `Tensor`, and `TabgradError`. A session owns a WebAssembly CPU
+`RuntimeSession`, `Tensor`, `SGD`, and `TabgradError`. A session owns a WebAssembly CPU
 context and its linear memory; the GPU factory additionally acquires a
 session-owned GPU device. A tensor handle belongs to exactly one session.
 

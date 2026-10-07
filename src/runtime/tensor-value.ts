@@ -14,8 +14,8 @@ export interface TensorMetadata {
 
 export interface NumericalOperationDefinition {
   readonly name: "add" | "mul" | "sum" | "expand";
-  readonly provenanceSource: "Tensor.add" | "Tensor.mul" | "Tensor.sum" | "DerivativeHistory.sum";
-  readonly loweredKind: "add-f32" | "mul-f32" | "sum-f32" | "expand-f32";
+  readonly provenanceSource: "Tensor.add" | "Tensor.mul" | "Tensor.sum" | "DerivativeHistory.sum" | "SGD.step";
+  readonly loweredKind: "add-f32" | "add-alpha-f32" | "mul-f32" | "sum-f32" | "expand-f32";
   readonly pure: true;
 }
 
@@ -30,6 +30,8 @@ export class TensorValue {
   readonly provenance: ProgramProvenance;
   references = 1;
   versionCounter: TensorVersionCounter | null = null;
+  detachmentCounter: TensorVersionCounter | null = null;
+  detachmentVersion = 0;
   version = 0;
   outcomes: readonly WriterOutcome[] = [];
 
@@ -63,7 +65,15 @@ export class OperationRecord {
   constructor(
     definition: NumericalOperationDefinition,
     inputs: readonly TensorValue[],
+    readonly alphaBits?: number,
   ) {
+    if (definition.loweredKind === "add-alpha-f32") {
+      if (!Number.isInteger(alphaBits) || alphaBits! < 0 || alphaBits! > 0xffff_ffff) {
+        throw new TypeError("Coefficient addition requires captured binary32 bits.");
+      }
+    } else if (alphaBits !== undefined) {
+      throw new TypeError("This operation has no coefficient.");
+    }
     this.definition = definition;
     this.inputs = Object.freeze([...inputs]);
     this.provenance = Object.freeze({

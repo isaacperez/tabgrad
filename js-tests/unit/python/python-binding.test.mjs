@@ -39,7 +39,7 @@ for (const custom of [false, true]) {
       : new URL("manifest.json", artifactBase);
     const resources = new Map([
       [manifestUrl.href, new URL("manifest.json", artifactBase)],
-      ...["bootstrap.py", "torch/__init__.py", "torch/autograd.py"].map((path) =>
+      ...["bootstrap.py", "torch/__init__.py", "torch/autograd.py", "torch/optim.py"].map((path) =>
         [new URL(path, manifestUrl).href, new URL(path, artifactBase)]),
     ]);
     const requests = [];
@@ -1743,6 +1743,7 @@ try:
     except ExceptionGroup as error:
         assert error.message == 'Python installation cleanup failed'
         assert [str(item) for item in error.exceptions] == [
+            'unlink completed with failure',
             'unlink completed with failure',
             'unlink completed with failure',
             'rmdir completed with failure',

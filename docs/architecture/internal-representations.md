@@ -127,6 +127,14 @@ but before a backend chooses kernels or physical memory. The named record gives
 both backends a stable, testable meaning to consume without requiring every
 backend to understand the full public API.
 
+Executable-program format 6 includes the private `add-alpha-f32` computation
+with immutable `alphaBits`. The ordinary operation record validates this
+unsigned 32-bit coefficient attribute, formation carries it into the frozen
+program, and CPU dispatch passes it through module profile 5. No payload,
+frontend object or later mutable learning-rate lookup crosses this boundary.
+The [SGD decision](cpu-sgd.md#coefficient-conversion-and-capture) owns its exact
+numerical meaning; other computations do not acquire a coefficient attribute.
+
 It deliberately excludes:
 
 - model weights and other tensor payloads;

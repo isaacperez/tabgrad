@@ -359,3 +359,31 @@ and process RSS are different measurements. Passing numerical and lifecycle
 checks establish neither a speed comparison nor bounded total process memory.
 Exact distribution identities, browser versions, command outcomes and material
 cost measurements belong to the change's verification evidence.
+
+### CPU SGD evidence
+
+The `sgdCases` field in the registered tensor oracle comes from
+`scripts/sgd_oracle.py`, executed by the pinned PyTorch 2.14.0 build
+`08187d9e0fba026dc8217405802ab5381dc88d90` with one thread in each pool.
+It covers repeated scalar/singleton/matrix/empty training, groups and repeats,
+crossed aliases, absent/present/empty gradients, zero/nonfinite/group-negative
+rates, integer midpoint neighbors, binding/validation phases, native false
+forms, closure identity/errors and reset/detachment/view/history interactions.
+Float32 bits, shape, tracking, mutation counters and Python exception classes
+compare exactly; NaN payloads remain excluded. Internal version inspection is
+test instrumentation, not a new public tensor property.
+
+The [SGD reference](reference/sgd.md) states the included domain and exclusions.
+Direct scalar/SIMD consumers select applicable numerical/state rows; the real
+Python presentation executes all sources. Production Chrome/Firefox profiles
+exercise direct auto/scalar/SIMD and managed Python lifecycle/worker entry,
+native/disabled JSPI and explicit scalar/SIMD worker selection. These tests
+qualify CPU behavior, not momentum, GPU SGD, general modules or compiled training.
+
+Separate host tests cover close priority, original closure throws, accepted
+captures, dropped mandatory writes, terminal barriers, independent release
+errors and Python finalization. Fixed-owner windows retain aliases and old
+saves while checking actual drain and retirement. Logical counts, Wasm
+allocated/reserved capacity and host heap/RSS remain separate measurements;
+they establish no universal speed or total-process-memory bound. Exact source,
+browser versions and raw cost observations belong to verification evidence.

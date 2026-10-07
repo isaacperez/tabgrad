@@ -20,7 +20,9 @@ export interface ProgramValue {
 }
 
 export interface LoweredComputation {
-  readonly kind: "add-f32" | "mul-f32" | "sum-f32" | "expand-f32";
+  readonly kind: "add-f32" | "add-alpha-f32" | "mul-f32" | "sum-f32" | "expand-f32";
+  /** Captured binary32 coefficient; present only for add-alpha-f32. */
+  readonly alphaBits?: number;
   /** Ordered operand occurrences, including repeats; arity belongs to the operation. */
   readonly inputs: readonly ProgramSlot[];
   readonly output: ProgramSlot;
@@ -28,7 +30,7 @@ export interface LoweredComputation {
 }
 
 export class ExecutableProgram {
-  readonly formatVersion = 5;
+  readonly formatVersion = 6;
   readonly domain: "webassembly-cpu" | "webgpu";
   readonly values: readonly ProgramValue[];
   readonly computations: readonly LoweredComputation[];

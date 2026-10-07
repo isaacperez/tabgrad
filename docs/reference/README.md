@@ -9,6 +9,9 @@ accepted form and scope without following a complete design narrative.
 Use [JavaScript tensor API](../javascript-api.md) for the direct session and
 tensor interface, observation and explicit resource cleanup.
 
+Use [Basic CPU SGD](sgd.md) for Python and JavaScript optimizer calls, parameter
+groups, numerical reset, ordered updates and host ownership.
+
 Use [Compatibility and public API support](../compatibility.md) for the meaning
 and scope of support records, the evidence they require and explicit
 differences from the reference behavior.

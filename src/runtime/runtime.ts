@@ -20,6 +20,8 @@ export type { TensorDevice } from "../execution/backend.js";
 import { DerivativeHistory, type DerivativeNode, type DerivativeRecipe } from "./autograd/derivative-history.js";
 import { COPY_DERIVATIVE, COPY_SLICES_DERIVATIVE, IDENTITY_DERIVATIVE, PASS_DERIVATIVE, MUL_DERIVATIVE, SUM_DERIVATIVE } from "./autograd/derivative-recipes.js";
 import { copyTensorShape, equalTensorShapes, inferViewShape, tensorElementCount } from "./tensor-shape.js";
+import { createSGD, type SGD, type SGDOptions, type SGDParameterGroup } from "./sgd.js";
+import type { OptimizerLease } from "./optimizer-lease.js";
 import {
   ExecutableProgram,
   type ProgramProvenance,
@@ -282,6 +284,8 @@ interface RuntimeSemanticOwnership {
   readonly leafEndpointOwners: number;
   readonly nonleafEntryOwners: number;
   readonly publicExposures: number;
+  readonly optimizerOccurrences: number;
+  readonly optimizerRegistrations: number;
   readonly collectorPasses: number;
   readonly collectorVisitedIdentities: number;
   readonly collectorVisitedHistoryNodes: number;
@@ -289,6 +293,7 @@ interface RuntimeSemanticOwnership {
 }
 
 interface RuntimeSessionAccess {
+  readonly registerOptimizer: (groups: readonly (readonly Tensor[])[]) => OptimizerLease;
   readonly gradient: (state: TensorState) => Tensor | null;
   readonly assignGradient: (state: TensorState, value: unknown) => void;
   readonly backward: (state: TensorState, gradient: unknown, options: unknown) => void;
@@ -312,6 +317,15 @@ interface RuntimeSessionAccess {
 }
 
 const RUNTIME_SESSION_ACCESS = new WeakMap<RuntimeSession, RuntimeSessionAccess>();
+
+interface OptimizerRegistration {
+  closed: boolean;
+  readonly groups: readonly (readonly TensorState[])[];
+}
+
+const COEFFICIENT_ADD_OPERATION: NumericalOperationDefinition = Object.freeze({
+  name: "add", provenanceSource: "SGD.step", loweredKind: "add-alpha-f32", pure: true,
+});
 
 function runtimeSessionAccess(session: RuntimeSession): RuntimeSessionAccess {
   const access = RUNTIME_SESSION_ACCESS.get(session);
@@ -721,6 +735,8 @@ export class RuntimeSession {
   readonly #materializations = new MaterializationTable();
   readonly #states = new Set<TensorState>();
   readonly #identities = new Set<TensorIdentity>();
+  readonly #optimizers = new Set<OptimizerRegistration>();
+  #optimizerOccurrences = 0;
   readonly #retainedEntries = new WeakMap<DerivativeNode<TensorValue>, WeakRef<TensorIdentity>>();
   #associationOwners = 0;
   #identityReferences = 0;
@@ -768,6 +784,7 @@ export class RuntimeSession {
       if (!Number.isSafeInteger(limit) || limit < 0) throw new TypeError("Update limits must be nonnegative safe integers.");
     }
     RUNTIME_SESSION_ACCESS.set(this, Object.freeze({
+      registerOptimizer: (groups: readonly (readonly Tensor[])[]) => this.#registerOptimizer(groups),
       gradient: (state: TensorState) => state.identity.gradient === null ? null : this.#expose(state.identity.gradient),
       assignGradient: (state: TensorState, value: unknown) => this.#assignGradient(state, value),
       backward: (state: TensorState, gradient: unknown, options: unknown) => this.#backward(state, gradient, options),
@@ -796,6 +813,142 @@ export class RuntimeSession {
         this.#materializations.countResidentProgramReferences()
       ),
     }));
+  }
+
+  /** Construct basic CPU SGD without copying parameter payloads. */
+  sgd(parameters: Tensor[] | SGDParameterGroup[], options?: SGDOptions): SGD {
+    this.#assertOpen();
+    if (arguments.length > 2) throw new TypeError("sgd requires parameters and optional options.");
+    return createSGD(parameters, options, (groups) => this.#registerOptimizer(groups));
+  }
+
+  #registerOptimizer(groups: readonly (readonly Tensor[])[]): OptimizerLease {
+    this.#assertOpen();
+    const previousGroups = new Set<TensorIdentity>();
+    const states = groups.map((group) => {
+      const identities = new Set<TensorIdentity>();
+      const members = group.map((handle) => {
+        const state = requireTensorState(handle);
+        assertTensorOpen(state);
+        if (state.session !== this) throw new TabgradError("DIFFERENT_SESSION", "SGD parameters must belong to this session.");
+        this.#requireGradients(this.#backendFor(state.value.device, "SGD"), "SGD");
+        if (state.history?.recipe !== null && state.history !== null && !state.identity.retained) {
+          throw new TabgradError("INVALID_TENSOR", "Cannot optimize a non-leaf tensor without retained gradients.");
+        }
+        if (previousGroups.has(state.identity)) throw new TabgradError("INVALID_TENSOR", "A parameter appears in more than one group.");
+        identities.add(state.identity);
+        return state;
+      });
+      for (const identity of identities) previousGroups.add(identity);
+      return Object.freeze(members);
+    });
+    const occurrences = states.reduce((count, group) => count + group.length, 0);
+    this.#checkUpdateCapacity(occurrences + 1);
+    const registration: OptimizerRegistration = { closed: false, groups: Object.freeze(states) };
+    for (const group of states) for (const state of group) this.#retainIdentity(state.identity);
+    this.#optimizerOccurrences += occurrences;
+    this.#optimizers.add(registration);
+    const assertOpen = () => {
+      this.#assertOpen();
+      if (registration.closed) throw new TabgradError("CLOSED_OPTIMIZER", "The optimizer is closed.");
+      for (const group of registration.groups) for (const state of group) assertTensorOpen(state);
+    };
+    return Object.freeze({
+      assertOpen,
+      beginStep: () => { assertOpen(); return this.#enterNoGrad(); },
+      setRecording: (recording: boolean) => { this.#recording = recording; },
+      hasGradients: (index: number) => {
+        assertOpen();
+        const parameters = registration.groups[index];
+        if (parameters === undefined) throw new TypeError("Invalid SGD group.");
+        return parameters.some((state) => state.identity.gradient !== null);
+      },
+      stepGroup: (index: number, alphaBits: number) => {
+        assertOpen();
+        const parameters = registration.groups[index];
+        if (parameters === undefined) throw new TypeError("Invalid SGD group.");
+        // Native setup collects identities, while each arithmetic operation
+        // captures the current numerical values in sequential parameter order.
+        const gradients = parameters.map((state) => state.identity.gradient);
+        for (let occurrence = 0; occurrence < parameters.length; occurrence += 1) {
+          const gradient = gradients[occurrence];
+          if (gradient !== null && gradient !== undefined) {
+            this.#optimizerUpdate(parameters[occurrence]!, gradient, alphaBits);
+          }
+        }
+      },
+      zeroGrad: (setToNone: boolean) => {
+        assertOpen();
+        for (const group of registration.groups) for (const state of group) {
+          if (setToNone) this.#replaceGradient(state.identity, null);
+          else if (state.identity.gradient !== null) this.#resetGradient(state.identity.gradient);
+        }
+      },
+      close: () => this.#retireOptimizer(registration),
+      finalize: () => {
+        try { this.#retireOptimizer(registration); }
+        catch (error) { (this.#cleanupFailures ??= []).push(error); }
+      },
+    });
+  }
+
+  #retireOptimizer(registration: OptimizerRegistration): void {
+    if (registration.closed) return;
+    registration.closed = true;
+    this.#optimizers.delete(registration);
+    let failures: unknown[] | undefined;
+    for (const group of registration.groups) for (const state of group) {
+      this.#optimizerOccurrences -= 1;
+      try { this.#releaseIdentity(state.identity); }
+      catch (error) { (failures ??= []).push(error); }
+    }
+    this.#scheduleCollection();
+    throwCleanupFailures(failures, "Optimizer occurrence retirement failed.");
+  }
+
+  #optimizerUpdate(parameter: TensorState, gradient: TensorIdentity, alphaBits: number): void {
+    const inputs = [parameter.value, gradient.value];
+    this.#requireComputation(inputs[0]!, COEFFICIENT_ADD_OPERATION);
+    this.#checkCapturedAdmission(inputs, parameter.shape);
+    const result = this.#recordOperation({
+      record: new OperationRecord(COEFFICIENT_ADD_OPERATION, inputs, alphaBits),
+      outputMetadata: inputs[0]!,
+    });
+    let failures: unknown[] | undefined;
+    try { this.#copy(parameter, result); }
+    catch (error) { (failures ??= []).push(error); }
+    try { result.close(); }
+    catch (error) { (failures ??= []).push(error); }
+    throwCleanupFailures(failures, "SGD update and temporary retirement failed.");
+  }
+
+  #resetGradient(identity: TensorIdentity): void {
+    const state = new TensorState(this, identity, (state) => this.#resolveHistory(state));
+    const history = state.history;
+    if (this.#recording && state.specialView && state.requiresGrad) {
+      throw new TabgradError("INPLACE_VIEW", "A view created in no_grad cannot change gradient metadata while recording.");
+    }
+    if (history !== null && history.recipe !== null) {
+      if (identity.isView) throw new TabgradError("INPLACE_VIEW", "Cannot detach a gradient view in place.");
+      identity.detachmentCounter.value += 1;
+      this.#moveRetention(identity, history, null);
+      identity.entry = null;
+      identity.requiresGrad = false;
+      this.#history.release(history);
+    } else if (!identity.trueLeaf) identity.entry = null;
+    identity.requiresGrad = false;
+    const scalar = this.tensor([0]);
+    let zeros: Tensor | undefined;
+    let failures: unknown[] | undefined;
+    try {
+      zeros = this.#expand(scalar, identity.shape);
+      const previous = this.#enterNoGrad();
+      try { this.#copy(state, zeros); }
+      finally { this.#recording = previous; }
+    } catch (error) { (failures ??= []).push(error); }
+    try { zeros?.close(); } catch (error) { (failures ??= []).push(error); }
+    try { scalar.close(); } catch (error) { (failures ??= []).push(error); }
+    throwCleanupFailures(failures, "Gradient reset and temporary retirement failed.");
   }
 
   /** Disable new derivative recording until this callback returns or settles. */
@@ -1093,7 +1246,7 @@ export class RuntimeSession {
 
   #gradientReceiver(node: DerivativeNode<TensorValue>, destinations: ReadonlySet<TensorIdentity>): TensorIdentity | undefined {
     return node.leafOwner instanceof TensorIdentity && destinations.has(node.leafOwner)
-      ? node.leafOwner : this.#retainedEntries.get(node)?.deref();
+      ? node.leafOwner.requiresGrad ? node.leafOwner : undefined : this.#retainedEntries.get(node)?.deref();
   }
 
   #detachedAlias(source: TensorIdentity, acquire = false): Tensor {
@@ -1239,7 +1392,7 @@ export class RuntimeSession {
   }
 
   #resolveHistory(state: TensorState): DerivativeNode<TensorValue> | null {
-    if (!state.isView) return state.identity.entry;
+    if (!state.isView) return state.identity.requiresGrad ? state.identity.entry : null;
     if (state.specialView && state.requiresGrad && state.historyVersion !== state.family.version) {
       throw new TabgradError("INPLACE_VIEW", "A view created in no_grad was modified in place, or its base was modified while recording.");
     }
@@ -1258,6 +1411,9 @@ export class RuntimeSession {
   }
 
   #validateSavedValue(value: TensorValue): void {
+    if (value.detachmentCounter !== null && value.detachmentCounter.value !== value.detachmentVersion) {
+      throw new TabgradError("SAVED_DETACHED", "A saved tensor was detached in place.");
+    }
     if (value.versionCounter !== null && value.versionCounter.value !== value.version) {
       throw new TabgradError("SAVED_VERSION_MISMATCH", "A tensor saved for differentiation was modified in place.", {
         expectedVersion: value.version, actualVersion: value.versionCounter!.value,
@@ -1312,6 +1468,8 @@ export class RuntimeSession {
     next.storage.references += 1;
     next.versionCounter = destination.family.versionCounter;
     next.version = destination.family.version + 1;
+    next.detachmentCounter = destination.identity.detachmentCounter;
+    next.detachmentVersion = destination.identity.detachmentCounter.value;
     next.outcomes = [outcome];
     retainWriterOutcomes(next.outcomes);
     this.#retainValue(captured);
@@ -1349,7 +1507,7 @@ export class RuntimeSession {
 
   #checkUpdateCapacity(additionalOwners: number, additionalBytes = 0): void {
     const owners = this.#identityReferences + this.#valueReferences + this.#history.references + this.#writers.references
-      + this.#requestLeases + this.#undeliveredEffects.size;
+      + this.#requestLeases + this.#undeliveredEffects.size + this.#optimizers.size;
     if (owners + additionalOwners > this.#updateLimits.owners || this.#liveBackingBytes + additionalBytes > this.#updateLimits.backingBytes) {
       throw new TabgradError("RESOURCE_EXHAUSTED", "Persistent update captures exceed the session capacity.", {
         owners, additionalOwners, maximumOwners: this.#updateLimits.owners,
@@ -1571,11 +1729,12 @@ export class RuntimeSession {
     const incomingReferences = [...incoming].reduce((total, token) => total + token.owners, 0);
     if (identityReferences !== this.#identityReferences || incomingReferences !== identityReferences ||
       gradientAssociations !== this.#associationOwners ||
-      identityReferences !== publicExposures + gradientAssociations + viewBaseReferences + leafEndpointOwners) {
+      identityReferences !== publicExposures + gradientAssociations + viewBaseReferences + leafEndpointOwners + this.#optimizerOccurrences) {
       throw new TabgradError("BACKEND_STATUS_ERROR", "Semantic ownership and its occurrence accounting disagree.");
     }
     return { identities: identities.length, identityReferences, gradientAssociations, viewBaseReferences,
-      leafEndpointOwners, nonleafEntryOwners, publicExposures,
+      leafEndpointOwners, nonleafEntryOwners, publicExposures, optimizerOccurrences: this.#optimizerOccurrences,
+      optimizerRegistrations: this.#optimizers.size,
       collectorPasses: this.#collectorPasses, collectorVisitedIdentities: this.#collectorVisitedIdentities,
       collectorVisitedHistoryNodes: this.#collectorVisitedHistoryNodes, collectorVisitedEdges: this.#collectorVisitedEdges };
   }
@@ -1622,6 +1781,10 @@ export class RuntimeSession {
       reject = onFailure;
     });
     const failures = this.#cleanupFailures ??= [];
+    for (const optimizer of [...this.#optimizers]) {
+      try { this.#retireOptimizer(optimizer); }
+      catch (error) { failures.push(error); }
+    }
     for (const state of [...this.#states]) {
       if (!state.closed) {
         state.closed = true;
@@ -1671,6 +1834,7 @@ export class RuntimeSession {
     requiresGrad: boolean = history !== null): Tensor {
     const identity = new TensorIdentity(new TensorFamily(value), value, history, requiresGrad,
       null, false, requiresGrad && history === null);
+    value.detachmentCounter = identity.detachmentCounter;
     this.#identities.add(identity);
     return this.#expose(identity);
   }
@@ -1766,6 +1930,9 @@ export class RuntimeSession {
     const live = new Set<TensorIdentity>();
     const histories = new Set<DerivativeNode<TensorValue>>();
     const pending: (TensorIdentity | DerivativeNode<TensorValue>)[] = [...this.#states].map(state => state.identity);
+    for (const optimizer of this.#optimizers) for (const group of optimizer.groups) {
+      for (const state of group) pending.push(state.identity);
+    }
     while (pending.length !== 0) {
       const owner = pending.pop()!;
       if (owner instanceof TensorIdentity) {
@@ -2052,6 +2219,18 @@ export function enterNoGradScope(session: RuntimeSession): boolean {
 export function restoreRecordingMode(session: RuntimeSession, previous: boolean): void {
   if (typeof previous !== "boolean") throw new TypeError("A captured recording mode must be boolean.");
   runtimeSessionAccess(session).restoreRecording(previous);
+}
+
+/** @internal Python binding retains its own groups and language objects. */
+export function registerOptimizerLease(session: RuntimeSession, groups: readonly (readonly Tensor[])[]): OptimizerLease {
+  return runtimeSessionAccess(session).registerOptimizer(groups);
+}
+
+/** @internal Native registration eligibility without exposing autograd metadata. */
+export function isOptimizableParameter(handle: Tensor): boolean {
+  const state = requireTensorState(handle);
+  assertTensorOpen(state);
+  return state.history === null || state.history.recipe === null || state.identity.retained;
 }
 
 /** @internal Prepare the owned backend before entering a synchronous frontend. */

@@ -46,11 +46,11 @@ export class RuntimeFixtureServer {
     });
     const manifest = manifestTransform({
       schemaVersion: 1,
-      moduleVersion: 4,
+      moduleVersion: 5,
       abiVersion: 1,
       addressWidth: 32,
       sharedMemory: false,
-      capabilities: ["add-f32", "sum-f32", "mul-f32", "expand-f32"],
+      capabilities: ["add-f32", "sum-f32", "mul-f32", "expand-f32", "add-alpha-f32"],
       imports: [{ module: "env", name: "memory", kind: "memory" }],
       memory: { initialPages: 32, maximumPages: 1024, alignment: 16 },
       variants: [variant("scalar", []), variant("simd128", ["simd128"])],

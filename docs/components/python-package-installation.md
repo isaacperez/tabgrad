@@ -37,7 +37,10 @@ backend remains responsible for numerical execution.
 The maintained inputs have different jobs. `bootstrap.py` installs
 and removes interpreter resources. `torch/__init__.py` is the imported package
 initializer and captures its session from the private bridge. `torch/autograd.py`
-normalizes functional derivative calls through that same bridge. Package import
+normalizes functional derivative calls through that same bridge. `torch/optim.py`
+normalizes SGD calls and owns Python optimizer wrappers, using private runtime
+leases for semantic registration and updates. The source manifest uses bridge
+protocol 2 and requires all four assets, including bootstrap. Package import
 does not establish PyTorch operation coverage. That requires the separate
 operation contracts and [compatibility evidence](../compatibility.md).
 
@@ -59,7 +62,7 @@ with `PYTHON_ASSET_INVALID`. All sources must validate before the binding
 creates a session or calls Python. A broken second asset therefore cannot
 leave another one partly installed. Installation owns both package modules and
 their exact importer-cache identities, including the package directory used
-to resolve the autograd submodule. Cleanup preserves host replacements.
+to resolve the autograd and optim submodules. Cleanup preserves host replacements.
 
 A hash detects different bytes relative to the supplied manifest. It is not a
 signature or an independent trust authority: replacing both source and its

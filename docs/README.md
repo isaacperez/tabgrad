@@ -74,6 +74,7 @@ link to its primary source, but they must not create a competing version.
 | Persistent CPU updates, alias versions, derivative fidelity and effect ownership | [`architecture/cpu-tensor-updates.md`](architecture/cpu-tensor-updates.md) |
 | CPU backward, persistent gradient identity, partial progress and cycle responsibility | [`architecture/cpu-gradient-state.md`](architecture/cpu-gradient-state.md) |
 | Supported backward calls, gradient slots, reset and lifetime | [`reference/backward-gradients.md`](reference/backward-gradients.md) |
+| Basic CPU SGD calls, groups, reset and host lifetime | [`reference/sgd.md`](reference/sgd.md) |
 | Ordinary CPU SGD calls, reset/update ordering and optimizer ownership | [`architecture/cpu-sgd.md`](architecture/cpu-sgd.md) |
 | WebGPU device selection, readiness, application setup and connection ownership | [`architecture/webgpu-integration.md`](architecture/webgpu-integration.md) |
 | Managed WebGPU transport, shared completion and concrete supervision ownership | [`components/webgpu-worker-connection.md`](components/webgpu-worker-connection.md) |
