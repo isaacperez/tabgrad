@@ -89,6 +89,21 @@ adapter information and resource snapshots. Inspect reports for privacy
 before publishing derived evidence. Preserve unsuccessful attempts as well
 as successful runs with the issue or reviewed evidence, not in normative docs.
 
+The report's `completed` field records whether all selected browser attempts
+finished successfully. Each `browsers` entry also has `completed`, set only
+after the harness has checked native browser termination and profile cleanup.
+Existing `browser`, `version` and `result` fields retain their meanings; version
+or page result is absent when the attempt failed before obtaining it. A failed
+selection has no browser entry. On failure, the report's `failure` contains the
+original error's string message and its structured harness `diagnostics` when
+available; the command still throws that original error without retrying.
+
+A valid page result can therefore coexist with `completed: false` and a cleanup
+failure. Page validity does not establish command success. An incomplete stderr
+capture does not establish descendant termination. Report creation follows
+server closure; setup, server-close or report-writing failures can prevent an
+artifact, so command diagnostics remain necessary at those I/O boundaries.
+
 The verifier must identify the exact distribution, measurement tool and fixture
 revision as well as the source fingerprint described below; that fingerprint
 alone does not prove that a stale distribution was rebuilt. Report whether the

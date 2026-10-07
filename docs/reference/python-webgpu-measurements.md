@@ -189,8 +189,19 @@ Timestamped `test-results/python-webgpu-{pilot,measure,diagnose}-*.json` reports
 ignored local output. They contain the source fingerprint, environment,
 individual timings, transport counts and diagnostics, including a failed
 partial run when the page returns a report. Inspect reports for privacy before
-publishing derived evidence. A harness failure before page reporting remains
-in its command diagnostics and must not disappear through a retry.
+publishing derived evidence. The report's `completed` field records whether all
+selected browser attempts finished successfully. Each `browsers` entry also
+records `completed`, set only after native termination and profile cleanup.
+Existing `browser`, `version` and `result` fields retain their meanings; an
+unavailable version or page result is omitted rather than fabricated. Failed
+browser selection leaves no browser entry. The report's `failure` preserves the
+original error's string message and structured harness `diagnostics` when
+available, including failures before page reporting. The command still throws
+that original error and does not retry it away.
+
+Setup, server-close or report-writing failures can prevent an artifact: saving
+follows server closure, and command diagnostics remain necessary at these I/O
+boundaries. Inspect saved diagnostics for privacy alongside page observations.
 
 The host closes its managed GPU controller and terminates its application-owned
 interpreter worker before reporting. A successful page result alone still does
