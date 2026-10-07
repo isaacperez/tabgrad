@@ -211,13 +211,61 @@ g=502.9061279296875 and lr=0.1, the pinned native result is
 zero. Selected cancellation values remain native-valid; exclusions or a loose
 tolerance cannot conceal this difference.
 
-Prefer extending the ordinary addition numerical contract over an optimizer
-private arithmetic loop or whole-step compilation. The physical algorithm is
-not selected here. Numerical qualification must establish coefficient
-conversion, rounding, signed-zero/nonfinite behavior and scalar/SIMD CPU/Wasm
-policy. Native arm64 observations alone cannot settle a universal FMA or
-cross-platform bit guarantee. Forward, backward, reset and optimizer effects
-continue through the ordinary operation/program/request/backend path.
+### Coefficient conversion and capture
+
+Preserve built-in Python negation and type semantics before checked native
+conversion of `alpha=-lr` to float32. The selected native scalar parser accepts
+integer alpha in the signed64/unsigned64 range [-2^63, 2^64-1]; negating an
+integer learning rate changes which boundary is accepted. Direct Boolean
+alpha is invalid for float32, whereas Boolean lr negates to an integer.
+Reject a finite float whose magnitude exceeds float32 maximum even when a
+rounded cast would produce the finite endpoint. Real infinities and NaN remain
+accepted; preserve ties-even conversion, underflow and signed zero rather than
+saturating.
+Validate when an update actually occurs: an absent gradient skips the update,
+while an empty gradient still requires coefficient validation.
+
+Capture the resulting coefficient bits as immutable per-invocation metadata
+through the ordinary operation record, program formation and validation, CPU
+dispatch, and versioned private Wasm ABI/artifact contract. Later group-rate
+mutation must not change already captured work. The ordinary arithmetic owner
+supplies this update; no optimizer-private loop or whole-step compilation is
+introduced. Public alpha=1 addition and separately rounded public tensor
+multiplication keep their contracts; this decision does not add public general
+alpha-add. Forward, backward, reset and optimizer effects continue through the
+ordinary operation/program/request/backend path.
+
+### Rounding and the physical response
+
+For the selected PyTorch 2.14.0 arm64 wheel, require one nearest/ties-even
+float32 rounding of the exact float32 coefficient-times-gradient plus
+parameter. Preserve signed zeros, subnormals, underflow, overflow and true
+infinity/NaN classifications; NaN payload and sign are not guaranteed. A zero
+rate does not skip arithmetic: zero times an infinite gradient produces NaN.
+Finite product overflow must not introduce an intermediate infinity before a
+canceling addition.
+
+Use the qualified compensated float64 response: form the exact float32 product
+in float64, retain the ordered TwoSum addition residual, and correct a high sum
+on a float32 midpoint using that residual, including both overflow boundaries.
+Every finite float32 product fits exactly in float64; the residual distinguishes
+which side of a float32 rounding boundary the exact sum occupies. An uncorrected
+float64 sum followed by a float32 cast can still double-round incorrectly.
+Exceptional inputs use widened arithmetic with explicit zero/nonfinite handling.
+
+SIMD128 promotes pairs to f64x2 for the product and residual arithmetic, applies
+the same correction per lane, and uses the scalar helper for tails. Keep the
+operation order; unsafe fast-math reassociation invalidates qualification.
+This internal arithmetic requires neither std, a new dependency nor relaxed
+SIMD, and does not change the tensor's CPU/float32/contiguous domain. The
+disposable prototype's buffers and entry points do not define production ABI
+signatures, allocation ownership or mutation ownership.
+
+Compensation adds float64 operations and per-lane correction. No production
+throughput or cost advantage is established. The compiled scalar/SIMD evidence
+is bounded to the recorded Node/Wasm toolchain and native wheel; it does not
+qualify browser integration or promise identical bits across all PyTorch builds.
+Qualify the shared production path and each claimed environment independently.
 
 A usable production capability requires qualified backward/gradient state,
 that numerical response, metadata reset integration and maintained Python/JS/
@@ -245,11 +293,16 @@ the basic Python signature.
 Foreach/fused are native-valid CPU alternatives, not interchangeable flags.
 Observed foreach Nesterov changes the gradient, while fused changes pinned
 version diagnostics. Silently translating them to basic single-tensor behavior
-would violate the contract. Corrected composition and dedicated ordinary
-coefficient computation remain numerical alternatives subject to qualification;
-the refuted naive composition is not a fallback. Waiting for all optimizer-base
-surfaces delays a usable basic domain without removing its arithmetic/reset
-obligations, and does not justify an unused framework.
+would violate the contract. Separately rounded float32 mul/add and an
+uncorrected float64 cast both fail selected native-valid cases; neither is a
+fallback. Correcting a composition must not silently fuse existing public
+mul/add rounding boundaries. The selected ordinary coefficient computation
+avoids that change. Exact integer/software arithmetic is a possible alternative,
+but the reference oracle is not a qualified production kernel and no unmeasured
+performance disadvantage is assigned to it. Relaxed SIMD permits fused or
+unfused results and cannot ensure this rounding contract. Waiting for all
+optimizer-base surfaces does not remove arithmetic/reset obligations or justify
+an unused framework.
 
 [Contract research](https://github.com/isaacperez/tabgrad/issues/168), its
 [reproducible evidence](https://github.com/isaacperez/tabgrad/issues/168#issuecomment-5998273869),
@@ -266,9 +319,23 @@ single-rounding discriminator on that arm64 wheel, not all hardware. Native
 2/8/32-step observations do not qualify Tabgrad owners, Wasm capacity or cost.
 Broader build diagnostics and NaN payload/sign guarantees remain limited.
 
+[Numerical research](https://github.com/isaacperez/tabgrad/issues/172), its
+[accepted exact response](https://github.com/isaacperez/tabgrad/issues/172#issuecomment-6039036110)
+and [frozen methods, results and independent challenge](https://gist.github.com/isaacperez/ea455ff176abb907ff3a7e2657ea7e66/4027173778bdb687fbf8a746ac7fab5c59a6fad6)
+support the coefficient and physical arithmetic decision. The corrected scalar
+and SIMD128 Wasm variants each matched 32,674 selected element occurrences;
+separate float32 composition differed 5017 times and an uncorrected float64 cast
+156 times in each variant. These deliberate discriminators and the exact
+integer reference support the response, not an exhaustive proof or error-rate
+estimate. Production metadata, aliases/versions, gradient/reset effects,
+lifetimes and browser user traces require their own integration evidence.
+
 Reconsider the domain through explicit compatibility/architecture work when
 momentum or broader APIs are needed, native-version changes alter covered
 observations, numerical qualification changes the supported platform policy,
-or real ownership/cost evidence contradicts these constraints. Preserve the
-native behavior of already covered calls; internal freedom does not authorize
-a different user optimizer.
+or real ownership/cost evidence contradicts these constraints. Changed native
+builds, compiler flags/features or numerical domains require requalification.
+Contrary native-valid results require revisiting the policy or qualification,
+not loosening tolerances or excluding cases to protect an implementation.
+Preserve the native behavior of already covered calls; internal freedom does
+not authorize a different user optimizer.
