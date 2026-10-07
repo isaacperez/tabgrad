@@ -7,6 +7,7 @@ import { GPU_ACCOUNTED, GPU_CONTROL_LENGTH, GPU_METRIC_LENGTH, assertGpuConnecti
 import { publishSharedGpuDrain, publishSharedGpuFailure, publishSharedGpuSuccess } from "./webgpu-shared-completion.js";
 import { TabgradError } from "../../shared/errors.js";
 import { isRecord } from "../../shared/object-shape.js";
+import { encodeGpuFailure } from "./webgpu-failure-diagnostic.js";
 
 interface PhysicalWorkerScope {
   addEventListener(type: "message", listener: (event: MessageEvent<unknown>) => void): void;
@@ -180,8 +181,8 @@ class PhysicalGpuWorker {
       this.#backend.assertAvailable();
       this.#updateMetrics();
       this.#scope.postMessage({ kind: "ready", capabilities: this.#backend.capabilities, diagnostics: this.#backend.diagnostics() });
-    } catch (_error) {
-      this.#scope.postMessage({ kind: "failure" });
+    } catch (error) {
+      this.#scope.postMessage({ kind: "failure", diagnostic: encodeGpuFailure(error) });
       // Do not await close here: it joins this acquisition itself.
       this.#closing ??= this.#close();
     }

@@ -208,6 +208,18 @@ Truncation is explicit. The semantic runtime can attach its own invocation
 context to the received diagnostic. Applications must not infer cross-realm
 exception identity from that information.
 
+Setup uses the same bounded diagnostic projection. A worker acquisition failure
+rejects `createWebGpuWorker` with the host's `BACKEND_LOAD_FAILED` classification
+and `worker-setup` phase. Its diagnostic cause preserves the acquisition
+error's code, message and phase, with the immediate native cause beneath it
+when readable. Missing WebGPU and a missing adapter therefore remain
+distinguishable from rejected adapter or device acquisition. Unreadable
+diagnostic properties cannot replace the primary rejection or stop cleanup;
+truncation is explicit, and short locators are preserved while larger text
+is reduced to fit the fixed budget. Receiving this diagnostic is not a cleanup
+acknowledgment: only the separate closure/loss protocol accounts for physical
+completion.
+
 ## Costs and qualification boundaries
 
 Program transfer scales with the selected definition and required host

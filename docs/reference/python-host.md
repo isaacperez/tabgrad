@@ -61,6 +61,10 @@ GPU leaves CPU as the default; device selection remains explicit. Missing
 secure isolation, shared-memory or worker prerequisites rejects with
 `UNSUPPORTED_DEVICE` before worker creation. Acquisition and setup failures
 use `UNSUPPORTED_DEVICE`, `BACKEND_LOAD_FAILED` or an observed backend failure.
+For a physical-worker acquisition rejection, `BACKEND_LOAD_FAILED` retains a
+bounded diagnostic cause with the originating code, message and phase, and
+an immediate native cause when readable. These are diagnostic reconstructions,
+not cross-worker exception identities; truncation is marked explicitly.
 Cancellation does not abandon a device that arrives late. The helper's close
 Promise is not a completion Promise for the Python script.
 

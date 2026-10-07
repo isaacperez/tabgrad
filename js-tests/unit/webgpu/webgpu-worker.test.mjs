@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { test } from "node:test";
 import * as python from "../../../dist/python.js";
+import { startWebGpuWorker } from "../../../dist/backends/webgpu/worker.js";
+import { TabgradError } from "../../../dist/shared/errors.js";
 
 const capabilities = { device: "webgpu", computations: ["add-f32"], gradients: false, maximumTensorBytes: 1048576 };
 const diagnostics = {
@@ -50,6 +52,135 @@ function environment(values) {
     }
   };
 }
+
+/** Replace acquisition and the worker scope, keeping both packaged endpoints. */
+async function acquisitionFailure(gpu, withholdAcknowledgment = false) {
+  let listener;
+  const replies = [];
+  const closed = Promise.withResolvers();
+  class EndpointWorker extends ControlledWorker {
+    postMessage(message, transferables) {
+      super.postMessage(message, transferables);
+      listener(new MessageEvent("message", { data: structuredClone(message, { transfer: transferables ?? [] }) }));
+    }
+  }
+  ControlledWorker.instances = [];
+  const restore = environment({
+    isSecureContext: true, crossOriginIsolated: true, Worker: EndpointWorker, navigator: { gpu },
+    addEventListener: (type, onMessage) => { assert.equal(type, "message"); listener = onMessage; },
+    postMessage: (message) => {
+      const copy = structuredClone(message);
+      replies.push(copy);
+      if (copy.kind !== "closed" || !withholdAcknowledgment) {
+        ControlledWorker.instances.at(-1).dispatchEvent(new MessageEvent("message", { data: copy }));
+      }
+      if (copy.kind === "closed") closed.resolve();
+    },
+  });
+  try {
+    startWebGpuWorker();
+    let error;
+    try { await python.createWebGpuWorker(); }
+    catch (failure) { error = failure; }
+    await closed.promise;
+    const worker = ControlledWorker.instances.at(-1);
+    return { error, worker, replies, control: new Int32Array(worker.initialization.control) };
+  } finally { restore(); }
+}
+
+test("actual GPU worker acquisition preserves distinct originating diagnostics", async () => {
+  const adapterFailure = new Error("specific adapter acquisition failure");
+  adapterFailure.name = "AdapterError";
+  adapterFailure.privateData = { tensor: new Float32Array(32) };
+  adapterFailure.cause = adapterFailure;
+  const deviceFailure = new Error("specific device acquisition failure");
+  deviceFailure.name = "DeviceError";
+  for (const [gpu, code, message, native] of [
+    [undefined, "UNSUPPORTED_DEVICE", "WebGPU is unavailable in this environment.", undefined],
+    [{ requestAdapter: async () => null }, "UNSUPPORTED_DEVICE", "No WebGPU adapter is available.", undefined],
+    [{ requestAdapter: async () => { throw adapterFailure; } }, "BACKEND_LOAD_FAILED", "WebGPU device acquisition failed.", adapterFailure],
+    [{ requestAdapter: async () => ({ requestDevice: async () => { throw deviceFailure; } }) }, "BACKEND_LOAD_FAILED", "WebGPU device acquisition failed.", deviceFailure],
+  ]) {
+    const { error, worker, replies, control } = await acquisitionFailure(gpu);
+    assert.equal(error.code, "BACKEND_LOAD_FAILED");
+    assert.equal(error.details.phase, "worker-setup");
+    assert.equal(error.cause?.code, code);
+    assert.equal(error.cause.message, message);
+    assert.equal(error.cause.details.phase, "device-acquisition");
+    assert.equal(error.cause.details.diagnosticTruncated, false);
+    assert.equal(error.cause.cause?.name, native?.name);
+    assert.equal(error.cause.cause?.message, native?.message);
+    if (native !== undefined) {
+      assert.notEqual(error.cause.cause, native);
+      assert.equal(error.cause.cause.privateData, undefined);
+      assert.equal(error.cause.cause.cause, undefined);
+    }
+    assert.deepEqual(replies.map((reply) => reply.kind), ["failure", "closed"]);
+    assert.equal(worker.terminated, true);
+    assert.equal(Atomics.load(control, 3), 1);
+  }
+});
+
+test("actual GPU setup bounds multibyte diagnostics and marks truncation", async () => {
+  const native = new Error("界".repeat(3000));
+  native.name = "N".repeat(300);
+  const primary = new TabgradError("BACKEND_LOAD_FAILED", "界".repeat(3000), {
+    backend: "webgpu", phase: "device-acquisition", reason: "界".repeat(300), privateData: new Float32Array(32),
+  }, native);
+  const { error, worker } = await acquisitionFailure({ requestAdapter: async () => { throw primary; } });
+  assert.equal(error.cause?.code, primary.code);
+  assert.equal(error.cause.details.phase, "device-acquisition");
+  assert.equal(error.cause.details.diagnosticTruncated, true);
+  assert(error.cause.message.length > 0 && error.cause.message.length <= 1024);
+  assert(error.cause.cause.message.length > 0 && error.cause.cause.message.length <= 1024);
+  assert(error.cause.cause.name.length <= 128);
+  assert.equal(error.cause.details.privateData, undefined);
+  assert(new TextEncoder().encode(JSON.stringify({ code: error.cause.code, message: error.cause.message,
+    details: error.cause.details, cause: { name: error.cause.cause.name, message: error.cause.cause.message } })).byteLength <= 4096);
+  assert.equal(worker.terminated, true);
+});
+
+test("unreadable GPU setup diagnostic fields cannot replace failure or prevent cleanup", async () => {
+  const native = new Error("readable device rejection");
+  Object.defineProperty(native, "name", { get() { throw new Error("unreadable native name"); } });
+  const primary = new TabgradError("BACKEND_LOAD_FAILED", "readable acquisition failure", {}, native);
+  Object.defineProperty(primary, "details", { value: new Proxy({ backend: "webgpu", phase: "device-acquisition" }, {
+    get(target, name) { if (name === "reason") throw new Error("unreadable detail"); return target[name]; },
+  }) });
+  const { error, worker } = await acquisitionFailure({ requestAdapter: async () => { throw primary; } });
+  assert.equal(error.cause?.code, primary.code);
+  assert.equal(error.cause.message, primary.message);
+  assert.equal(error.cause.details.phase, "device-acquisition");
+  assert.equal(error.cause.cause.name, "Error");
+  assert.equal(error.cause.cause.message, "readable device rejection");
+  assert.equal(worker.terminated, true);
+});
+
+test("setup diagnostics do not acknowledge physical worker cleanup", async () => {
+  const { error, worker, replies, control } = await acquisitionFailure(undefined, true);
+  try {
+    assert.equal(error.cause?.code, "UNSUPPORTED_DEVICE");
+    assert.deepEqual(replies.map((reply) => reply.kind), ["failure", "closed"]);
+    assert.equal(worker.terminated, false, "the host must wait for its cleanup acknowledgment");
+    worker.dispatchEvent(new Event("error"));
+    assert.equal(worker.terminated, true);
+    assert.equal(Atomics.load(control, 3), 2, "unacknowledged worker loss remains unknown completion");
+  } finally { worker.closed(); }
+});
+
+test("malformed setup diagnostics preserve the outer failure and still request cleanup", async () => {
+  const restore = workerEnvironment();
+  let worker;
+  try {
+    const setup = python.createWebGpuWorker();
+    worker = ControlledWorker.instances[0];
+    worker.dispatchEvent(new MessageEvent("message", { data: { kind: "failure", diagnostic: new Uint8Array([123]) } }));
+    await assert.rejects(setup, (error) => error.code === "BACKEND_LOAD_FAILED"
+      && error.cause?.code === "BACKEND_STATUS_ERROR");
+    assert.equal(worker.terminated, false);
+    assert.equal(worker.messages.at(-1).message.kind, "close");
+  } finally { worker?.closed(); restore(); }
+});
 
 test("the GPU helper rejects insecure or nonisolated hosting before creating a worker", async () => {
   let workers = 0;

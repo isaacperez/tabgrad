@@ -2,6 +2,7 @@ import type { BackendCapabilities } from "../../execution/backend.js";
 import { TabgradError } from "../../shared/errors.js";
 import { isRecord } from "../../shared/object-shape.js";
 import type { WebGpuDiagnostics } from "./webgpu-backend.js";
+import { decodeGpuFailure } from "./webgpu-failure-diagnostic.js";
 import { GPU_ACCOUNTED, GPU_CONTROL_LENGTH, GPU_METRIC_LENGTH, retireGpuConnection, type WebGpuConnection, type WebGpuConnectionData } from "./webgpu-connection.js";
 
 export type { WebGpuConnection } from "./webgpu-connection.js";
@@ -142,7 +143,7 @@ class GpuWorkerController implements WebGpuWorkerController {
     } else if (message.kind === "failure") {
       this.#setup.reject(new TabgradError("BACKEND_LOAD_FAILED", "GPU worker acquisition or execution failed.", {
         backend: "webgpu", phase: "worker-setup",
-      }));
+      }, message.diagnostic instanceof Uint8Array ? decodeGpuFailure(message.diagnostic) : undefined));
       void this.close();
     }
   };
