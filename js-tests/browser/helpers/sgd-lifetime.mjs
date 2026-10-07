@@ -155,6 +155,21 @@ export const pythonSGDHostChecks = `
 import torch, gc
 from pyodide.ffi import JsException
 def _check_sgd_hosts():
+    for restructure in ('parameters', 'group', 'state'):
+        p = torch.tensor([2.], dtype=torch.float32, requires_grad=True)
+        q = torch.tensor([4.], dtype=torch.float32)
+        p.grad = torch.tensor([3.], dtype=torch.float32)
+        optimizer = torch.optim.SGD([p], lr=0.5)
+        def changed_structure():
+            if restructure == 'parameters': optimizer.param_groups[0]['params'] = [q]
+            elif restructure == 'group': optimizer.param_groups[0] = {'params': [q], 'lr': 0.5}
+            else: optimizer.state[p]['injected'] = 1
+        with torch.no_grad():
+            try: optimizer.step(changed_structure)
+            except NotImplementedError: pass
+            else: raise AssertionError('closure used stale registered roots')
+            assert not (p+p).requires_grad
+        assert p.tolist() == [2.]
     for closed in ('tensor', 'optimizer', 'optimizer-and-tensor'):
         p = torch.tensor([2.], dtype=torch.float32, requires_grad=True)
         p.grad = torch.tensor([3.], dtype=torch.float32)
