@@ -1,5 +1,6 @@
 import { TabgradError, throwCleanupFailures } from "../../shared/errors.js";
-import { getRecordingMode, enterNoGradScope, restoreRecordingMode, observeTensorSynchronously, completeRuntimeSession, shouldWarnUnretainedGradient, finalizeTensorExposure, type RuntimeSession, type Tensor } from "../../runtime/runtime.js";
+import { getRecordingMode, enterNoGradScope, restoreRecordingMode, observeTensorSynchronously, completeRuntimeSession, shouldWarnUnretainedGradient, finalizeTensorExposure, registerOptimizerLease, isOptimizableParameter, type RuntimeSession, type Tensor } from "../../runtime/runtime.js";
+import type { OptimizerLease } from "../../runtime/optimizer-lease.js";
 import type { TensorDevice } from "../../execution/backend.js";
 
 /** Structural subset of Pyodide's borrowed buffer protocol; no interpreter owner. */
@@ -36,6 +37,14 @@ export class PythonRuntimeBridge {
   readonly #exposureKeys = new WeakMap<Tensor, number>();
   #nextExposureKey = 0;
   constructor(readonly session: RuntimeSession) {}
+
+  registerSGD(groups: readonly (readonly Tensor[])[]): OptimizerLease {
+    return registerOptimizerLease(this.session, groups);
+  }
+
+  isOptimizableParameter(handle: Tensor): boolean {
+    return isOptimizableParameter(handle);
+  }
 
   getRecordingMode(): boolean {
     return getRecordingMode(this.session);

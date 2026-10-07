@@ -29,6 +29,7 @@ export class TensorIdentity {
   references = 0;
   retired = false;
   retained = false;
+  readonly detachmentCounter = { value: 0 };
   readonly shape: readonly number[];
   historyVersion: number;
   #snapshot: TensorValue;
@@ -44,14 +45,18 @@ export class TensorIdentity {
   get isView(): boolean { return this.base !== null; }
   get value(): TensorValue {
     if (!this.isView && this.controls.length === 0
+      && this.family.current.detachmentCounter === this.detachmentCounter
       && (this.shape === this.family.current.shape || equalTensorShapes(this.shape, this.family.current.shape))) return this.family.current;
     if (this.#snapshot.storage !== this.family.current.storage || this.#snapshot.version !== this.family.version
+      || this.#snapshot.detachmentCounter !== this.detachmentCounter || this.#snapshot.detachmentVersion !== this.detachmentCounter.value
       || this.#snapshotControls !== this.controls || (this.controls.length === 0 && this.#snapshot.outcomes !== this.family.current.outcomes)) {
       const current = this.family.current;
       this.#snapshot = new TensorValue({ ...current, shape: this.shape }, null, current.storage);
       this.#snapshot.references = 0;
       this.#snapshot.versionCounter = this.family.versionCounter;
       this.#snapshot.version = this.family.version;
+      this.#snapshot.detachmentCounter = this.detachmentCounter;
+      this.#snapshot.detachmentVersion = this.detachmentCounter.value;
       this.#snapshot.outcomes = this.controls.length === 0 ? current.outcomes : captureWriterOutcomes([current.outcomes, this.controls]);
       this.#snapshotControls = this.controls;
     }

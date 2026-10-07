@@ -2,6 +2,9 @@
 import { attachPython, servePythonWorker } from "/python.js";
 import { selectCpuProfile } from "/helpers/cpu-profile.mjs";
 import { pythonBackwardChecks } from "/helpers/backward-cases.mjs";
+import { pythonSGDChecks } from "/helpers/sgd-cases.mjs";
+import { getTestTensorVersion, getTestRuntimeOwnership, getTestRuntimeSemanticOwnership } from "/testing.js";
+import { pythonSGDHostChecks, checkPythonSGDFixedOwners, checkPythonSGDTeardown } from "/helpers/sgd-lifetime.mjs";
 import { pythonBackwardLifetimeChecks, checkPythonBackwardFaults, checkPythonBackwardAliasFault, checkPythonFinalizationFault } from "/helpers/backward-lifetime.mjs";
 
 async function start(event) {
@@ -22,6 +25,7 @@ async function start(event) {
       indexURL: "/pyodide/",
       stdout(text) { postMessage({ kind: "stdout", text }); },
     });
+    interpreter.globals.set("inspect_sgd_version", getTestTensorVersion);
     selectCpuProfile(variant);
     interpreter.runPython("host_value = 40");
     if (gate !== undefined) {
@@ -72,6 +76,9 @@ else:
 `);
       const backwardOracle = await (await fetch('/helpers/python-copy-oracle.json')).json();
       await replacement.runPythonAsync(pythonBackwardChecks(backwardOracle));
+      await replacement.runPythonAsync(pythonSGDChecks(backwardOracle));
+      await replacement.runPythonAsync(pythonSGDHostChecks);
+      for (const length of [32, 4096, 65536]) await checkPythonSGDFixedOwners(replacement, interpreter, length, getTestRuntimeOwnership, getTestRuntimeSemanticOwnership);
       await replacement.runPythonAsync(pythonBackwardLifetimeChecks);
       const { WebAssemblyCpuBackend } = await import('/backends/cpu/cpu-backend.js');
       await checkPythonBackwardFaults(replacement, WebAssemblyCpuBackend);
@@ -82,6 +89,7 @@ else:
     finally { await aliasBinding.close(); }
     const finalizationBinding = await attachPython(interpreter);
     await checkPythonFinalizationFault(finalizationBinding, WebAssemblyCpuBackend);
+    await checkPythonSGDTeardown(attachPython, interpreter, WebAssemblyCpuBackend);
     if (gate !== undefined) interpreter.unregisterJsModule("_test_worker_gate");
     postMessage({ kind: "finished", answer, diagnostics,
       selectedVariant: interpreter.runPython("selected_variant") });

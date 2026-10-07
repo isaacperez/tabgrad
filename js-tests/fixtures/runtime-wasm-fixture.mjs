@@ -74,21 +74,23 @@ function constantBody(value) {
 export function fixtureModule({
   abiVersion = 1,
   arenaBase = 1_048_576,
-  capabilities = 15,
+  capabilities = 31,
   kernelBehavior = "success",
   memoryImportName = "memory",
   omitKernelExport = false,
   omitSumExport = false,
   omitMulExport = false,
   omitExpandExport = false,
+  omitAlphaAddExport = false,
   failureCall,
 } = {}) {
   const i32 = 0x7f;
   const types = section(1, [
-    0x03,
+    0x04,
     ...functionType([], [i32]),
     ...functionType([i32, i32, i32, i32], [i32]),
     ...functionType([i32, i32, i32], [i32]),
+    ...functionType([i32, i32, i32, i32, i32], [i32]),
   ]);
   const imports = section(2, [
     0x01,
@@ -99,7 +101,7 @@ export function fixtureModule({
     ...unsignedLeb128(32),
     ...unsignedLeb128(1024),
   ]);
-  const functions = section(3, [0x07, 0x00, 0x00, 0x00, 0x01, 0x02, 0x01, 0x02]);
+  const functions = section(3, [0x08, 0x00, 0x00, 0x00, 0x01, 0x02, 0x01, 0x02, 0x03]);
   const exportedFunctions = [
     ["tabgrad_abi_version", 0],
     ["tabgrad_capabilities", 1],
@@ -108,6 +110,7 @@ export function fixtureModule({
     ...(omitSumExport ? [] : [["tabgrad_sum_f32", 4]]),
     ...(omitMulExport ? [] : [["tabgrad_mul_f32", 5]]),
     ...(omitExpandExport ? [] : [["tabgrad_expand_f32", 6]]),
+    ...(omitAlphaAddExport ? [] : [["tabgrad_add_alpha_f32", 7]]),
   ];
   const exports = section(7, [
     ...unsignedLeb128(exportedFunctions.length),
@@ -128,7 +131,7 @@ export function fixtureModule({
   const mulBody = [0x00, ...(failureCall === undefined
     ? kernelInstructions : scalarFaultKernel(kernelBehavior, failureCall, "mul"))];
   const code = section(10, [
-    0x07,
+    0x08,
     ...constantBody(abiVersion),
     ...constantBody(capabilities),
     ...constantBody(arenaBase),
@@ -140,6 +143,8 @@ export function fixtureModule({
     ...mulBody,
     ...unsignedLeb128(sumBody.length),
     ...sumBody,
+    ...unsignedLeb128(mulBody.length),
+    ...mulBody,
   ]);
   return Buffer.from([
     0x00, 0x61, 0x73, 0x6d,

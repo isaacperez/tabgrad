@@ -21,7 +21,7 @@ interface BackendContext {
 export class WebAssemblyCpuBackend implements ExecutionBackend {
   readonly synchronousObservation = true;
   readonly capabilities: BackendCapabilities = Object.freeze({
-    device: "cpu", computations: Object.freeze(["add-f32", "mul-f32", "sum-f32", "expand-f32"] as const),
+    device: "cpu", computations: Object.freeze(["add-f32", "add-alpha-f32", "mul-f32", "sum-f32", "expand-f32"] as const),
     gradients: true, maximumTensorBytes: MAXIMUM_ADDRESS,
   });
   readonly #artifactLoader: CpuArtifactLoader;
@@ -146,6 +146,11 @@ export class WebAssemblyCpuBackend implements ExecutionBackend {
         try {
           this.#kernelCalls += 1;
           switch (computation.kind) {
+            case "add-alpha-f32":
+              status = context.exports.tabgrad_add_alpha_f32(
+                inputs[0]!.offset, inputs[1]!.offset, output.offset, length, computation.alphaBits!,
+              );
+              break;
             case "expand-f32":
               status = context.exports.tabgrad_expand_f32(inputs[0]!.offset, output.offset, length);
               break;

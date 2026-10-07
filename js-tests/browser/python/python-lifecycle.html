@@ -7,6 +7,9 @@
       import { pythonGradientProgressChecks, loadGradientProgressOracle } from "/helpers/gradient-progress-cases.mjs";
       import { pythonNoGradChecks } from "/helpers/python-no-grad-cases.mjs";
       import { pythonBackwardChecks } from "/helpers/backward-cases.mjs";
+      import { pythonSGDChecks } from "/helpers/sgd-cases.mjs";
+      import { getTestTensorVersion, getTestRuntimeOwnership, getTestRuntimeSemanticOwnership } from "/testing.js";
+      import { pythonSGDHostChecks, checkPythonSGDFixedOwners, checkPythonSGDTeardown } from "/helpers/sgd-lifetime.mjs";
       import { pythonBackwardLifetimeChecks, checkPythonBackwardFaults, checkPythonBackwardAliasFault, checkPythonFinalizationFault } from "/helpers/backward-lifetime.mjs";
       const token = new URLSearchParams(location.search).get("token");
       async function send(endpoint, value) {
@@ -35,6 +38,7 @@
           import("/pyodide/pyodide.mjs"), import("/python.js"),
         ]);
         const interpreter = await loadPyodide({ indexURL: "/pyodide/" });
+        interpreter.globals.set("inspect_sgd_version", getTestTensorVersion);
         await send("/__phase", { phase: "assets-loaded" });
         interpreter.runPython("host_value = 40");
         const binding = await attachPython(interpreter);
@@ -169,6 +173,9 @@ else:
 `);
           const { WebAssemblyCpuBackend } = await import('/backends/cpu/cpu-backend.js');
           await replacement.runPythonAsync(pythonBackwardChecks(await (await fetch('/helpers/python-copy-oracle.json')).json()));
+          await replacement.runPythonAsync(pythonSGDChecks(await (await fetch('/helpers/python-copy-oracle.json')).json()));
+          await replacement.runPythonAsync(pythonSGDHostChecks);
+          for (const length of [32, 4096, 65536]) await checkPythonSGDFixedOwners(replacement, interpreter, length, getTestRuntimeOwnership, getTestRuntimeSemanticOwnership);
           await replacement.runPythonAsync(pythonBackwardLifetimeChecks);
           await checkPythonBackwardFaults(replacement, WebAssemblyCpuBackend);
         } finally {
@@ -180,6 +187,7 @@ else:
         finally { await aliasBinding.close(); }
         const finalizationBinding = await attachPython(interpreter);
         await checkPythonFinalizationFault(finalizationBinding, WebAssemblyCpuBackend);
+        await checkPythonSGDTeardown(attachPython, interpreter, WebAssemblyCpuBackend);
         await send("/__phase", { phase: "runtime-finished" });
         await send("/__result", { ok: true, answer, pyodide: interpreter.version, jspiAvailable });
       } catch (error) {

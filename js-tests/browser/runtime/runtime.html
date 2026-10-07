@@ -8,6 +8,8 @@
     <script type="module">
       import { checkGradientProgress, loadGradientProgressOracle } from "/helpers/gradient-progress-cases.mjs";
       import { checkBackwardCase, isDirectBackwardCase } from "/helpers/backward-cases.mjs";
+      import { checkSGDCase, isDirectSGDCase } from "/helpers/sgd-cases.mjs";
+      import { checkSGDHostGuards, checkSGDFaults, checkSGDFixedOwners } from "/helpers/sgd-lifetime.mjs";
       import { checkBackwardLifetime, checkBackwardFaults, checkBackwardCleanup } from "/helpers/backward-lifetime.mjs";
       const parameters = new URLSearchParams(location.search);
       const token = parameters.get("token");
@@ -239,7 +241,7 @@
 
       try {
         await reportPhase("application-started");
-        const [{ createRuntimeSession }, { createTestRuntimeSession, getTestRuntimeSemanticOwnership, getTestTensorVersion }] = await Promise.all([
+        const [{ createRuntimeSession }, { createTestRuntimeSession, getTestRuntimeSemanticOwnership, getTestRuntimeOwnership, getTestTensorVersion }] = await Promise.all([
           import("/index.js"),
           import("/testing.js"),
         ]);
@@ -271,12 +273,19 @@
         for (const fixture of backwardOracle.backwardCases.filter(isDirectBackwardCase)) {
           await checkBackwardCase(session, fixture, getTestTensorVersion);
         }
+        for (const fixture of backwardOracle.sgdCases.filter(isDirectSGDCase)) {
+          await checkSGDCase(session, fixture, getTestTensorVersion);
+        }
         await checkBackwardLifetime(session, getTestRuntimeSemanticOwnership);
         await checkBackwardFaults(options => createTestRuntimeSession({ manifestUrl,
           forceVariant: forceVariant === 'auto' ? 'simd128' : forceVariant, ...options }));
         const [{ WebAssemblyCpuBackend }, { ExecutionTicket }] = await Promise.all([
           import('/backends/cpu/cpu-backend.js'), import('/execution/execution-ticket.js'),
         ]);
+        const createSGDSession = options => createTestRuntimeSession({ manifestUrl, forceVariant: forceVariant === 'auto' ? 'simd128' : forceVariant, ...options });
+        await checkSGDHostGuards(createSGDSession, getTestTensorVersion);
+        await checkSGDFaults(createSGDSession, getTestTensorVersion, getTestRuntimeOwnership, getTestRuntimeSemanticOwnership, WebAssemblyCpuBackend);
+        for (const length of [32, 4096, 65536]) await checkSGDFixedOwners(session, length, getTestRuntimeOwnership, getTestRuntimeSemanticOwnership);
         await checkBackwardCleanup(options => createTestRuntimeSession({ manifestUrl,
           forceVariant: forceVariant === 'auto' ? 'simd128' : forceVariant, ...options }), WebAssemblyCpuBackend, ExecutionTicket, getTestRuntimeSemanticOwnership);
         await checkNoGrad(session);

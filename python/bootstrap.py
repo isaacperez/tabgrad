@@ -64,8 +64,9 @@ class _OwnedSourceFinder(FileFinder):
 
 
 def _reject_conflicts() -> None:
-    if "torch.autograd" in sys.modules or "torch.autograd" in jsfinder.jsproxies:
-        raise ImportError("Tabgrad cannot replace the existing module 'torch.autograd'")
+    for child in ("torch.autograd", "torch.optim"):
+        if child in sys.modules or child in jsfinder.jsproxies:
+            raise ImportError(f"Tabgrad cannot replace the existing module {child!r}")
     for name in ("torch", BRIDGE_NAME):
         if (
             name in sys.modules
@@ -110,7 +111,9 @@ class Installation:
         sys.path_importer_cache[str(path)] = importer
         return importer
 
-    def install(self, source: str, autograd_source: str, bridge: object) -> None:
+    def install(
+        self, source: str, autograd_source: str, optim_source: str, bridge: object
+    ) -> None:
         """Reject conflicts before mutation and roll back partial installation."""
         _reject_conflicts()
         try:
@@ -123,6 +126,7 @@ class Installation:
             content = source.encode("utf-8")
             self._write_source(path, content)
             self._write_source(package / "autograd.py", autograd_source.encode("utf-8"))
+            self._write_source(package / "optim.py", optim_source.encode("utf-8"))
             self.import_path = _OwnedImportPath(str(root))
             sys.path.insert(0, self.import_path)
             root_importer = self._install_importer(root)
@@ -139,6 +143,7 @@ class Installation:
                 sys.dont_write_bytecode = True
                 importlib.import_module("torch")
                 importlib.import_module("torch.autograd")
+                importlib.import_module("torch.optim")
             finally:
                 root_importer.modules = None
                 package_importer.modules = None

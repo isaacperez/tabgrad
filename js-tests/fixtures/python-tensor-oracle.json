@@ -7851,6 +7851,2786 @@
       }
     }
   ],
+  "sgdCases": [
+    {
+      "name": "integer-rounding-4611686293305294847",
+      "kind": "integer",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([0.]); p.grad = tensor([1.], False)\ntorch.optim.SGD([p], lr=4611686293305294847).step()\nreport = {'parameter': state(p)}\n",
+      "expected": {
+        "parameter": {
+          "bits": [
+            3732930560
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": true,
+          "version": 1
+        }
+      }
+    },
+    {
+      "name": "integer-rounding-4611686293305294848",
+      "kind": "integer",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([0.]); p.grad = tensor([1.], False)\ntorch.optim.SGD([p], lr=4611686293305294848).step()\nreport = {'parameter': state(p)}\n",
+      "expected": {
+        "parameter": {
+          "bits": [
+            3732930560
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": true,
+          "version": 1
+        }
+      }
+    },
+    {
+      "name": "integer-rounding-4611686293305294849",
+      "kind": "integer",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([0.]); p.grad = tensor([1.], False)\ntorch.optim.SGD([p], lr=4611686293305294849).step()\nreport = {'parameter': state(p)}\n",
+      "expected": {
+        "parameter": {
+          "bits": [
+            3732930561
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": true,
+          "version": 1
+        }
+      }
+    },
+    {
+      "name": "integer-rounding-9223371761976868863",
+      "kind": "integer",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([0.]); p.grad = tensor([1.], False)\ntorch.optim.SGD([p], lr=9223371761976868863).step()\nreport = {'parameter': state(p)}\n",
+      "expected": {
+        "parameter": {
+          "bits": [
+            3741319167
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": true,
+          "version": 1
+        }
+      }
+    },
+    {
+      "name": "integer-rounding-9223371761976868864",
+      "kind": "integer",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([0.]); p.grad = tensor([1.], False)\ntorch.optim.SGD([p], lr=9223371761976868864).step()\nreport = {'parameter': state(p)}\n",
+      "expected": {
+        "parameter": {
+          "bits": [
+            3741319168
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": true,
+          "version": 1
+        }
+      }
+    },
+    {
+      "name": "integer-rounding-9223371761976868865",
+      "kind": "integer",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([0.]); p.grad = tensor([1.], False)\ntorch.optim.SGD([p], lr=9223371761976868865).step()\nreport = {'parameter': state(p)}\n",
+      "expected": {
+        "parameter": {
+          "bits": [
+            3741319168
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": true,
+          "version": 1
+        }
+      }
+    },
+    {
+      "name": "reset-special-view-False",
+      "kind": "reset",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([2.]); q = tensor([4.]); x = tensor([3.]); first = tensor([7.], False)\nwith torch.no_grad(): g = x.view(1)\np.grad = first; q.grad = g; optimizer = torch.optim.SGD([p, q])\nif False:\n    with torch.no_grad(): error = attempt(lambda: optimizer.zero_grad(False))\nelse: error = attempt(lambda: optimizer.zero_grad(False))\nreport = {'error': error, 'first': state(first), 'gradient': state(g), 'associated': q.grad is g}\n",
+      "expected": {
+        "error": "RuntimeError",
+        "first": {
+          "bits": [
+            0
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": false,
+          "version": 1
+        },
+        "gradient": {
+          "bits": [
+            1077936128
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": true,
+          "version": 0
+        },
+        "associated": true
+      }
+    },
+    {
+      "name": "reset-special-view-True",
+      "kind": "reset",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([2.]); q = tensor([4.]); x = tensor([3.]); first = tensor([7.], False)\nwith torch.no_grad(): g = x.view(1)\np.grad = first; q.grad = g; optimizer = torch.optim.SGD([p, q])\nif True:\n    with torch.no_grad(): error = attempt(lambda: optimizer.zero_grad(False))\nelse: error = attempt(lambda: optimizer.zero_grad(False))\nreport = {'error': error, 'first': state(first), 'gradient': state(g), 'associated': q.grad is g}\n",
+      "expected": {
+        "error": "ok",
+        "first": {
+          "bits": [
+            0
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": false,
+          "version": 1
+        },
+        "gradient": {
+          "bits": [
+            0
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": true,
+          "version": 1
+        },
+        "associated": true
+      }
+    },
+    {
+      "name": "training-scalar",
+      "kind": "training",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor(2.)\nalias = p.view(())\noptimizer = torch.optim.SGD([p], lr=0.125)\ntrace = []\nfor index in range(6):\n    optimizer.zero_grad(set_to_none=index % 2 == 0)\n    loss = p.mul(p).add(p).sum()\n    loss.backward()\n    gradient = p.grad\n    returned = optimizer.step()\n    trace.append([state(p), state(alias), state(gradient), p.grad is gradient, returned is None, len(optimizer.state)])\n    with torch.no_grad():\n        p.copy_(p)\nreport = {'trace': trace}\n",
+      "expected": {
+        "trace": [
+          [
+            {
+              "bits": 1068498944,
+              "shape": [],
+              "tracking": true,
+              "version": 1
+            },
+            {
+              "bits": 1068498944,
+              "shape": [],
+              "tracking": true,
+              "version": 1
+            },
+            {
+              "bits": 1084227584,
+              "shape": [],
+              "tracking": false,
+              "version": 1
+            },
+            true,
+            true,
+            0
+          ],
+          [
+            {
+              "bits": 1063780352,
+              "shape": [],
+              "tracking": true,
+              "version": 3
+            },
+            {
+              "bits": 1063780352,
+              "shape": [],
+              "tracking": true,
+              "version": 3
+            },
+            {
+              "bits": 1081081856,
+              "shape": [],
+              "tracking": false,
+              "version": 3
+            },
+            true,
+            true,
+            0
+          ],
+          [
+            {
+              "bits": 1057882112,
+              "shape": [],
+              "tracking": true,
+              "version": 5
+            },
+            {
+              "bits": 1057882112,
+              "shape": [],
+              "tracking": true,
+              "version": 5
+            },
+            {
+              "bits": 1077149696,
+              "shape": [],
+              "tracking": false,
+              "version": 1
+            },
+            true,
+            true,
+            0
+          ],
+          [
+            {
+              "bits": 1049952256,
+              "shape": [],
+              "tracking": true,
+              "version": 7
+            },
+            {
+              "bits": 1049952256,
+              "shape": [],
+              "tracking": true,
+              "version": 7
+            },
+            {
+              "bits": 1074200576,
+              "shape": [],
+              "tracking": false,
+              "version": 3
+            },
+            true,
+            true,
+            0
+          ],
+          [
+            {
+              "bits": 1035927552,
+              "shape": [],
+              "tracking": true,
+              "version": 9
+            },
+            {
+              "bits": 1035927552,
+              "shape": [],
+              "tracking": true,
+              "version": 9
+            },
+            {
+              "bits": 1070235648,
+              "shape": [],
+              "tracking": false,
+              "version": 1
+            },
+            true,
+            true,
+            0
+          ],
+          [
+            {
+              "bits": 3177283584,
+              "shape": [],
+              "tracking": true,
+              "version": 11
+            },
+            {
+              "bits": 3177283584,
+              "shape": [],
+              "tracking": true,
+              "version": 11
+            },
+            {
+              "bits": 1066917888,
+              "shape": [],
+              "tracking": false,
+              "version": 3
+            },
+            true,
+            true,
+            0
+          ]
+        ]
+      }
+    },
+    {
+      "name": "training-singleton",
+      "kind": "training",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([[[2.]]])\nalias = p.view((1, 1, 1))\noptimizer = torch.optim.SGD([p], lr=0.125)\ntrace = []\nfor index in range(6):\n    optimizer.zero_grad(set_to_none=index % 2 == 0)\n    loss = p.mul(p).add(p).sum()\n    loss.backward()\n    gradient = p.grad\n    returned = optimizer.step()\n    trace.append([state(p), state(alias), state(gradient), p.grad is gradient, returned is None, len(optimizer.state)])\n    with torch.no_grad():\n        p.copy_(p)\nreport = {'trace': trace}\n",
+      "expected": {
+        "trace": [
+          [
+            {
+              "bits": [
+                [
+                  [
+                    1068498944
+                  ]
+                ]
+              ],
+              "shape": [
+                1,
+                1,
+                1
+              ],
+              "tracking": true,
+              "version": 1
+            },
+            {
+              "bits": [
+                [
+                  [
+                    1068498944
+                  ]
+                ]
+              ],
+              "shape": [
+                1,
+                1,
+                1
+              ],
+              "tracking": true,
+              "version": 1
+            },
+            {
+              "bits": [
+                [
+                  [
+                    1084227584
+                  ]
+                ]
+              ],
+              "shape": [
+                1,
+                1,
+                1
+              ],
+              "tracking": false,
+              "version": 1
+            },
+            true,
+            true,
+            0
+          ],
+          [
+            {
+              "bits": [
+                [
+                  [
+                    1063780352
+                  ]
+                ]
+              ],
+              "shape": [
+                1,
+                1,
+                1
+              ],
+              "tracking": true,
+              "version": 3
+            },
+            {
+              "bits": [
+                [
+                  [
+                    1063780352
+                  ]
+                ]
+              ],
+              "shape": [
+                1,
+                1,
+                1
+              ],
+              "tracking": true,
+              "version": 3
+            },
+            {
+              "bits": [
+                [
+                  [
+                    1081081856
+                  ]
+                ]
+              ],
+              "shape": [
+                1,
+                1,
+                1
+              ],
+              "tracking": false,
+              "version": 3
+            },
+            true,
+            true,
+            0
+          ],
+          [
+            {
+              "bits": [
+                [
+                  [
+                    1057882112
+                  ]
+                ]
+              ],
+              "shape": [
+                1,
+                1,
+                1
+              ],
+              "tracking": true,
+              "version": 5
+            },
+            {
+              "bits": [
+                [
+                  [
+                    1057882112
+                  ]
+                ]
+              ],
+              "shape": [
+                1,
+                1,
+                1
+              ],
+              "tracking": true,
+              "version": 5
+            },
+            {
+              "bits": [
+                [
+                  [
+                    1077149696
+                  ]
+                ]
+              ],
+              "shape": [
+                1,
+                1,
+                1
+              ],
+              "tracking": false,
+              "version": 1
+            },
+            true,
+            true,
+            0
+          ],
+          [
+            {
+              "bits": [
+                [
+                  [
+                    1049952256
+                  ]
+                ]
+              ],
+              "shape": [
+                1,
+                1,
+                1
+              ],
+              "tracking": true,
+              "version": 7
+            },
+            {
+              "bits": [
+                [
+                  [
+                    1049952256
+                  ]
+                ]
+              ],
+              "shape": [
+                1,
+                1,
+                1
+              ],
+              "tracking": true,
+              "version": 7
+            },
+            {
+              "bits": [
+                [
+                  [
+                    1074200576
+                  ]
+                ]
+              ],
+              "shape": [
+                1,
+                1,
+                1
+              ],
+              "tracking": false,
+              "version": 3
+            },
+            true,
+            true,
+            0
+          ],
+          [
+            {
+              "bits": [
+                [
+                  [
+                    1035927552
+                  ]
+                ]
+              ],
+              "shape": [
+                1,
+                1,
+                1
+              ],
+              "tracking": true,
+              "version": 9
+            },
+            {
+              "bits": [
+                [
+                  [
+                    1035927552
+                  ]
+                ]
+              ],
+              "shape": [
+                1,
+                1,
+                1
+              ],
+              "tracking": true,
+              "version": 9
+            },
+            {
+              "bits": [
+                [
+                  [
+                    1070235648
+                  ]
+                ]
+              ],
+              "shape": [
+                1,
+                1,
+                1
+              ],
+              "tracking": false,
+              "version": 1
+            },
+            true,
+            true,
+            0
+          ],
+          [
+            {
+              "bits": [
+                [
+                  [
+                    3177283584
+                  ]
+                ]
+              ],
+              "shape": [
+                1,
+                1,
+                1
+              ],
+              "tracking": true,
+              "version": 11
+            },
+            {
+              "bits": [
+                [
+                  [
+                    3177283584
+                  ]
+                ]
+              ],
+              "shape": [
+                1,
+                1,
+                1
+              ],
+              "tracking": true,
+              "version": 11
+            },
+            {
+              "bits": [
+                [
+                  [
+                    1066917888
+                  ]
+                ]
+              ],
+              "shape": [
+                1,
+                1,
+                1
+              ],
+              "tracking": false,
+              "version": 3
+            },
+            true,
+            true,
+            0
+          ]
+        ]
+      }
+    },
+    {
+      "name": "training-matrix",
+      "kind": "training",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([[1., 2.], [3., 4.]])\nalias = p.view((4,))\noptimizer = torch.optim.SGD([p], lr=0.125)\ntrace = []\nfor index in range(6):\n    optimizer.zero_grad(set_to_none=index % 2 == 0)\n    loss = p.mul(p).add(p).sum()\n    loss.backward()\n    gradient = p.grad\n    returned = optimizer.step()\n    trace.append([state(p), state(alias), state(gradient), p.grad is gradient, returned is None, len(optimizer.state)])\n    with torch.no_grad():\n        p.copy_(p)\nreport = {'trace': trace}\n",
+      "expected": {
+        "trace": [
+          [
+            {
+              "bits": [
+                [
+                  1059061760,
+                  1068498944
+                ],
+                [
+                  1074266112,
+                  1077411840
+                ]
+              ],
+              "shape": [
+                2,
+                2
+              ],
+              "tracking": true,
+              "version": 1
+            },
+            {
+              "bits": [
+                1059061760,
+                1068498944,
+                1074266112,
+                1077411840
+              ],
+              "shape": [
+                4
+              ],
+              "tracking": true,
+              "version": 1
+            },
+            {
+              "bits": [
+                [
+                  1077936128,
+                  1084227584
+                ],
+                [
+                  1088421888,
+                  1091567616
+                ]
+              ],
+              "shape": [
+                2,
+                2
+              ],
+              "tracking": false,
+              "version": 1
+            },
+            true,
+            true,
+            0
+          ],
+          [
+            {
+              "bits": [
+                [
+                  1051721728,
+                  1063780352
+                ],
+                [
+                  1069285376,
+                  1073872896
+                ]
+              ],
+              "shape": [
+                2,
+                2
+              ],
+              "tracking": true,
+              "version": 3
+            },
+            {
+              "bits": [
+                1051721728,
+                1063780352,
+                1069285376,
+                1073872896
+              ],
+              "shape": [
+                4
+              ],
+              "tracking": true,
+              "version": 3
+            },
+            {
+              "bits": [
+                [
+                  1074790400,
+                  1081081856
+                ],
+                [
+                  1084751872,
+                  1087897600
+                ]
+              ],
+              "shape": [
+                2,
+                2
+              ],
+              "tracking": false,
+              "version": 3
+            },
+            true,
+            true,
+            0
+          ],
+          [
+            {
+              "bits": [
+                [
+                  1040711680,
+                  1057882112
+                ],
+                [
+                  1064960000,
+                  1068695552
+                ]
+              ],
+              "shape": [
+                2,
+                2
+              ],
+              "tracking": true,
+              "version": 5
+            },
+            {
+              "bits": [
+                1040711680,
+                1057882112,
+                1064960000,
+                1068695552
+              ],
+              "shape": [
+                4
+              ],
+              "tracking": true,
+              "version": 5
+            },
+            {
+              "bits": [
+                [
+                  1071120384,
+                  1077149696
+                ],
+                [
+                  1081868288,
+                  1084358656
+                ]
+              ],
+              "shape": [
+                2,
+                2
+              ],
+              "tracking": false,
+              "version": 1
+            },
+            true,
+            true,
+            0
+          ],
+          [
+            {
+              "bits": [
+                [
+                  3167748096,
+                  1049952256
+                ],
+                [
+                  1058766848,
+                  1064075264
+                ]
+              ],
+              "shape": [
+                2,
+                2
+              ],
+              "tracking": true,
+              "version": 7
+            },
+            {
+              "bits": [
+                3167748096,
+                1049952256,
+                1058766848,
+                1064075264
+              ],
+              "shape": [
+                4
+              ],
+              "tracking": true,
+              "version": 7
+            },
+            {
+              "bits": [
+                [
+                  1067581440,
+                  1074200576
+                ],
+                [
+                  1077739520,
+                  1081278464
+                ]
+              ],
+              "shape": [
+                2,
+                2
+              ],
+              "tracking": false,
+              "version": 3
+            },
+            true,
+            true,
+            0
+          ],
+          [
+            {
+              "bits": [
+                [
+                  3188948992,
+                  1035927552
+                ],
+                [
+                  1051279360,
+                  1058103296
+                ]
+              ],
+              "shape": [
+                2,
+                2
+              ],
+              "tracking": true,
+              "version": 9
+            },
+            {
+              "bits": [
+                3188948992,
+                1035927552,
+                1051279360,
+                1058103296
+              ],
+              "shape": [
+                4
+              ],
+              "tracking": true,
+              "version": 9
+            },
+            {
+              "bits": [
+                [
+                  1064501248,
+                  1070235648
+                ],
+                [
+                  1074642944,
+                  1077297152
+                ]
+              ],
+              "shape": [
+                2,
+                2
+              ],
+              "tracking": false,
+              "version": 1
+            },
+            true,
+            true,
+            0
+          ],
+          [
+            {
+              "bits": [
+                [
+                  3194920960,
+                  3177283584
+                ],
+                [
+                  1039908864,
+                  1050284032
+                ]
+              ],
+              "shape": [
+                2,
+                2
+              ],
+              "tracking": true,
+              "version": 11
+            },
+            {
+              "bits": [
+                3194920960,
+                3177283584,
+                1039908864,
+                1050284032
+              ],
+              "shape": [
+                4
+              ],
+              "tracking": true,
+              "version": 11
+            },
+            {
+              "bits": [
+                [
+                  1060519936,
+                  1066917888
+                ],
+                [
+                  1070899200,
+                  1074311168
+                ]
+              ],
+              "shape": [
+                2,
+                2
+              ],
+              "tracking": false,
+              "version": 3
+            },
+            true,
+            true,
+            0
+          ]
+        ]
+      }
+    },
+    {
+      "name": "training-empty",
+      "kind": "training",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([[], []])\nalias = p.view((0,))\noptimizer = torch.optim.SGD([p], lr=0.125)\ntrace = []\nfor index in range(6):\n    optimizer.zero_grad(set_to_none=index % 2 == 0)\n    loss = p.mul(p).add(p).sum()\n    loss.backward()\n    gradient = p.grad\n    returned = optimizer.step()\n    trace.append([state(p), state(alias), state(gradient), p.grad is gradient, returned is None, len(optimizer.state)])\n    with torch.no_grad():\n        p.copy_(p)\nreport = {'trace': trace}\n",
+      "expected": {
+        "trace": [
+          [
+            {
+              "bits": [
+                [],
+                []
+              ],
+              "shape": [
+                2,
+                0
+              ],
+              "tracking": true,
+              "version": 1
+            },
+            {
+              "bits": [],
+              "shape": [
+                0
+              ],
+              "tracking": true,
+              "version": 1
+            },
+            {
+              "bits": [
+                [],
+                []
+              ],
+              "shape": [
+                2,
+                0
+              ],
+              "tracking": false,
+              "version": 1
+            },
+            true,
+            true,
+            0
+          ],
+          [
+            {
+              "bits": [
+                [],
+                []
+              ],
+              "shape": [
+                2,
+                0
+              ],
+              "tracking": true,
+              "version": 3
+            },
+            {
+              "bits": [],
+              "shape": [
+                0
+              ],
+              "tracking": true,
+              "version": 3
+            },
+            {
+              "bits": [
+                [],
+                []
+              ],
+              "shape": [
+                2,
+                0
+              ],
+              "tracking": false,
+              "version": 3
+            },
+            true,
+            true,
+            0
+          ],
+          [
+            {
+              "bits": [
+                [],
+                []
+              ],
+              "shape": [
+                2,
+                0
+              ],
+              "tracking": true,
+              "version": 5
+            },
+            {
+              "bits": [],
+              "shape": [
+                0
+              ],
+              "tracking": true,
+              "version": 5
+            },
+            {
+              "bits": [
+                [],
+                []
+              ],
+              "shape": [
+                2,
+                0
+              ],
+              "tracking": false,
+              "version": 1
+            },
+            true,
+            true,
+            0
+          ],
+          [
+            {
+              "bits": [
+                [],
+                []
+              ],
+              "shape": [
+                2,
+                0
+              ],
+              "tracking": true,
+              "version": 7
+            },
+            {
+              "bits": [],
+              "shape": [
+                0
+              ],
+              "tracking": true,
+              "version": 7
+            },
+            {
+              "bits": [
+                [],
+                []
+              ],
+              "shape": [
+                2,
+                0
+              ],
+              "tracking": false,
+              "version": 3
+            },
+            true,
+            true,
+            0
+          ],
+          [
+            {
+              "bits": [
+                [],
+                []
+              ],
+              "shape": [
+                2,
+                0
+              ],
+              "tracking": true,
+              "version": 9
+            },
+            {
+              "bits": [],
+              "shape": [
+                0
+              ],
+              "tracking": true,
+              "version": 9
+            },
+            {
+              "bits": [
+                [],
+                []
+              ],
+              "shape": [
+                2,
+                0
+              ],
+              "tracking": false,
+              "version": 1
+            },
+            true,
+            true,
+            0
+          ],
+          [
+            {
+              "bits": [
+                [],
+                []
+              ],
+              "shape": [
+                2,
+                0
+              ],
+              "tracking": true,
+              "version": 11
+            },
+            {
+              "bits": [],
+              "shape": [
+                0
+              ],
+              "tracking": true,
+              "version": 11
+            },
+            {
+              "bits": [
+                [],
+                []
+              ],
+              "shape": [
+                2,
+                0
+              ],
+              "tracking": false,
+              "version": 3
+            },
+            true,
+            true,
+            0
+          ]
+        ]
+      }
+    },
+    {
+      "name": "groups-and-occurrences",
+      "kind": "groups",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([2.]); q = tensor([4.], False)\np.grad = tensor([3.], False); q.grad = tensor([5.], False)\nfirst = {'params': (p, p), 'lr': 0.5, 'tag': 'inert'}\nempty = {'params': [], 'lr': -7.}\nlast = {'params': [q], 'lr': -0.25}\nwith warnings.catch_warnings(record=True) as recorded:\n    warnings.simplefilter('always')\n    optimizer = torch.optim.SGD([first, empty, last])\nold_gradient = p.grad\nreturned = optimizer.step()\nfirst['lr'] = 0.\noptimizer.step()\nreport = {'p': state(p), 'q': state(q), 'same_group': optimizer.param_groups[0] is first,\n    'same_param': first['params'][0] is p, 'same_gradient': p.grad is old_gradient,\n    'warnings': [warning.category.__name__ for warning in recorded], 'state': len(optimizer.state), 'return': returned is None}\n",
+      "expected": {
+        "p": {
+          "bits": [
+            3212836864
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": true,
+          "version": 4
+        },
+        "q": {
+          "bits": [
+            1087373312
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": false,
+          "version": 2
+        },
+        "same_group": true,
+        "same_param": true,
+        "same_gradient": true,
+        "warnings": [
+          "UserWarning"
+        ],
+        "state": 0,
+        "return": true
+      }
+    },
+    {
+      "name": "crossed-alias-progress",
+      "kind": "alias",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([2.]); q = tensor([4.])\np.grad = q; q.grad = p\noptimizer = torch.optim.SGD([p, q], lr=0.5)\noptimizer.step()\nreport = {'p': state(p), 'q': state(q), 'p_grad': p.grad is q, 'q_grad': q.grad is p}\n",
+      "expected": {
+        "p": {
+          "bits": [
+            0
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": true,
+          "version": 1
+        },
+        "q": {
+          "bits": [
+            1082130432
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": true,
+          "version": 1
+        },
+        "p_grad": true,
+        "q_grad": true
+      }
+    },
+    {
+      "name": "coefficient-absent-0.1",
+      "kind": "coefficient",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([1.]); p.grad = None\noptimizer = torch.optim.SGD([p])\noptimizer.param_groups[0]['lr'] = 0.1\nerror = attempt(optimizer.step)\nreport = {'error': error, 'parameter': state(p), 'gradient': state(p.grad)}\n",
+      "expected": {
+        "error": "ok",
+        "parameter": {
+          "bits": [
+            1065353216
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": true,
+          "version": 0
+        },
+        "gradient": null
+      }
+    },
+    {
+      "name": "coefficient-present-0.1",
+      "kind": "coefficient",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([50.29061508178711]); p.grad = tensor([502.9061279296875], False)\noptimizer = torch.optim.SGD([p])\noptimizer.param_groups[0]['lr'] = 0.1\nerror = attempt(optimizer.step)\nreport = {'error': error, 'parameter': state(p), 'gradient': state(p.grad)}\n",
+      "expected": {
+        "error": "ok",
+        "parameter": {
+          "bits": [
+            902733416
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": true,
+          "version": 1
+        },
+        "gradient": {
+          "bits": [
+            1140552700
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": false,
+          "version": 0
+        }
+      }
+    },
+    {
+      "name": "coefficient-empty-0.1",
+      "kind": "coefficient",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([]); p.grad = tensor([], False)\noptimizer = torch.optim.SGD([p])\noptimizer.param_groups[0]['lr'] = 0.1\nerror = attempt(optimizer.step)\nreport = {'error': error, 'parameter': state(p), 'gradient': state(p.grad)}\n",
+      "expected": {
+        "error": "ok",
+        "parameter": {
+          "bits": [],
+          "shape": [
+            0
+          ],
+          "tracking": true,
+          "version": 1
+        },
+        "gradient": {
+          "bits": [],
+          "shape": [
+            0
+          ],
+          "tracking": false,
+          "version": 0
+        }
+      }
+    },
+    {
+      "name": "coefficient-absent-True",
+      "kind": "coefficient",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([1.]); p.grad = None\noptimizer = torch.optim.SGD([p])\noptimizer.param_groups[0]['lr'] = True\nerror = attempt(optimizer.step)\nreport = {'error': error, 'parameter': state(p), 'gradient': state(p.grad)}\n",
+      "expected": {
+        "error": "ok",
+        "parameter": {
+          "bits": [
+            1065353216
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": true,
+          "version": 0
+        },
+        "gradient": null
+      }
+    },
+    {
+      "name": "coefficient-present-True",
+      "kind": "coefficient",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([50.29061508178711]); p.grad = tensor([502.9061279296875], False)\noptimizer = torch.optim.SGD([p])\noptimizer.param_groups[0]['lr'] = True\nerror = attempt(optimizer.step)\nreport = {'error': error, 'parameter': state(p), 'gradient': state(p.grad)}\n",
+      "expected": {
+        "error": "ok",
+        "parameter": {
+          "bits": [
+            3286388425
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": true,
+          "version": 1
+        },
+        "gradient": {
+          "bits": [
+            1140552700
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": false,
+          "version": 0
+        }
+      }
+    },
+    {
+      "name": "coefficient-empty-True",
+      "kind": "coefficient",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([]); p.grad = tensor([], False)\noptimizer = torch.optim.SGD([p])\noptimizer.param_groups[0]['lr'] = True\nerror = attempt(optimizer.step)\nreport = {'error': error, 'parameter': state(p), 'gradient': state(p.grad)}\n",
+      "expected": {
+        "error": "ok",
+        "parameter": {
+          "bits": [],
+          "shape": [
+            0
+          ],
+          "tracking": true,
+          "version": 1
+        },
+        "gradient": {
+          "bits": [],
+          "shape": [
+            0
+          ],
+          "tracking": false,
+          "version": 0
+        }
+      }
+    },
+    {
+      "name": "coefficient-absent-0.",
+      "kind": "coefficient",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([1.]); p.grad = None\noptimizer = torch.optim.SGD([p])\noptimizer.param_groups[0]['lr'] = 0.\nerror = attempt(optimizer.step)\nreport = {'error': error, 'parameter': state(p), 'gradient': state(p.grad)}\n",
+      "expected": {
+        "error": "ok",
+        "parameter": {
+          "bits": [
+            1065353216
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": true,
+          "version": 0
+        },
+        "gradient": null
+      }
+    },
+    {
+      "name": "coefficient-present-0.",
+      "kind": "coefficient",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([50.29061508178711]); p.grad = tensor([502.9061279296875], False)\noptimizer = torch.optim.SGD([p])\noptimizer.param_groups[0]['lr'] = 0.\nerror = attempt(optimizer.step)\nreport = {'error': error, 'parameter': state(p), 'gradient': state(p.grad)}\n",
+      "expected": {
+        "error": "ok",
+        "parameter": {
+          "bits": [
+            1112091031
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": true,
+          "version": 1
+        },
+        "gradient": {
+          "bits": [
+            1140552700
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": false,
+          "version": 0
+        }
+      }
+    },
+    {
+      "name": "coefficient-empty-0.",
+      "kind": "coefficient",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([]); p.grad = tensor([], False)\noptimizer = torch.optim.SGD([p])\noptimizer.param_groups[0]['lr'] = 0.\nerror = attempt(optimizer.step)\nreport = {'error': error, 'parameter': state(p), 'gradient': state(p.grad)}\n",
+      "expected": {
+        "error": "ok",
+        "parameter": {
+          "bits": [],
+          "shape": [
+            0
+          ],
+          "tracking": true,
+          "version": 1
+        },
+        "gradient": {
+          "bits": [],
+          "shape": [
+            0
+          ],
+          "tracking": false,
+          "version": 0
+        }
+      }
+    },
+    {
+      "name": "coefficient-absent-float('inf')",
+      "kind": "coefficient",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([1.]); p.grad = None\noptimizer = torch.optim.SGD([p])\noptimizer.param_groups[0]['lr'] = float('inf')\nerror = attempt(optimizer.step)\nreport = {'error': error, 'parameter': state(p), 'gradient': state(p.grad)}\n",
+      "expected": {
+        "error": "ok",
+        "parameter": {
+          "bits": [
+            1065353216
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": true,
+          "version": 0
+        },
+        "gradient": null
+      }
+    },
+    {
+      "name": "coefficient-present-float('inf')",
+      "kind": "coefficient",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([50.29061508178711]); p.grad = tensor([502.9061279296875], False)\noptimizer = torch.optim.SGD([p])\noptimizer.param_groups[0]['lr'] = float('inf')\nerror = attempt(optimizer.step)\nreport = {'error': error, 'parameter': state(p), 'gradient': state(p.grad)}\n",
+      "expected": {
+        "error": "ok",
+        "parameter": {
+          "bits": [
+            4286578688
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": true,
+          "version": 1
+        },
+        "gradient": {
+          "bits": [
+            1140552700
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": false,
+          "version": 0
+        }
+      }
+    },
+    {
+      "name": "coefficient-empty-float('inf')",
+      "kind": "coefficient",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([]); p.grad = tensor([], False)\noptimizer = torch.optim.SGD([p])\noptimizer.param_groups[0]['lr'] = float('inf')\nerror = attempt(optimizer.step)\nreport = {'error': error, 'parameter': state(p), 'gradient': state(p.grad)}\n",
+      "expected": {
+        "error": "ok",
+        "parameter": {
+          "bits": [],
+          "shape": [
+            0
+          ],
+          "tracking": true,
+          "version": 1
+        },
+        "gradient": {
+          "bits": [],
+          "shape": [
+            0
+          ],
+          "tracking": false,
+          "version": 0
+        }
+      }
+    },
+    {
+      "name": "coefficient-absent-float('nan')",
+      "kind": "coefficient",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([1.]); p.grad = None\noptimizer = torch.optim.SGD([p])\noptimizer.param_groups[0]['lr'] = float('nan')\nerror = attempt(optimizer.step)\nreport = {'error': error, 'parameter': state(p), 'gradient': state(p.grad)}\n",
+      "expected": {
+        "error": "ok",
+        "parameter": {
+          "bits": [
+            1065353216
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": true,
+          "version": 0
+        },
+        "gradient": null
+      }
+    },
+    {
+      "name": "coefficient-present-float('nan')",
+      "kind": "coefficient",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([50.29061508178711]); p.grad = tensor([502.9061279296875], False)\noptimizer = torch.optim.SGD([p])\noptimizer.param_groups[0]['lr'] = float('nan')\nerror = attempt(optimizer.step)\nreport = {'error': error, 'parameter': state(p), 'gradient': state(p.grad)}\n",
+      "expected": {
+        "error": "ok",
+        "parameter": {
+          "bits": [
+            "nan"
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": true,
+          "version": 1
+        },
+        "gradient": {
+          "bits": [
+            1140552700
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": false,
+          "version": 0
+        }
+      }
+    },
+    {
+      "name": "coefficient-empty-float('nan')",
+      "kind": "coefficient",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([]); p.grad = tensor([], False)\noptimizer = torch.optim.SGD([p])\noptimizer.param_groups[0]['lr'] = float('nan')\nerror = attempt(optimizer.step)\nreport = {'error': error, 'parameter': state(p), 'gradient': state(p.grad)}\n",
+      "expected": {
+        "error": "ok",
+        "parameter": {
+          "bits": [],
+          "shape": [
+            0
+          ],
+          "tracking": true,
+          "version": 1
+        },
+        "gradient": {
+          "bits": [],
+          "shape": [
+            0
+          ],
+          "tracking": false,
+          "version": 0
+        }
+      }
+    },
+    {
+      "name": "coefficient-absent-2**63",
+      "kind": "coefficient",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([1.]); p.grad = None\noptimizer = torch.optim.SGD([p])\noptimizer.param_groups[0]['lr'] = 2**63\nerror = attempt(optimizer.step)\nreport = {'error': error, 'parameter': state(p), 'gradient': state(p.grad)}\n",
+      "expected": {
+        "error": "ok",
+        "parameter": {
+          "bits": [
+            1065353216
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": true,
+          "version": 0
+        },
+        "gradient": null
+      }
+    },
+    {
+      "name": "coefficient-present-2**63",
+      "kind": "coefficient",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([50.29061508178711]); p.grad = tensor([502.9061279296875], False)\noptimizer = torch.optim.SGD([p])\noptimizer.param_groups[0]['lr'] = 2**63\nerror = attempt(optimizer.step)\nreport = {'error': error, 'parameter': state(p), 'gradient': state(p.grad)}\n",
+      "expected": {
+        "error": "ok",
+        "parameter": {
+          "bits": [
+            3816518652
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": true,
+          "version": 1
+        },
+        "gradient": {
+          "bits": [
+            1140552700
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": false,
+          "version": 0
+        }
+      }
+    },
+    {
+      "name": "coefficient-empty-2**63",
+      "kind": "coefficient",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([]); p.grad = tensor([], False)\noptimizer = torch.optim.SGD([p])\noptimizer.param_groups[0]['lr'] = 2**63\nerror = attempt(optimizer.step)\nreport = {'error': error, 'parameter': state(p), 'gradient': state(p.grad)}\n",
+      "expected": {
+        "error": "ok",
+        "parameter": {
+          "bits": [],
+          "shape": [
+            0
+          ],
+          "tracking": true,
+          "version": 1
+        },
+        "gradient": {
+          "bits": [],
+          "shape": [
+            0
+          ],
+          "tracking": false,
+          "version": 0
+        }
+      }
+    },
+    {
+      "name": "coefficient-absent-2**63+1",
+      "kind": "coefficient",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([1.]); p.grad = None\noptimizer = torch.optim.SGD([p])\noptimizer.param_groups[0]['lr'] = 2**63+1\nerror = attempt(optimizer.step)\nreport = {'error': error, 'parameter': state(p), 'gradient': state(p.grad)}\n",
+      "expected": {
+        "error": "ok",
+        "parameter": {
+          "bits": [
+            1065353216
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": true,
+          "version": 0
+        },
+        "gradient": null
+      }
+    },
+    {
+      "name": "coefficient-present-2**63+1",
+      "kind": "coefficient",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([50.29061508178711]); p.grad = tensor([502.9061279296875], False)\noptimizer = torch.optim.SGD([p])\noptimizer.param_groups[0]['lr'] = 2**63+1\nerror = attempt(optimizer.step)\nreport = {'error': error, 'parameter': state(p), 'gradient': state(p.grad)}\n",
+      "expected": {
+        "error": "OverflowError",
+        "parameter": {
+          "bits": [
+            1112091031
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": true,
+          "version": 0
+        },
+        "gradient": {
+          "bits": [
+            1140552700
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": false,
+          "version": 0
+        }
+      }
+    },
+    {
+      "name": "coefficient-empty-2**63+1",
+      "kind": "coefficient",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([]); p.grad = tensor([], False)\noptimizer = torch.optim.SGD([p])\noptimizer.param_groups[0]['lr'] = 2**63+1\nerror = attempt(optimizer.step)\nreport = {'error': error, 'parameter': state(p), 'gradient': state(p.grad)}\n",
+      "expected": {
+        "error": "OverflowError",
+        "parameter": {
+          "bits": [],
+          "shape": [
+            0
+          ],
+          "tracking": true,
+          "version": 0
+        },
+        "gradient": {
+          "bits": [],
+          "shape": [
+            0
+          ],
+          "tracking": false,
+          "version": 0
+        }
+      }
+    },
+    {
+      "name": "coefficient-absent-1e39",
+      "kind": "coefficient",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([1.]); p.grad = None\noptimizer = torch.optim.SGD([p])\noptimizer.param_groups[0]['lr'] = 1e39\nerror = attempt(optimizer.step)\nreport = {'error': error, 'parameter': state(p), 'gradient': state(p.grad)}\n",
+      "expected": {
+        "error": "ok",
+        "parameter": {
+          "bits": [
+            1065353216
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": true,
+          "version": 0
+        },
+        "gradient": null
+      }
+    },
+    {
+      "name": "coefficient-present-1e39",
+      "kind": "coefficient",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([50.29061508178711]); p.grad = tensor([502.9061279296875], False)\noptimizer = torch.optim.SGD([p])\noptimizer.param_groups[0]['lr'] = 1e39\nerror = attempt(optimizer.step)\nreport = {'error': error, 'parameter': state(p), 'gradient': state(p.grad)}\n",
+      "expected": {
+        "error": "RuntimeError",
+        "parameter": {
+          "bits": [
+            1112091031
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": true,
+          "version": 0
+        },
+        "gradient": {
+          "bits": [
+            1140552700
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": false,
+          "version": 0
+        }
+      }
+    },
+    {
+      "name": "coefficient-empty-1e39",
+      "kind": "coefficient",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([]); p.grad = tensor([], False)\noptimizer = torch.optim.SGD([p])\noptimizer.param_groups[0]['lr'] = 1e39\nerror = attempt(optimizer.step)\nreport = {'error': error, 'parameter': state(p), 'gradient': state(p.grad)}\n",
+      "expected": {
+        "error": "RuntimeError",
+        "parameter": {
+          "bits": [],
+          "shape": [
+            0
+          ],
+          "tracking": true,
+          "version": 0
+        },
+        "gradient": {
+          "bits": [],
+          "shape": [
+            0
+          ],
+          "tracking": false,
+          "version": 0
+        }
+      }
+    },
+    {
+      "name": "coefficient-absent-None",
+      "kind": "coefficient",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([1.]); p.grad = None\noptimizer = torch.optim.SGD([p])\noptimizer.param_groups[0]['lr'] = None\nerror = attempt(optimizer.step)\nreport = {'error': error, 'parameter': state(p), 'gradient': state(p.grad)}\n",
+      "expected": {
+        "error": "ok",
+        "parameter": {
+          "bits": [
+            1065353216
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": true,
+          "version": 0
+        },
+        "gradient": null
+      }
+    },
+    {
+      "name": "coefficient-present-None",
+      "kind": "coefficient",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([50.29061508178711]); p.grad = tensor([502.9061279296875], False)\noptimizer = torch.optim.SGD([p])\noptimizer.param_groups[0]['lr'] = None\nerror = attempt(optimizer.step)\nreport = {'error': error, 'parameter': state(p), 'gradient': state(p.grad)}\n",
+      "expected": {
+        "error": "TypeError",
+        "parameter": {
+          "bits": [
+            1112091031
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": true,
+          "version": 0
+        },
+        "gradient": {
+          "bits": [
+            1140552700
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": false,
+          "version": 0
+        }
+      }
+    },
+    {
+      "name": "coefficient-empty-None",
+      "kind": "coefficient",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([]); p.grad = tensor([], False)\noptimizer = torch.optim.SGD([p])\noptimizer.param_groups[0]['lr'] = None\nerror = attempt(optimizer.step)\nreport = {'error': error, 'parameter': state(p), 'gradient': state(p.grad)}\n",
+      "expected": {
+        "error": "TypeError",
+        "parameter": {
+          "bits": [],
+          "shape": [
+            0
+          ],
+          "tracking": true,
+          "version": 0
+        },
+        "gradient": {
+          "bits": [],
+          "shape": [
+            0
+          ],
+          "tracking": false,
+          "version": 0
+        }
+      }
+    },
+    {
+      "name": "coefficient-absent-'invalid'",
+      "kind": "coefficient",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([1.]); p.grad = None\noptimizer = torch.optim.SGD([p])\noptimizer.param_groups[0]['lr'] = 'invalid'\nerror = attempt(optimizer.step)\nreport = {'error': error, 'parameter': state(p), 'gradient': state(p.grad)}\n",
+      "expected": {
+        "error": "ok",
+        "parameter": {
+          "bits": [
+            1065353216
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": true,
+          "version": 0
+        },
+        "gradient": null
+      }
+    },
+    {
+      "name": "coefficient-present-'invalid'",
+      "kind": "coefficient",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([50.29061508178711]); p.grad = tensor([502.9061279296875], False)\noptimizer = torch.optim.SGD([p])\noptimizer.param_groups[0]['lr'] = 'invalid'\nerror = attempt(optimizer.step)\nreport = {'error': error, 'parameter': state(p), 'gradient': state(p.grad)}\n",
+      "expected": {
+        "error": "TypeError",
+        "parameter": {
+          "bits": [
+            1112091031
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": true,
+          "version": 0
+        },
+        "gradient": {
+          "bits": [
+            1140552700
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": false,
+          "version": 0
+        }
+      }
+    },
+    {
+      "name": "coefficient-empty-'invalid'",
+      "kind": "coefficient",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([]); p.grad = tensor([], False)\noptimizer = torch.optim.SGD([p])\noptimizer.param_groups[0]['lr'] = 'invalid'\nerror = attempt(optimizer.step)\nreport = {'error': error, 'parameter': state(p), 'gradient': state(p.grad)}\n",
+      "expected": {
+        "error": "TypeError",
+        "parameter": {
+          "bits": [],
+          "shape": [
+            0
+          ],
+          "tracking": true,
+          "version": 0
+        },
+        "gradient": {
+          "bits": [],
+          "shape": [
+            0
+          ],
+          "tracking": false,
+          "version": 0
+        }
+      }
+    },
+    {
+      "name": "reset-truthiness-True",
+      "kind": "reset",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([2.]); g = tensor([-0.]); p.grad = g\noptimizer = torch.optim.SGD([p])\noptimizer.zero_grad(True)\nreport = {'gradient': state(g), 'associated': p.grad is g}\n",
+      "expected": {
+        "gradient": {
+          "bits": [
+            2147483648
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": true,
+          "version": 0
+        },
+        "associated": false
+      }
+    },
+    {
+      "name": "reset-truthiness-False",
+      "kind": "reset",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([2.]); g = tensor([-0.]); p.grad = g\noptimizer = torch.optim.SGD([p])\noptimizer.zero_grad(False)\nreport = {'gradient': state(g), 'associated': p.grad is g}\n",
+      "expected": {
+        "gradient": {
+          "bits": [
+            0
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": false,
+          "version": 1
+        },
+        "associated": true
+      }
+    },
+    {
+      "name": "reset-truthiness-None",
+      "kind": "reset",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([2.]); g = tensor([-0.]); p.grad = g\noptimizer = torch.optim.SGD([p])\noptimizer.zero_grad(None)\nreport = {'gradient': state(g), 'associated': p.grad is g}\n",
+      "expected": {
+        "gradient": {
+          "bits": [
+            0
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": false,
+          "version": 1
+        },
+        "associated": true
+      }
+    },
+    {
+      "name": "reset-truthiness-0",
+      "kind": "reset",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([2.]); g = tensor([-0.]); p.grad = g\noptimizer = torch.optim.SGD([p])\noptimizer.zero_grad(0)\nreport = {'gradient': state(g), 'associated': p.grad is g}\n",
+      "expected": {
+        "gradient": {
+          "bits": [
+            0
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": false,
+          "version": 1
+        },
+        "associated": true
+      }
+    },
+    {
+      "name": "reset-truthiness-0.",
+      "kind": "reset",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([2.]); g = tensor([-0.]); p.grad = g\noptimizer = torch.optim.SGD([p])\noptimizer.zero_grad(0.)\nreport = {'gradient': state(g), 'associated': p.grad is g}\n",
+      "expected": {
+        "gradient": {
+          "bits": [
+            0
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": false,
+          "version": 1
+        },
+        "associated": true
+      }
+    },
+    {
+      "name": "reset-truthiness-''",
+      "kind": "reset",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([2.]); g = tensor([-0.]); p.grad = g\noptimizer = torch.optim.SGD([p])\noptimizer.zero_grad('')\nreport = {'gradient': state(g), 'associated': p.grad is g}\n",
+      "expected": {
+        "gradient": {
+          "bits": [
+            0
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": false,
+          "version": 1
+        },
+        "associated": true
+      }
+    },
+    {
+      "name": "reset-truthiness-'yes'",
+      "kind": "reset",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([2.]); g = tensor([-0.]); p.grad = g\noptimizer = torch.optim.SGD([p])\noptimizer.zero_grad('yes')\nreport = {'gradient': state(g), 'associated': p.grad is g}\n",
+      "expected": {
+        "gradient": {
+          "bits": [
+            2147483648
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": true,
+          "version": 0
+        },
+        "associated": false
+      }
+    },
+    {
+      "name": "reset-truthiness--2",
+      "kind": "reset",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([2.]); g = tensor([-0.]); p.grad = g\noptimizer = torch.optim.SGD([p])\noptimizer.zero_grad(-2)\nreport = {'gradient': state(g), 'associated': p.grad is g}\n",
+      "expected": {
+        "gradient": {
+          "bits": [
+            2147483648
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": true,
+          "version": 0
+        },
+        "associated": false
+      }
+    },
+    {
+      "name": "reset-truthiness-float('nan')",
+      "kind": "reset",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([2.]); g = tensor([-0.]); p.grad = g\noptimizer = torch.optim.SGD([p])\noptimizer.zero_grad(float('nan'))\nreport = {'gradient': state(g), 'associated': p.grad is g}\n",
+      "expected": {
+        "gradient": {
+          "bits": [
+            2147483648
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": true,
+          "version": 0
+        },
+        "associated": false
+      }
+    },
+    {
+      "name": "reset-detachment-and-alias",
+      "kind": "reset",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([2.]); x = tensor([3.]); g = x*x; alias = g.view([1]); saved = g*x\np.grad = g\noptimizer = torch.optim.SGD([p]); optimizer.zero_grad(False)\nerror = attempt(lambda: saved.backward())\nreport = {'gradient': state(g), 'alias': state(alias), 'associated': p.grad is g, 'error': error}\n",
+      "expected": {
+        "gradient": {
+          "bits": [
+            0
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": false,
+          "version": 1
+        },
+        "alias": {
+          "bits": [
+            0
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": true,
+          "version": 1
+        },
+        "associated": true,
+        "error": "RuntimeError"
+      }
+    },
+    {
+      "name": "reset-view-progress",
+      "kind": "reset",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([2.]); q = tensor([4.]); x = tensor([3.]); first = tensor([7.], False); bad = (x*x).view([1])\np.grad = first; q.grad = bad\noptimizer = torch.optim.SGD([p, q]); error = attempt(lambda: optimizer.zero_grad(False))\nreport = {'error': error, 'first': state(first), 'bad': state(bad), 'first_same': p.grad is first, 'bad_same': q.grad is bad}\n",
+      "expected": {
+        "error": "RuntimeError",
+        "first": {
+          "bits": [
+            0
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": false,
+          "version": 1
+        },
+        "bad": {
+          "bits": [
+            1091567616
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": true,
+          "version": 0
+        },
+        "first_same": true,
+        "bad_same": true
+      }
+    },
+    {
+      "name": "closure-scope-return-and-error",
+      "kind": "closure",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([2.]); p.grad = tensor([3.], False); optimizer = torch.optim.SGD([p], lr=0.5)\nsentinel = object(); calls = []\ndef closure():\n    calls.append((p+p).requires_grad)\n    return sentinel\nwith torch.no_grad():\n    same_return = optimizer.step(closure) is sentinel\n    restored = not (p+p).requires_grad\nclass SentinelError(Exception): pass\nerror = SentinelError('original')\ndef failing():\n    with torch.no_grad():\n        p.copy_(tensor([8.], False))\n    raise error\ntry:\n    optimizer.step(failing)\nexcept Exception as caught:\n    same_error = caught is error\nreport = {'calls': calls, 'same_return': same_return, 'restored': restored, 'same_error': same_error, 'parameter': state(p)}\n",
+      "expected": {
+        "calls": [
+          true
+        ],
+        "same_return": true,
+        "restored": true,
+        "same_error": true,
+        "parameter": {
+          "bits": [
+            1090519040
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": true,
+          "version": 2
+        }
+      }
+    },
+    {
+      "name": "constructor-false-form-nesterov",
+      "kind": "constructor",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([2.]); p.grad = tensor([3.], False)\noptimizer = torch.optim.SGD([p], **{'nesterov': None})\ncalls = []\nerror = attempt(lambda: optimizer.step(lambda: calls.append(1)))\nreport = {'error': error, 'calls': calls, 'defaults': {key: [type(value).__name__, repr(value)] for key, value in optimizer.defaults.items()}, 'parameter': state(p)}\n",
+      "expected": {
+        "error": "ok",
+        "calls": [
+          1
+        ],
+        "defaults": {
+          "lr": [
+            "float",
+            "0.001"
+          ],
+          "momentum": [
+            "int",
+            "0"
+          ],
+          "dampening": [
+            "int",
+            "0"
+          ],
+          "weight_decay": [
+            "int",
+            "0"
+          ],
+          "nesterov": [
+            "NoneType",
+            "None"
+          ],
+          "maximize": [
+            "bool",
+            "False"
+          ],
+          "foreach": [
+            "NoneType",
+            "None"
+          ],
+          "differentiable": [
+            "bool",
+            "False"
+          ],
+          "fused": [
+            "NoneType",
+            "None"
+          ]
+        },
+        "parameter": {
+          "bits": [
+            1073716658
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": true,
+          "version": 1
+        }
+      }
+    },
+    {
+      "name": "constructor-false-form-maximize",
+      "kind": "constructor",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([2.]); p.grad = tensor([3.], False)\noptimizer = torch.optim.SGD([p], **{'maximize': 0})\ncalls = []\nerror = attempt(lambda: optimizer.step(lambda: calls.append(1)))\nreport = {'error': error, 'calls': calls, 'defaults': {key: [type(value).__name__, repr(value)] for key, value in optimizer.defaults.items()}, 'parameter': state(p)}\n",
+      "expected": {
+        "error": "ok",
+        "calls": [
+          1
+        ],
+        "defaults": {
+          "lr": [
+            "float",
+            "0.001"
+          ],
+          "momentum": [
+            "int",
+            "0"
+          ],
+          "dampening": [
+            "int",
+            "0"
+          ],
+          "weight_decay": [
+            "int",
+            "0"
+          ],
+          "nesterov": [
+            "bool",
+            "False"
+          ],
+          "maximize": [
+            "int",
+            "0"
+          ],
+          "foreach": [
+            "NoneType",
+            "None"
+          ],
+          "differentiable": [
+            "bool",
+            "False"
+          ],
+          "fused": [
+            "NoneType",
+            "None"
+          ]
+        },
+        "parameter": {
+          "bits": [
+            1073716658
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": true,
+          "version": 1
+        }
+      }
+    },
+    {
+      "name": "constructor-false-form-foreach",
+      "kind": "constructor",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([2.]); p.grad = tensor([3.], False)\noptimizer = torch.optim.SGD([p], **{'foreach': 0})\ncalls = []\nerror = attempt(lambda: optimizer.step(lambda: calls.append(1)))\nreport = {'error': error, 'calls': calls, 'defaults': {key: [type(value).__name__, repr(value)] for key, value in optimizer.defaults.items()}, 'parameter': state(p)}\n",
+      "expected": {
+        "error": "ok",
+        "calls": [
+          1
+        ],
+        "defaults": {
+          "lr": [
+            "float",
+            "0.001"
+          ],
+          "momentum": [
+            "int",
+            "0"
+          ],
+          "dampening": [
+            "int",
+            "0"
+          ],
+          "weight_decay": [
+            "int",
+            "0"
+          ],
+          "nesterov": [
+            "bool",
+            "False"
+          ],
+          "maximize": [
+            "bool",
+            "False"
+          ],
+          "foreach": [
+            "int",
+            "0"
+          ],
+          "differentiable": [
+            "bool",
+            "False"
+          ],
+          "fused": [
+            "NoneType",
+            "None"
+          ]
+        },
+        "parameter": {
+          "bits": [
+            1073716658
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": true,
+          "version": 1
+        }
+      }
+    },
+    {
+      "name": "constructor-false-form-fused",
+      "kind": "constructor",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([2.]); p.grad = tensor([3.], False)\noptimizer = torch.optim.SGD([p], **{'fused': 0})\ncalls = []\nerror = attempt(lambda: optimizer.step(lambda: calls.append(1)))\nreport = {'error': error, 'calls': calls, 'defaults': {key: [type(value).__name__, repr(value)] for key, value in optimizer.defaults.items()}, 'parameter': state(p)}\n",
+      "expected": {
+        "error": "ok",
+        "calls": [
+          1
+        ],
+        "defaults": {
+          "lr": [
+            "float",
+            "0.001"
+          ],
+          "momentum": [
+            "int",
+            "0"
+          ],
+          "dampening": [
+            "int",
+            "0"
+          ],
+          "weight_decay": [
+            "int",
+            "0"
+          ],
+          "nesterov": [
+            "bool",
+            "False"
+          ],
+          "maximize": [
+            "bool",
+            "False"
+          ],
+          "foreach": [
+            "NoneType",
+            "None"
+          ],
+          "differentiable": [
+            "bool",
+            "False"
+          ],
+          "fused": [
+            "int",
+            "0"
+          ]
+        },
+        "parameter": {
+          "bits": [
+            1073716658
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": true,
+          "version": 1
+        }
+      }
+    },
+    {
+      "name": "constructor-false-form-differentiable-zero",
+      "kind": "constructor",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([2.]); p.grad = tensor([3.], False)\noptimizer = torch.optim.SGD([p], **{'differentiable': 0})\ncalls = []\nerror = attempt(lambda: optimizer.step(lambda: calls.append(1)))\nreport = {'error': error, 'calls': calls, 'defaults': {key: [type(value).__name__, repr(value)] for key, value in optimizer.defaults.items()}, 'parameter': state(p)}\n",
+      "expected": {
+        "error": "TypeError",
+        "calls": [],
+        "defaults": {
+          "lr": [
+            "float",
+            "0.001"
+          ],
+          "momentum": [
+            "int",
+            "0"
+          ],
+          "dampening": [
+            "int",
+            "0"
+          ],
+          "weight_decay": [
+            "int",
+            "0"
+          ],
+          "nesterov": [
+            "bool",
+            "False"
+          ],
+          "maximize": [
+            "bool",
+            "False"
+          ],
+          "foreach": [
+            "NoneType",
+            "None"
+          ],
+          "differentiable": [
+            "int",
+            "0"
+          ],
+          "fused": [
+            "NoneType",
+            "None"
+          ]
+        },
+        "parameter": {
+          "bits": [
+            1073741824
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": true,
+          "version": 0
+        }
+      }
+    },
+    {
+      "name": "constructor-false-form-differentiable-none",
+      "kind": "constructor",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([2.]); p.grad = tensor([3.], False)\noptimizer = torch.optim.SGD([p], **{'differentiable': None})\ncalls = []\nerror = attempt(lambda: optimizer.step(lambda: calls.append(1)))\nreport = {'error': error, 'calls': calls, 'defaults': {key: [type(value).__name__, repr(value)] for key, value in optimizer.defaults.items()}, 'parameter': state(p)}\n",
+      "expected": {
+        "error": "TypeError",
+        "calls": [],
+        "defaults": {
+          "lr": [
+            "float",
+            "0.001"
+          ],
+          "momentum": [
+            "int",
+            "0"
+          ],
+          "dampening": [
+            "int",
+            "0"
+          ],
+          "weight_decay": [
+            "int",
+            "0"
+          ],
+          "nesterov": [
+            "bool",
+            "False"
+          ],
+          "maximize": [
+            "bool",
+            "False"
+          ],
+          "foreach": [
+            "NoneType",
+            "None"
+          ],
+          "differentiable": [
+            "NoneType",
+            "None"
+          ],
+          "fused": [
+            "NoneType",
+            "None"
+          ]
+        },
+        "parameter": {
+          "bits": [
+            1073741824
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": true,
+          "version": 0
+        }
+      }
+    },
+    {
+      "name": "invalid-empty",
+      "kind": "binding",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\np=tensor([2.])\nreport={'error':attempt(lambda:torch.optim.SGD([]))}\n",
+      "expected": {
+        "error": "ValueError"
+      }
+    },
+    {
+      "name": "invalid-bare",
+      "kind": "binding",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\np=tensor([2.])\nreport={'error':attempt(lambda:torch.optim.SGD(p))}\n",
+      "expected": {
+        "error": "TypeError"
+      }
+    },
+    {
+      "name": "invalid-nonleaf",
+      "kind": "binding",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\np=tensor([2.])\nreport={'error':attempt(lambda:torch.optim.SGD([p+p]))}\n",
+      "expected": {
+        "error": "ValueError"
+      }
+    },
+    {
+      "name": "invalid-cross-group",
+      "kind": "binding",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\np=tensor([2.])\nreport={'error':attempt(lambda:torch.optim.SGD([{'params':[p]}, {'params':[p]}]))}\n",
+      "expected": {
+        "error": "ValueError"
+      }
+    },
+    {
+      "name": "invalid-member",
+      "kind": "binding",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\np=tensor([2.])\nreport={'error':attempt(lambda:torch.optim.SGD([17]))}\n",
+      "expected": {
+        "error": "TypeError"
+      }
+    },
+    {
+      "name": "invalid-missing-params",
+      "kind": "binding",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\np=tensor([2.])\nreport={'error':attempt(lambda:torch.optim.SGD([{}]))}\n",
+      "expected": {
+        "error": "KeyError"
+      }
+    },
+    {
+      "name": "invalid-unordered-group",
+      "kind": "binding",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\np=tensor([2.])\nreport={'error':attempt(lambda:torch.optim.SGD([{'params':{p}}]))}\n",
+      "expected": {
+        "error": "TypeError"
+      }
+    },
+    {
+      "name": "invalid-negative-lr",
+      "kind": "binding",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\np=tensor([2.])\nreport={'error':attempt(lambda:torch.optim.SGD([p], lr=-1))}\n",
+      "expected": {
+        "error": "ValueError"
+      }
+    },
+    {
+      "name": "invalid-negative-momentum-before-unsupported",
+      "kind": "binding",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\np=tensor([2.])\nreport={'error':attempt(lambda:torch.optim.SGD([p], momentum=-1, weight_decay=1))}\n",
+      "expected": {
+        "error": "ValueError"
+      }
+    },
+    {
+      "name": "invalid-nesterov-before-params",
+      "kind": "binding",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\np=tensor([2.])\nreport={'error':attempt(lambda:torch.optim.SGD([], nesterov=True))}\n",
+      "expected": {
+        "error": "ValueError"
+      }
+    },
+    {
+      "name": "invalid-nonleaf-before-momentum",
+      "kind": "binding",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\np=tensor([2.])\nreport={'error':attempt(lambda:torch.optim.SGD([p+p], momentum=1))}\n",
+      "expected": {
+        "error": "ValueError"
+      }
+    },
+    {
+      "name": "invalid-binding",
+      "kind": "binding",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\np=tensor([2.])\nreport={'error':attempt(lambda:torch.optim.SGD([p], unknown=True))}\n",
+      "expected": {
+        "error": "TypeError"
+      }
+    },
+    {
+      "name": "invalid-reset-binding",
+      "kind": "binding",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\np=tensor([2.])\nreport={'error':attempt(lambda:torch.optim.SGD([p]).zero_grad(unknown=True))}\n",
+      "expected": {
+        "error": "TypeError"
+      }
+    },
+    {
+      "name": "invalid-step-binding",
+      "kind": "binding",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\np=tensor([2.])\nreport={'error':attempt(lambda:torch.optim.SGD([p]).step(unknown=True))}\n",
+      "expected": {
+        "error": "TypeError"
+      }
+    },
+    {
+      "name": "retained-nonleaf-registration",
+      "kind": "constructor",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\nx = tensor([2.]); p = x+x; p.sum().backward(inputs=[p])\noptimizer = torch.optim.SGD([p], lr=0.5); optimizer.step()\nreport = {'parameter': state(p), 'gradient': state(p.grad)}\n",
+      "expected": {
+        "parameter": {
+          "bits": [
+            1080033280
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": true,
+          "version": 1
+        },
+        "gradient": {
+          "bits": [
+            1065353216
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": false,
+          "version": 0
+        }
+      }
+    },
+    {
+      "name": "reset-leaf-old-history",
+      "kind": "reset",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([2.]); g = tensor([3.]); constant = tensor([4.], False)\nold = (g*constant).sum(); p.grad = g\noptimizer = torch.optim.SGD([p]); optimizer.zero_grad(False)\nfirst = attempt(old.backward); second = attempt(old.backward)\nreport = {'first': first, 'second': second, 'gradient': state(g), 'old_grad': state(g.grad)}\n",
+      "expected": {
+        "first": "ok",
+        "second": "RuntimeError",
+        "gradient": {
+          "bits": [
+            0
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": false,
+          "version": 1
+        },
+        "old_grad": null
+      }
+    },
+    {
+      "name": "registered-incoming-gradient-owner",
+      "kind": "acquisition",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([2.]); seed = tensor(3., False); optimizer = torch.optim.SGD([p, seed])\np.sum().backward(seed)\ngradient = p.grad\nwith torch.no_grad():\n    gradient.copy_(tensor([7.], False))\nreport = {'seed': state(seed), 'gradient': state(gradient), 'same_gradient': p.grad is gradient}\n",
+      "expected": {
+        "seed": {
+          "bits": 1077936128,
+          "shape": [],
+          "tracking": false,
+          "version": 0
+        },
+        "gradient": {
+          "bits": [
+            1088421888
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": false,
+          "version": 2
+        },
+        "same_gradient": true
+      }
+    },
+    {
+      "name": "repeated-gradient-reset",
+      "kind": "reset",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([2.]); q = tensor([4.]); gradient = tensor([-0.]); alias = gradient.view([1])\np.grad = gradient; q.grad = gradient\noptimizer = torch.optim.SGD([p, q]); optimizer.zero_grad(False)\nreport = {'gradient': state(gradient), 'alias': state(alias), 'p_same': p.grad is gradient, 'q_same': q.grad is gradient}\n",
+      "expected": {
+        "gradient": {
+          "bits": [
+            0
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": false,
+          "version": 2
+        },
+        "alias": {
+          "bits": [
+            0
+          ],
+          "shape": [
+            1
+          ],
+          "tracking": true,
+          "version": 2
+        },
+        "p_same": true,
+        "q_same": true
+      }
+    }
+  ],
   "copyCases": [
     {
       "name": "stale-child-bypasses-parent-new-child-binds-parent",

@@ -19,11 +19,11 @@ for (const descriptor of [
 
 const manifest = {
   schemaVersion: 1,
-  moduleVersion: 4,
+  moduleVersion: 5,
   abiVersion: 1,
   addressWidth: 32,
   sharedMemory: false,
-  capabilities: ["add-f32", "sum-f32", "mul-f32", "expand-f32"],
+  capabilities: ["add-f32", "sum-f32", "mul-f32", "expand-f32", "add-alpha-f32"],
   imports: [{ module: "env", name: "memory", kind: "memory" }],
   memory: {
     initialPages: 32,

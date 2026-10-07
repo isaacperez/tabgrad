@@ -1,4 +1,5 @@
 export { TabgradError, type TabgradErrorCode } from "./shared/errors.js";
+export { SGD, type SGDOptions, type SGDParameterGroup } from "./runtime/sgd.js";
 export {
   RuntimeSession,
   Tensor,

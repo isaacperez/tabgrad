@@ -17,14 +17,15 @@ export class PythonInstallation {
       interpreter.runPython(sources.bootstrap, { globals: this.#namespace });
       this.#namespace.set("_package_source", sources.package);
       this.#namespace.set("_autograd_source", sources.autograd);
+      this.#namespace.set("_optim_source", sources.optim);
       this.#namespace.set("_runtime_bridge", bridge);
       interpreter.runPython(
-        "_installation = Installation(); _installation.install(_package_source, _autograd_source, _runtime_bridge)",
+        "_installation = Installation(); _installation.install(_package_source, _autograd_source, _optim_source, _runtime_bridge)",
         { globals: this.#namespace },
       );
       // Imported modules retain their own references. Source text and the
       // temporary bridge reference need not survive for the binding's lifetime.
-      interpreter.runPython("del _package_source, _autograd_source, _runtime_bridge", { globals: this.#namespace });
+      interpreter.runPython("del _package_source, _autograd_source, _optim_source, _runtime_bridge", { globals: this.#namespace });
     } catch (cause) {
       let failure = cause;
       try {

@@ -66,7 +66,7 @@ checks in the same change as a registered generated path.
 ### Python tensor oracle fixtures
 
 - **Path:** `js-tests/fixtures/python-tensor-oracle.json`.
-- **Source/generator:** `scripts/generate_tensor_oracle.py` and its maintained `scripts/backward_oracle.py` case sources and comparison policy; not Tabgrad's implementation.
+- **Source/generator:** `scripts/generate_tensor_oracle.py` and its maintained `scripts/backward_oracle.py` and `scripts/sgd_oracle.py` case sources and comparison policy; not Tabgrad's implementation.
 - **Command:** `.venv/bin/python scripts/generate_tensor_oracle.py` from the repository root.
 - **Inputs:** the prepared native environment and hashed oracle lock in [Development](development.md#prepare-python-integration-and-its-compatibility-oracle); PyTorch 2.14.0 build revision `08187d9e0fba026dc8217405802ab5381dc88d90`. The generator rejects another version/revision and bounds both thread pools to one. No NumPy is needed; its known initialization warning is retained.
 - **Commit policy:** committed so CI and browser contributors can consume native expectations without installing the platform-specific development oracle. No native package is distributed.
@@ -90,7 +90,7 @@ checks in the same change as a registered generated path.
 ### Browser distribution
 
 - **Paths:** `dist/index.js`, `dist/index.d.ts`, `dist/python.js`, `dist/python.d.ts`, their emitted internal JavaScript and declaration modules, `dist/manifest.json`, `dist/wasm/kernels-{scalar,simd128}.wasm`, and the static source and manifest under `dist/python/`.
-- **Sources:** `src/**/*.ts`, `python/bootstrap.py`, `python/torch/__init__.py`, `python/torch/autograd.py`, `crates/tabgrad-wasm-kernels/src/**/*.rs`, the Cargo manifests and lock, `tsconfig.json`, `rust-toolchain.toml`, and the build scripts under `scripts/`.
+- **Sources:** `src/**/*.ts`, `python/bootstrap.py`, `python/torch/__init__.py`, `python/torch/autograd.py`, `python/torch/optim.py`, `crates/tabgrad-wasm-kernels/src/**/*.rs`, the Cargo manifests and lock, `tsconfig.json`, `rust-toolchain.toml`, and the build scripts under `scripts/`.
 - **Generators:** TypeScript 6.0.3, Rust and Cargo 1.98.1, and the maintained Node.js build scripts.
 - **Command:** `npm run build` from the repository root.
 - **Inputs:** the prepared environment in [Development environment and commands](development.md). The Rust build fixes release optimization, imported-memory bounds, and scalar or `simd128` target features. The manifest generator hashes the exact emitted module bytes with SHA-256.
