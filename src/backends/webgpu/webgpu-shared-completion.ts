@@ -1,46 +1,17 @@
-import { TabgradError, type TabgradErrorCode } from "../../shared/errors.js";
+import { TabgradError } from "../../shared/errors.js";
 import { ExecutionTicket, type SynchronousCompletion } from "../../execution/execution-ticket.js";
-import { isRecord } from "../../shared/object-shape.js";
+import { GPU_DIAGNOSTIC_BYTES, decodeGpuFailure, encodeGpuFailure } from "./webgpu-failure-diagnostic.js";
 import { GPU_ACCOUNTED, GPU_PULSE, assertGpuConnectionActive, wakeGpuObservers } from "./webgpu-connection.js";
 
 // Fixed control and bounded diagnostics are separate from demand-sized payload.
 const HEADER_BYTES = 16;
-const DIAGNOSTIC_BYTES = 4096;
-const PAYLOAD_OFFSET = HEADER_BYTES + DIAGNOSTIC_BYTES;
+const PAYLOAD_OFFSET = HEADER_BYTES + GPU_DIAGNOSTIC_BYTES;
 const STATUS = 0;
 const DRAINED = 1;
 const LENGTH = 2;
 const PENDING = 0;
 const SUCCESS = 1;
 const FAILURE = 2;
-
-interface GpuCauseDiagnostic {
-  name: string;
-  message: string;
-}
-
-interface GpuFailureDiagnostic {
-  readonly code: TabgradErrorCode;
-  message: string;
-  readonly details: Record<string, unknown>;
-  readonly cause: GpuCauseDiagnostic | undefined;
-  diagnosticTruncated: boolean;
-}
-
-/** Preserve useful immediate native diagnostics, never recurse through causes. */
-function projectGpuCause(cause: unknown): GpuCauseDiagnostic | undefined {
-  if (cause === undefined) return undefined;
-  if (typeof cause === "string") return { name: "Error", message: cause };
-  try {
-    if (isRecord(cause) && typeof cause.message === "string") {
-      return { name: typeof cause.name === "string" ? cause.name : "Error", message: cause.message };
-    }
-  } catch {
-    // Diagnostic access must not prevent publishing the original failure.
-    return { name: "Error", message: "The native cause diagnostic could not be read." };
-  }
-  return { name: "Error", message: "The native cause supplied no textual diagnostic." };
-}
 
 export function sharedGpuPayload(buffer: SharedArrayBuffer): Uint8Array {
   return new Uint8Array(buffer, PAYLOAD_OFFSET);
@@ -161,56 +132,15 @@ export function publishSharedGpuDrain(buffer: SharedArrayBuffer, control: Int32A
 }
 
 export function publishSharedGpuFailure(buffer: SharedArrayBuffer, control: Int32Array, error: unknown): void {
-  const primary = error instanceof TabgradError ? error : new TabgradError("BACKEND_STATUS_ERROR", "Physical GPU execution failed.", {}, error);
-  const details: Record<string, unknown> = {};
-  let diagnosticTruncated = primary.message.length > 1024;
-  // Preserve the execution locator and bounded scalar diagnostics, never tensor
-  // state, the program or an arbitrary exception object in shared storage.
-  for (const name of ["backend", "device", "phase", "programValueSlot", "reason"]) {
-    const value = primary.details[name];
-    if (typeof value === "number" || typeof value === "boolean") details[name] = value;
-    else if (typeof value === "string") {
-      details[name] = value.slice(0, 256);
-      diagnosticTruncated ||= value.length > 256;
-    }
-  }
-  const cause = projectGpuCause(primary.cause);
-  if (cause !== undefined) {
-    diagnosticTruncated ||= cause.name.length > 128 || cause.message.length > 1024;
-    cause.name = cause.name.slice(0, 128);
-    cause.message = cause.message.slice(0, 1024);
-  }
-  const diagnostic: GpuFailureDiagnostic = { code: primary.code, message: primary.message.slice(0, 1024),
-    details, cause, diagnosticTruncated };
-  const encoder = new TextEncoder();
-  let encoded = encoder.encode(JSON.stringify(diagnostic));
-  while (encoded.byteLength > DIAGNOSTIC_BYTES) {
-    diagnostic.diagnosticTruncated = true;
-    diagnostic.message = diagnostic.message.slice(0, Math.floor(diagnostic.message.length / 2));
-    if (cause !== undefined) cause.message = cause.message.slice(0, Math.floor(cause.message.length / 2));
-    for (const [name, value] of Object.entries(details)) {
-      if (typeof value === "string") details[name] = value.slice(0, Math.floor(value.length / 2));
-    }
-    encoded = encoder.encode(JSON.stringify(diagnostic));
-  }
+  const encoded = encodeGpuFailure(error);
   const header = new Int32Array(buffer, 0, HEADER_BYTES / 4);
-  new Uint8Array(buffer, HEADER_BYTES, DIAGNOSTIC_BYTES).set(encoded);
+  new Uint8Array(buffer, HEADER_BYTES, GPU_DIAGNOSTIC_BYTES).set(encoded);
   Atomics.store(header, LENGTH, encoded.byteLength);
   Atomics.store(header, STATUS, FAILURE);
   wakeGpuObservers(control);
 }
 
 function readSharedFailure(buffer: SharedArrayBuffer, length: number): TabgradError {
-  if (length <= 0 || length > DIAGNOSTIC_BYTES) return new TabgradError("BACKEND_STATUS_ERROR", "Invalid shared GPU failure length.");
-  const record: unknown = JSON.parse(new TextDecoder().decode(new Uint8Array(buffer, HEADER_BYTES, length)));
-  if (!isRecord(record) || typeof record.code !== "string" || typeof record.message !== "string" || !isRecord(record.details)) {
-    return new TabgradError("BACKEND_STATUS_ERROR", "Invalid shared GPU failure diagnostic.");
-  }
-  let cause: Error | undefined;
-  if (isRecord(record.cause) && typeof record.cause.name === "string" && typeof record.cause.message === "string") {
-    cause = new Error(record.cause.message);
-    cause.name = record.cause.name;
-  }
-  return new TabgradError(record.code as TabgradErrorCode, record.message,
-    { ...record.details, diagnosticTruncated: record.diagnosticTruncated }, cause);
+  if (length <= 0 || length > GPU_DIAGNOSTIC_BYTES) return new TabgradError("BACKEND_STATUS_ERROR", "Invalid shared GPU failure length.");
+  return decodeGpuFailure(new Uint8Array(buffer, HEADER_BYTES, length));
 }
