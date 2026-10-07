@@ -12,6 +12,78 @@ before(async () => { distributionUrl = await fixtures.start(); });
 after(async () => { await fixtures.close(); });
 const oracle = JSON.parse(await readFile(new URL("../../fixtures/python-tensor-oracle.json", import.meta.url), "utf8"));
 
+function differentiateForCapacity(session, root, input, seed, persistent) {
+  if (!persistent) return session.grad(root, [input], seed)[0];
+  root.backward(seed);
+  return input.grad;
+}
+
+for (const persistent of [false, true]) {
+  for (const explicit of [false, true]) {
+    for (const resource of ["owners", "backingBytes"]) {
+      test(`${persistent ? "backward" : "functional"} ${explicit ? "explicit" : "implicit"} seed preserves ${resource} admission boundary`, async () => {
+        // Observed limits for this graph, including the independent padding.
+        // Keep the expected boundary independent of the extracted calculation.
+        const ownerBoundary = persistent ? (explicit ? 267 : 265) : (explicit ? 189 : 187);
+        const boundary = resource === "owners" ? ownerBoundary : 60;
+        for (const margin of [-1, 0]) {
+          const session = createTestRuntimeSession({
+            manifestUrl: new URL("manifest.json", distributionUrl), forceVariant: "scalar",
+            updateLimits: { [resource]: boundary + margin },
+          });
+          try {
+            const input = session.tensor([2], { requiresGrad: true });
+            const sourceInput = session.tensor([1.5]);
+            const source = sourceInput.add(sourceInput);
+            session.noGrad(() => input.copy_(source));
+            const root = input.mul(input);
+            const seed = explicit ? session.tensor([1]) : undefined;
+            const padding = session.tensor([0]);
+            const beforeOwnership = getTestRuntimeOwnership(session);
+            const beforeDiagnostics = session.diagnostics();
+            if (margin < 0) {
+              assert.throws(() => differentiateForCapacity(session, root, input, seed, persistent), { code: "RESOURCE_EXHAUSTED" });
+              assert.deepEqual(getTestRuntimeOwnership(session), beforeOwnership);
+              assert.deepEqual(session.diagnostics(), beforeDiagnostics);
+              assert.equal(input.grad, null);
+              padding.close();
+            }
+            const gradient = differentiateForCapacity(session, root, input, seed, persistent);
+            assert.deepEqual([...await gradient.toArray()], [6]);
+            assert.equal(gradient.requiresGrad, false);
+            assert.equal(input.grad, persistent ? gradient : null);
+            assert.equal(session.diagnostics().liveSavedValues, 0);
+            gradient.close();
+          } finally { await session.close(); }
+          for (const count of Object.values(getTestRuntimeOwnership(session))) assert.equal(count, 0);
+          assert.equal(session.diagnostics().liveAllocationBytes, 0);
+          assert.equal(session.diagnostics().liveDerivativeNodes, 0);
+        }
+      });
+    }
+  }
+}
+
+for (const explicit of [false, true]) {
+  test(`functional ${explicit ? "explicit" : "implicit"} seed omits reservation without writer controls or effects`, async () => {
+    const session = createTestRuntimeSession({
+      manifestUrl: new URL("manifest.json", distributionUrl), forceVariant: "scalar",
+      updateLimits: { owners: 1, backingBytes: explicit ? 8 : 4 },
+    });
+    try {
+      const input = session.tensor([3], { requiresGrad: true });
+      const root = input.mul(input);
+      const seed = explicit ? session.tensor([2]) : undefined;
+      const gradient = session.grad(root, [input], seed)[0];
+      assert.deepEqual([...await gradient.toArray()], [explicit ? 12 : 6]);
+      assert.equal(input.grad, null);
+      gradient.close();
+    } finally { await session.close(); }
+    for (const count of Object.values(getTestRuntimeOwnership(session))) assert.equal(count, 0);
+    assert.equal(session.diagnostics().liveAllocationBytes, 0);
+  });
+}
+
 for (const forceVariant of ['scalar', 'simd128']) {
   test(`existing view tracking follows promotion and lazy history epochs (${forceVariant})`, async () => {
     const { checkTrackingEpochTransitions } = await import('../../browser/helpers/backward-lifetime.mjs');
