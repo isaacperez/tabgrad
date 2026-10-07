@@ -86,6 +86,7 @@ link to its primary source, but they must not create a competing version.
 | Issues, labels, project fields, and milestones | [`project-management.md`](project-management.md) |
 | Capability-route discovery, consultation and impact handoffs | [`project-management.md`](project-management.md#maintain-the-capability-route) |
 | Agent delegation and independent checks | [`agent-workflow.md`](agent-workflow.md) |
+| Evidence selection, durable records and concise reports | [`agent-workflow.md`](agent-workflow.md#keep-evidence-and-reports-proportionate) |
 | Contextual validation planning and evidence handoff | [`agent-workflow.md`](agent-workflow.md#plan-contextual-validation) |
 | Independent organization, design and extensibility assessment | [`agent-workflow.md`](agent-workflow.md#assess-design-and-extensibility-before-code-delivery) |
 | Unexpected findings, blockers, and pending decisions | [`CONTRIBUTING.md`](../CONTRIBUTING.md#handling-unexpected-findings-and-pending-decisions) |
