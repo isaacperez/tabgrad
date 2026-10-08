@@ -1,10 +1,12 @@
 import { TensorValue, OperationRecord, type StorageState, type TensorMetadata, type NumericalOperationDefinition } from "./tensor-value.js";
 import { TensorFamily, TensorIdentity, TensorState } from "./tensor-family.js";
-import { WriterOutcome, WriterOutcomeLedger, type EffectFailure, captureWriterOutcomes, retainWriterOutcomes,
+import { WriterOutcome, WriterOutcomeLedger, hasCanonicalWriterDispatch, type EffectFailure, captureWriterOutcomes, retainWriterOutcomes,
   releaseWriterOutcomes, failedWriterOutcome } from "./writer-outcome.js";
 import {
   type WasmVariant,
   WebAssemblyCpuBackend,
+  hasCanonicalCpuDispatch,
+  isPreparedCanonicalCpuBackend,
 } from "../backends/cpu/cpu-backend.js";
 import {
   TabgradError,
@@ -1201,7 +1203,7 @@ export class RuntimeSession {
     const effectControls = this.#gradientControlBound(plan.order, destinations, effects);
     const outcomes = captureWriterOutcomes([result.value.outcomes, ...plan.outcomes, explicitSeed?.value.outcomes ?? []]);
     if (outcomes.length !== 0 || effects !== 0) {
-      this.#checkGradientCapacity(plan, explicitSeed === undefined, requested.length * 4, outcomes.length + effectControls);
+      this.#checkGradientCapacity(plan, explicitSeed, requested.length * 4, outcomes.length + effectControls, effects, destinations);
     }
     const seed = explicitSeed === undefined
       ? this.tensor([1], { shape: result.value.shape }) : this.#borrowValue(explicitSeed.value);
@@ -1323,7 +1325,7 @@ export class RuntimeSession {
     const effects = this.#reserveGradientEffects(plan.order, destinations);
     const controls = captureWriterOutcomes([result.value.outcomes, explicitSeed?.value.outcomes ?? []]).length
       + this.#gradientControlBound(plan.order, destinations, effects);
-    this.#checkGradientCapacity(plan, explicitSeed === undefined, requested.length * 10, controls);
+    this.#checkGradientCapacity(plan, explicitSeed, requested.length * 10, controls, effects, destinations);
     const seed = explicitSeed === undefined ? this.tensor([1], { shape: result.shape }) : this.#borrowValue(explicitSeed.value);
     if (explicitSeed !== undefined) {
       const identity = requireTensorState(seed).identity;
@@ -1338,7 +1340,8 @@ export class RuntimeSession {
     } finally { seed.close(); }
   }
 
-  #checkGradientCapacity(plan: DerivativePlan<TensorValue>, implicitSeed: boolean, requestedOwners: number, controls: number): void {
+  #checkGradientCapacity(plan: DerivativePlan<TensorValue>, explicitSeed: TensorState | undefined,
+    requestedOwners: number, controls: number, effects: number, destinations: ReadonlySet<TensorIdentity>): void {
     let nodeElements = 0;
     let edgeElements = 0;
     for (const node of plan.order) {
@@ -1354,9 +1357,43 @@ export class RuntimeSession {
     // the node sum, giving 8*edgeElements + 4*outputElements without retirement
     // credit. Fanout after a reduction defeats a node-only payload estimate.
     // Keep larger old reservations and the separate binary-recipe owner bound.
-    const additionalBytes = (implicitSeed ? 4 : 0)
+    const additionalBytes = (explicitSeed === undefined ? 4 : 0)
       + Math.max(nodeElements * 20, edgeElements * 8 + outputElements * 4);
-    this.#checkUpdateCapacity((plan.order.length * 20 + requestedOwners + 10) * (controls + 1), additionalBytes);
+    const slots = plan.order.length * 20 + requestedOwners + 10;
+    let additionalOwners = slots * (controls + 1);
+    const refinedOwners = slots * (controls - effects + 1) + effects * 4;
+    const owners = this.#updateOwnerCount();
+    // Old controls may occur in every temporary container. Under closed
+    // dispatch each new receiver effect has at most four references, including
+    // retain-before-release overlap. Keep the old estimate outside that proof.
+    // Already-admitted calls must not inspect dispatch or traverse the plan again.
+    if (owners + additionalOwners > this.#updateLimits.owners
+      && owners + refinedOwners <= this.#updateLimits.owners
+      && this.#liveBackingBytes + additionalBytes <= this.#updateLimits.backingBytes
+      && this.#requestHead === undefined && !this.#advancing
+      && this.#onProgramFormed === undefined && this.#beforeCopyPublication === undefined
+      && hasCanonicalRuntimeDispatch(this) && hasCanonicalCpuDispatch(this.#backend)
+      && hasCanonicalWriterDispatch(this.#writers)
+      && (isPreparedCanonicalCpuBackend(this.#backend)
+        || this.#hostAliasGradientPlan(plan, destinations, explicitSeed))) {
+      additionalOwners = refinedOwners;
+    }
+    this.#checkUpdateCapacity(additionalOwners, additionalBytes);
+  }
+
+  #hostAliasGradientPlan(plan: DerivativePlan<TensorValue>, destinations: ReadonlySet<TensorIdentity>,
+    explicitSeed: TensorState | undefined): boolean {
+    if (explicitSeed !== undefined && this.#materializations.get(explicitSeed.value)?.kind !== "host") return false;
+    let edges = 0;
+    for (const node of plan.order) {
+      if (node.recipe !== null && node.recipe !== PASS_DERIVATIVE && node.recipe !== IDENTITY_DERIVATIVE
+        && node.recipe !== COPY_DERIVATIVE && node.recipe !== COPY_SLICES_DERIVATIVE) return false;
+      const owner = this.#gradientReceiver(node, destinations);
+      if (owner !== undefined && owner.gradient !== null) return false;
+      for (const input of node.inputs) if (input !== null && plan.needed.has(input)) edges += 1;
+    }
+    // A selected DAG with M-1 input positions needs no contribution combines.
+    return edges === plan.order.length - 1;
   }
 
   #reserveGradientEffects(nodes: readonly DerivativeNode<TensorValue>[], destinations: ReadonlySet<TensorIdentity>): number {
@@ -1634,9 +1671,13 @@ export class RuntimeSession {
     throwCleanupFailures(failures, "Committed copy predecessor retirement failed.");
   }
 
-  #checkUpdateCapacity(additionalOwners: number, additionalBytes = 0): void {
-    const owners = this.#identityReferences + this.#valueReferences + this.#history.references + this.#writers.references
+  #updateOwnerCount(): number {
+    return this.#identityReferences + this.#valueReferences + this.#history.references + this.#writers.references
       + this.#requestLeases + this.#undeliveredEffects.size + this.#optimizers.size + this.#optimizerCaptures.size;
+  }
+
+  #checkUpdateCapacity(additionalOwners: number, additionalBytes = 0): void {
+    const owners = this.#updateOwnerCount();
     if (owners + additionalOwners > this.#updateLimits.owners || this.#liveBackingBytes + additionalBytes > this.#updateLimits.backingBytes) {
       throw new TabgradError("RESOURCE_EXHAUSTED", "Persistent update captures exceed the session capacity.", {
         owners, additionalOwners, maximumOwners: this.#updateLimits.owners,
@@ -2507,4 +2548,30 @@ export function inspectRuntimeSemanticOwnershipForTesting(session: RuntimeSessio
 /** @internal Native version-counter diagnostic, outside the supported public API. */
 export function inspectTensorVersionForTesting(handle: Tensor): number {
   return requireTensorState(handle).family.version;
+}
+
+// Compare descriptors, never getters, after public argument normalization.
+// The eventual execution still uses ordinary public method dispatch.
+const canonicalTensorMethods = ["add", "mul", "view", "close"].map(
+  name => [name, Object.getOwnPropertyDescriptor(Tensor.prototype, name)!] as const);
+const canonicalSessionMethods = ["noGrad", "tensor"].map(
+  name => [name, Object.getOwnPropertyDescriptor(RuntimeSession.prototype, name)!] as const);
+
+function hasCanonicalRuntimeDispatch(session: RuntimeSession): boolean {
+  if (Object.getPrototypeOf(session) !== RuntimeSession.prototype
+    || Object.getPrototypeOf(RuntimeSession.prototype) !== Object.prototype
+    || Object.getPrototypeOf(Tensor.prototype) !== Object.prototype
+    || Object.getPrototypeOf(Object.prototype) !== null
+    || Object.hasOwn(Tensor.prototype, "then") || Object.hasOwn(Object.prototype, "then")) return false;
+  for (const [name, expected] of canonicalSessionMethods) {
+    const actual = Object.getOwnPropertyDescriptor(RuntimeSession.prototype, name);
+    if (Object.hasOwn(session, name) || actual === undefined
+      || actual.value !== expected.value || actual.get !== expected.get || actual.set !== expected.set) return false;
+  }
+  for (const [name, expected] of canonicalTensorMethods) {
+    const actual = Object.getOwnPropertyDescriptor(Tensor.prototype, name);
+    if (actual === undefined || actual.value !== expected.value
+      || actual.get !== expected.get || actual.set !== expected.set) return false;
+  }
+  return true;
 }

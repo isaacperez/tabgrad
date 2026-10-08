@@ -45,6 +45,7 @@ export class WebAssemblyCpuBackend implements ExecutionBackend {
   };
 
   constructor(manifestUrl: URL, forceVariant?: WasmVariant) {
+    canonicalCpuCapabilities.set(this, this.capabilities);
     this.#artifactLoader = new CpuArtifactLoader(manifestUrl, forceVariant, this.#timings);
   }
 
@@ -314,4 +315,29 @@ export class WebAssemblyCpuBackend implements ExecutionBackend {
     }
     return allocation;
   }
+}
+
+// Capture in the defining module: an override before importing the runtime is
+// still an override. The weak key does not extend a backend's lifetime.
+const canonicalCpuCapabilities = new WeakMap<WebAssemblyCpuBackend, object>();
+const canonicalCpuMethods = ["ready", "prepare", "execute", "release", "assertAvailable"].map(
+  name => [name, Object.getOwnPropertyDescriptor(WebAssemblyCpuBackend.prototype, name)!] as const);
+const canonicalCpuReady = Object.getOwnPropertyDescriptor(WebAssemblyCpuBackend.prototype, "ready")!.get!;
+
+export function hasCanonicalCpuDispatch(backend: WebAssemblyCpuBackend): boolean {
+  if (Object.getPrototypeOf(backend) !== WebAssemblyCpuBackend.prototype
+    || Object.getPrototypeOf(WebAssemblyCpuBackend.prototype) !== Object.prototype
+    || Object.getOwnPropertyDescriptor(backend, "capabilities")?.value !== canonicalCpuCapabilities.get(backend)
+    || Object.getOwnPropertyDescriptor(backend, "synchronousObservation")?.value !== true) return false;
+  for (const [name, expected] of canonicalCpuMethods) {
+    const actual = Object.getOwnPropertyDescriptor(WebAssemblyCpuBackend.prototype, name);
+    if (Object.hasOwn(backend, name) || actual === undefined
+      || actual.value !== expected.value || actual.get !== expected.get || actual.set !== expected.set) return false;
+  }
+  return true;
+}
+
+/** Read private preparation state only after hasCanonicalCpuDispatch succeeds. */
+export function isPreparedCanonicalCpuBackend(backend: WebAssemblyCpuBackend): boolean {
+  return Reflect.apply(canonicalCpuReady, backend, []) === true;
 }

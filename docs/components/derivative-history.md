@@ -122,6 +122,33 @@ handles are retired per occurrence, including repeated operands and requests.
 
 ## Costs and extension boundary
 
+Differentiation reserves owners, backing bytes and pending effects before
+creating its seed or consuming history. The runtime ordinarily reserves
+`S * (controls + 1)` owners, where `S = 20M + requestedAllowance + 10` for
+`M` selected nodes. The requested allowance is four per functional result or
+ten per backward input. These are conservative ownership references, not
+payload bytes or a minimum requirement.
+
+An owner rejection can instead use `S * (controls - E + 1) + 4E`, where `E`
+is the planned receiver-effect count. Old pending or failed controls still
+multiply the temporary-container bound. Newly created effects need at most
+four references each, including retain-before-release overlap, only under
+closed canonical dispatch. The runtime checks that dispatch by descriptors,
+without invoking user getters, after ordinary argument normalization. It
+requires an empty request queue, no active advancement or reachable formation
+or publication hook, and canonical runtime, CPU and writer-ledger methods.
+The CPU must already be prepared, or the selected plan must preserve host
+aliases: a host seed, only current pass/identity/copy recipes, no contribution
+combines and no prior receiver gradients. Qualification never prepares the
+backend or drains requests.
+
+The smaller bound is considered only when the original owner estimate rejects
+and the new owner and unchanged byte estimates fit. Already-admitted calls do
+not inspect eligibility; uncertain dispatch or plans retain the original
+reservation and execution path. The cold-plan check adds one selected-plan
+scan only on a potentially rescuable rejection. This refinement establishes
+neither universal linear ownership nor a timing or process-memory guarantee.
+
 For `V` history nodes and `E` edges reachable from the output, planning uses
 `O(V + E)` work and metadata. It traverses history metadata to establish
 connectivity but admits numerical work only on paths to requested inputs.
