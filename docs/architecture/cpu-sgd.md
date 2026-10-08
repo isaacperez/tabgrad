@@ -198,7 +198,7 @@ These observations do not qualify a candidate implementation, scalar/browser
 integration, otherwise unexposed cyclic captures or physical costs. Actual
 integration must establish those contracts independently, including capacity,
 revocation, diagnostics and drain. The compatibility record remains the source
-for implemented support and its known dictionary limitation.
+for implemented support and dictionary qualification.
 
 Reconsider this boundary if native-valid observations contradict the selected
 phases, synchronous bridge transport cannot preserve the contract, or actual
@@ -257,8 +257,8 @@ progress. An option or coefficient error that occurs before the next lifetime
 check keeps its precedence; the close priority does not move that check ahead
 of earlier failures. A different validation algorithm must also preserve native
 per-group gradient capture and sequential numerical alias effects. The
-[known dictionary discrepancy](../compatibility.md#known-group-dictionary-limitation)
-records where the current Python presentation does not yet meet that contract.
+[dictionary qualification](../compatibility.md#group-dictionary-capture-evidence)
+records the implemented Python presentation's bounded evidence.
 
 ## Optimizer ownership and retirement
 

@@ -102,8 +102,9 @@ checks in the same change as a registered generated path.
 `scripts/build-python.mjs` copies maintained Python source byte for byte into
 `dist/python/` and writes its separate `manifest.json`. That manifest records
 the source paths, byte lengths, SHA-256 hashes, bootstrap/bridge protocol version
-and selected Pyodide version. The package handoff uses bridge protocol 3,
-independently of schema 1 and Pyodide 314.0.6; mixed protocol 2/3 distributions
+and selected Pyodide version. The private bridge uses protocol 4, including
+the unchanged package-source map and synchronous SGD capture interface,
+independently of schema 1 and Pyodide 314.0.6; mixed protocol 3/4 distributions
 reject before Python execution. It does not describe numerical kernels. Serving
 the distribution must preserve these relative paths, or the host must supply
 the Python manifest's location explicitly. The

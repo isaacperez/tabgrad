@@ -23,6 +23,89 @@ def attempt(call):
 """
 
 
+REENTRY_SOURCE = """import warnings
+
+def run_case(name):
+    p=torch.tensor([2.],dtype=torch.float32,requires_grad=True)
+    q=torch.tensor([4.],dtype=torch.float32,requires_grad=True)
+    old=torch.tensor([3.],dtype=torch.float32)
+    other=torch.tensor([5.],dtype=torch.float32)
+    replacement=torch.tensor([9.],dtype=torch.float32)
+    p.grad=old
+    q.grad=other
+    events=[]
+    marker=LookupError('dictionary sentinel')
+    class Group(dict):
+        armed=False
+        fired=False
+        momentum_reads=0
+        rate_reads=0
+        def __getitem__(self,key):
+            value=super().__getitem__(key)
+            if self.armed:
+                events.append(key)
+                if key=='momentum':
+                    self.momentum_reads+=1
+                    if name=='post-momentum-throw' and self.momentum_reads==3: raise marker
+                if key=='lr':
+                    self.rate_reads+=1
+                    if name=='rate-sequence': return 0.5*self.rate_reads
+                trigger='params' if name.startswith('params-') else 'fused' if name.startswith('fused-') else ('lr' if name.startswith('rate-') or name.startswith('second-rate-') or name=='absent-bad-rate' else 'momentum')
+                if key==trigger and not self.fired:
+                    self.fired=True
+                    if name in ('params-clear','clear-current','rate-clear','fused-clear','second-rate-throw','second-rate-bad'): p.grad=None
+                    elif name in ('replace-current','duplicate-replace','fused-replace'): p.grad=replacement
+                    elif name in ('clear-later','cross-group-clear'): q.grad=None
+                    elif name=='replace-later': q.grad=replacement
+                    elif name=='numeric-alias':
+                        with torch.no_grad(): q.copy_(replacement)
+                    elif name in ('params-throw','option-throw','rate-throw'): raise marker
+                    elif name in ('recursive','recursive-replace'):
+                        if name=='recursive-replace': p.grad=replacement
+                        optimizer.step()
+                    if name=='second-rate-throw': raise marker
+                    if name in ('second-rate-bad','absent-bad-rate'): return 'bad'
+            return value
+    group=Group(params=[p,q] if name in ('clear-later','replace-later','numeric-alias') else ([p,p] if name=='duplicate-replace' else [p]),lr=0.5)
+    if name=='numeric-alias': p.grad=q.view(1); q.grad=p.view(1)
+    if name=='absent-bad-rate': p.grad=None
+    if name.startswith('second-rate-'):
+        first={'params':[q],'lr':0.5}
+        groups=[first,group]
+    elif name=='cross-group-clear': groups=[group,{'params':[q],'lr':0.5}]
+    else: groups=[group]
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        optimizer=torch.optim.SGD(groups,foreach=False)
+    group.armed=True
+    error=None
+    same=False
+    closure_calls=0
+    def closure():
+        nonlocal closure_calls
+        closure_calls+=1
+        if name=='params-clear':
+            p.grad=replacement
+            return 42
+        with torch.no_grad(): p.copy_(replacement)
+        if name=='params-throw': return 42
+        raise marker
+    try: optimizer.step(closure if name in ('closure-throw','params-clear','params-throw') else None)
+    except Exception as exception:
+        error=type(exception).__name__
+        same=exception is marker
+    def association(parameter):
+        value=parameter.grad
+        return 'none' if value is None else ('old' if value is old else ('other' if value is other else ('replacement' if value is replacement else 'alias')))
+    return {'name':name,'p':p.tolist(),'q':q.tolist(),'pGrad':association(p),'qGrad':association(q),'pVersion':_inspect_version(p),'qVersion':_inspect_version(q),'error':error,'sameException':same,'recordingRestored':(p*p).requires_grad,'closureCalls':closure_calls,'events':events}
+
+case_names=['clear-current','replace-current','clear-later','replace-later','fused-clear','fused-replace','rate-clear','option-throw','rate-throw','second-rate-throw','second-rate-bad','absent-bad-rate','duplicate-replace','numeric-alias','cross-group-clear','closure-throw','recursive','recursive-replace','post-momentum-throw','rate-sequence','params-clear','params-throw']
+observations=[run_case(name) for name in case_names]
+
+report = {"observations": observations}
+"""
+
+
 def sources() -> list[tuple[str, str, str]]:
     cases: list[tuple[str, str, str]] = []
     for midpoint in (2**62 + 2**38, 2**63 - 2**38):
@@ -338,6 +421,7 @@ report = {'gradient': state(gradient), 'alias': state(alias), 'p_same': p.grad i
             "reset",
         )
     )
+    cases.append(("dictionary-reentry-phases", COMMON + REENTRY_SOURCE, "reentry"))
     return cases
 
 

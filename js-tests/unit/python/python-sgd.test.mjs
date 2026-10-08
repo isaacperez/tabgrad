@@ -29,6 +29,41 @@ test("Python SGD host closures preserve close priority and original exceptions",
   finally { await binding.close(); }
 });
 
+test("actual Python capture views expire independently of borrowed callback proxies", { timeout: 20_000 }, async () => {
+  const interpreter = await loadPyodide(); const binding = await attachPython(interpreter);
+  try {
+    await binding.runPythonAsync(`
+import torch, gc
+from pyodide.ffi import JsException
+def check_capture_expiry():
+    p = torch.tensor([2.], dtype=torch.float32)
+    gradient = torch.tensor([3.], dtype=torch.float32)
+    p.grad = gradient
+    optimizer = torch.optim.SGD([p])
+    views = []
+    def collect(scope):
+        views.append(scope)
+        assert scope.capture(0)
+        gradient._handle.close()
+        p.grad = None
+    optimizer._lease.withGroup(0, collect)
+    for operation in (lambda: views[0].hasGradient(0), lambda: views[0].capture(0), lambda: views[0].apply(0)):
+        try: operation()
+        except JsException as error: assert 'scope has expired' in str(error)
+        else: raise AssertionError('escaped capture view remained usable')
+    assert p.tolist() == [2.]
+check_capture_expiry()
+del check_capture_expiry
+gc.collect()
+assert torch._runtime_session.diagnostics().liveTensorHandles == 0
+assert torch._runtime_session.diagnostics().liveTensorValues == 0
+`);
+    const semantic = getTestRuntimeSemanticOwnership(interpreter.runPython("torch._runtime_session"));
+    assert.equal(semantic.optimizerCaptureOccurrences, 0);
+    assert.equal(semantic.optimizerCaptureScopes, 0);
+  } finally { await binding.close(); }
+});
+
 test("Python derivatives preserve saved-detachment causes and lifetime categories after SGD reset", { timeout: 20_000 }, async () => {
   const interpreter = await loadPyodide();
   const binding = await attachPython(interpreter);

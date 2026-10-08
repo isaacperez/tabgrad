@@ -369,6 +369,12 @@ It covers repeated scalar/singleton/matrix/empty training, groups and repeats,
 crossed aliases, absent/present/empty gradients, zero/nonfinite/group-negative
 rates, integer midpoint neighbors, binding/validation phases, native false
 forms, closure identity/errors and reset/detachment/view/history interactions.
+The dictionary-reentry trace compares 22 selected cases with the same native
+sources: occurrence-interleaved selection, changed/cleared current and later
+associations, repeated parameters, numerical aliases, recursive calls,
+params/closure ordering, single rate access, post-update errors and earlier-group
+progress. It compares the native access trace together with values, associations,
+versions, original exception identity and recording restoration.
 Saved detachment after numeric reset is checked through both `backward()` and
 `torch.autograd.grad`, including the preserved gradient association and alias.
 Float32 bits, shape, tracking, mutation counters and Python exception classes
@@ -390,16 +396,14 @@ allocated/reserved capacity and host heap/RSS remain separate measurements;
 they establish no universal speed or total-process-memory bound. Exact source,
 browser versions and raw cost observations belong to verification evidence.
 
-#### Known group-dictionary limitation
+#### Group-dictionary capture evidence
 
-A group dictionary subclass can return ordinary built-in SGD options while
-removing a parameter's gradient during option access. With parameter 2,
-gradient 3 and learning rate 0.5, clearing the association when momentum is read
-leaves the pinned native parameter at 0.5: its group has already captured the
-gradient. Tabgrad instead leaves the parameter at 2 because it reads options
-before collecting the gradient. Both leave the association absent. The
-[shared reproduction and observations](https://github.com/isaacperez/tabgrad/issues/184#issuecomment-6053660862)
-demonstrate this numerical compatibility discrepancy, tracked in
-[#199](https://github.com/isaacperez/tabgrad/issues/199); the corpus above does
-not cover it. Dictionary subclasses are not silently added to the exclusions,
-and matching the current result would not establish native compatibility.
+Dictionary subclasses returning built-in basic options are covered. Clearing
+the association during momentum access after capture still updates a parameter
+at 2 with captured gradient 3 and rate 0.5 to 0.5, leaving the association absent.
+Identity capture follows native occurrence phases; numerical values remain
+sequential. The maintained corpus covers this class rather than freezing only
+one numerical reproduction. The [research and native observations](https://github.com/isaacperez/tabgrad/issues/202)
+record the bounded source/build evidence; tests qualify the implemented owner
+and actual Python/browser consumers separately. These selected observations do
+not cover custom scalars, broader modes or arbitrary structural tampering.

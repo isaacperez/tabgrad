@@ -10658,6 +10658,667 @@
         "p_same": true,
         "q_same": true
       }
+    },
+    {
+      "name": "dictionary-reentry-phases",
+      "kind": "reentry",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\nimport warnings\n\ndef run_case(name):\n    p=torch.tensor([2.],dtype=torch.float32,requires_grad=True)\n    q=torch.tensor([4.],dtype=torch.float32,requires_grad=True)\n    old=torch.tensor([3.],dtype=torch.float32)\n    other=torch.tensor([5.],dtype=torch.float32)\n    replacement=torch.tensor([9.],dtype=torch.float32)\n    p.grad=old\n    q.grad=other\n    events=[]\n    marker=LookupError('dictionary sentinel')\n    class Group(dict):\n        armed=False\n        fired=False\n        momentum_reads=0\n        rate_reads=0\n        def __getitem__(self,key):\n            value=super().__getitem__(key)\n            if self.armed:\n                events.append(key)\n                if key=='momentum':\n                    self.momentum_reads+=1\n                    if name=='post-momentum-throw' and self.momentum_reads==3: raise marker\n                if key=='lr':\n                    self.rate_reads+=1\n                    if name=='rate-sequence': return 0.5*self.rate_reads\n                trigger='params' if name.startswith('params-') else 'fused' if name.startswith('fused-') else ('lr' if name.startswith('rate-') or name.startswith('second-rate-') or name=='absent-bad-rate' else 'momentum')\n                if key==trigger and not self.fired:\n                    self.fired=True\n                    if name in ('params-clear','clear-current','rate-clear','fused-clear','second-rate-throw','second-rate-bad'): p.grad=None\n                    elif name in ('replace-current','duplicate-replace','fused-replace'): p.grad=replacement\n                    elif name in ('clear-later','cross-group-clear'): q.grad=None\n                    elif name=='replace-later': q.grad=replacement\n                    elif name=='numeric-alias':\n                        with torch.no_grad(): q.copy_(replacement)\n                    elif name in ('params-throw','option-throw','rate-throw'): raise marker\n                    elif name in ('recursive','recursive-replace'):\n                        if name=='recursive-replace': p.grad=replacement\n                        optimizer.step()\n                    if name=='second-rate-throw': raise marker\n                    if name in ('second-rate-bad','absent-bad-rate'): return 'bad'\n            return value\n    group=Group(params=[p,q] if name in ('clear-later','replace-later','numeric-alias') else ([p,p] if name=='duplicate-replace' else [p]),lr=0.5)\n    if name=='numeric-alias': p.grad=q.view(1); q.grad=p.view(1)\n    if name=='absent-bad-rate': p.grad=None\n    if name.startswith('second-rate-'):\n        first={'params':[q],'lr':0.5}\n        groups=[first,group]\n    elif name=='cross-group-clear': groups=[group,{'params':[q],'lr':0.5}]\n    else: groups=[group]\n    with warnings.catch_warnings():\n        warnings.simplefilter(\"ignore\", UserWarning)\n        optimizer=torch.optim.SGD(groups,foreach=False)\n    group.armed=True\n    error=None\n    same=False\n    closure_calls=0\n    def closure():\n        nonlocal closure_calls\n        closure_calls+=1\n        if name=='params-clear':\n            p.grad=replacement\n            return 42\n        with torch.no_grad(): p.copy_(replacement)\n        if name=='params-throw': return 42\n        raise marker\n    try: optimizer.step(closure if name in ('closure-throw','params-clear','params-throw') else None)\n    except Exception as exception:\n        error=type(exception).__name__\n        same=exception is marker\n    def association(parameter):\n        value=parameter.grad\n        return 'none' if value is None else ('old' if value is old else ('other' if value is other else ('replacement' if value is replacement else 'alias')))\n    return {'name':name,'p':p.tolist(),'q':q.tolist(),'pGrad':association(p),'qGrad':association(q),'pVersion':_inspect_version(p),'qVersion':_inspect_version(q),'error':error,'sameException':same,'recordingRestored':(p*p).requires_grad,'closureCalls':closure_calls,'events':events}\n\ncase_names=['clear-current','replace-current','clear-later','replace-later','fused-clear','fused-replace','rate-clear','option-throw','rate-throw','second-rate-throw','second-rate-bad','absent-bad-rate','duplicate-replace','numeric-alias','cross-group-clear','closure-throw','recursive','recursive-replace','post-momentum-throw','rate-sequence','params-clear','params-throw']\nobservations=[run_case(name) for name in case_names]\n\nreport = {\"observations\": observations}\n",
+      "expected": {
+        "observations": [
+          {
+            "name": "clear-current",
+            "p": [
+              0.5
+            ],
+            "q": [
+              4.0
+            ],
+            "pGrad": "none",
+            "qGrad": "other",
+            "pVersion": 1,
+            "qVersion": 0,
+            "error": null,
+            "sameException": false,
+            "recordingRestored": true,
+            "closureCalls": 0,
+            "events": [
+              "params",
+              "fused",
+              "momentum",
+              "weight_decay",
+              "momentum",
+              "lr",
+              "dampening",
+              "nesterov",
+              "maximize",
+              "foreach",
+              "fused",
+              "momentum"
+            ]
+          },
+          {
+            "name": "replace-current",
+            "p": [
+              0.5
+            ],
+            "q": [
+              4.0
+            ],
+            "pGrad": "replacement",
+            "qGrad": "other",
+            "pVersion": 1,
+            "qVersion": 0,
+            "error": null,
+            "sameException": false,
+            "recordingRestored": true,
+            "closureCalls": 0,
+            "events": [
+              "params",
+              "fused",
+              "momentum",
+              "weight_decay",
+              "momentum",
+              "lr",
+              "dampening",
+              "nesterov",
+              "maximize",
+              "foreach",
+              "fused",
+              "momentum"
+            ]
+          },
+          {
+            "name": "clear-later",
+            "p": [
+              0.5
+            ],
+            "q": [
+              4.0
+            ],
+            "pGrad": "old",
+            "qGrad": "none",
+            "pVersion": 1,
+            "qVersion": 0,
+            "error": null,
+            "sameException": false,
+            "recordingRestored": true,
+            "closureCalls": 0,
+            "events": [
+              "params",
+              "fused",
+              "momentum",
+              "weight_decay",
+              "momentum",
+              "lr",
+              "dampening",
+              "nesterov",
+              "maximize",
+              "foreach",
+              "fused",
+              "momentum"
+            ]
+          },
+          {
+            "name": "replace-later",
+            "p": [
+              0.5
+            ],
+            "q": [
+              -0.5
+            ],
+            "pGrad": "old",
+            "qGrad": "replacement",
+            "pVersion": 1,
+            "qVersion": 1,
+            "error": null,
+            "sameException": false,
+            "recordingRestored": true,
+            "closureCalls": 0,
+            "events": [
+              "params",
+              "fused",
+              "momentum",
+              "fused",
+              "momentum",
+              "weight_decay",
+              "momentum",
+              "lr",
+              "dampening",
+              "nesterov",
+              "maximize",
+              "foreach",
+              "fused",
+              "momentum"
+            ]
+          },
+          {
+            "name": "fused-clear",
+            "p": [
+              2.0
+            ],
+            "q": [
+              4.0
+            ],
+            "pGrad": "none",
+            "qGrad": "other",
+            "pVersion": 0,
+            "qVersion": 0,
+            "error": "AttributeError",
+            "sameException": false,
+            "recordingRestored": true,
+            "closureCalls": 0,
+            "events": [
+              "params",
+              "fused"
+            ]
+          },
+          {
+            "name": "fused-replace",
+            "p": [
+              -2.5
+            ],
+            "q": [
+              4.0
+            ],
+            "pGrad": "replacement",
+            "qGrad": "other",
+            "pVersion": 1,
+            "qVersion": 0,
+            "error": null,
+            "sameException": false,
+            "recordingRestored": true,
+            "closureCalls": 0,
+            "events": [
+              "params",
+              "fused",
+              "momentum",
+              "weight_decay",
+              "momentum",
+              "lr",
+              "dampening",
+              "nesterov",
+              "maximize",
+              "foreach",
+              "fused",
+              "momentum"
+            ]
+          },
+          {
+            "name": "rate-clear",
+            "p": [
+              0.5
+            ],
+            "q": [
+              4.0
+            ],
+            "pGrad": "none",
+            "qGrad": "other",
+            "pVersion": 1,
+            "qVersion": 0,
+            "error": null,
+            "sameException": false,
+            "recordingRestored": true,
+            "closureCalls": 0,
+            "events": [
+              "params",
+              "fused",
+              "momentum",
+              "weight_decay",
+              "momentum",
+              "lr",
+              "dampening",
+              "nesterov",
+              "maximize",
+              "foreach",
+              "fused",
+              "momentum"
+            ]
+          },
+          {
+            "name": "option-throw",
+            "p": [
+              2.0
+            ],
+            "q": [
+              4.0
+            ],
+            "pGrad": "old",
+            "qGrad": "other",
+            "pVersion": 0,
+            "qVersion": 0,
+            "error": "LookupError",
+            "sameException": true,
+            "recordingRestored": true,
+            "closureCalls": 0,
+            "events": [
+              "params",
+              "fused",
+              "momentum"
+            ]
+          },
+          {
+            "name": "rate-throw",
+            "p": [
+              2.0
+            ],
+            "q": [
+              4.0
+            ],
+            "pGrad": "old",
+            "qGrad": "other",
+            "pVersion": 0,
+            "qVersion": 0,
+            "error": "LookupError",
+            "sameException": true,
+            "recordingRestored": true,
+            "closureCalls": 0,
+            "events": [
+              "params",
+              "fused",
+              "momentum",
+              "weight_decay",
+              "momentum",
+              "lr"
+            ]
+          },
+          {
+            "name": "second-rate-throw",
+            "p": [
+              2.0
+            ],
+            "q": [
+              1.5
+            ],
+            "pGrad": "none",
+            "qGrad": "other",
+            "pVersion": 0,
+            "qVersion": 1,
+            "error": "LookupError",
+            "sameException": true,
+            "recordingRestored": true,
+            "closureCalls": 0,
+            "events": [
+              "params",
+              "fused",
+              "momentum",
+              "weight_decay",
+              "momentum",
+              "lr"
+            ]
+          },
+          {
+            "name": "second-rate-bad",
+            "p": [
+              2.0
+            ],
+            "q": [
+              1.5
+            ],
+            "pGrad": "none",
+            "qGrad": "other",
+            "pVersion": 0,
+            "qVersion": 1,
+            "error": "TypeError",
+            "sameException": false,
+            "recordingRestored": true,
+            "closureCalls": 0,
+            "events": [
+              "params",
+              "fused",
+              "momentum",
+              "weight_decay",
+              "momentum",
+              "lr",
+              "dampening",
+              "nesterov",
+              "maximize",
+              "foreach",
+              "fused"
+            ]
+          },
+          {
+            "name": "absent-bad-rate",
+            "p": [
+              2.0
+            ],
+            "q": [
+              4.0
+            ],
+            "pGrad": "none",
+            "qGrad": "other",
+            "pVersion": 0,
+            "qVersion": 0,
+            "error": null,
+            "sameException": false,
+            "recordingRestored": true,
+            "closureCalls": 0,
+            "events": [
+              "params",
+              "weight_decay",
+              "momentum",
+              "lr",
+              "dampening",
+              "nesterov",
+              "maximize",
+              "foreach",
+              "fused",
+              "momentum"
+            ]
+          },
+          {
+            "name": "duplicate-replace",
+            "p": [
+              -4.0
+            ],
+            "q": [
+              4.0
+            ],
+            "pGrad": "replacement",
+            "qGrad": "other",
+            "pVersion": 2,
+            "qVersion": 0,
+            "error": null,
+            "sameException": false,
+            "recordingRestored": true,
+            "closureCalls": 0,
+            "events": [
+              "params",
+              "fused",
+              "momentum",
+              "fused",
+              "momentum",
+              "weight_decay",
+              "momentum",
+              "lr",
+              "dampening",
+              "nesterov",
+              "maximize",
+              "foreach",
+              "fused",
+              "momentum"
+            ]
+          },
+          {
+            "name": "numeric-alias",
+            "p": [
+              -2.5
+            ],
+            "q": [
+              10.25
+            ],
+            "pGrad": "alias",
+            "qGrad": "alias",
+            "pVersion": 1,
+            "qVersion": 2,
+            "error": null,
+            "sameException": false,
+            "recordingRestored": true,
+            "closureCalls": 0,
+            "events": [
+              "params",
+              "fused",
+              "momentum",
+              "fused",
+              "momentum",
+              "weight_decay",
+              "momentum",
+              "lr",
+              "dampening",
+              "nesterov",
+              "maximize",
+              "foreach",
+              "fused",
+              "momentum"
+            ]
+          },
+          {
+            "name": "cross-group-clear",
+            "p": [
+              0.5
+            ],
+            "q": [
+              4.0
+            ],
+            "pGrad": "old",
+            "qGrad": "none",
+            "pVersion": 1,
+            "qVersion": 0,
+            "error": null,
+            "sameException": false,
+            "recordingRestored": true,
+            "closureCalls": 0,
+            "events": [
+              "params",
+              "fused",
+              "momentum",
+              "weight_decay",
+              "momentum",
+              "lr",
+              "dampening",
+              "nesterov",
+              "maximize",
+              "foreach",
+              "fused",
+              "momentum"
+            ]
+          },
+          {
+            "name": "closure-throw",
+            "p": [
+              9.0
+            ],
+            "q": [
+              4.0
+            ],
+            "pGrad": "old",
+            "qGrad": "other",
+            "pVersion": 1,
+            "qVersion": 0,
+            "error": "LookupError",
+            "sameException": true,
+            "recordingRestored": true,
+            "closureCalls": 1,
+            "events": []
+          },
+          {
+            "name": "recursive",
+            "p": [
+              -1.0
+            ],
+            "q": [
+              4.0
+            ],
+            "pGrad": "old",
+            "qGrad": "other",
+            "pVersion": 2,
+            "qVersion": 0,
+            "error": null,
+            "sameException": false,
+            "recordingRestored": true,
+            "closureCalls": 0,
+            "events": [
+              "params",
+              "fused",
+              "momentum",
+              "params",
+              "fused",
+              "momentum",
+              "weight_decay",
+              "momentum",
+              "lr",
+              "dampening",
+              "nesterov",
+              "maximize",
+              "foreach",
+              "fused",
+              "momentum",
+              "weight_decay",
+              "momentum",
+              "lr",
+              "dampening",
+              "nesterov",
+              "maximize",
+              "foreach",
+              "fused",
+              "momentum"
+            ]
+          },
+          {
+            "name": "recursive-replace",
+            "p": [
+              -4.0
+            ],
+            "q": [
+              4.0
+            ],
+            "pGrad": "replacement",
+            "qGrad": "other",
+            "pVersion": 2,
+            "qVersion": 0,
+            "error": null,
+            "sameException": false,
+            "recordingRestored": true,
+            "closureCalls": 0,
+            "events": [
+              "params",
+              "fused",
+              "momentum",
+              "params",
+              "fused",
+              "momentum",
+              "weight_decay",
+              "momentum",
+              "lr",
+              "dampening",
+              "nesterov",
+              "maximize",
+              "foreach",
+              "fused",
+              "momentum",
+              "weight_decay",
+              "momentum",
+              "lr",
+              "dampening",
+              "nesterov",
+              "maximize",
+              "foreach",
+              "fused",
+              "momentum"
+            ]
+          },
+          {
+            "name": "post-momentum-throw",
+            "p": [
+              0.5
+            ],
+            "q": [
+              4.0
+            ],
+            "pGrad": "old",
+            "qGrad": "other",
+            "pVersion": 1,
+            "qVersion": 0,
+            "error": "LookupError",
+            "sameException": true,
+            "recordingRestored": true,
+            "closureCalls": 0,
+            "events": [
+              "params",
+              "fused",
+              "momentum",
+              "weight_decay",
+              "momentum",
+              "lr",
+              "dampening",
+              "nesterov",
+              "maximize",
+              "foreach",
+              "fused",
+              "momentum"
+            ]
+          },
+          {
+            "name": "rate-sequence",
+            "p": [
+              0.5
+            ],
+            "q": [
+              4.0
+            ],
+            "pGrad": "old",
+            "qGrad": "other",
+            "pVersion": 1,
+            "qVersion": 0,
+            "error": null,
+            "sameException": false,
+            "recordingRestored": true,
+            "closureCalls": 0,
+            "events": [
+              "params",
+              "fused",
+              "momentum",
+              "weight_decay",
+              "momentum",
+              "lr",
+              "dampening",
+              "nesterov",
+              "maximize",
+              "foreach",
+              "fused",
+              "momentum"
+            ]
+          },
+          {
+            "name": "params-clear",
+            "p": [
+              2.0
+            ],
+            "q": [
+              4.0
+            ],
+            "pGrad": "none",
+            "qGrad": "other",
+            "pVersion": 0,
+            "qVersion": 0,
+            "error": null,
+            "sameException": false,
+            "recordingRestored": true,
+            "closureCalls": 1,
+            "events": [
+              "params",
+              "weight_decay",
+              "momentum",
+              "lr",
+              "dampening",
+              "nesterov",
+              "maximize",
+              "foreach",
+              "fused",
+              "momentum"
+            ]
+          },
+          {
+            "name": "params-throw",
+            "p": [
+              9.0
+            ],
+            "q": [
+              4.0
+            ],
+            "pGrad": "old",
+            "qGrad": "other",
+            "pVersion": 1,
+            "qVersion": 0,
+            "error": "LookupError",
+            "sameException": true,
+            "recordingRestored": true,
+            "closureCalls": 1,
+            "events": [
+              "params"
+            ]
+          }
+        ]
+      }
     }
   ],
   "copyCases": [

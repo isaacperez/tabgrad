@@ -17,7 +17,7 @@ export interface PythonSources {
 function parseManifest(value: unknown): SourceDescriptor[] {
   if (typeof value !== "object" || value === null) throw new Error("Invalid Python manifest.");
   const manifest = value as Record<string, unknown>;
-  if (manifest.schemaVersion !== 1 || manifest.bridgeVersion !== 3
+  if (manifest.schemaVersion !== 1 || manifest.bridgeVersion !== 4
     || manifest.pyodideVersion !== "314.0.6" || !Array.isArray(manifest.files)
     || manifest.files.length !== SOURCE_PATHS.length) {
     throw new Error("Incompatible Python artifact manifest.");
