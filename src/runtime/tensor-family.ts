@@ -31,6 +31,7 @@ export class TensorIdentity {
   retained = false;
   readonly detachmentCounter = { value: 0 };
   readonly shape: readonly number[];
+  readonly familyBase: TensorIdentity;
   historyVersion: number;
   #snapshot: TensorValue;
   constructor(readonly family: TensorFamily, value: TensorValue,
@@ -38,6 +39,7 @@ export class TensorIdentity {
     readonly base: TensorIdentity | null, readonly specialView: boolean,
     readonly trueLeaf: boolean = entry?.recipe === null) {
     this.shape = value.shape;
+    this.familyBase = base?.familyBase ?? this;
     this.historyVersion = family.version;
     this.#snapshot = value;
     this.incomingIdentity = { owners: 0 };
