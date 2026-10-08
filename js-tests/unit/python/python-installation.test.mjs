@@ -71,13 +71,16 @@ test("installation transfers a path dictionary and releases its proxy before imp
 for (const phase of ["bootstrap", "sources:acquire", "sources:set", "namespace:set", "sources:destroy", "install", "temporaries"]) {
   test(`failed ${phase} releases each acquired dictionary once`, () => {
     const primary = new Error(phase);
-    const { interpreter, proxies } = installationDouble(new Map([[phase, primary]]));
+    const { interpreter, proxies, events } = installationDouble(new Map([[phase, primary]]));
     assert.throws(() => new PythonInstallation(interpreter, sources, {}), (error) => {
       assert.equal(error.code, "PYTHON_INSTALL_FAILED");
       assert.deepEqual(errorLeaves(error), [primary]);
       return true;
     });
     assert.ok(proxies.every((proxy) => proxy.destroys === 1));
+    assert.equal(events.filter((event) => event === "close").length, phase === "temporaries" ? 1 : 0);
+    assert.ok(events.indexOf("clear") < events.indexOf("namespace:destroy"));
+    if (phase === "temporaries") assert.ok(events.indexOf("close") < events.indexOf("clear"));
   });
 }
 
@@ -98,6 +101,20 @@ for (const phase of ["sources:set", "namespace:set", "install", "temporaries"]) 
     assert.ok(proxies.every((proxy) => proxy.destroys === 1));
   });
 }
+
+test("failed finalization preserves retirement and both namespace cleanup failures", () => {
+  const errors = [new Error("temporaries"), new Error("close"), new Error("clear"), new Error("destroy")];
+  const { interpreter, proxies, events } = installationDouble(new Map([
+    ["temporaries", errors[0]], ["close", errors[1]], ["clear", errors[2]], ["namespace:destroy", errors[3]],
+  ]));
+  assert.throws(() => new PythonInstallation(interpreter, sources, {}), (error) => {
+    assert.equal(error.code, "PYTHON_INSTALL_FAILED");
+    assert.deepEqual(errorLeaves(error), errors);
+    return true;
+  });
+  assert.deepEqual(events.slice(-4), ["temporaries", "close", "clear", "namespace:destroy"]);
+  assert.ok(proxies.every((proxy) => proxy.destroys === 1));
+});
 
 test("retirement preserves close, namespace clear and destroy failures", () => {
   const errors = [new Error("close"), new Error("clear"), new Error("destroy")];

@@ -1818,6 +1818,163 @@ test("failed source transfer releases real proxies and permits reattachment", { 
   }
 });
 
+for (const afterDeletion of [false, true]) {
+  for (const hostChanges of [false, true]) {
+    test(`failed attachment finalization retires completed installation (deleted=${afterDeletion}, host=${hostChanges})`, {
+      timeout: 15_000,
+    }, async (context) => {
+      const { attachPython } = await import("../../../dist/python.js");
+      const interpreter = await loadPyodide();
+      const run = interpreter.runPython;
+      const control = await attachPython(interpreter);
+      await control.close();
+      run(`
+import os, sys, types
+from pathlib import Path
+from _pyodide._importhook import jsfinder
+host_sentinel = object()
+before_tmp = set(os.listdir('/tmp'))
+before_path = tuple(sys.path)
+before_cache = set(sys.path_importer_cache)
+before_modules = tuple(sys.modules.get(name) for name in ('torch', 'torch.autograd', 'torch.optim', '_tabgrad_runtime_bridge'))
+`);
+      const primary = new Error("injected finalization failure");
+      let injected = false;
+      let retirements = 0;
+      let oldSession;
+      const replacement = context.mock.method(interpreter, "runPython", (source, options) => {
+        if (source === "_installation.close()") retirements += 1;
+        if (source !== "del _package_sources, _runtime_bridge" || injected) return run(source, options);
+        injected = true;
+        oldSession = run("__import__('sys').modules['torch']._runtime_session");
+        run("old_torch = sys.modules['torch']; original_sentinel = host_sentinel");
+        if (hostChanges) {
+          run(`
+host_module = types.ModuleType('torch.autograd')
+sys.modules['torch.autograd'] = host_module
+host_file = Path(old_torch.__file__)
+host_root = host_file.parent.parent
+host_file.write_text('# host replacement')
+host_path = str(host_root)
+sys.path.insert(0, host_path)
+host_finder = __import__('importlib').machinery.FileFinder(str(host_root))
+sys.path_importer_cache[host_path] = host_finder
+`);
+          interpreter.registerJsModule("_tabgrad_runtime_bridge", { hostOwned: true });
+        }
+        if (afterDeletion) run(source, options);
+        throw primary;
+      });
+      const sessionClose = context.mock.method(RuntimeSession.prototype, "close");
+      let binding;
+      try {
+        await assert.rejects(attachPython(interpreter), (error) => {
+          assert.equal(error.code, "PYTHON_INSTALL_FAILED");
+          assert.equal(error.cause, primary);
+          return true;
+        });
+        replacement.mock.restore();
+        assert.equal(injected, true);
+        assert.equal(run("'torch' not in sys.modules and 'torch.optim' not in sys.modules"), true);
+        assert.equal(run("'_tabgrad_runtime_bridge' not in jsfinder.jsproxies"), !hostChanges);
+        assert.equal(retirements, 1);
+        assert.equal(sessionClose.mock.callCount(), 1);
+        assert.equal(run("host_sentinel is original_sentinel"), true);
+        assert.throws(() => oldSession.tensor([]), (error) => error.code === "CLOSED_SESSION");
+        assert.throws(() => run("old_torch._runtime_session.tensor([])"), /closed/i);
+        if (hostChanges) {
+          assert.equal(run(`(
+sys.modules['torch.autograd'] is host_module and
+host_file.read_text() == '# host replacement' and
+any(entry is host_path for entry in sys.path) and
+sys.path_importer_cache[host_path] is host_finder
+)`), true);
+          run("sys.modules.pop('_tabgrad_runtime_bridge', None); None");
+          assert.equal(run("__import__('_tabgrad_runtime_bridge').hostOwned"), true);
+          interpreter.unregisterJsModule("_tabgrad_runtime_bridge");
+          run(`
+sys.modules.pop('_tabgrad_runtime_bridge', None)
+sys.modules.pop('torch.autograd')
+sys.path[:] = [entry for entry in sys.path if entry is not host_path]
+sys.path_importer_cache.pop(host_path)
+host_file.unlink()
+host_file.parent.rmdir()
+host_root.rmdir()
+`);
+        }
+        assert.equal(run(`(
+tuple(sys.modules.get(name) for name in ('torch', 'torch.autograd', 'torch.optim', '_tabgrad_runtime_bridge')) == before_modules and
+'_tabgrad_runtime_bridge' not in jsfinder.jsproxies and
+set(os.listdir('/tmp')) == before_tmp and tuple(sys.path) == before_path and
+set(sys.path_importer_cache) == before_cache
+)`), true);
+        binding = await attachPython(interpreter);
+        await binding.runPythonAsync("import torch; assert torch._runtime_session is not old_torch._runtime_session; assert torch.tensor([2.], dtype=torch.float32).shape == (1,)");
+        await binding.close();
+        assert.equal(sessionClose.mock.callCount(), 2);
+        assert.throws(() => oldSession.tensor([]), (error) => error.code === "CLOSED_SESSION");
+      } finally {
+        replacement.mock.restore();
+        await binding?.close();
+      }
+    });
+  }
+}
+
+test("failed attachment finalization retains every independent cleanup cause", { timeout: 15_000 }, async (context) => {
+  const { attachPython } = await import("../../../dist/python.js");
+  const interpreter = await loadPyodide();
+  const run = interpreter.runPython;
+  const failures = ["finalization", "retirement", "clear", "destroy", "session"].map((phase) => new Error(phase));
+  const events = [];
+  let dictionaries = 0;
+  let injected = false;
+  const replacement = context.mock.method(interpreter, "runPython", (source, options) => {
+    if (source === "del _package_sources, _runtime_bridge" && !injected) {
+      injected = true;
+      events.push("finalization");
+      throw failures[0];
+    }
+    const result = run(source, options);
+    if (source === "{}" && dictionaries++ === 0) {
+      const destroy = result.destroy.bind(result);
+      context.mock.method(result, "destroy", () => {
+        events.push("destroy");
+        destroy();
+        throw failures[3];
+      });
+    }
+    if (source === "_installation.close()" || source === "globals().clear()") {
+      const retiring = source === "_installation.close()";
+      events.push(retiring ? "retirement" : "clear");
+      throw failures[retiring ? 1 : 2];
+    }
+    return result;
+  });
+  const close = RuntimeSession.prototype.close;
+  context.mock.method(RuntimeSession.prototype, "close", async function () {
+    events.push("session");
+    await close.call(this);
+    throw failures[4];
+  });
+  await assert.rejects(attachPython(interpreter), (error) => {
+    assert.ok(error instanceof AggregateError);
+    const [installation, session] = error.errors;
+    assert.equal(session, failures[4]);
+    assert.equal(installation.code, "PYTHON_INSTALL_FAILED");
+    assert.ok(installation.cause instanceof AggregateError);
+    const [primary, cleanup] = installation.cause.errors;
+    assert.equal(primary, failures[0]);
+    const [retirement, namespace] = cleanup.errors;
+    assert.equal(retirement, failures[1]);
+    assert.deepEqual(namespace.errors, failures.slice(2, 4));
+    return true;
+  });
+  replacement.mock.restore();
+  assert.deepEqual(events, ["finalization", "retirement", "clear", "destroy", "session"]);
+  assert.equal(run("'torch' not in __import__('sys').modules and '_tabgrad_runtime_bridge' not in __import__('_pyodide._importhook', fromlist=['jsfinder']).jsfinder.jsproxies"), true);
+});
+
 test("repeated attachments release bootstrap proxies and filesystem/import bookkeeping", {
   timeout: 15_000,
 }, async (context) => {

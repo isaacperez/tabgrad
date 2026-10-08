@@ -13,6 +13,7 @@ export class PythonInstallation {
     this.#interpreter = interpreter;
     // A literal creates owned state without resolving a host-shadowed builtin.
     this.#namespace = interpreter.runPython("{}") as PythonNamespace;
+    let installed = false;
     try {
       interpreter.runPython(sources.bootstrap, { globals: this.#namespace });
       this.#transferSources(sources.packageSources);
@@ -21,13 +22,17 @@ export class PythonInstallation {
         "_installation = Installation(); _installation.install(_package_sources, _runtime_bridge)",
         { globals: this.#namespace },
       );
+      installed = true;
       // Imported modules retain their own references. Source text and the
       // temporary bridge reference need not survive for the binding's lifetime.
       interpreter.runPython("del _package_sources, _runtime_bridge", { globals: this.#namespace });
     } catch (cause) {
       let failure = cause;
       try {
-        this.#releaseNamespace();
+        // A failed import rolls itself back. Once it returns, this constructor
+        // owns retirement until the completed installation reaches the binding.
+        if (installed) this.close();
+        else this.#releaseNamespace();
       } catch (cleanup) {
         failure = new AggregateError([cause, cleanup], "Python bootstrap cleanup failed.");
       }
