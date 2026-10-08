@@ -50,6 +50,10 @@ Tracked views can reject before writing. Views created in `no_grad` retain
 caller-mode-sensitive guards. Earlier reset progress survives later failure;
 aliases retain their own tracking and history.
 
+Each group's `params` dictionary getter runs immediately before that group's
+reset. Its effects can clear, install or replace the current gradient used by
+reset. A thrown getter preserves its exception and earlier groups' progress.
+
 `step()` returns `None`, or the exact result of a closure run once with recording
 enabled. A throwing closure preserves its exception/effects without SGD updates.
 The caller's mode is always restored. Each group selects gradient identities
@@ -123,6 +127,10 @@ Session, optimizer and original public parameter-handle close guards run in that
 priority before calls and again after normal closure return: `CLOSED_SESSION`,
 `CLOSED_OPTIMIZER`, `CLOSED_TENSOR`. Throwing closures retain their exception.
 These are Tabgrad host extensions, not native error claims.
+
+After a reset dictionary getter returns normally, session/optimizer checks and each
+target's public-handle check precede its reset. These checks preserve earlier
+accepted resets when a later target closes.
 
 Registration retains one semantic identity edge per occurrence, without payload
 clones or completed-step history. Close independently retires all occurrences

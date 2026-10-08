@@ -234,23 +234,22 @@ class SGD:
     def _check_structure(self) -> None:
         if self.state or len(self.param_groups) != len(self._groups):
             _unsupported()
-        for group, original, members, parameter_list in zip(
-            self.param_groups,
-            self._groups,
-            self._registered,
-            self._parameter_lists,
-            strict=True,
+        for index in range(len(self._groups)):
+            self._check_group_structure(index)
+
+    def _check_group_structure(self, index: int) -> None:
+        group = self.param_groups[index]
+        if (
+            group is not self._groups[index]
+            or dict[str, object].get(group, "params")
+            is not self._parameter_lists[index]
+            or type(dict[str, object].get(group, "params")) is not list
+            or tuple(
+                cast("list[Tensor]", dict[str, object].__getitem__(group, "params"))
+            )
+            != self._registered[index]
         ):
-            if (
-                group is not original
-                or dict[str, object].get(group, "params") is not parameter_list
-                or type(dict[str, object].get(group, "params")) is not list
-                or tuple(
-                    cast("list[Tensor]", dict[str, object].__getitem__(group, "params"))
-                )
-                != members
-            ):
-                _unsupported()
+            _unsupported()
 
     def zero_grad(self, set_to_none: object = True) -> None:
         self._lease.assertOpen()
@@ -258,7 +257,16 @@ class SGD:
             _unsupported()
         self._check_structure()
         try:
-            self._lease.zeroGrad(bool(set_to_none))
+            for index, group in enumerate(self.param_groups):
+                parameters = group["params"]
+                if (
+                    self.state
+                    or len(self.param_groups) != len(self._groups)
+                    or parameters is not self._parameter_lists[index]
+                ):
+                    _unsupported()
+                self._check_group_structure(index)
+                self._lease.zeroGradGroup(index, bool(set_to_none))
         except JsException as error:
             _raise_gradient_failure(error)
 

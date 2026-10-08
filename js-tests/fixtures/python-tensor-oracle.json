@@ -11319,6 +11319,1559 @@
           }
         ]
       }
+    },
+    {
+      "name": "reset-dictionary-reentry",
+      "kind": "reset-reentry",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\ndef reset_case(name, set_to_none, shape='vector'):\n    data = 2. if shape == 'scalar' else ([] if shape == 'empty' else [2.])\n    old_data = 3. if shape == 'scalar' else ([] if shape == 'empty' else [3.])\n    new_data = 9. if shape == 'scalar' else ([] if shape == 'empty' else [9.])\n    p = tensor(data); q = tensor([4.])\n    old = tensor(old_data, False); other = tensor([5.], False)\n    replacement = tensor(new_data, name == 'replace-tracked')\n    alias = replacement.view(list(replacement.shape))\n    zero = tensor([0.], False)\n    p.grad = None if name in ('install-absent', 'absent') else (zero if name == 'zero' else old)\n    q.grad = other\n    events = []\n    marker = LookupError('zero_grad dictionary sentinel')\n    class Group(dict):\n        armed = False\n        def __getitem__(self, key):\n            value = super().__getitem__(key)\n            if self.armed:\n                events.append(key)\n                if key == 'params':\n                    if name == 'clear': p.grad = None\n                    elif name in ('replace', 'replace-tracked', 'install-absent'): p.grad = replacement\n                    elif name in ('throw', 'second-throw'): raise marker\n                    elif name == 'second-observe': events.append(state(old))\n            return value\n    group = Group(params=[q] if name.startswith('second-') else [p], lr=0.5)\n    groups = [{'params': [p]}, group] if name.startswith('second-') else [group]\n    with warnings.catch_warnings(record=True) as caught:\n        warnings.simplefilter('always')\n        optimizer = torch.optim.SGD(groups, foreach=False)\n        group.armed = True\n        error = None; same = False; result = 'not-returned'\n        try: result = optimizer.zero_grad(set_to_none)\n        except Exception as failure:\n            error = type(failure).__name__\n            same = failure is marker\n    def association(parameter):\n        value = parameter.grad\n        return 'none' if value is None else ('old' if value is old else ('other' if value is other else ('replacement' if value is replacement else 'zero')))\n    return {'name': name, 'setToNone': set_to_none, 'shape': shape, 'events': events,\n        'error': error, 'sameException': same, 'returnedNone': result is None,\n        'pGrad': association(p), 'qGrad': association(q), 'old': state(old),\n        'other': state(other), 'replacement': state(replacement), 'alias': state(alias),\n        'zero': state(zero), 'warnings': [item.category.__name__ for item in caught],\n        'recordingRestored': (p*p).requires_grad}\nobservations = [reset_case(name, reset) for reset in (False, True)\n    for name in ('trace', 'clear', 'replace', 'replace-tracked', 'install-absent',\n        'throw', 'second-throw', 'second-observe', 'absent', 'zero')]\nobservations += [reset_case('replace', reset, shape) for reset in (False, True)\n    for shape in ('scalar', 'empty')]\nreport = {'observations': observations}\n",
+      "expected": {
+        "observations": [
+          {
+            "name": "trace",
+            "setToNone": false,
+            "shape": "vector",
+            "events": [
+              "params"
+            ],
+            "error": null,
+            "sameException": false,
+            "returnedNone": true,
+            "pGrad": "old",
+            "qGrad": "other",
+            "old": {
+              "bits": [
+                0
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 1
+            },
+            "other": {
+              "bits": [
+                1084227584
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "replacement": {
+              "bits": [
+                1091567616
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "alias": {
+              "bits": [
+                1091567616
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "zero": {
+              "bits": [
+                0
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "warnings": [],
+            "recordingRestored": true
+          },
+          {
+            "name": "clear",
+            "setToNone": false,
+            "shape": "vector",
+            "events": [
+              "params"
+            ],
+            "error": null,
+            "sameException": false,
+            "returnedNone": true,
+            "pGrad": "none",
+            "qGrad": "other",
+            "old": {
+              "bits": [
+                1077936128
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "other": {
+              "bits": [
+                1084227584
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "replacement": {
+              "bits": [
+                1091567616
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "alias": {
+              "bits": [
+                1091567616
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "zero": {
+              "bits": [
+                0
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "warnings": [],
+            "recordingRestored": true
+          },
+          {
+            "name": "replace",
+            "setToNone": false,
+            "shape": "vector",
+            "events": [
+              "params"
+            ],
+            "error": null,
+            "sameException": false,
+            "returnedNone": true,
+            "pGrad": "replacement",
+            "qGrad": "other",
+            "old": {
+              "bits": [
+                1077936128
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "other": {
+              "bits": [
+                1084227584
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "replacement": {
+              "bits": [
+                0
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 1
+            },
+            "alias": {
+              "bits": [
+                0
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 1
+            },
+            "zero": {
+              "bits": [
+                0
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "warnings": [],
+            "recordingRestored": true
+          },
+          {
+            "name": "replace-tracked",
+            "setToNone": false,
+            "shape": "vector",
+            "events": [
+              "params"
+            ],
+            "error": null,
+            "sameException": false,
+            "returnedNone": true,
+            "pGrad": "replacement",
+            "qGrad": "other",
+            "old": {
+              "bits": [
+                1077936128
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "other": {
+              "bits": [
+                1084227584
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "replacement": {
+              "bits": [
+                0
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 1
+            },
+            "alias": {
+              "bits": [
+                0
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": true,
+              "version": 1
+            },
+            "zero": {
+              "bits": [
+                0
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "warnings": [],
+            "recordingRestored": true
+          },
+          {
+            "name": "install-absent",
+            "setToNone": false,
+            "shape": "vector",
+            "events": [
+              "params"
+            ],
+            "error": null,
+            "sameException": false,
+            "returnedNone": true,
+            "pGrad": "replacement",
+            "qGrad": "other",
+            "old": {
+              "bits": [
+                1077936128
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "other": {
+              "bits": [
+                1084227584
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "replacement": {
+              "bits": [
+                0
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 1
+            },
+            "alias": {
+              "bits": [
+                0
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 1
+            },
+            "zero": {
+              "bits": [
+                0
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "warnings": [],
+            "recordingRestored": true
+          },
+          {
+            "name": "throw",
+            "setToNone": false,
+            "shape": "vector",
+            "events": [
+              "params"
+            ],
+            "error": "LookupError",
+            "sameException": true,
+            "returnedNone": false,
+            "pGrad": "old",
+            "qGrad": "other",
+            "old": {
+              "bits": [
+                1077936128
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "other": {
+              "bits": [
+                1084227584
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "replacement": {
+              "bits": [
+                1091567616
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "alias": {
+              "bits": [
+                1091567616
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "zero": {
+              "bits": [
+                0
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "warnings": [],
+            "recordingRestored": true
+          },
+          {
+            "name": "second-throw",
+            "setToNone": false,
+            "shape": "vector",
+            "events": [
+              "params"
+            ],
+            "error": "LookupError",
+            "sameException": true,
+            "returnedNone": false,
+            "pGrad": "old",
+            "qGrad": "other",
+            "old": {
+              "bits": [
+                0
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 1
+            },
+            "other": {
+              "bits": [
+                1084227584
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "replacement": {
+              "bits": [
+                1091567616
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "alias": {
+              "bits": [
+                1091567616
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "zero": {
+              "bits": [
+                0
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "warnings": [],
+            "recordingRestored": true
+          },
+          {
+            "name": "second-observe",
+            "setToNone": false,
+            "shape": "vector",
+            "events": [
+              "params",
+              {
+                "bits": [
+                  0
+                ],
+                "shape": [
+                  1
+                ],
+                "tracking": false,
+                "version": 1
+              }
+            ],
+            "error": null,
+            "sameException": false,
+            "returnedNone": true,
+            "pGrad": "old",
+            "qGrad": "other",
+            "old": {
+              "bits": [
+                0
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 1
+            },
+            "other": {
+              "bits": [
+                0
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 1
+            },
+            "replacement": {
+              "bits": [
+                1091567616
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "alias": {
+              "bits": [
+                1091567616
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "zero": {
+              "bits": [
+                0
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "warnings": [],
+            "recordingRestored": true
+          },
+          {
+            "name": "absent",
+            "setToNone": false,
+            "shape": "vector",
+            "events": [
+              "params"
+            ],
+            "error": null,
+            "sameException": false,
+            "returnedNone": true,
+            "pGrad": "none",
+            "qGrad": "other",
+            "old": {
+              "bits": [
+                1077936128
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "other": {
+              "bits": [
+                1084227584
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "replacement": {
+              "bits": [
+                1091567616
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "alias": {
+              "bits": [
+                1091567616
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "zero": {
+              "bits": [
+                0
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "warnings": [],
+            "recordingRestored": true
+          },
+          {
+            "name": "zero",
+            "setToNone": false,
+            "shape": "vector",
+            "events": [
+              "params"
+            ],
+            "error": null,
+            "sameException": false,
+            "returnedNone": true,
+            "pGrad": "zero",
+            "qGrad": "other",
+            "old": {
+              "bits": [
+                1077936128
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "other": {
+              "bits": [
+                1084227584
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "replacement": {
+              "bits": [
+                1091567616
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "alias": {
+              "bits": [
+                1091567616
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "zero": {
+              "bits": [
+                0
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 1
+            },
+            "warnings": [],
+            "recordingRestored": true
+          },
+          {
+            "name": "trace",
+            "setToNone": true,
+            "shape": "vector",
+            "events": [
+              "params"
+            ],
+            "error": null,
+            "sameException": false,
+            "returnedNone": true,
+            "pGrad": "none",
+            "qGrad": "other",
+            "old": {
+              "bits": [
+                1077936128
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "other": {
+              "bits": [
+                1084227584
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "replacement": {
+              "bits": [
+                1091567616
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "alias": {
+              "bits": [
+                1091567616
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "zero": {
+              "bits": [
+                0
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "warnings": [],
+            "recordingRestored": true
+          },
+          {
+            "name": "clear",
+            "setToNone": true,
+            "shape": "vector",
+            "events": [
+              "params"
+            ],
+            "error": null,
+            "sameException": false,
+            "returnedNone": true,
+            "pGrad": "none",
+            "qGrad": "other",
+            "old": {
+              "bits": [
+                1077936128
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "other": {
+              "bits": [
+                1084227584
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "replacement": {
+              "bits": [
+                1091567616
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "alias": {
+              "bits": [
+                1091567616
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "zero": {
+              "bits": [
+                0
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "warnings": [],
+            "recordingRestored": true
+          },
+          {
+            "name": "replace",
+            "setToNone": true,
+            "shape": "vector",
+            "events": [
+              "params"
+            ],
+            "error": null,
+            "sameException": false,
+            "returnedNone": true,
+            "pGrad": "none",
+            "qGrad": "other",
+            "old": {
+              "bits": [
+                1077936128
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "other": {
+              "bits": [
+                1084227584
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "replacement": {
+              "bits": [
+                1091567616
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "alias": {
+              "bits": [
+                1091567616
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "zero": {
+              "bits": [
+                0
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "warnings": [],
+            "recordingRestored": true
+          },
+          {
+            "name": "replace-tracked",
+            "setToNone": true,
+            "shape": "vector",
+            "events": [
+              "params"
+            ],
+            "error": null,
+            "sameException": false,
+            "returnedNone": true,
+            "pGrad": "none",
+            "qGrad": "other",
+            "old": {
+              "bits": [
+                1077936128
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "other": {
+              "bits": [
+                1084227584
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "replacement": {
+              "bits": [
+                1091567616
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": true,
+              "version": 0
+            },
+            "alias": {
+              "bits": [
+                1091567616
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": true,
+              "version": 0
+            },
+            "zero": {
+              "bits": [
+                0
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "warnings": [],
+            "recordingRestored": true
+          },
+          {
+            "name": "install-absent",
+            "setToNone": true,
+            "shape": "vector",
+            "events": [
+              "params"
+            ],
+            "error": null,
+            "sameException": false,
+            "returnedNone": true,
+            "pGrad": "none",
+            "qGrad": "other",
+            "old": {
+              "bits": [
+                1077936128
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "other": {
+              "bits": [
+                1084227584
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "replacement": {
+              "bits": [
+                1091567616
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "alias": {
+              "bits": [
+                1091567616
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "zero": {
+              "bits": [
+                0
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "warnings": [],
+            "recordingRestored": true
+          },
+          {
+            "name": "throw",
+            "setToNone": true,
+            "shape": "vector",
+            "events": [
+              "params"
+            ],
+            "error": "LookupError",
+            "sameException": true,
+            "returnedNone": false,
+            "pGrad": "old",
+            "qGrad": "other",
+            "old": {
+              "bits": [
+                1077936128
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "other": {
+              "bits": [
+                1084227584
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "replacement": {
+              "bits": [
+                1091567616
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "alias": {
+              "bits": [
+                1091567616
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "zero": {
+              "bits": [
+                0
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "warnings": [],
+            "recordingRestored": true
+          },
+          {
+            "name": "second-throw",
+            "setToNone": true,
+            "shape": "vector",
+            "events": [
+              "params"
+            ],
+            "error": "LookupError",
+            "sameException": true,
+            "returnedNone": false,
+            "pGrad": "none",
+            "qGrad": "other",
+            "old": {
+              "bits": [
+                1077936128
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "other": {
+              "bits": [
+                1084227584
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "replacement": {
+              "bits": [
+                1091567616
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "alias": {
+              "bits": [
+                1091567616
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "zero": {
+              "bits": [
+                0
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "warnings": [],
+            "recordingRestored": true
+          },
+          {
+            "name": "second-observe",
+            "setToNone": true,
+            "shape": "vector",
+            "events": [
+              "params",
+              {
+                "bits": [
+                  1077936128
+                ],
+                "shape": [
+                  1
+                ],
+                "tracking": false,
+                "version": 0
+              }
+            ],
+            "error": null,
+            "sameException": false,
+            "returnedNone": true,
+            "pGrad": "none",
+            "qGrad": "none",
+            "old": {
+              "bits": [
+                1077936128
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "other": {
+              "bits": [
+                1084227584
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "replacement": {
+              "bits": [
+                1091567616
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "alias": {
+              "bits": [
+                1091567616
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "zero": {
+              "bits": [
+                0
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "warnings": [],
+            "recordingRestored": true
+          },
+          {
+            "name": "absent",
+            "setToNone": true,
+            "shape": "vector",
+            "events": [
+              "params"
+            ],
+            "error": null,
+            "sameException": false,
+            "returnedNone": true,
+            "pGrad": "none",
+            "qGrad": "other",
+            "old": {
+              "bits": [
+                1077936128
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "other": {
+              "bits": [
+                1084227584
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "replacement": {
+              "bits": [
+                1091567616
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "alias": {
+              "bits": [
+                1091567616
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "zero": {
+              "bits": [
+                0
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "warnings": [],
+            "recordingRestored": true
+          },
+          {
+            "name": "zero",
+            "setToNone": true,
+            "shape": "vector",
+            "events": [
+              "params"
+            ],
+            "error": null,
+            "sameException": false,
+            "returnedNone": true,
+            "pGrad": "none",
+            "qGrad": "other",
+            "old": {
+              "bits": [
+                1077936128
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "other": {
+              "bits": [
+                1084227584
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "replacement": {
+              "bits": [
+                1091567616
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "alias": {
+              "bits": [
+                1091567616
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "zero": {
+              "bits": [
+                0
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "warnings": [],
+            "recordingRestored": true
+          },
+          {
+            "name": "replace",
+            "setToNone": false,
+            "shape": "scalar",
+            "events": [
+              "params"
+            ],
+            "error": null,
+            "sameException": false,
+            "returnedNone": true,
+            "pGrad": "replacement",
+            "qGrad": "other",
+            "old": {
+              "bits": 1077936128,
+              "shape": [],
+              "tracking": false,
+              "version": 0
+            },
+            "other": {
+              "bits": [
+                1084227584
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "replacement": {
+              "bits": 0,
+              "shape": [],
+              "tracking": false,
+              "version": 1
+            },
+            "alias": {
+              "bits": 0,
+              "shape": [],
+              "tracking": false,
+              "version": 1
+            },
+            "zero": {
+              "bits": [
+                0
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "warnings": [],
+            "recordingRestored": true
+          },
+          {
+            "name": "replace",
+            "setToNone": false,
+            "shape": "empty",
+            "events": [
+              "params"
+            ],
+            "error": null,
+            "sameException": false,
+            "returnedNone": true,
+            "pGrad": "replacement",
+            "qGrad": "other",
+            "old": {
+              "bits": [],
+              "shape": [
+                0
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "other": {
+              "bits": [
+                1084227584
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "replacement": {
+              "bits": [],
+              "shape": [
+                0
+              ],
+              "tracking": false,
+              "version": 1
+            },
+            "alias": {
+              "bits": [],
+              "shape": [
+                0
+              ],
+              "tracking": false,
+              "version": 1
+            },
+            "zero": {
+              "bits": [
+                0
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "warnings": [],
+            "recordingRestored": true
+          },
+          {
+            "name": "replace",
+            "setToNone": true,
+            "shape": "scalar",
+            "events": [
+              "params"
+            ],
+            "error": null,
+            "sameException": false,
+            "returnedNone": true,
+            "pGrad": "none",
+            "qGrad": "other",
+            "old": {
+              "bits": 1077936128,
+              "shape": [],
+              "tracking": false,
+              "version": 0
+            },
+            "other": {
+              "bits": [
+                1084227584
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "replacement": {
+              "bits": 1091567616,
+              "shape": [],
+              "tracking": false,
+              "version": 0
+            },
+            "alias": {
+              "bits": 1091567616,
+              "shape": [],
+              "tracking": false,
+              "version": 0
+            },
+            "zero": {
+              "bits": [
+                0
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "warnings": [],
+            "recordingRestored": true
+          },
+          {
+            "name": "replace",
+            "setToNone": true,
+            "shape": "empty",
+            "events": [
+              "params"
+            ],
+            "error": null,
+            "sameException": false,
+            "returnedNone": true,
+            "pGrad": "none",
+            "qGrad": "other",
+            "old": {
+              "bits": [],
+              "shape": [
+                0
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "other": {
+              "bits": [
+                1084227584
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "replacement": {
+              "bits": [],
+              "shape": [
+                0
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "alias": {
+              "bits": [],
+              "shape": [
+                0
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "zero": {
+              "bits": [
+                0
+              ],
+              "shape": [
+                1
+              ],
+              "tracking": false,
+              "version": 0
+            },
+            "warnings": [],
+            "recordingRestored": true
+          }
+        ]
+      }
     }
   ],
   "copyCases": [

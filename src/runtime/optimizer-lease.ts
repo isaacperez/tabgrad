@@ -16,6 +16,7 @@ export interface OptimizerLease {
   stepGroup(index: number, alphaBits: number): void;
   withGroup<Result>(index: number, callback: (capture: OptimizerCapture) => Result): Result;
   zeroGrad(setToNone: boolean): void;
+  zeroGradGroup(index: number, setToNone: boolean): void;
   close(): void;
   finalize(): void;
 }

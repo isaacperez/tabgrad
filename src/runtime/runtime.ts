@@ -897,11 +897,11 @@ export class RuntimeSession {
       ),
       zeroGrad: (setToNone: boolean) => {
         assertOpen();
-        for (const group of registration.groups) for (const state of group) {
-          if (setToNone) this.#replaceGradient(state.identity, null);
-          else if (state.identity.gradient !== null) this.#resetGradient(state.identity.gradient);
+        for (let index = 0; index < registration.groups.length; index += 1) {
+          this.#zeroOptimizerGroup(registration, index, setToNone);
         }
       },
+      zeroGradGroup: (index: number, setToNone: boolean) => this.#zeroOptimizerGroup(registration, index, setToNone),
       close: () => this.#retireOptimizer(registration),
       finalize: () => {
         try { this.#retireOptimizer(registration); }
@@ -911,9 +911,26 @@ export class RuntimeSession {
   }
 
   #assertOptimizerOpen(registration: OptimizerRegistration): void {
+    this.#assertOptimizerActive(registration);
+    for (const group of registration.groups) for (const state of group) assertTensorOpen(state);
+  }
+
+  #assertOptimizerActive(registration: OptimizerRegistration): void {
     this.#assertOpen();
     if (registration.closed) throw new TabgradError("CLOSED_OPTIMIZER", "The optimizer is closed.");
-    for (const group of registration.groups) for (const state of group) assertTensorOpen(state);
+  }
+
+  #zeroOptimizerGroup(registration: OptimizerRegistration, index: number, setToNone: boolean): void {
+    this.#assertOptimizerActive(registration);
+    const parameters = registration.groups[index];
+    if (!Number.isSafeInteger(index) || parameters === undefined) throw new TypeError("Invalid SGD group.");
+    // Frontend dictionary access can change associations or close a target.
+    // Select each current gradient only when its occurrence is admitted.
+    for (const state of parameters) {
+      assertTensorOpen(state);
+      if (setToNone) this.#replaceGradient(state.identity, null);
+      else if (state.identity.gradient !== null) this.#resetGradient(state.identity.gradient);
+    }
   }
 
   #assertCaptureOpen(scope: OptimizerCaptureScope): void {
