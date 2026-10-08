@@ -2040,8 +2040,7 @@ export class RuntimeSession {
   }
 
   #familyBase(identity: TensorIdentity): TensorIdentity {
-    while (identity.base !== null) identity = identity.base;
-    return identity;
+    return identity.familyBase;
   }
 
   #releaseIdentity(identity: TensorIdentity): void {

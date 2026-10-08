@@ -3,7 +3,7 @@ import { after, before, test } from "node:test";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { RuntimeFixtureServer } from "../../fixtures/runtime-fixture-server.mjs";
-import { createTestRuntimeSession, getTestRuntimeOwnership, getTestTensorVersion, getTestTensorAncestry } from "../../../dist/testing.js";
+import { createTestRuntimeSession, getTestRuntimeOwnership, getTestTensorVersion, getTestTensorAncestry, getTestRuntimeSemanticOwnership } from "../../../dist/testing.js";
 import { WebAssemblyCpuBackend } from "../../../dist/backends/cpu/cpu-backend.js";
 import { ExecutionTicket } from "../../../dist/execution/execution-ticket.js";
 import { completeRuntimeSession } from "../../../dist/runtime/runtime.js";
@@ -13,6 +13,64 @@ const fixtures = new RuntimeFixtureServer(fileURLToPath(new URL("../../../dist",
 let distributionUrl;
 before(async () => { distributionUrl = await fixtures.start(); });
 after(async () => { await fixtures.close(); });
+
+for (const forceVariant of ["scalar", "simd128"]) {
+  for (const length of [0, 1]) {
+    for (const firstClosed of ["deepest", "sibling"]) {
+      test(`deep view copies preserve immediate-parent owners (${forceVariant}, length=${length}, close=${firstClosed})`, async () => {
+        const session = createTestRuntimeSession({ manifestUrl: new URL("manifest.json", distributionUrl), forceVariant });
+        const depth = 512, copies = 16, siblingDepth = 7;
+        const base = session.tensor(new Float32Array(length));
+        const closed = [];
+        let deepest = base, sibling;
+        try {
+          for (let index = 0; index < depth; index++) {
+            if (index === siblingDepth) sibling = deepest.view([length]);
+            const next = deepest.view([length]);
+            deepest.close(); closed.push(deepest); deepest = next;
+          }
+          const source = session.tensor(new Float32Array(length).fill(2));
+          const before = getTestRuntimeSemanticOwnership(session);
+          assert.equal(before.identities, depth + 3);
+          assert.equal(before.viewBaseReferences, depth + 1);
+          assert.equal(before.publicExposures, 3);
+          assert.equal(before.identityReferences, depth + 4);
+          for (let index = 0; index < copies; index++) {
+            assert.equal(session.noGrad(() => deepest.copy_(source)), deepest);
+          }
+          await completeRuntimeSession(session);
+          assert.equal(getTestTensorVersion(deepest), copies);
+          assert.equal(getTestTensorVersion(sibling), copies);
+          assert.deepEqual([...await deepest.toArray()], new Array(length).fill(2));
+          assert.deepEqual([...await sibling.toArray()], new Array(length).fill(2));
+          assert.equal(session.diagnostics().kernelCalls, 0);
+          assert.equal(getTestRuntimeOwnership(session).pendingCopies, 0);
+          assert.equal(getTestRuntimeSemanticOwnership(session).identityReferences, depth + 4);
+          for (const handle of closed) assert.throws(() => handle.view([length]), { code: "CLOSED_TENSOR" });
+          if (firstClosed === "deepest") {
+            deepest.close();
+            assert.equal(getTestRuntimeSemanticOwnership(session).identities, siblingDepth + 3);
+            assert.equal(getTestRuntimeSemanticOwnership(session).viewBaseReferences, siblingDepth + 1);
+            assert.deepEqual([...await sibling.toArray()], new Array(length).fill(2));
+            sibling.close();
+          } else {
+            sibling.close();
+            assert.equal(getTestRuntimeSemanticOwnership(session).identities, depth + 2);
+            assert.equal(getTestRuntimeSemanticOwnership(session).viewBaseReferences, depth);
+            assert.deepEqual([...await deepest.toArray()], new Array(length).fill(2));
+            deepest.close();
+          }
+          assert.equal(getTestRuntimeSemanticOwnership(session).identities, 1);
+          source.close();
+          for (const key of ["identities", "identityReferences", "gradientAssociations", "viewBaseReferences", "leafEndpointOwners", "nonleafEntryOwners", "publicExposures"]) {
+            assert.equal(getTestRuntimeSemanticOwnership(session)[key], 0, key);
+          }
+          for (const count of Object.values(getTestRuntimeOwnership(session))) assert.equal(count, 0);
+        } finally { await session.close(); }
+      });
+    }
+  }
+}
 
 for (const forceVariant of ["scalar", "simd128"]) {
   for (const acquisition of [false, true]) {

@@ -143,6 +143,13 @@ adds a semantic identity with a strong base-identity occurrence and optional
 derivative entry; it has no additional F pin or numerical producer. Closing a
 base exposure therefore cannot destroy a sibling. Semantic base identities can
 remain owned even after their public exposures close.
+Each identity also records its structural root, derived once from its immediate
+parent's root or itself. Copy and current-history rebasing consult that root
+without walking the chain again. This adds one reference slot per identity;
+the root is already reachable through the unchanged base chain. It adds no
+semantic owning occurrence. Retention, retirement, cycle collection and tracking
+ancestry still follow their existing immediate-parent relationships. This
+constant root lookup does not bound other tracking or derivative-history work.
 Storage retains its original value descriptor to preserve the producing
 operation's shape and provenance during formation, even when that original
 value has no owners. This is one descriptor per live storage, not a retained
