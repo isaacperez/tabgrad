@@ -40,8 +40,8 @@ initializer and captures its session from the private bridge. `torch/autograd.py
 normalizes functional derivative calls through that same bridge. `torch/optim.py`
 normalizes SGD calls and owns Python optimizer wrappers, using private runtime
 leases for semantic registration and updates. The source manifest uses bridge
-protocol 4 and requires all four assets, including bootstrap and the private
-SGD synchronous capture interface. Schema 1 and
+protocol 4 and requires all four assets, including bootstrap. Protocol 4 also
+requires the private SGD synchronous capture interface. Schema 1 and
 Pyodide 314.0.6 are separate compatibility dimensions. Protocol 3 and 4 assets
 cannot be mixed: migrate or roll back the matching distribution as a whole.
 Package import does not establish PyTorch operation coverage. That requires the separate
