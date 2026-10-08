@@ -71,3 +71,18 @@ export function failedWriterOutcome(outcomes: readonly WriterOutcome[]): EffectF
   }
   return undefined;
 }
+
+// Keep originals local to their defining module, before consumers can patch them.
+const canonicalWriterMethods = ["create", "retain", "release"].map(
+  name => [name, Object.getOwnPropertyDescriptor(WriterOutcomeLedger.prototype, name)!] as const);
+
+export function hasCanonicalWriterDispatch(ledger: WriterOutcomeLedger): boolean {
+  if (Object.getPrototypeOf(ledger) !== WriterOutcomeLedger.prototype
+    || Object.getPrototypeOf(WriterOutcomeLedger.prototype) !== Object.prototype) return false;
+  for (const [name, expected] of canonicalWriterMethods) {
+    const actual = Object.getOwnPropertyDescriptor(WriterOutcomeLedger.prototype, name);
+    if (Object.hasOwn(ledger, name) || actual === undefined
+      || actual.value !== expected.value || actual.get !== expected.get || actual.set !== expected.set) return false;
+  }
+  return true;
+}

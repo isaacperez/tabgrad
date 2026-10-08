@@ -98,6 +98,11 @@ controls preserve root, seed, traversed history and previous writer failures
 independently of numerical aliasing. Physical write failure terminally prevents
 new writes. Finite capacity is checked before backward consumes history or
 partially admits planned effects; exhaustion reports `RESOURCE_EXHAUSTED`.
+Owner admission can use a smaller conservative reservation for closed CPU
+execution; uncertain or externally modified dispatch retains the original
+reservation. The [history component](../components/derivative-history.md#costs-and-extension-boundary)
+describes that bounded refinement. Byte and pending-effect limits remain
+independent.
 
 Live history strongly owns leaf accumulator identities and weakly refers to
 retained nonleaf destinations. Views strongly own base identities. Unreachable
