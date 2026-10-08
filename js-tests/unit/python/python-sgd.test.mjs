@@ -23,6 +23,30 @@ test("Python SGD matches the pinned native corpus", { timeout: 30_000 }, async (
   finally { await binding.close(); }
 });
 
+test("Python SGD normalizes valid named tuples before rejecting deferred support", { timeout: 20_000 }, async () => {
+  const interpreter = await loadPyodide(); const binding = await attachPython(interpreter);
+  try {
+    await binding.runPythonAsync(`
+import torch, gc
+def check_named_rejection():
+    p = torch.tensor([2.], dtype=torch.float32)
+    original = [('weight', p)]
+    group = {'params': original}
+    try: torch.optim.SGD([group])
+    except NotImplementedError: pass
+    else: raise AssertionError('named parameters became supported')
+    assert group['params'] is not original
+    assert len(group['params']) == 1 and group['params'][0] is p
+    assert group['param_names'] == ['weight'] and group['lr'] == 0.001
+check_named_rejection()
+del check_named_rejection
+gc.collect()
+`);
+    const ownership = getTestRuntimeOwnership(interpreter.runPython("torch._runtime_session"));
+    assert.ok(Object.values(ownership).every((count) => count === 0));
+  } finally { await binding.close(); }
+});
+
 test("Python SGD host closures preserve close priority and original exceptions", { timeout: 20_000 }, async () => {
   const interpreter = await loadPyodide(); const binding = await attachPython(interpreter);
   try { await binding.runPythonAsync(pythonSGDHostChecks); }

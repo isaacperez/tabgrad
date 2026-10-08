@@ -35,6 +35,12 @@ options outside this subset reject explicitly. Named parameters, tensor rates,
 custom scalar/truthiness types, hooks, group addition, state serialization,
 momentum, higher-order training and GPU optimization are excluded.
 
+Constructor normalization publishes a fresh parameter list before extracting
+named tuples. If extraction fails, that list and earlier groups' progress
+remain visible; an iterable that fails before its list is complete leaves
+the original container in place. These invalid-call effects do not add support
+for named parameters.
+
 Builtin bool/int/float rates include infinity and NaN. Negative global rates
 reject; negative group rates are valid. An actual update checks `-lr` against
 the native integer or finite float32 range and rounds directly to float32.
