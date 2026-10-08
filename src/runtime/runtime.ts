@@ -2127,7 +2127,15 @@ export class RuntimeSession {
   }
 
   #retainValue(value: TensorValue): void {
-    if (value.references === 0) { this.#values.add(value); retainWriterOutcomes(value.outcomes); }
+    if (value.references === 0) {
+      // A fresh owner needs unresolved/failed controls, not completed writes.
+      // Existing owners keep the exact snapshot paired with their release.
+      if (value.outcomes.some(outcome => outcome.state.kind === "success")) {
+        value.outcomes = captureWriterOutcomes([value.outcomes]);
+      }
+      this.#values.add(value);
+      retainWriterOutcomes(value.outcomes);
+    }
     value.references += 1;
     this.#valueReferences += 1;
     value.storage.references += 1;

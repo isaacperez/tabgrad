@@ -32,6 +32,14 @@ its corresponding reference. Releasing a handle ends only that handle's
 ownership. The result of a lazy operation can therefore outlive its input
 handles without losing the inputs it needs to compute.
 
+A numerical descriptor gaining its first owner captures only pending or failed
+writer outcomes. Successful publication is terminal and does not need a new
+control reference. An already-owned descriptor keeps its acquired snapshot
+until release, even if a writer completes meanwhile; retention and release
+must traverse the same snapshot. Pending-only snapshots retain their reuse.
+A delivered failure still belongs to subsequent captures: delivering its error
+responsibility does not turn the captured failure into success.
+
 An `OperationRecord` is an immutable description of admitted numerical work,
 including its input values and definition. Shared storage's link to that producer is an owning
 edge, not a permanent historical archive. The session removes the link when the
