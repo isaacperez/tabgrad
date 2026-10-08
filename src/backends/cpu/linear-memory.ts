@@ -24,6 +24,7 @@ export class LinearMemoryAllocator {
   readonly #alignment: number;
   #cursor: number;
   #freeSegments: FreeSegment[] = [];
+  #freeSegmentByteBound = 0;
   #livePayloadBytes = 0;
   #highWaterPayloadBytes = 0;
   #liveReservedBytes = 0;
@@ -63,18 +64,25 @@ export class LinearMemoryAllocator {
   allocate(byteLength: number): CpuAllocation {
     const reservedByteLength = this.#align(byteLength);
     let offset: number | undefined;
-    for (let index = 0; index < this.#freeSegments.length; index += 1) {
-      const segment = this.#freeSegments[index];
-      if (segment !== undefined && segment.byteLength >= reservedByteLength) {
-        offset = segment.offset;
-        if (segment.byteLength === reservedByteLength) {
-          this.#freeSegments.splice(index, 1);
-        } else {
-          segment.offset += reservedByteLength;
-          segment.byteLength -= reservedByteLength;
+    if (reservedByteLength <= this.#freeSegmentByteBound) {
+      let largest = 0;
+      for (let index = 0; index < this.#freeSegments.length; index += 1) {
+        const segment = this.#freeSegments[index]!;
+        if (segment.byteLength >= reservedByteLength) {
+          offset = segment.offset;
+          if (segment.byteLength === reservedByteLength) {
+            this.#freeSegments.splice(index, 1);
+          } else {
+            segment.offset += reservedByteLength;
+            segment.byteLength -= reservedByteLength;
+          }
+          break;
         }
-        break;
+        largest = Math.max(largest, segment.byteLength);
       }
+      // Removing or splitting a range can leave a conservative overestimate.
+      // Tighten it during an unsuccessful search, without a second traversal.
+      if (offset === undefined) this.#freeSegmentByteBound = largest;
     }
 
     if (offset === undefined) {
@@ -118,11 +126,7 @@ export class LinearMemoryAllocator {
     this.#livePayloadBytes -= allocation.byteLength;
     this.#liveReservedBytes -= allocation.reservedByteLength;
     if (allocation.reservedByteLength > 0) {
-      this.#freeSegments.push({
-        offset: allocation.offset,
-        byteLength: allocation.reservedByteLength,
-      });
-      this.#coalesceFreeSegments();
+      this.#insertFreeSegment(allocation.offset, allocation.reservedByteLength);
     }
   }
 
@@ -155,17 +159,38 @@ export class LinearMemoryAllocator {
     }
   }
 
-  #coalesceFreeSegments(): void {
-    this.#freeSegments.sort((left, right) => left.offset - right.offset);
-    const merged: FreeSegment[] = [];
-    for (const segment of this.#freeSegments) {
-      const previous = merged.at(-1);
-      if (previous !== undefined && previous.offset + previous.byteLength === segment.offset) {
-        previous.byteLength += segment.byteLength;
-      } else {
-        merged.push({ ...segment });
+  #insertFreeSegment(offset: number, byteLength: number): void {
+    let index = this.#freeSegments.length;
+    const last = this.#freeSegments.at(-1);
+    // Address-ordered releases append without searching or shifting the list.
+    if (last !== undefined && last.offset > offset) {
+      let low = 0;
+      let high = index;
+      while (low < high) {
+        const middle = Math.floor((low + high) / 2);
+        if (this.#freeSegments[middle]!.offset <= offset) low = middle + 1;
+        else high = middle;
       }
+      index = low;
     }
-    this.#freeSegments = merged;
+    const previous = this.#freeSegments[index - 1];
+    const next = this.#freeSegments[index];
+    let segment: FreeSegment;
+    if (previous !== undefined && previous.offset + previous.byteLength === offset) {
+      segment = previous;
+      segment.byteLength += byteLength;
+      if (next !== undefined && segment.offset + segment.byteLength === next.offset) {
+        segment.byteLength += next.byteLength;
+        this.#freeSegments.splice(index, 1);
+      }
+    } else if (next !== undefined && offset + byteLength === next.offset) {
+      segment = next;
+      segment.offset = offset;
+      segment.byteLength += byteLength;
+    } else {
+      segment = { offset, byteLength };
+      this.#freeSegments.splice(index, 0, segment);
+    }
+    this.#freeSegmentByteBound = Math.max(this.#freeSegmentByteBound, segment.byteLength);
   }
 }

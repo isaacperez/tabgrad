@@ -166,7 +166,23 @@ working set. Retaining those intermediates intentionally prevents their reuse.
 Shared graphs require enough storage for overlapping live values. Neither case
 changes the algorithm into a promise of constant memory for arbitrary graphs.
 
-Allocator search, alignment and free-range coalescing have their own costs.
+The allocator keeps free ranges in address order and merges only the neighbors
+of a released range. Address-ordered releases append or extend the final range
+without reconstructing the list. Other releases locate their position with
+binary search, but inserting or removing a middle array entry can still shift
+`O(F)` entries for `F` free ranges. This preserves lowest-address first-fit and
+aligned prefix splitting; it does not promise linear work for every release
+order.
+
+A conservative upper bound on free-range size skips searches for requests
+strictly larger than that bound. Release raises it for a new merged range;
+successful reuse can leave it above the actual maximum. An unsuccessful search
+tightens it during the same traversal, so repeated requests known not to fit
+avoid scanning every hole. Other first-fit searches remain `O(F)`. Free-range
+metadata uses `O(F)` storage plus one scalar summary, without retaining an
+allocation history. Zero-byte allocations preserve the first available free
+address without consuming its range.
+
 Mixed sizes can fragment free ranges, and lowering peak payload does not shrink
 already reserved WebAssembly linear memory. Measurements must distinguish these
 quantities and the extra bookkeeping, especially when all values are retained.
