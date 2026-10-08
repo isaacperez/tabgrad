@@ -389,3 +389,17 @@ saves while checking actual drain and retirement. Logical counts, Wasm
 allocated/reserved capacity and host heap/RSS remain separate measurements;
 they establish no universal speed or total-process-memory bound. Exact source,
 browser versions and raw cost observations belong to verification evidence.
+
+#### Known group-dictionary limitation
+
+A group dictionary subclass can return ordinary built-in SGD options while
+removing a parameter's gradient during option access. With parameter 2,
+gradient 3 and learning rate 0.5, clearing the association when momentum is read
+leaves the pinned native parameter at 0.5: its group has already captured the
+gradient. Tabgrad instead leaves the parameter at 2 because it reads options
+before collecting the gradient. Both leave the association absent. The
+[shared reproduction and observations](https://github.com/isaacperez/tabgrad/issues/184#issuecomment-6053660862)
+demonstrate this numerical compatibility discrepancy, tracked in
+[#199](https://github.com/isaacperez/tabgrad/issues/199); the corpus above does
+not cover it. Dictionary subclasses are not silently added to the exclusions,
+and matching the current result would not establish native compatibility.

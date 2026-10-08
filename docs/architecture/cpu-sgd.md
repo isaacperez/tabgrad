@@ -174,6 +174,19 @@ SGD updates. Cleanup/restoration must neither start fresh closed-session work
 nor replace the original exception with an incidental mode-access error.
 These close rules are Tabgrad host extensions, not native PyTorch behavior.
 
+Caller reentry is not confined to the closure. Both presentations can execute
+caller code while processing a group: JavaScript property access and Python
+dictionary access or comparison can change lifetime and gradient associations.
+Learning-rate access can reenter after gradient discovery and before update
+admission. Preserve lifetime validation at the applicable admission boundaries,
+the original thrown exception, recording restoration and accepted earlier-group
+progress. An option or coefficient error that occurs before the next lifetime
+check keeps its precedence; the close priority does not move that check ahead
+of earlier failures. A different validation algorithm must also preserve native
+per-group gradient capture and sequential numerical alias effects. The
+[known dictionary discrepancy](../compatibility.md#known-group-dictionary-limitation)
+records where the current Python presentation does not yet meet that contract.
+
 ## Optimizer ownership and retirement
 
 Registration owns one semantic identity edge per parameter occurrence.
