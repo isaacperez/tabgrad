@@ -6,6 +6,7 @@ import { checkSGDCase, isDirectSGDCase } from "../../browser/helpers/sgd-cases.m
 import { checkSGDHostGuards, checkSGDFaults, checkSGDFixedOwners } from "../../browser/helpers/sgd-lifetime.mjs";
 import { WebAssemblyCpuBackend } from "../../../dist/backends/cpu/cpu-backend.js";
 import { RuntimeFixtureServer } from "../../fixtures/runtime-fixture-server.mjs";
+import { createRuntimeSession } from "../../../dist/index.js";
 import { createTestRuntimeSession, getTestTensorVersion, getTestRuntimeOwnership, getTestRuntimeSemanticOwnership } from "../../../dist/testing.js";
 
 const fixtures = new RuntimeFixtureServer(fileURLToPath(new URL("../../../dist", import.meta.url)));
@@ -13,6 +14,73 @@ let distributionUrl;
 before(async () => { distributionUrl = await fixtures.start(); });
 after(async () => { await fixtures.close(); });
 const oracle = JSON.parse(await readFile(new URL("../../fixtures/python-tensor-oracle.json", import.meta.url), "utf8"));
+
+for (const grouped of [false, true]) for (const hole of [0, 1, 2, "all", "undefined"]) {
+  test(`SGD registration rejects ${grouped ? "grouped" : "flat"} parameter holes at ${hole} without roots`, async () => {
+    const session = createRuntimeSession();
+    const p = session.tensor([2]); const q = session.tensor([3]);
+    const priorGroup = grouped ? session.tensor([4]) : null;
+    const parameters = hole === "all" ? new Array(1) : [p, q];
+    if (typeof hole === "number") {
+      parameters.splice(hole, 0, undefined);
+      delete parameters[hole];
+    }
+    if (hole === "undefined") parameters.splice(1, 0, undefined);
+    const groups = grouped ? [{ params: [priorGroup] }, { params: parameters }] : parameters;
+    const beforeOwners = getTestRuntimeOwnership(session);
+    const beforeSemantic = getTestRuntimeSemanticOwnership(session);
+    try {
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        assert.throws(() => session.sgd(groups), { code: "INVALID_TENSOR" });
+        assert.deepEqual(getTestRuntimeOwnership(session), beforeOwners);
+        assert.deepEqual(getTestRuntimeSemanticOwnership(session), beforeSemantic);
+      }
+    } finally {
+      p.close(); q.close(); priorGroup?.close(); await session.close();
+    }
+    assert.ok(Object.values(getTestRuntimeOwnership(session)).every(value => value === 0));
+    assert.equal(getTestRuntimeSemanticOwnership(session).identityReferences, 0);
+  });
+}
+
+for (const grouped of [false, true]) for (const effect of ["none", "close-parameter", "close-session", "throw-after-close", "invalid-after-close"]) {
+  test(`SGD registration preserves ${effect} indexed access in ${grouped ? "later" : "one"} group`, async () => {
+    const session = createRuntimeSession();
+    const p = session.tensor([2]); const q = session.tensor([3]);
+    const parameters = grouped ? [q] : [p, q];
+    const index = grouped ? 0 : 1;
+    const sentinel = new Error("SGD parameter getter sentinel");
+    const accesses = [];
+    let closing;
+    Object.defineProperty(parameters, index, { get() {
+      accesses.push(index);
+      if (effect !== "none") p.close();
+      if (effect === "close-session") closing ??= session.close();
+      if (effect === "throw-after-close") throw sentinel;
+      return q;
+    } });
+    if (effect === "invalid-after-close") parameters.push(undefined);
+    const groups = grouped ? [{ params: [p] }, { params: parameters }] : parameters;
+    try {
+      if (effect === "none") {
+        const optimizer = session.sgd(groups);
+        assert.deepEqual(accesses, [index, index, index]);
+        assert.equal(getTestRuntimeSemanticOwnership(session).optimizerOccurrences, 2);
+        optimizer.step(); optimizer.close();
+      } else {
+        const expected = effect === "throw-after-close" ? error => error === sentinel
+          : { code: effect === "invalid-after-close" ? "INVALID_TENSOR" : "CLOSED_TENSOR" };
+        assert.throws(() => session.sgd(groups), expected);
+        assert.deepEqual(accesses, [index]);
+        assert.equal(getTestRuntimeSemanticOwnership(session).optimizerOccurrences, 0);
+      }
+    } finally {
+      p.close(); q.close(); await (closing ?? session.close());
+    }
+    assert.ok(Object.values(getTestRuntimeOwnership(session)).every(value => value === 0));
+    assert.equal(getTestRuntimeSemanticOwnership(session).identityReferences, 0);
+  });
+}
 
 for (const forceVariant of ["scalar", "simd128"]) {
   const createSession = (extra = {}) => createTestRuntimeSession({

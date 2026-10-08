@@ -838,7 +838,11 @@ export class RuntimeSession {
     const previousGroups = new Set<TensorIdentity>();
     const states = groups.map((group) => {
       const identities = new Set<TensorIdentity>();
-      const members = group.map((handle) => {
+      const members: TensorState[] = [];
+      const length = group.length;
+      for (let index = 0; index < length; index += 1) {
+        // Preserve ordered property access, but validate missing positions too.
+        const handle = index in group ? group[index] : undefined;
         const state = requireTensorState(handle);
         assertTensorOpen(state);
         if (state.session !== this) throw new TabgradError("DIFFERENT_SESSION", "SGD parameters must belong to this session.");
@@ -848,11 +852,15 @@ export class RuntimeSession {
         }
         if (previousGroups.has(state.identity)) throw new TabgradError("INVALID_TENSOR", "A parameter appears in more than one group.");
         identities.add(state.identity);
-        return state;
-      });
+        members.push(state);
+      }
       for (const identity of identities) previousGroups.add(identity);
       return Object.freeze(members);
     });
+    // Later getters can close earlier exposures. Recheck captured internal
+    // states before acquisition; no caller code runs between here and publication.
+    this.#assertOpen();
+    for (const group of states) for (const state of group) assertTensorOpen(state);
     const occurrences = states.reduce((count, group) => count + group.length, 0);
     this.#checkUpdateCapacity(occurrences + 1);
     const registration: OptimizerRegistration = { closed: false, groups: Object.freeze(states) };
