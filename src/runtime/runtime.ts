@@ -17,7 +17,7 @@ import { acquireWebGpuDevice, assertWebGpuSetupActive } from "../backends/webgpu
 import type { ExecutionBackend, ResidentAllocation, TensorDevice } from "../execution/backend.js";
 import { WebGpuBackend, type WebGpuDiagnostics, type WebGpuExecutionBackend } from "../backends/webgpu/webgpu-backend.js";
 export type { TensorDevice } from "../execution/backend.js";
-import { DerivativeHistory, type DerivativeNode, type DerivativeRecipe } from "./autograd/derivative-history.js";
+import { DerivativeHistory, type DerivativeNode, type DerivativePlan, type DerivativeRecipe } from "./autograd/derivative-history.js";
 import { COPY_DERIVATIVE, COPY_SLICES_DERIVATIVE, IDENTITY_DERIVATIVE, PASS_DERIVATIVE, MUL_DERIVATIVE, SUM_DERIVATIVE } from "./autograd/derivative-recipes.js";
 import { copyTensorShape, equalTensorShapes, inferViewShape, tensorElementCount } from "./tensor-shape.js";
 import { createSGD, type SGD, type SGDOptions, type SGDParameterGroup } from "./sgd.js";
@@ -1201,7 +1201,7 @@ export class RuntimeSession {
     const effectControls = this.#gradientControlBound(plan.order, destinations, effects);
     const outcomes = captureWriterOutcomes([result.value.outcomes, ...plan.outcomes, explicitSeed?.value.outcomes ?? []]);
     if (outcomes.length !== 0 || effects !== 0) {
-      this.#checkGradientCapacity(plan.order, explicitSeed === undefined, requested.length * 4, outcomes.length + effectControls);
+      this.#checkGradientCapacity(plan, explicitSeed === undefined, requested.length * 4, outcomes.length + effectControls);
     }
     const seed = explicitSeed === undefined
       ? this.tensor([1], { shape: result.value.shape }) : this.#borrowValue(explicitSeed.value);
@@ -1323,7 +1323,7 @@ export class RuntimeSession {
     const effects = this.#reserveGradientEffects(plan.order, destinations);
     const controls = captureWriterOutcomes([result.value.outcomes, explicitSeed?.value.outcomes ?? []]).length
       + this.#gradientControlBound(plan.order, destinations, effects);
-    this.#checkGradientCapacity(plan.order, explicitSeed === undefined, requested.length * 10, controls);
+    this.#checkGradientCapacity(plan, explicitSeed === undefined, requested.length * 10, controls);
     const seed = explicitSeed === undefined ? this.tensor([1], { shape: result.shape }) : this.#borrowValue(explicitSeed.value);
     if (explicitSeed !== undefined) {
       const identity = requireTensorState(seed).identity;
@@ -1338,13 +1338,25 @@ export class RuntimeSession {
     } finally { seed.close(); }
   }
 
-  #checkGradientCapacity(nodes: readonly DerivativeNode<TensorValue>[], implicitSeed: boolean, requestedOwners: number, controls: number): void {
-    // Bound contributions before seed admission or consumption. Each current
-    // binary recipe emits at most two contributions plus combines. The byte
-    // and owner factors have different units and both bound the transient peak.
+  #checkGradientCapacity(plan: DerivativePlan<TensorValue>, implicitSeed: boolean, requestedOwners: number, controls: number): void {
+    let nodeElements = 0;
+    let edgeElements = 0;
+    for (const node of plan.order) {
+      nodeElements += tensorElementCount(node.shape);
+      for (const input of node.inputs) {
+        if (input !== null && plan.needed.has(input)) edgeElements += tensorElementCount(input.shape);
+      }
+    }
+    const output = plan.order.at(-1);
+    const outputElements = output === undefined ? 0 : tensorElementCount(output.shape);
+    // Each selected edge can allocate one contribution; combines cost another
+    // edge sum minus non-output nodes. Prior-gradient additions cost at most
+    // the node sum, giving 8*edgeElements + 4*outputElements without retirement
+    // credit. Fanout after a reduction defeats a node-only payload estimate.
+    // Keep larger old reservations and the separate binary-recipe owner bound.
     const additionalBytes = (implicitSeed ? 4 : 0)
-      + nodes.reduce((bytes, node) => bytes + tensorElementCount(node.shape) * 20, 0);
-    this.#checkUpdateCapacity((nodes.length * 20 + requestedOwners + 10) * (controls + 1), additionalBytes);
+      + Math.max(nodeElements * 20, edgeElements * 8 + outputElements * 4);
+    this.#checkUpdateCapacity((plan.order.length * 20 + requestedOwners + 10) * (controls + 1), additionalBytes);
   }
 
   #reserveGradientEffects(nodes: readonly DerivativeNode<TensorValue>[], destinations: ReadonlySet<TensorIdentity>): number {

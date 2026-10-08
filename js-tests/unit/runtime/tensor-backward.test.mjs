@@ -18,6 +18,96 @@ function differentiateForCapacity(session, root, input, seed, persistent) {
   return input.grad;
 }
 
+function repeatedReduction(session, input, branches) {
+  let root = input.sum();
+  for (let index = 1; index < branches; index += 1) {
+    const term = input.sum();
+    const next = root.add(term);
+    root.close();
+    term.close();
+    root = next;
+  }
+  return root;
+}
+
+for (const forceVariant of ["scalar", "simd128"]) {
+  for (const persistent of [false, true]) {
+    for (const explicit of [false, true]) {
+      for (const populated of [false, true]) {
+        test(`repeated reductions reserve backing bytes before ${persistent ? "backward" : "retained functional grad"} (${forceVariant}, explicit=${explicit}, populated=${populated})`, async () => {
+          const session = createTestRuntimeSession({
+            manifestUrl: new URL("manifest.json", distributionUrl), forceVariant,
+            updateLimits: { backingBytes: 25000 },
+          });
+          try {
+            const input = session.tensor(new Float32Array(64).fill(2), { requiresGrad: true });
+            const target = persistent ? input : input.view([64]);
+            const previous = populated ? session.tensor(new Float32Array(64).fill(3)) : null;
+            target.grad = previous;
+            const sum = repeatedReduction(session, target, 32);
+            const factor = session.tensor([1], { shape: [] });
+            const root = sum.mul(factor);
+            sum.close();
+            const seed = explicit ? session.tensor([1], { shape: [] }) : undefined;
+            if (!persistent) {
+              // Install retention using the existing late-invalid-input phase.
+              assert.throws(() => root.backward(seed, { inputs: [target, factor] }), { code: "GRADIENT_NOT_TRACKED" });
+            }
+            // The old estimate admits this padding plus fanout. Removing it
+            // makes the same unconsumed graph fit the corrected reservation.
+            const padding = session.tensor(new Float32Array(5000));
+            const ownership = getTestRuntimeOwnership(session);
+            const diagnostics = session.diagnostics();
+            assert.ok(diagnostics.liveSavedValues > 0);
+            const differentiate = () => persistent ? root.backward(seed) : session.grad(root, [input], seed);
+            assert.throws(differentiate, { code: "RESOURCE_EXHAUSTED" });
+            assert.deepEqual(getTestRuntimeOwnership(session), ownership);
+            assert.deepEqual(session.diagnostics(), diagnostics);
+            assert.equal(target.grad, previous);
+            padding.close();
+            const returned = differentiate();
+            const gradient = persistent ? input.grad : returned[0];
+            assert.deepEqual([...await gradient.toArray()], Array(64).fill(persistent && populated ? 35 : 32));
+            const retained = target.grad;
+            assert.deepEqual([...await retained.toArray()], Array(64).fill(populated ? 35 : 32));
+            assert.equal(getTestTensorVersion(retained), persistent ? (populated ? 1 : 30) : 0);
+            if (populated) {
+              if (persistent) assert.equal(retained, previous);
+              else {
+                assert.notEqual(retained, previous);
+                assert.deepEqual([...await previous.toArray()], Array(64).fill(3));
+              }
+            }
+            assert.equal(input.grad, persistent ? gradient : null);
+            assert.equal(session.diagnostics().liveSavedValues, 0);
+            gradient.close();
+            retained.close();
+          } finally { await session.close(); }
+          for (const count of Object.values(getTestRuntimeOwnership(session))) assert.equal(count, 0);
+          assert.equal(session.diagnostics().liveAllocationBytes, 0);
+        });
+      }
+    }
+  }
+
+  test(`backing reservation excludes unselected large reduction input (${forceVariant})`, async () => {
+    const session = createTestRuntimeSession({
+      manifestUrl: new URL("manifest.json", distributionUrl), forceVariant,
+      updateLimits: { backingBytes: 30000 },
+    });
+    try {
+      const selected = session.tensor([2], { requiresGrad: true });
+      const unselected = session.tensor(new Float32Array(6400).fill(3), { requiresGrad: true });
+      const left = selected.sum(), right = unselected.sum(), root = left.add(right);
+      root.backward(undefined, { inputs: [selected] });
+      assert.deepEqual([...await selected.grad.toArray()], [1]);
+      assert.equal(unselected.grad, null);
+    } finally { await session.close(); }
+    for (const count of Object.values(getTestRuntimeOwnership(session))) assert.equal(count, 0);
+    assert.equal(session.diagnostics().liveAllocationBytes, 0);
+  });
+}
+
 for (const persistent of [false, true]) {
   for (const explicit of [false, true]) {
     for (const resource of ["owners", "backingBytes"]) {

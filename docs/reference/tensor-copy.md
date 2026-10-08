@@ -124,7 +124,9 @@ live owning references and 64 MiB of unique live backing payload. The owner
 budget counts numeric/history/control references, requests and undelivered
 failures. Control-capturing derivative and downstream admissions reserve count
 and byte capacity before changing ownership; derivative planning uses a
-conservative bound for temporary contributions. Exhaustion raises
+conservative bound for temporary contributions. It counts selected input
+occurrences and their combinations, including full-size gradients expanded
+from scalar reductions. Exhaustion raises
 `RESOURCE_EXHAUSTED` without flushing unrelated work. These are finite
 implementation capacities, not measured process-memory limits. Active history,
 retained saves and undrained requests remain legitimate owners; reserved Wasm
