@@ -58,6 +58,9 @@ present zero/empty gradients and zero rates still increment the alias version.
 Parameter and gradient identities remain stable; earlier updates survive later
 failure.
 
+Group dictionary option access that changes gradient associations has a
+[known compatibility discrepancy](../compatibility.md#known-group-dictionary-limitation).
+
 ```python
 import torch
 p = torch.tensor([2., 3.], dtype=torch.float32, requires_grad=True)
