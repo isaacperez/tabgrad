@@ -13,11 +13,17 @@ from importlib.machinery import (
 )
 from pathlib import Path
 from types import ModuleType
+from typing import TypeGuard
 
 from _pyodide._importhook import jsfinder
 from pyodide.ffi import register_js_module, unregister_js_module
 
 BRIDGE_NAME = "_tabgrad_runtime_bridge"
+_PACKAGE_MODULES = (
+    ("torch/__init__.py", "torch"),
+    ("torch/autograd.py", "torch.autograd"),
+    ("torch/optim.py", "torch.optim"),
+)
 
 
 class _OwnedImportPath(str):
@@ -64,7 +70,9 @@ class _OwnedSourceFinder(FileFinder):
 
 
 def _reject_conflicts() -> None:
-    for child in ("torch.autograd", "torch.optim"):
+    for _, child in _PACKAGE_MODULES:
+        if child == "torch":
+            continue
         if child in sys.modules or child in jsfinder.jsproxies:
             raise ImportError(f"Tabgrad cannot replace the existing module {child!r}")
     for name in ("torch", BRIDGE_NAME):
@@ -81,6 +89,12 @@ def _same_file(path: Path, inode: int) -> bool:
         return path.lstat().st_ino == inode
     except FileNotFoundError:
         return False
+
+
+def _valid_sources(sources: dict[str, object]) -> TypeGuard[dict[str, str]]:
+    return set(sources) == {path for path, _ in _PACKAGE_MODULES} and all(
+        isinstance(source, str) for source in sources.values()
+    )
 
 
 class Installation:
@@ -111,22 +125,21 @@ class Installation:
         sys.path_importer_cache[str(path)] = importer
         return importer
 
-    def install(
-        self, source: str, autograd_source: str, optim_source: str, bridge: object
-    ) -> None:
+    def install(self, sources: dict[str, object], bridge: object) -> None:
         """Reject conflicts before mutation and roll back partial installation."""
         _reject_conflicts()
+        if not _valid_sources(sources):
+            raise ValueError("Invalid Python package sources")
         try:
             root = Path(tempfile.mkdtemp(prefix="tabgrad-"))
             self.directories.append((root, root.stat().st_ino))
             package = root / "torch"
             package.mkdir()
             self.directories.append((package, package.stat().st_ino))
-            path = package / "__init__.py"
-            content = source.encode("utf-8")
-            self._write_source(path, content)
-            self._write_source(package / "autograd.py", autograd_source.encode("utf-8"))
-            self._write_source(package / "optim.py", optim_source.encode("utf-8"))
+            for source_path, _ in _PACKAGE_MODULES:
+                self._write_source(
+                    root / source_path, sources[source_path].encode("utf-8")
+                )
             self.import_path = _OwnedImportPath(str(root))
             sys.path.insert(0, self.import_path)
             root_importer = self._install_importer(root)
@@ -141,9 +154,8 @@ class Installation:
                 # Source is already verified. Do not leave an untracked cache in
                 # the borrowed interpreter's filesystem during initial import.
                 sys.dont_write_bytecode = True
-                importlib.import_module("torch")
-                importlib.import_module("torch.autograd")
-                importlib.import_module("torch.optim")
+                for _, module_name in _PACKAGE_MODULES:
+                    importlib.import_module(module_name)
             finally:
                 root_importer.modules = None
                 package_importer.modules = None

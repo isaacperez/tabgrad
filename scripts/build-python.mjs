@@ -15,7 +15,7 @@ for (const path of ["bootstrap.py", "torch/__init__.py", "torch/autograd.py", "t
 }
 await writeFile(new URL("manifest.json", output), `${JSON.stringify({
   schemaVersion: 1,
-  bridgeVersion: 2,
+  bridgeVersion: 3,
   pyodideVersion: "314.0.6",
   files,
 }, null, 2)}\n`);

@@ -1720,7 +1720,7 @@ test("Python cleanup aggregates filesystem failures and continues releasing owne
   let namespace;
   context.mock.method(interpreter, "runPython", (source, options) => {
     const result = run(source, options);
-    if (source === "{}") namespace = result;
+    if (source === "{}" && namespace === undefined) namespace = result;
     return result;
   });
   interpreter.runPython("import os, sys; before_tmp = set(os.listdir('/tmp')); before_path = tuple(sys.path)");
@@ -1766,6 +1766,58 @@ _installation.close()
   assert.equal(interpreter.runPython("'torch' not in sys.modules and '_tabgrad_runtime_bridge' not in sys.modules"), true);
 });
 
+test("failed source transfer releases real proxies and permits reattachment", { timeout: 15_000 }, async (context) => {
+  const { attachPython } = await import("../../../dist/python.js");
+  const interpreter = await getInterpreter();
+  const run = interpreter.runPython;
+  for (const phase of ["population", "assignment"]) {
+    const primary = new Error(`injected source ${phase}`);
+    const cleanup = new Error("injected source destroy");
+    const proxies = [];
+    const replacement = context.mock.method(interpreter, "runPython", (source, options) => {
+      const result = run(source, options);
+      if (source !== "{}") return result;
+      const destroy = result.destroy.bind(result);
+      const owned = { proxy: result, releases: 0 };
+      proxies.push(owned);
+      context.mock.method(result, "destroy", () => {
+        owned.releases += 1;
+        destroy();
+        if (proxies.indexOf(owned) === 1) throw cleanup;
+      });
+      if (proxies.length === 1 && phase === "assignment") {
+        const set = result.set.bind(result);
+        context.mock.method(result, "set", (key, value) => {
+          if (key === "_package_sources") throw primary;
+          set(key, value);
+        });
+      }
+      if (proxies.length === 2 && phase === "population") {
+        context.mock.method(result, "set", () => { throw primary; });
+      }
+      return result;
+    });
+    try {
+      await assert.rejects(attachPython(interpreter), (error) => {
+        assert.equal(error.code, "PYTHON_INSTALL_FAILED");
+        assert.deepEqual(error.cause.errors, [primary, cleanup]);
+        return true;
+      });
+      assert.equal(proxies.length, 2);
+      assert.ok(proxies.every((owned) => owned.releases === 1));
+    } finally {
+      replacement.mock.restore();
+    }
+    const binding = await attachPython(interpreter);
+    try {
+      await binding.runPythonAsync("import torch; assert torch.tensor([2.], dtype=torch.float32).shape == (1,)");
+    } finally {
+      await binding.close();
+      if (interpreter.globals.has("torch")) interpreter.globals.delete("torch");
+    }
+  }
+});
+
 test("repeated attachments release bootstrap proxies and filesystem/import bookkeeping", {
   timeout: 15_000,
 }, async (context) => {
@@ -1775,16 +1827,24 @@ test("repeated attachments release bootstrap proxies and filesystem/import bookk
   const destructions = [];
   context.mock.method(interpreter, "runPython", (source, options) => {
     const result = originalRun(source, options);
-    if (source === "{}") destructions.push(context.mock.method(result, "destroy"));
+    if (source === "{}") destructions.push({ proxy: result, destroy: context.mock.method(result, "destroy") });
     return result;
   });
   interpreter.runPython("import os, sys; before_tmp = set(os.listdir('/tmp')); before_path = tuple(sys.path); before_cache = set(sys.path_importer_cache)");
   for (let iteration = 0; iteration < 20; iteration += 1) {
     const binding = await attachPython(interpreter);
+    const [namespace, payload] = destructions.slice(iteration * 2);
+    assert.notEqual(namespace.proxy, payload.proxy);
+    assert.equal(namespace.destroy.mock.callCount(), 0);
+    assert.equal(payload.destroy.mock.callCount(), 1);
+    assert.equal(namespace.proxy.has("_package_sources"), false);
+    assert.equal(namespace.proxy.has("_runtime_bridge"), false);
     await binding.close();
+    assert.equal(namespace.destroy.mock.callCount(), 1);
+    assert.equal(payload.destroy.mock.callCount(), 1);
   }
-  assert.equal(destructions.length, 20);
-  assert.ok(destructions.every((destroy) => destroy.mock.callCount() === 1));
+  assert.equal(destructions.length, 40);
+  assert.ok(destructions.every(({ destroy }) => destroy.mock.callCount() === 1));
   assert.equal(interpreter.runPython("set(os.listdir('/tmp')) == before_tmp and tuple(sys.path) == before_path"), true);
   assert.equal(interpreter.runPython("set(sys.path_importer_cache) == before_cache"), true);
 });
@@ -1798,7 +1858,7 @@ test("close releases the installation object without waiting for cyclic garbage 
   let namespace;
   context.mock.method(interpreter, "runPython", (source, options) => {
     const result = run(source, options);
-    if (source === "{}") namespace = result;
+    if (source === "{}" && namespace === undefined) namespace = result;
     return result;
   });
   const binding = await attachPython(interpreter);
