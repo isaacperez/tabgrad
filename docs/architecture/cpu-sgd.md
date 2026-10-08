@@ -108,16 +108,17 @@ reset. Internal reset integration does not imply public zero_ or detach_ APIs.
 
 Basic step skips only absent gradients. Present zero or empty gradients and
 learning rate zero still perform the native version/alias transition, including
-invalidating older saves. Parameter identity and the gradient association
-remain stable. Genuine parameter/gradient aliases can change gradient numbers
-when an earlier parameter update changes their shared family.
+invalidating older saves. The update preserves parameter identity and does not
+replace its gradient association. Genuine parameter/gradient aliases can
+change gradient numbers when an earlier parameter update changes their shared
+family.
 
 For example, let parameters p and q start at 2 and 4, with p's gradient aliasing
 q and q's gradient aliasing p. With rate 0.5 and order p then q, p becomes 0;
 q then uses that updated gradient value and remains 4. Copying all gradients at
-step entry would produce a different result. Current groups collect gradient
-identities before arithmetic, but numerical captures follow the required
-sequential native update order.
+step entry would produce a different result. Collect gradient identities at
+the native occurrence-specific phases before group arithmetic; acquire their
+numerical values in the required sequential native update order.
 
 Constructor and relevant group setup validation precede that group's
 arithmetic. An earlier group's updates survive a later semantic error. There
@@ -131,6 +132,78 @@ Step preserves its arbitrary return identity and restores the caller's mode.
 A thrown closure starts no SGD update; its own accepted effects remain. No
 closure means the native None return. The closure is ordinary user computation,
 not a special training engine or permission to bypass validation.
+
+### Capture ownership across Python reentry
+
+Python owns native dictionary access and validation phases. A group's params
+access follows successful closure execution. Within that group, gradient
+selection interleaves with option access for each parameter occurrence: native
+fused access occurs between the initial presence check and gradient capture,
+and momentum access follows capture. Later option reads and post-update option
+effects remain observable. Repeated parameters can therefore select different
+gradient identities within one group. Neither an eager group snapshot nor
+reselection at arithmetic admission preserves this behavior. Structural
+validation must not introduce incidental caller getter effects before these
+native phases.
+
+The shared TypeScript runtime owns a synchronous capture scope for each group
+invocation. Its private callback supplies Python with a bounded collection and
+admission view. Python drives selection at the native phases; the runtime
+retains each selected identity occurrence and applies ordinary updates using
+its current numerical value. Nested invocations have independent scopes. A
+scope is neither optimizer-stored state nor a permanent gradient snapshot.
+Neither the callback nor its view may escape synchronous processing or be
+awaited. The runtime enforces view expiry after callback return, including
+exceptional return; Pyodide's borrowed callback-proxy disposal does not prove
+capture-view expiry.
+
+Acquisition uses checked ownership capacity and transactional rollback. Active
+capture occurrences are explicit roots in the existing semantic identity and
+cycle authority, reconciled with its ownership diagnostics. They retain
+identities without cloning numerical payloads or creating another collector.
+The runtime owns retirement on every exit, independently attempts each release
+once, and preserves the primary failure together with independent cleanup
+failures. Retirement execution does not establish successful physical
+reclamation. Accepted updates retain their ordinary effect and drain owners.
+
+Optimizer or session close revokes new capture and update admission and retires
+or safely joins active ownership. Apply the lifetime and error-priority rules
+below at the actual admission boundary: an earlier option or coefficient error
+must not be displaced by a new close check. No update is admitted after close.
+Recording restoration, original throws and accepted earlier-group progress
+remain intact. This internal interface leaves direct JavaScript observations,
+public call signatures, supported modes and the numerical executor unchanged.
+Its distribution follows the existing matching-version private bridge policy.
+
+Ordinary Python lists of exposed gradients were considered as the capture
+owner. A reachable wrapper is insufficient: closing its canonical exposure
+and removing its association can retire the identity. Extra valid retention
+would need runtime pins, while internal public getters can introduce warning
+or lifetime phases. A runtime capture token with explicit close supplies that
+retention but permits stale or escaping tokens and places release obligations
+in Python. The synchronous callback scope keeps retirement in the semantic
+owner and bounds it to the invocation. It adds a synchronous language crossing
+per group and scoped-view enforcement; no speed or memory advantage is claimed.
+
+The [capture research](https://github.com/isaacperez/tabgrad/issues/202),
+[shared native/current-runtime evidence](https://github.com/isaacperez/tabgrad/issues/202#issuecomment-6054759920),
+[params/closure addendum](https://github.com/isaacperez/tabgrad/issues/202#issuecomment-6054815547),
+[independent challenge](https://github.com/isaacperez/tabgrad/issues/202#issuecomment-6054893082)
+and [exact acceptance](https://github.com/isaacperez/tabgrad/issues/202#issuecomment-6055134442)
+support this boundary. The 22 selected cases concern one pinned PyTorch 2.14.0
+arm64 wheel; the actual baseline selected SIMD128. Callback transport on
+Pyodide314.0.6 establishes synchronous normal/nested calls and original Python
+exception identity, not capture ownership, expiry or cleanup qualification.
+These observations do not qualify a candidate implementation, scalar/browser
+integration, otherwise unexposed cyclic captures or physical costs. Actual
+integration must establish those contracts independently, including capacity,
+revocation, diagnostics and drain. The compatibility record remains the source
+for implemented support and its known dictionary limitation.
+
+Reconsider this boundary if native-valid observations contradict the selected
+phases, synchronous bridge transport cannot preserve the contract, or actual
+ownership and cleanup evidence defeats scoped retention. Such evidence calls
+for renewed investigation, not excluding covered dictionary behavior.
 
 ## Direct JavaScript presentation and lifetime
 
