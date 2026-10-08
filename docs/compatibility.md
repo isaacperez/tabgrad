@@ -407,3 +407,13 @@ one numerical reproduction. The [research and native observations](https://githu
 record the bounded source/build evidence; tests qualify the implemented owner
 and actual Python/browser consumers separately. These selected observations do
 not cover custom scalars, broader modes or arbitrary structural tampering.
+
+The reset corpus independently observes each group's `params` getter directly
+before that group's reset. It covers clearing, replacing and installing a
+gradient, original exception identity and earlier-group progress for numeric
+and truthy resets. Association identity, float32 bits, tracked metadata, aliases,
+versions, scalar/empty shapes and absent/present-zero controls come from the
+pinned native build. The same Python sources execute in Node Pyodide and the
+managed Chrome/Firefox profiles; host close checks qualify Tabgrad admission
+separately. This preserves the existing dictionary-subclass domain and does
+not qualify structural tampering or custom reset values.

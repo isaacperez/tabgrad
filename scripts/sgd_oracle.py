@@ -106,6 +106,61 @@ report = {"observations": observations}
 """
 
 
+RESET_REENTRY_SOURCE = """
+def reset_case(name, set_to_none, shape='vector'):
+    data = 2. if shape == 'scalar' else ([] if shape == 'empty' else [2.])
+    old_data = 3. if shape == 'scalar' else ([] if shape == 'empty' else [3.])
+    new_data = 9. if shape == 'scalar' else ([] if shape == 'empty' else [9.])
+    p = tensor(data); q = tensor([4.])
+    old = tensor(old_data, False); other = tensor([5.], False)
+    replacement = tensor(new_data, name == 'replace-tracked')
+    alias = replacement.view(list(replacement.shape))
+    zero = tensor([0.], False)
+    p.grad = None if name in ('install-absent', 'absent') else (zero if name == 'zero' else old)
+    q.grad = other
+    events = []
+    marker = LookupError('zero_grad dictionary sentinel')
+    class Group(dict):
+        armed = False
+        def __getitem__(self, key):
+            value = super().__getitem__(key)
+            if self.armed:
+                events.append(key)
+                if key == 'params':
+                    if name == 'clear': p.grad = None
+                    elif name in ('replace', 'replace-tracked', 'install-absent'): p.grad = replacement
+                    elif name in ('throw', 'second-throw'): raise marker
+                    elif name == 'second-observe': events.append(state(old))
+            return value
+    group = Group(params=[q] if name.startswith('second-') else [p], lr=0.5)
+    groups = [{'params': [p]}, group] if name.startswith('second-') else [group]
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        optimizer = torch.optim.SGD(groups, foreach=False)
+        group.armed = True
+        error = None; same = False; result = 'not-returned'
+        try: result = optimizer.zero_grad(set_to_none)
+        except Exception as failure:
+            error = type(failure).__name__
+            same = failure is marker
+    def association(parameter):
+        value = parameter.grad
+        return 'none' if value is None else ('old' if value is old else ('other' if value is other else ('replacement' if value is replacement else 'zero')))
+    return {'name': name, 'setToNone': set_to_none, 'shape': shape, 'events': events,
+        'error': error, 'sameException': same, 'returnedNone': result is None,
+        'pGrad': association(p), 'qGrad': association(q), 'old': state(old),
+        'other': state(other), 'replacement': state(replacement), 'alias': state(alias),
+        'zero': state(zero), 'warnings': [item.category.__name__ for item in caught],
+        'recordingRestored': (p*p).requires_grad}
+observations = [reset_case(name, reset) for reset in (False, True)
+    for name in ('trace', 'clear', 'replace', 'replace-tracked', 'install-absent',
+        'throw', 'second-throw', 'second-observe', 'absent', 'zero')]
+observations += [reset_case('replace', reset, shape) for reset in (False, True)
+    for shape in ('scalar', 'empty')]
+report = {'observations': observations}
+"""
+
+
 def sources() -> list[tuple[str, str, str]]:
     cases: list[tuple[str, str, str]] = []
     for midpoint in (2**62 + 2**38, 2**63 - 2**38):
@@ -422,6 +477,9 @@ report = {'gradient': state(gradient), 'alias': state(alias), 'p_same': p.grad i
         )
     )
     cases.append(("dictionary-reentry-phases", COMMON + REENTRY_SOURCE, "reentry"))
+    cases.append(
+        ("reset-dictionary-reentry", COMMON + RESET_REENTRY_SOURCE, "reset-reentry")
+    )
     return cases
 
 

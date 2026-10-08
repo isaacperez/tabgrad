@@ -360,14 +360,16 @@ bytecode settings, and cleanup restricted to exact owned modules, registrations,
 files, paths and finders. Host replacements survive; retained old modules stay
 tied to their old closed session.
 
-The private bridge uses protocol 4 with matching builder, loader and
+The private bridge uses protocol 5 with matching builder, loader and
 documentation; schema 1 and Pyodide 314.0.6 remain independent compatibility
-dimensions. Protocol 3 and 4
+dimensions. Protocol 4 and 5
 artifacts must reject each other before Python executes. Migration and rollback
 operate on matching distributions, without a mixed-protocol fallback.
-The package-source map remains unchanged; protocol 4 also requires the private
-SGD synchronous capture interface. Python retains its own callback exceptions
-until runtime retirement finishes, preserving primary and cleanup causes without
+The package-source map remains unchanged; protocol 5 also requires the private
+SGD synchronous capture and per-group reset interfaces. Python owns dictionary
+access immediately before each group's reset; the runtime owns current-gradient
+selection, admission and reset transitions. Python retains its own callback
+exceptions until runtime retirement finishes, preserving primary and cleanup causes without
 transporting a Python traceback through a JavaScript `PythonError`. Runtime
 capture ownership and expiry follow the [SGD contract](cpu-sgd.md#capture-ownership-across-python-reentry).
 

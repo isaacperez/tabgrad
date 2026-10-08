@@ -102,10 +102,10 @@ checks in the same change as a registered generated path.
 `scripts/build-python.mjs` copies maintained Python source byte for byte into
 `dist/python/` and writes its separate `manifest.json`. That manifest records
 the source paths, byte lengths, SHA-256 hashes, bootstrap/bridge protocol version
-and selected Pyodide version. The private bridge uses protocol 4, including
-the unchanged package-source map and synchronous SGD capture interface,
-independently of schema 1 and Pyodide 314.0.6; mixed protocol 3/4 distributions
-reject before Python execution. It does not describe numerical kernels. Serving
+and selected Pyodide version. The private bridge uses protocol 5, including
+the unchanged package-source map, synchronous SGD capture and per-group reset
+interfaces, independently of schema 1 and Pyodide 314.0.6; mixed protocol 4/5
+distributions reject before Python execution. It does not describe numerical kernels. Serving
 the distribution must preserve these relative paths, or the host must supply
 the Python manifest's location explicitly. The
 [installation component](components/python-package-installation.md) explains

@@ -155,6 +155,60 @@ export const pythonSGDHostChecks = `
 import torch, gc
 from pyodide.ffi import JsException
 def _check_sgd_hosts():
+    for reset in (False, True):
+        for closing in ('current', 'later-group', 'later-occurrence', 'optimizer', 'optimizer-and-tensor'):
+            for throwing in (False, True):
+                p = torch.tensor([2.], dtype=torch.float32, requires_grad=True)
+                q = torch.tensor([4.], dtype=torch.float32)
+                first = torch.tensor([3.], dtype=torch.float32)
+                later = torch.tensor([5.], dtype=torch.float32)
+                p.grad = first; q.grad = later
+                original = LookupError('reset close sentinel'); calls = []
+                class Group(dict):
+                    armed = False
+                    def __getitem__(self, key):
+                        value = super().__getitem__(key)
+                        if self.armed:
+                            calls.append(key)
+                            if key == 'params':
+                                if closing == 'current': p._handle.close()
+                                if closing.startswith('later') or closing == 'optimizer-and-tensor': q._handle.close()
+                                if closing.startswith('optimizer'): optimizer._lease.close()
+                                if throwing: raise original
+                        return value
+                group = Group(params=[p, q] if closing == 'later-occurrence' else [p])
+                optimizer = torch.optim.SGD([group] if closing == 'later-occurrence' else [group, {'params': [q]}])
+                group.armed = True
+                with torch.no_grad():
+                    try: optimizer.zero_grad(reset)
+                    except LookupError as error: assert throwing and error is original
+                    except JsException as error:
+                        assert not throwing
+                        assert error.js_error.code == ('CLOSED_OPTIMIZER' if closing.startswith('optimizer') else 'CLOSED_TENSOR')
+                    else: raise AssertionError('reset admitted closed target')
+                    if closing != 'current': assert not (p+p).requires_grad
+                assert calls == ['params']
+                assert later.tolist() == [5.]
+                assert first.tolist() == ([0.] if not reset and closing.startswith('later') and not throwing else [3.])
+                if closing.startswith('later'): assert p.grad is (None if reset and not throwing else first)
+        for closing in ('tensor', 'optimizer', 'optimizer-and-tensor'):
+            p = torch.tensor([2.], dtype=torch.float32)
+            q = torch.tensor([4.], dtype=torch.float32)
+            gradient = torch.tensor([3.], dtype=torch.float32); p.grad = gradient
+            calls = []
+            class Group(dict):
+                armed = False
+                def __getitem__(self, key):
+                    if self.armed: calls.append(key)
+                    return super().__getitem__(key)
+            group = Group(params=[p])
+            optimizer = torch.optim.SGD([group, {'params': [q]}]); group.armed = True
+            if closing != 'optimizer': q._handle.close()
+            if closing != 'tensor': optimizer._lease.close()
+            try: optimizer.zero_grad(reset)
+            except JsException as error: assert error.js_error.code == ('CLOSED_TENSOR' if closing == 'tensor' else 'CLOSED_OPTIMIZER')
+            else: raise AssertionError('reset entry accepted closed owner')
+            assert calls == [] and gradient.tolist() == [3.] and p.grad is gradient
     for closing in ('tensor', 'optimizer'):
         for outcome in ('coefficient', 'original', 'unsupported', 'admission'):
             p = torch.tensor([2.], dtype=torch.float32, requires_grad=True)
@@ -285,6 +339,41 @@ else: raise AssertionError('saved version guard lost')
 }
 
 export async function checkPythonSGDTeardown(attachPython, interpreter, CpuBackend) {
+  for (const reset of [false, true]) for (const throwing of [false, true]) {
+    const binding = await attachPython(interpreter);
+    try {
+      await binding.runPythonAsync(`
+import torch
+from pyodide.ffi import JsException
+def closed_session_reset():
+    p = torch.tensor([2.], dtype=torch.float32)
+    p.grad = torch.tensor([3.], dtype=torch.float32)
+    original = LookupError('reset session sentinel'); calls = []
+    class Group(dict):
+        armed = False
+        def __getitem__(self, key):
+            value = super().__getitem__(key)
+            if self.armed:
+                calls.append(key)
+                if key == 'params':
+                    optimizer._lease.close(); p._handle.close(); torch._runtime_session.close()
+                    if ${throwing ? "True" : "False"}: raise original
+            return value
+    group = Group(params=[p]); optimizer = torch.optim.SGD([group]); group.armed = True
+    try: optimizer.zero_grad(${reset ? "True" : "False"})
+    except LookupError as error: assert ${throwing ? "True" : "False"} and error is original
+    except JsException as error: assert not ${throwing ? "True" : "False"} and error.js_error.code == 'CLOSED_SESSION'
+    else: raise AssertionError('reset session close was ignored')
+    assert calls == ['params']
+    try: optimizer.zero_grad(${reset ? "True" : "False"})
+    except JsException as error: assert error.js_error.code == 'CLOSED_SESSION'
+    else: raise AssertionError('closed reset invoked getter')
+    assert calls == ['params']
+closed_session_reset()
+del closed_session_reset
+`);
+    } finally { await binding.close(); }
+  }
   for (const throwing of [false, true]) {
     const binding = await attachPython(interpreter);
     try {

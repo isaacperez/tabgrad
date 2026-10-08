@@ -88,6 +88,14 @@ perform numeric reset; true-like values drop associations. Nonzero numbers,
 including NaN, and nonempty strings are true-like. Invalid arity and unknown
 keywords retain TypeError. Direct JavaScript uses strict booleans instead.
 
+After the upfront ownership and structural checks, Python reads each supplied
+group's `group["params"]` immediately before resetting that group. Dictionary
+getter effects can clear, install or replace a gradient; reset selects the
+current association after those effects. A thrown getter retains its original
+exception and effects, leaves that group unreset and preserves earlier groups'
+accepted progress. Structural validation uses intrinsic dictionary access,
+without an extra virtual getter or moving later getters before earlier resets.
+
 A truthy reset releases each association without invalidating already exposed
 gradient objects. Numeric reset preserves the exact gradient identity and
 numerical alias family. Before publishing positive zeros, it detaches native
@@ -246,6 +254,13 @@ A thrown closure preserves its original exception/effects, without starting
 SGD updates. Cleanup/restoration must neither start fresh closed-session work
 nor replace the original exception with an incidental mode-access error.
 These close rules are Tabgrad host extensions, not native PyTorch behavior.
+
+After a reset dictionary getter returns normally, session and optimizer checks
+precede admission of that group's parameter occurrences. Each occurrence's
+public handle is checked before its reset; a later closed target does not undo
+an earlier admitted reset. This does not replace the global upfront handle
+check or step's global group-update admission check. A throwing getter keeps
+its original exception rather than invoking a subsequent admission check.
 
 Caller reentry is not confined to the closure. Both presentations can execute
 caller code while processing a group: JavaScript property access and Python
