@@ -15,17 +15,15 @@ export class PythonInstallation {
     this.#namespace = interpreter.runPython("{}") as PythonNamespace;
     try {
       interpreter.runPython(sources.bootstrap, { globals: this.#namespace });
-      this.#namespace.set("_package_source", sources.package);
-      this.#namespace.set("_autograd_source", sources.autograd);
-      this.#namespace.set("_optim_source", sources.optim);
+      this.#transferSources(sources.packageSources);
       this.#namespace.set("_runtime_bridge", bridge);
       interpreter.runPython(
-        "_installation = Installation(); _installation.install(_package_source, _autograd_source, _optim_source, _runtime_bridge)",
+        "_installation = Installation(); _installation.install(_package_sources, _runtime_bridge)",
         { globals: this.#namespace },
       );
       // Imported modules retain their own references. Source text and the
       // temporary bridge reference need not survive for the binding's lifetime.
-      interpreter.runPython("del _package_source, _autograd_source, _optim_source, _runtime_bridge", { globals: this.#namespace });
+      interpreter.runPython("del _package_sources, _runtime_bridge", { globals: this.#namespace });
     } catch (cause) {
       let failure = cause;
       try {
@@ -37,14 +35,41 @@ export class PythonInstallation {
     }
   }
 
+  #transferSources(sources: ReadonlyMap<string, string>): void {
+    const dictionary = this.#interpreter.runPython("{}") as PythonNamespace;
+    const failures: unknown[] = [];
+    try {
+      for (const [path, source] of sources) dictionary.set(path, source);
+      this.#namespace.set("_package_sources", dictionary);
+    } catch (error) {
+      failures.push(error);
+    }
+    try {
+      // The private namespace now owns the native dictionary, not its proxy.
+      dictionary.destroy();
+    } catch (error) {
+      failures.push(error);
+    }
+    if (failures.length === 1) throw failures[0];
+    if (failures.length > 1) throw new AggregateError(failures, "Python source transfer and cleanup failed.");
+  }
+
   #releaseNamespace(): void {
+    const failures: unknown[] = [];
     try {
       // Bootstrap functions refer back to their globals. Break that cycle
       // explicitly instead of retaining a retired installation until Python GC.
       this.#interpreter.runPython("globals().clear()", { globals: this.#namespace });
-    } finally {
-      this.#namespace.destroy();
+    } catch (error) {
+      failures.push(error);
     }
+    try {
+      this.#namespace.destroy();
+    } catch (error) {
+      failures.push(error);
+    }
+    if (failures.length === 1) throw failures[0];
+    if (failures.length > 1) throw new AggregateError(failures, "Python namespace cleanup failed.");
   }
 
   close(): void {

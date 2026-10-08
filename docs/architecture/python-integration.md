@@ -324,11 +324,10 @@ remain tied to the old closed binding, not rebound to a new session.
 
 The [package-source decision](https://github.com/isaacperez/tabgrad/issues/186#issuecomment-6052966373)
 separates artifact admission, installation composition and public module
-presentation. Replacing the positional package-source handoff must preserve
-these responsibilities rather than make the manifest a general module loader.
+presentation. The bounded package-source handoff preserves these
+responsibilities rather than making the manifest a general module loader.
 The [installation component](../components/python-package-installation.md)
-describes the positional implementation; this decision defines its replacement
-contract.
+describes the implemented transport and transaction.
 
 Artifact admission remains a closed contract in the delivered source loader.
 All expected paths, protocol versions, byte lengths, hashes and UTF-8 must
@@ -336,7 +335,7 @@ validate before creating a runtime session or executing Python. Source
 correspondence follows the verified descriptor's path, not a semantic position
 in an array. Bootstrap source is separate from package source.
 
-The replacement handoff carries a bounded path-to-source collection. The
+The handoff carries a bounded path-to-source collection. The
 verified bootstrap owns the fixed, ordered file/import pairs for the package
 root, autograd and optim. It validates the exact keys and string values before
 creating files, derives writes and ordinary imports from those pairs, and
@@ -361,9 +360,9 @@ bytecode settings, and cleanup restricted to exact owned modules, registrations,
 files, paths and finders. Host replacements survive; retained old modules stay
 tied to their old closed session.
 
-Changing the install signature is a bridge-protocol change. The replacement
-uses protocol 3 with matching builder, loader and documentation; schema 1 and
-Pyodide 314.0.6 remain independent compatibility dimensions. Protocol 2 and 3
+The install signature uses bridge protocol 3 with matching builder, loader and
+documentation; schema 1 and Pyodide 314.0.6 remain independent compatibility
+dimensions. Protocol 2 and 3
 artifacts must reject each other before Python executes. Migration and rollback
 operate on matching distributions, without a mixed-protocol fallback.
 

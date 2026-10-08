@@ -40,8 +40,10 @@ initializer and captures its session from the private bridge. `torch/autograd.py
 normalizes functional derivative calls through that same bridge. `torch/optim.py`
 normalizes SGD calls and owns Python optimizer wrappers, using private runtime
 leases for semantic registration and updates. The source manifest uses bridge
-protocol 2 and requires all four assets, including bootstrap. Package import
-does not establish PyTorch operation coverage. That requires the separate
+protocol 3 and requires all four assets, including bootstrap. Schema 1 and
+Pyodide 314.0.6 are separate compatibility dimensions. Protocol 2 and 3 assets
+cannot be mixed: migrate or roll back the matching distribution as a whole.
+Package import does not establish PyTorch operation coverage. That requires the separate
 operation contracts and [compatibility evidence](../compatibility.md).
 
 ## Verify everything before executing anything
@@ -74,14 +76,22 @@ security boundary against its own application.
 ## Install through a private namespace
 
 Once validation succeeds, [`src/frontends/python/python-installation.ts`](../../src/frontends/python/python-installation.ts)
-owns one Python dictionary proxy. A dictionary can be used as the globals for
-a particular Python execution without becoming the interpreter's application
+owns a private Python dictionary proxy. A dictionary can be used as the globals
+for a particular Python execution without becoming the interpreter's application
 globals. The installer evaluates the verified bootstrap in this private
-dictionary and passes the verified package text and a JavaScript bridge object
-into it. Helper names, imports and temporary installation variables therefore
-do not overwrite similarly named application variables.
+dictionary and populates a second, temporary native Python dictionary with
+verified package sources keyed by path. After the private namespace retains
+that dictionary, its JavaScript proxy is destroyed before installation. This
+release leaves the Python dictionary usable by bootstrap. The installer also
+passes a JavaScript bridge object into the private namespace. Helper names,
+imports and temporary installation variables therefore do not overwrite
+similarly named application variables.
 
 The bootstrap's `Installation` object owns the interpreter-side transaction.
+Bootstrap owns the fixed ordered root/autograd/optim file and import pairs;
+the manifest cannot choose import targets. It validates the exact source keys
+and string values before writing files. Source and bridge temporaries are
+removed from the namespace after installation.
 Before writing files or registering Tabgrad modules, it rejects an imported,
 registered or discoverable module named `torch` or `_tabgrad_runtime_bridge`.
 A name cached as `None` also counts as occupied. A package merely present on
@@ -235,8 +245,11 @@ Normal close waits for the accepted managed script, closes the runtime
 session, and removes owned installation entries. It attempts installation
 cleanup even if session close fails. A single cleanup error remains that error;
 multiple failures are reported together rather than allowing the last one to
-hide the first. The private dictionary is cleared and its proxy released on
-success and failure. Clearing matters because bootstrap functions refer back
+hide the first. Source population or assignment failures still release the
+temporary proxy; an independent destroy failure is retained alongside the
+primary error. Namespace clearing and proxy destruction are both attempted,
+and failures of both remain inspectable. The private dictionary is cleared and
+its proxy released on success and failure. Clearing matters because bootstrap functions refer back
 to their globals: releasing only the JavaScript proxy would leave the retired
 installation in a Python reference cycle until cyclic garbage collection.
 Application globals and the borrowed interpreter survive.

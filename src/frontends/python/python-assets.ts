@@ -11,15 +11,13 @@ interface SourceDescriptor {
 /** @internal Verified maintained Python source; loading does not touch Pyodide. */
 export interface PythonSources {
   readonly bootstrap: string;
-  readonly package: string;
-  readonly autograd: string;
-  readonly optim: string;
+  readonly packageSources: ReadonlyMap<string, string>;
 }
 
 function parseManifest(value: unknown): SourceDescriptor[] {
   if (typeof value !== "object" || value === null) throw new Error("Invalid Python manifest.");
   const manifest = value as Record<string, unknown>;
-  if (manifest.schemaVersion !== 1 || manifest.bridgeVersion !== 2
+  if (manifest.schemaVersion !== 1 || manifest.bridgeVersion !== 3
     || manifest.pyodideVersion !== "314.0.6" || !Array.isArray(manifest.files)
     || manifest.files.length !== SOURCE_PATHS.length) {
     throw new Error("Incompatible Python artifact manifest.");
@@ -58,8 +56,11 @@ export async function loadPythonSources(manifestUrl: URL): Promise<PythonSources
   try {
     const response = await fetchResponse(manifestUrl);
     const descriptors = parseManifest(await response.json());
-    const sources = await Promise.all(descriptors.map((entry) => readSource(entry, manifestUrl)));
-    return { bootstrap: sources[0]!, package: sources[1]!, autograd: sources[2]!, optim: sources[3]! };
+    const sources = new Map(await Promise.all(descriptors.map(async (entry) =>
+      [entry.path, await readSource(entry, manifestUrl)] as const)));
+    const bootstrap = sources.get("bootstrap.py")!;
+    sources.delete("bootstrap.py");
+    return { bootstrap, packageSources: sources };
   } catch (cause) {
     throw new TabgradError("PYTHON_ASSET_INVALID", "Python assets could not be validated.", {}, cause);
   }
