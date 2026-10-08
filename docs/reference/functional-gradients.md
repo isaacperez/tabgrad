@@ -89,6 +89,16 @@ owns an independently closeable handle, including repeated requests for the
 same input. Call `await gradient.toArray()` to observe a result and close every
 result under the ordinary [session lifetime](../javascript-api.md) contract.
 
+The request captures its length with one JavaScript `ToLength` conversion and
+retains array allocation errors before indexed reads. Every position in that
+captured length must supply a valid handle. A missing position rejects with
+`INVALID_TENSOR`, just like an explicit undefined
+entry. Each position checks property presence before reading its current value,
+including inherited indexes, and validates that handle before checking the next
+position. Presence checks, getter effects and original thrown errors
+survive; appended positions do not extend the captured request. Requested
+handles are read before history resolution and seed admission.
+
 ## History consumption and validation
 
 Global argument validation occurs before admitting any derivative operation

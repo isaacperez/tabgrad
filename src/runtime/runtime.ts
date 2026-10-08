@@ -1170,7 +1170,13 @@ export class RuntimeSession {
       throw new TypeError("grad requires one output and a nonempty array of input tensors, plus an optional seed.");
     }
     const result = this.#gradientInput(output);
-    const requested = inputs.map((input: unknown) => this.#gradientInput(input));
+    // Preserve array methods' single ToLength conversion and allocation phase.
+    const length = +inputs.length;
+    const inputCount = Math.min(Math.max(Math.trunc(length) || 0, 0), Number.MAX_SAFE_INTEGER);
+    const requested: TensorState[] = new Array(inputCount);
+    for (let index = 0; index < inputCount; index += 1) {
+      requested[index] = this.#gradientInput(index in inputs ? inputs[index] : undefined);
+    }
     if (result.history === null || requested.some((input) => !input.requiresGrad)) {
       throw new TabgradError("GRADIENT_NOT_TRACKED", "Output and requested inputs must require gradients.");
     }
