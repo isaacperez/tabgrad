@@ -21,7 +21,7 @@ import { DerivativeHistory, type DerivativeNode, type DerivativeRecipe } from ".
 import { COPY_DERIVATIVE, COPY_SLICES_DERIVATIVE, IDENTITY_DERIVATIVE, PASS_DERIVATIVE, MUL_DERIVATIVE, SUM_DERIVATIVE } from "./autograd/derivative-recipes.js";
 import { copyTensorShape, equalTensorShapes, inferViewShape, tensorElementCount } from "./tensor-shape.js";
 import { createSGD, type SGD, type SGDOptions, type SGDParameterGroup } from "./sgd.js";
-import type { OptimizerLease } from "./optimizer-lease.js";
+import type { OptimizerCapture, OptimizerLease } from "./optimizer-lease.js";
 import {
   ExecutableProgram,
   type ProgramProvenance,
@@ -286,6 +286,8 @@ interface RuntimeSemanticOwnership {
   readonly publicExposures: number;
   readonly optimizerOccurrences: number;
   readonly optimizerRegistrations: number;
+  readonly optimizerCaptureOccurrences: number;
+  readonly optimizerCaptureScopes: number;
   readonly collectorPasses: number;
   readonly collectorVisitedIdentities: number;
   readonly collectorVisitedHistoryNodes: number;
@@ -321,6 +323,13 @@ const RUNTIME_SESSION_ACCESS = new WeakMap<RuntimeSession, RuntimeSessionAccess>
 interface OptimizerRegistration {
   closed: boolean;
   readonly groups: readonly (readonly TensorState[])[];
+}
+
+interface OptimizerCaptureScope {
+  active: boolean;
+  readonly registration: OptimizerRegistration;
+  readonly parameters: readonly TensorState[];
+  readonly occurrences: { readonly parameter: TensorState; readonly gradient: TensorIdentity }[];
 }
 
 const COEFFICIENT_ADD_OPERATION: NumericalOperationDefinition = Object.freeze({
@@ -737,6 +746,8 @@ export class RuntimeSession {
   readonly #identities = new Set<TensorIdentity>();
   readonly #optimizers = new Set<OptimizerRegistration>();
   #optimizerOccurrences = 0;
+  readonly #optimizerCaptures = new Set<OptimizerCaptureScope>();
+  #optimizerCaptureOccurrences = 0;
   readonly #retainedEntries = new WeakMap<DerivativeNode<TensorValue>, WeakRef<TensorIdentity>>();
   #associationOwners = 0;
   #identityReferences = 0;
@@ -848,11 +859,7 @@ export class RuntimeSession {
     for (const group of states) for (const state of group) this.#retainIdentity(state.identity);
     this.#optimizerOccurrences += occurrences;
     this.#optimizers.add(registration);
-    const assertOpen = () => {
-      this.#assertOpen();
-      if (registration.closed) throw new TabgradError("CLOSED_OPTIMIZER", "The optimizer is closed.");
-      for (const group of registration.groups) for (const state of group) assertTensorOpen(state);
-    };
+    const assertOpen = () => this.#assertOptimizerOpen(registration);
     return Object.freeze({
       assertOpen,
       beginStep: () => { assertOpen(); return this.#enterNoGrad(); },
@@ -877,6 +884,9 @@ export class RuntimeSession {
           }
         }
       },
+      withGroup: <Result>(index: number, callback: (capture: OptimizerCapture) => Result) => (
+        this.#withOptimizerGroup(registration, index, callback)
+      ),
       zeroGrad: (setToNone: boolean) => {
         assertOpen();
         for (const group of registration.groups) for (const state of group) {
@@ -892,11 +902,99 @@ export class RuntimeSession {
     });
   }
 
+  #assertOptimizerOpen(registration: OptimizerRegistration): void {
+    this.#assertOpen();
+    if (registration.closed) throw new TabgradError("CLOSED_OPTIMIZER", "The optimizer is closed.");
+    for (const group of registration.groups) for (const state of group) assertTensorOpen(state);
+  }
+
+  #assertCaptureOpen(scope: OptimizerCaptureScope): void {
+    this.#assertOpen();
+    if (scope.registration.closed) throw new TabgradError("CLOSED_OPTIMIZER", "The optimizer is closed.");
+    if (!scope.active) throw new TypeError("The SGD capture scope has expired.");
+  }
+
+  #captureParameter(scope: OptimizerCaptureScope, occurrence: number): TensorState {
+    this.#assertCaptureOpen(scope);
+    const parameter = scope.parameters[occurrence];
+    if (!Number.isSafeInteger(occurrence) || parameter === undefined) throw new TypeError("Invalid SGD occurrence.");
+    assertTensorOpen(parameter);
+    return parameter;
+  }
+
+  #captureOptimizerGradient(scope: OptimizerCaptureScope, occurrence: number): boolean {
+    const parameter = this.#captureParameter(scope, occurrence);
+    const gradient = parameter.identity.gradient;
+    if (gradient === null) return false;
+    this.#checkUpdateCapacity(1);
+    // Publish the root only after checked acquisition; no caller code runs here.
+    scope.occurrences.push({ parameter, gradient });
+    this.#retainIdentity(gradient);
+    this.#optimizerCaptureOccurrences += 1;
+    return true;
+  }
+
+  #applyOptimizerCaptures(scope: OptimizerCaptureScope, alphaBits: number): void {
+    this.#assertCaptureOpen(scope);
+    // All registered handles are checked at group update admission. Capturing
+    // each occurrence checks its own handle rather than rescanning every group.
+    this.#assertOptimizerOpen(scope.registration);
+    for (const { parameter, gradient } of scope.occurrences) {
+      this.#assertCaptureOpen(scope);
+      assertTensorOpen(parameter);
+      this.#optimizerUpdate(parameter, gradient, alphaBits);
+    }
+  }
+
+  #withOptimizerGroup<Result>(registration: OptimizerRegistration, index: number,
+    callback: (capture: OptimizerCapture) => Result): Result {
+    this.#assertOptimizerOpen(registration);
+    const parameters = registration.groups[index];
+    if (!Number.isSafeInteger(index) || parameters === undefined || typeof callback !== "function") {
+      throw new TypeError("Invalid SGD group callback.");
+    }
+    this.#checkUpdateCapacity(1);
+    const scope: OptimizerCaptureScope = { active: true, registration, parameters, occurrences: [] };
+    this.#optimizerCaptures.add(scope);
+    const view: OptimizerCapture = Object.freeze({
+      hasGradient: (occurrence: number) => this.#captureParameter(scope, occurrence).identity.gradient !== null,
+      capture: (occurrence: number) => this.#captureOptimizerGradient(scope, occurrence),
+      apply: (alphaBits: number) => this.#applyOptimizerCaptures(scope, alphaBits),
+    });
+    let result!: Result;
+    let failures: unknown[] | undefined;
+    try { result = callback(view); }
+    catch (error) { (failures ??= []).push(error); }
+    try { this.#retireOptimizerCapture(scope); }
+    catch (error) { (failures ??= []).push(error); }
+    throwCleanupFailures(failures, "SGD group processing and capture retirement failed.");
+    return result;
+  }
+
+  #retireOptimizerCapture(scope: OptimizerCaptureScope): void {
+    if (!scope.active) return;
+    scope.active = false;
+    this.#optimizerCaptures.delete(scope);
+    const occurrences = scope.occurrences.splice(0);
+    let failures: unknown[] | undefined;
+    for (const { gradient } of occurrences) {
+      this.#optimizerCaptureOccurrences -= 1;
+      try { this.#releaseIdentity(gradient); }
+      catch (error) { (failures ??= []).push(error); }
+    }
+    this.#scheduleCollection();
+    throwCleanupFailures(failures, "SGD capture retirement failed.");
+  }
+
   #retireOptimizer(registration: OptimizerRegistration): void {
     if (registration.closed) return;
     registration.closed = true;
     this.#optimizers.delete(registration);
     let failures: unknown[] | undefined;
+    for (const scope of [...this.#optimizerCaptures]) if (scope.registration === registration) {
+      try { this.#retireOptimizerCapture(scope); }
+      catch (error) { (failures ??= []).push(error); }
+    }
     for (const group of registration.groups) for (const state of group) {
       this.#optimizerOccurrences -= 1;
       try { this.#releaseIdentity(state.identity); }
@@ -1495,7 +1593,7 @@ export class RuntimeSession {
 
   #checkUpdateCapacity(additionalOwners: number, additionalBytes = 0): void {
     const owners = this.#identityReferences + this.#valueReferences + this.#history.references + this.#writers.references
-      + this.#requestLeases + this.#undeliveredEffects.size + this.#optimizers.size;
+      + this.#requestLeases + this.#undeliveredEffects.size + this.#optimizers.size + this.#optimizerCaptures.size;
     if (owners + additionalOwners > this.#updateLimits.owners || this.#liveBackingBytes + additionalBytes > this.#updateLimits.backingBytes) {
       throw new TabgradError("RESOURCE_EXHAUSTED", "Persistent update captures exceed the session capacity.", {
         owners, additionalOwners, maximumOwners: this.#updateLimits.owners,
@@ -1729,12 +1827,14 @@ export class RuntimeSession {
     const incomingReferences = [...incoming].reduce((total, token) => total + token.owners, 0);
     if (identityReferences !== this.#identityReferences || incomingReferences !== identityReferences ||
       gradientAssociations !== this.#associationOwners ||
-      identityReferences !== publicExposures + gradientAssociations + viewBaseReferences + leafEndpointOwners + this.#optimizerOccurrences) {
+      identityReferences !== publicExposures + gradientAssociations + viewBaseReferences + leafEndpointOwners
+        + this.#optimizerOccurrences + this.#optimizerCaptureOccurrences) {
       throw new TabgradError("BACKEND_STATUS_ERROR", "Semantic ownership and its occurrence accounting disagree.");
     }
     return { identities: identities.length, identityReferences, gradientAssociations, viewBaseReferences,
       leafEndpointOwners, nonleafEntryOwners, publicExposures, optimizerOccurrences: this.#optimizerOccurrences,
       optimizerRegistrations: this.#optimizers.size,
+      optimizerCaptureOccurrences: this.#optimizerCaptureOccurrences, optimizerCaptureScopes: this.#optimizerCaptures.size,
       collectorPasses: this.#collectorPasses, collectorVisitedIdentities: this.#collectorVisitedIdentities,
       collectorVisitedHistoryNodes: this.#collectorVisitedHistoryNodes, collectorVisitedEdges: this.#collectorVisitedEdges };
   }
@@ -1932,6 +2032,9 @@ export class RuntimeSession {
     const pending: (TensorIdentity | DerivativeNode<TensorValue>)[] = [...this.#states].map(state => state.identity);
     for (const optimizer of this.#optimizers) for (const group of optimizer.groups) {
       for (const state of group) pending.push(state.identity);
+    }
+    for (const scope of this.#optimizerCaptures) {
+      for (const { gradient } of scope.occurrences) pending.push(gradient);
     }
     while (pending.length !== 0) {
       const owner = pending.pop()!;

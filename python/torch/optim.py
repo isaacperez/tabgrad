@@ -243,9 +243,12 @@ class SGD:
         ):
             if (
                 group is not original
-                or group.get("params") is not parameter_list
-                or type(group.get("params")) is not list
-                or tuple(cast("list[Tensor]", group["params"])) != members
+                or dict[str, object].get(group, "params") is not parameter_list
+                or type(dict[str, object].get(group, "params")) is not list
+                or tuple(
+                    cast("list[Tensor]", dict[str, object].__getitem__(group, "params"))
+                )
+                != members
             ):
                 _unsupported()
 
@@ -278,16 +281,82 @@ class SGD:
             self._lease.assertOpen()
             self._check_structure()
             for index, group in enumerate(self.param_groups):
-                _supported(group)
-                if self._lease.hasGradients(index):
-                    alpha_bits = _alpha_bits(group["lr"])
-                    try:
-                        self._lease.stepGroup(index, alpha_bits)
-                    except JsException as error:
-                        _raise_gradient_failure(error)
+                self._process_group(index, group)
             return result
         finally:
             self._lease.setRecording(previous)
+
+    def _process_group(self, index: int, group: dict[str, object]) -> None:
+        failures: list[BaseException] = []
+        try:
+            self._lease.withGroup(
+                index, lambda capture: self._run_group(group, capture, failures)
+            )
+        except JsException as error:
+            failures.append(error)
+        if len(failures) == 1:
+            raise failures[0]
+        if failures:
+            raise BaseExceptionGroup(
+                "SGD group and capture retirement failed", failures
+            )
+
+    def _run_group(
+        self,
+        group: dict[str, object],
+        capture: _bridge.OptimizerCapture,
+        failures: list[BaseException],
+    ) -> None:
+        # Keep Python exceptions in Python: a transported PythonError can retain
+        # its traceback/wrappers until JavaScript GC. Runtime still owns cleanup.
+        try:
+            self._step_group(group, capture)
+        except BaseException as error:
+            failures.append(error)
+
+    def _step_group(
+        self, group: dict[str, object], capture: _bridge.OptimizerCapture
+    ) -> None:
+        captured = 0
+        for occurrence, _parameter in enumerate(cast("list[Tensor]", group["params"])):
+            if capture.hasGradient(occurrence):
+                if not _false_form(group["fused"]):
+                    _unsupported()
+                if not capture.capture(occurrence):
+                    # Native checks sparse metadata after its second grad read.
+                    raise AttributeError(
+                        "'NoneType' object has no attribute 'is_sparse'"
+                    )
+                captured += 1
+                if group["momentum"] != 0:
+                    _unsupported()
+        # Native evaluates these keywords once, even when no gradients remain.
+        options = {
+            name: group[name]
+            for name in (
+                "weight_decay",
+                "momentum",
+                "lr",
+                "dampening",
+                "nesterov",
+                "maximize",
+                "foreach",
+                "fused",
+            )
+        }
+        options["differentiable"] = dict[str, object].__getitem__(
+            group, "differentiable"
+        )
+        if dict[str, object].__contains__(group, "param_names"):
+            _unsupported()
+        _supported(options)
+        if captured:
+            try:
+                capture.apply(_alpha_bits(options["lr"]))
+            except JsException as error:
+                _raise_gradient_failure(error)
+        if group["momentum"] != 0:
+            _unsupported()
 
     def add_param_group(self, param_group: object) -> None:
         _unsupported()

@@ -52,14 +52,18 @@ aliases retain their own tracking and history.
 
 `step()` returns `None`, or the exact result of a closure run once with recording
 enabled. A throwing closure preserves its exception/effects without SGD updates.
-The caller's mode is always restored. Each group collects gradient identities
+The caller's mode is always restored. Each group selects gradient identities
+at native per-occurrence phases, interleaved with dictionary option access,
 and updates current numerical values in parameter order. Absent gradients skip;
 present zero/empty gradients and zero rates still increment the alias version.
-Parameter and gradient identities remain stable; earlier updates survive later
-failure.
+The update preserves parameter identity and does not replace its gradient
+association; caller code can change that association. Earlier updates survive
+later failure.
 
-Group dictionary option access that changes gradient associations has a
-[known compatibility discrepancy](../compatibility.md#known-group-dictionary-limitation).
+Group dictionary access can clear or replace an association after its identity
+was captured; the update still uses that captured gradient. Recursive steps
+retain independent captures. See the [capture contract](../architecture/cpu-sgd.md#capture-ownership-across-python-reentry)
+and [bounded compatibility evidence](../compatibility.md#group-dictionary-capture-evidence).
 
 ```python
 import torch

@@ -155,6 +155,39 @@ export const pythonSGDHostChecks = `
 import torch, gc
 from pyodide.ffi import JsException
 def _check_sgd_hosts():
+    for closing in ('tensor', 'optimizer'):
+        for outcome in ('coefficient', 'original', 'unsupported', 'admission'):
+            p = torch.tensor([2.], dtype=torch.float32, requires_grad=True)
+            q = torch.tensor([4.], dtype=torch.float32)
+            p.grad = torch.tensor([3.], dtype=torch.float32)
+            original = LookupError('dictionary close sentinel')
+            class Group(dict):
+                armed = False
+                fired = False
+                def __getitem__(self, key):
+                    value = super().__getitem__(key)
+                    if self.armed and key == 'momentum' and not self.fired:
+                        self.fired = True
+                        if closing == 'tensor': q._handle.close()
+                        else: optimizer._lease.close()
+                        if outcome == 'original': raise original
+                        if outcome == 'unsupported': return 1
+                    if self.armed and key == 'lr' and outcome == 'coefficient': return 'bad'
+                    return value
+            group = Group(params=[p], lr=0.5)
+            optimizer = torch.optim.SGD([group, {'params': [q]}])
+            group.armed = True
+            with torch.no_grad():
+                try: optimizer.step()
+                except LookupError as error: assert outcome == 'original' and error is original
+                except TypeError: assert outcome == 'coefficient'
+                except NotImplementedError: assert outcome == 'unsupported'
+                except JsException as error:
+                    assert outcome == 'admission'
+                    assert error.js_error.code == ('CLOSED_TENSOR' if closing == 'tensor' else 'CLOSED_OPTIMIZER')
+                else: raise AssertionError('dictionary close was ignored')
+                assert not (p+p).requires_grad
+            assert p.tolist() == [2.]
     for restructure in ('parameters', 'group', 'state'):
         p = torch.tensor([2.], dtype=torch.float32, requires_grad=True)
         q = torch.tensor([4.], dtype=torch.float32)
@@ -334,4 +367,52 @@ del _sgd_unraisable, _sgd_previous_hook
     }
     equal(releases, 2, "independent optimizer finalizer cleanup");
   } finally { CpuBackend.prototype.release = release; await finalized.close().catch(() => undefined); }
+
+  const captureFailure = await attachPython(interpreter);
+  await captureFailure.runPythonAsync(`
+import torch, gc
+from pyodide.ffi import JsException
+_capture_p = torch.tensor([2.], dtype=torch.float32)
+_capture_seed = torch.tensor([3.], dtype=torch.float32)
+_capture_g = _capture_seed + _capture_seed
+assert _capture_g.tolist() == [6.]
+del _capture_seed
+gc.collect()
+_capture_p.grad = _capture_g
+_capture_original = LookupError('original capture callback')
+class _CaptureGroup(dict):
+    armed = False
+    def __getitem__(self, key):
+        value = super().__getitem__(key)
+        if self.armed and key == 'lr':
+            _capture_g._handle.close()
+            _capture_p.grad = None
+            raise _capture_original
+        return value
+_capture_group = _CaptureGroup(params=[_capture_p], lr=0.5)
+_capture_owner = torch.optim.SGD([_capture_group])
+_capture_group.armed = True
+`);
+  const captureFault = new Error("Python capture physical release"); let captureReleases = 0;
+  CpuBackend.prototype.release = function (allocation) { release.call(this, allocation); captureReleases += 1; throw captureFault; };
+  try {
+    await captureFailure.runPythonAsync(`
+def _check_capture_causes():
+    try: _capture_owner.step()
+    except BaseExceptionGroup as error:
+        assert len(error.exceptions) == 2
+        assert error.exceptions[0] is _capture_original
+        assert isinstance(error.exceptions[1], JsException)
+        assert 'Python capture physical release' in str(error.exceptions[1])
+    else: raise AssertionError('capture primary/cleanup causes lost')
+    assert _capture_p.tolist() == [2.]
+_check_capture_causes()
+del _check_capture_causes, _capture_owner, _capture_group, _CaptureGroup
+del _capture_original, _capture_p, _capture_g
+gc.collect()
+assert torch._runtime_session.diagnostics().liveTensorHandles == 0
+assert torch._runtime_session.diagnostics().liveTensorValues == 0
+`);
+    equal(captureReleases, 1, "Python capture independent retirement");
+  } finally { CpuBackend.prototype.release = release; await captureFailure.close(); }
 }
