@@ -23,6 +23,56 @@ def attempt(call):
 """
 
 
+NORMALIZATION_SOURCE = """
+def normalization_contents(value, p, q):
+    if type(value) is not list: return type(value).__name__
+    return ['p' if item is p else 'q' if item is q else type(item).__name__ for item in value]
+def normalization_case(name):
+    p = tensor([2.]); q = tensor([3.])
+    events = []; writes = []
+    marker = LookupError('normalization sentinel')
+    class Group(dict):
+        def __setitem__(self, key, value):
+            super().__setitem__(key, value)
+            writes.append([key, normalization_contents(value, p, q), value is original])
+            if name == 'publication-error' and key == 'params': raise marker
+    class Named(tuple):
+        def __getitem__(self, index):
+            events.append(['index', index, group['params'] is original])
+            if index == 1: raise marker
+            return super().__getitem__(index)
+    class Members:
+        def __iter__(self):
+            events.append(['iterate', group['params'] is original])
+            yield p
+            raise marker
+    original = {
+        'empty-tuple': [()], 'short-tuple': [('name',)],
+        'late-short': [p, ('name',)], 'mixed': [('name', p), q],
+        'member-error': [('name', p), ('other', 17)],
+        'ordinary': [p, q], 'iterable-error': Members(),
+        'tuple-index-error': [Named(('name', p))],
+        'publication-error': [('name',)],
+    }[name]
+    group = Group(params=original)
+    before = []; after = []
+    first = {'params': before}; last = {'params': after}
+    error = 'ok'; same_error = False
+    try: torch.optim.SGD([first, group, last])
+    except Exception as caught:
+        error = type(caught).__name__; same_error = caught is marker
+    return {'name': name, 'error': error, 'same_error': same_error,
+            'same_original': group['params'] is original,
+            'contents': normalization_contents(group['params'], p, q), 'writes': writes, 'events': events,
+            'names': dict.get(group, 'param_names'),
+            'first_progress': [first['params'] is before, 'lr' in first],
+            'last_progress': [last['params'] is after, 'lr' in last]}
+report = {'cases': [normalization_case(name) for name in (
+    'empty-tuple', 'short-tuple', 'late-short', 'mixed', 'member-error',
+    'ordinary', 'iterable-error', 'tuple-index-error', 'publication-error')]}
+"""
+
+
 REENTRY_SOURCE = """import warnings
 
 def run_case(name):
@@ -162,7 +212,13 @@ report = {'observations': observations}
 
 
 def sources() -> list[tuple[str, str, str]]:
-    cases: list[tuple[str, str, str]] = []
+    cases: list[tuple[str, str, str]] = [
+        (
+            "constructor-normalization-progress",
+            COMMON + NORMALIZATION_SOURCE,
+            "constructor",
+        )
+    ]
     for midpoint in (2**62 + 2**38, 2**63 - 2**38):
         for offset in (-1, 0, 1):
             cases.append(

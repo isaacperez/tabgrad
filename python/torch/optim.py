@@ -160,6 +160,7 @@ class SGD:
                 raise TypeError("optimizer parameters need an ordered collection")
             else:
                 parameters = list(cast("Iterable[object]", members))
+            group["params"] = parameters
             names: list[object] = []
             extracted: list[object] = []
             for parameter in parameters:

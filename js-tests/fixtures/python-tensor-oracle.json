@@ -7947,6 +7947,316 @@
   ],
   "sgdCases": [
     {
+      "name": "constructor-normalization-progress",
+      "kind": "constructor",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\ndef normalization_contents(value, p, q):\n    if type(value) is not list: return type(value).__name__\n    return ['p' if item is p else 'q' if item is q else type(item).__name__ for item in value]\ndef normalization_case(name):\n    p = tensor([2.]); q = tensor([3.])\n    events = []; writes = []\n    marker = LookupError('normalization sentinel')\n    class Group(dict):\n        def __setitem__(self, key, value):\n            super().__setitem__(key, value)\n            writes.append([key, normalization_contents(value, p, q), value is original])\n            if name == 'publication-error' and key == 'params': raise marker\n    class Named(tuple):\n        def __getitem__(self, index):\n            events.append(['index', index, group['params'] is original])\n            if index == 1: raise marker\n            return super().__getitem__(index)\n    class Members:\n        def __iter__(self):\n            events.append(['iterate', group['params'] is original])\n            yield p\n            raise marker\n    original = {\n        'empty-tuple': [()], 'short-tuple': [('name',)],\n        'late-short': [p, ('name',)], 'mixed': [('name', p), q],\n        'member-error': [('name', p), ('other', 17)],\n        'ordinary': [p, q], 'iterable-error': Members(),\n        'tuple-index-error': [Named(('name', p))],\n        'publication-error': [('name',)],\n    }[name]\n    group = Group(params=original)\n    before = []; after = []\n    first = {'params': before}; last = {'params': after}\n    error = 'ok'; same_error = False\n    try: torch.optim.SGD([first, group, last])\n    except Exception as caught:\n        error = type(caught).__name__; same_error = caught is marker\n    return {'name': name, 'error': error, 'same_error': same_error,\n            'same_original': group['params'] is original,\n            'contents': normalization_contents(group['params'], p, q), 'writes': writes, 'events': events,\n            'names': dict.get(group, 'param_names'),\n            'first_progress': [first['params'] is before, 'lr' in first],\n            'last_progress': [last['params'] is after, 'lr' in last]}\nreport = {'cases': [normalization_case(name) for name in (\n    'empty-tuple', 'short-tuple', 'late-short', 'mixed', 'member-error',\n    'ordinary', 'iterable-error', 'tuple-index-error', 'publication-error')]}\n",
+      "expected": {
+        "cases": [
+          {
+            "name": "empty-tuple",
+            "error": "IndexError",
+            "same_error": false,
+            "same_original": false,
+            "contents": [
+              "tuple"
+            ],
+            "writes": [
+              [
+                "params",
+                [
+                  "tuple"
+                ],
+                false
+              ]
+            ],
+            "events": [],
+            "names": null,
+            "first_progress": [
+              false,
+              true
+            ],
+            "last_progress": [
+              true,
+              false
+            ]
+          },
+          {
+            "name": "short-tuple",
+            "error": "IndexError",
+            "same_error": false,
+            "same_original": false,
+            "contents": [
+              "tuple"
+            ],
+            "writes": [
+              [
+                "params",
+                [
+                  "tuple"
+                ],
+                false
+              ]
+            ],
+            "events": [],
+            "names": null,
+            "first_progress": [
+              false,
+              true
+            ],
+            "last_progress": [
+              true,
+              false
+            ]
+          },
+          {
+            "name": "late-short",
+            "error": "IndexError",
+            "same_error": false,
+            "same_original": false,
+            "contents": [
+              "p",
+              "tuple"
+            ],
+            "writes": [
+              [
+                "params",
+                [
+                  "p",
+                  "tuple"
+                ],
+                false
+              ]
+            ],
+            "events": [],
+            "names": null,
+            "first_progress": [
+              false,
+              true
+            ],
+            "last_progress": [
+              true,
+              false
+            ]
+          },
+          {
+            "name": "mixed",
+            "error": "ValueError",
+            "same_error": false,
+            "same_original": false,
+            "contents": [
+              "p",
+              "q"
+            ],
+            "writes": [
+              [
+                "params",
+                [
+                  "tuple",
+                  "q"
+                ],
+                false
+              ],
+              [
+                "params",
+                [
+                  "p",
+                  "q"
+                ],
+                false
+              ]
+            ],
+            "events": [],
+            "names": null,
+            "first_progress": [
+              false,
+              true
+            ],
+            "last_progress": [
+              true,
+              false
+            ]
+          },
+          {
+            "name": "member-error",
+            "error": "TypeError",
+            "same_error": false,
+            "same_original": false,
+            "contents": [
+              "p",
+              "int"
+            ],
+            "writes": [
+              [
+                "params",
+                [
+                  "tuple",
+                  "tuple"
+                ],
+                false
+              ],
+              [
+                "params",
+                [
+                  "p",
+                  "int"
+                ],
+                false
+              ],
+              [
+                "param_names",
+                [
+                  "str",
+                  "str"
+                ],
+                false
+              ]
+            ],
+            "events": [],
+            "names": [
+              "name",
+              "other"
+            ],
+            "first_progress": [
+              false,
+              true
+            ],
+            "last_progress": [
+              true,
+              false
+            ]
+          },
+          {
+            "name": "ordinary",
+            "error": "ok",
+            "same_error": false,
+            "same_original": false,
+            "contents": [
+              "p",
+              "q"
+            ],
+            "writes": [
+              [
+                "params",
+                [
+                  "p",
+                  "q"
+                ],
+                false
+              ],
+              [
+                "params",
+                [
+                  "p",
+                  "q"
+                ],
+                false
+              ]
+            ],
+            "events": [],
+            "names": null,
+            "first_progress": [
+              false,
+              true
+            ],
+            "last_progress": [
+              false,
+              true
+            ]
+          },
+          {
+            "name": "iterable-error",
+            "error": "LookupError",
+            "same_error": true,
+            "same_original": true,
+            "contents": "Members",
+            "writes": [],
+            "events": [
+              [
+                "iterate",
+                true
+              ]
+            ],
+            "names": null,
+            "first_progress": [
+              false,
+              true
+            ],
+            "last_progress": [
+              true,
+              false
+            ]
+          },
+          {
+            "name": "tuple-index-error",
+            "error": "LookupError",
+            "same_error": true,
+            "same_original": false,
+            "contents": [
+              "Named"
+            ],
+            "writes": [
+              [
+                "params",
+                [
+                  "Named"
+                ],
+                false
+              ]
+            ],
+            "events": [
+              [
+                "index",
+                0,
+                false
+              ],
+              [
+                "index",
+                1,
+                false
+              ]
+            ],
+            "names": null,
+            "first_progress": [
+              false,
+              true
+            ],
+            "last_progress": [
+              true,
+              false
+            ]
+          },
+          {
+            "name": "publication-error",
+            "error": "LookupError",
+            "same_error": true,
+            "same_original": false,
+            "contents": [
+              "tuple"
+            ],
+            "writes": [
+              [
+                "params",
+                [
+                  "tuple"
+                ],
+                false
+              ]
+            ],
+            "events": [],
+            "names": null,
+            "first_progress": [
+              false,
+              true
+            ],
+            "last_progress": [
+              true,
+              false
+            ]
+          }
+        ]
+      }
+    },
+    {
       "name": "integer-rounding-4611686293305294847",
       "kind": "integer",
       "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([0.]); p.grad = tensor([1.], False)\ntorch.optim.SGD([p], lr=4611686293305294847).step()\nreport = {'parameter': state(p)}\n",
