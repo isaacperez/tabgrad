@@ -1294,6 +1294,7 @@ export class RuntimeSession {
     if (output === null) throw new TabgradError("GRADIENT_NOT_TRACKED", "Output must require gradients and have derivative history.");
     const requested: TensorIdentity[] = [];
     if (selected?.inputs !== undefined) {
+      const seen = new Set<TensorIdentity>();
       for (const handle of selected.inputs) {
         const state = this.#gradientInput(handle);
         if (!state.requiresGrad) throw new TabgradError("GRADIENT_NOT_TRACKED", "Requested input must require gradients.");
@@ -1302,7 +1303,10 @@ export class RuntimeSession {
           state.identity.retained = true;
           this.#retainedEntries.set(entry, new WeakRef(state.identity));
         }
-        if (!requested.includes(state.identity)) requested.push(state.identity);
+        if (!seen.has(state.identity)) {
+          seen.add(state.identity);
+          requested.push(state.identity);
+        }
       }
     }
     if (selected?.inputs === undefined) {

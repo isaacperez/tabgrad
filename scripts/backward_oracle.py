@@ -30,6 +30,8 @@ BINDINGS = {
     "unused": "out.backward(inputs=[unused])",
     "used-unused": "out.backward(inputs=[x, unused])",
     "repeated": "out.backward(inputs=[x, x])",
+    "repeated-nonleaf-leaf": "out.backward(inputs=[mid, mid, x, unused, x])",
+    "generator-repeated": "out.backward(inputs=(item for item in [mid, mid, x, unused, x]))",
     "nonleaf": "out.backward(inputs=[mid])",
     "nonleaf-leaf": "out.backward(inputs=[mid, x])",
     "root": "out.backward(inputs=[out])",
@@ -234,6 +236,7 @@ def sources() -> list[tuple[str, str, str]]:
             )
     setups = {
         "invalid-target": "out.backward(inputs=[mid,1])",
+        "repeated-invalid-target": "out.backward(inputs=[mid,mid,1])",
         "seed-shape": "out.backward(tensor([1.,1.],False),inputs=[mid])",
         "create-none": "out.backward(create_graph=None,inputs=[mid])",
         "root-tracking": "plain.backward(tensor(1.,False),inputs=[mid])",

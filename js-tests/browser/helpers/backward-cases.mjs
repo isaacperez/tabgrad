@@ -35,7 +35,7 @@ class BackwardCase {
   gradient(owner) { const handle = owner.grad; return handle === null ? null : this.keep(handle); }
 }
 
-const directBindingCases = new Set(["default", "unused", "used-unused", "repeated", "nonleaf", "nonleaf-leaf", "root", "untracked", "bad-shape"]);
+const directBindingCases = new Set(["default", "unused", "used-unused", "repeated", "repeated-nonleaf-leaf", "nonleaf", "nonleaf-leaf", "root", "untracked", "bad-shape"]);
 
 /** Python normalization cases are qualified through the actual Python frontend. */
 export function isDirectBackwardCase(fixture) {
@@ -49,6 +49,7 @@ async function bindingCase(c, name) {
   const mid = c.keep(x.mul(x)); const out = c.keep(c.keep(mid.add(x)).sum());
   const inputs = name === "unused" ? [unused] : name === "used-unused" ? [x, unused]
     : name === "repeated" ? [x, x] : name === "nonleaf" ? [mid] : name === "nonleaf-leaf" ? [mid, x]
+      : name === "repeated-nonleaf-leaf" ? [mid, mid, x, unused, x]
       : name === "root" ? [out] : name === "untracked" ? [plain] : [x];
   const call = attempt(() => out.backward(name === "bad-shape" ? plain : undefined,
     ["default", "none-sequence", "bad-shape"].includes(name) ? undefined : { inputs }));
@@ -175,8 +176,8 @@ async function setupCase(c, name) {
   const x = c.tensor([2, 3]); const mid = c.keep(x.add(x)); const out = c.keep(mid.sum());
   const plain = c.keep(c.session.noGrad(() => mid.sum()));
   let call;
-  if (name === 'setup-invalid-target') {
-    try { out.backward(undefined, { inputs: [mid, 1] }); call = { none: true }; }
+  if (name === 'setup-invalid-target' || name === 'setup-repeated-invalid-target') {
+    try { out.backward(undefined, { inputs: name === 'setup-invalid-target' ? [mid, 1] : [mid, mid, 1] }); call = { none: true }; }
     catch (error) { if (error.code !== 'INVALID_TENSOR') throw error; call = { error: 'RuntimeError' }; }
   } else if (name === 'setup-seed-shape') call = attempt(() => out.backward(c.tensor([1, 1], false), { inputs: [mid] }));
   else if (name === 'setup-root-tracking') call = attempt(() => plain.backward(c.tensor([1], false, []), { inputs: [mid] }));
