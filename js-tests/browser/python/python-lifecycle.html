@@ -150,6 +150,41 @@ answer += 1
         if (!interpreter.runPython("'torch' not in sys.modules and 'torch.autograd' not in sys.modules and '_tabgrad_runtime_bridge' not in sys.modules")) {
           throw new Error("Binding left imported modules behind.");
         }
+        const run = interpreter.runPython;
+        run("import os; from _pyodide._importhook import jsfinder; before_tmp = set(os.listdir('/tmp')); before_path = tuple(sys.path); before_cache = set(sys.path_importer_cache)");
+        for (const afterDeletion of [false, true]) {
+          const fault = new Error("controlled attachment finalization failure");
+          let injected = false;
+          interpreter.runPython = (source, options) => {
+            if (source !== "del _package_sources, _runtime_bridge" || injected) return run(source, options);
+            injected = true;
+            run("fault_module = sys.modules['torch']");
+            if (afterDeletion) run(source, options);
+            throw fault;
+          };
+          try {
+            try {
+              await attachPython(interpreter);
+              throw new Error("Finalization fault unexpectedly attached.");
+            } catch (error) {
+              if (error.code !== "PYTHON_INSTALL_FAILED" || error.cause !== fault) throw error;
+            }
+          } finally {
+            interpreter.runPython = run;
+          }
+          if (!injected || !run(`(
+all(name not in sys.modules for name in ('torch', 'torch.autograd', 'torch.optim', '_tabgrad_runtime_bridge')) and
+'_tabgrad_runtime_bridge' not in jsfinder.jsproxies and host_value == 40 and
+set(os.listdir('/tmp')) == before_tmp and tuple(sys.path) == before_path and
+set(sys.path_importer_cache) == before_cache
+)`)) throw new Error("Failed finalization left owned interpreter state.");
+          try {
+            run("fault_module._runtime_session.tensor([])");
+            throw new Error("Failed attachment retained an open session.");
+          } catch (error) {
+            if (!String(error).toLowerCase().includes("closed")) throw error;
+          }
+        }
         const replacement = await attachPython(interpreter);
         try {
           await replacement.runPythonAsync("assert host_value == 40");

@@ -239,6 +239,12 @@ the replacement to cleanup. Initial import suppresses bytecode-cache writing onl
 for that synchronous operation and restores the interpreter's previous setting.
 Bootstrap failure is reported as `PYTHON_INSTALL_FAILED`, retaining its Python
 cause. If rollback also fails, the Python exception group retains both errors.
+After import returns successfully, the JavaScript installer owns retirement
+until construction finishes. If removing temporary source or bridge references
+fails, it retires that completed installation before clearing the namespace.
+An import failure has already attempted bootstrap rollback and is not retired
+a second time by the constructor. Independent retirement, namespace-clearing
+and proxy-destruction failures remain inspectable alongside the primary cause.
 Attachment then closes any created session and releases the interpreter
 reservation; a failed attachment never returns an apparently usable binding.
 
