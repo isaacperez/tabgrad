@@ -5173,6 +5173,70 @@
       }
     },
     {
+      "name": "binding-repeated-nonleaf-leaf",
+      "kind": "binding",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\n\nx = tensor([2., 3.])\nunused = tensor([4., 5.])\nplain = tensor([1., 1.], False)\nmid = x*x\nout = (mid+x).sum()\ncall=attempt(lambda: out.backward(inputs=[mid, mid, x, unused, x]))\n\nreport = {'call': call, 'x': state(x.grad), 'unused': state(unused.grad), 'mid': state(mid.grad), 'out': state(out.grad)}\n",
+      "expected": {
+        "call": {
+          "none": true
+        },
+        "x": {
+          "values": [
+            5.0,
+            7.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "unused": null,
+        "mid": {
+          "values": [
+            1.0,
+            1.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "out": null
+      }
+    },
+    {
+      "name": "binding-generator-repeated",
+      "kind": "binding",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\n\nx = tensor([2., 3.])\nunused = tensor([4., 5.])\nplain = tensor([1., 1.], False)\nmid = x*x\nout = (mid+x).sum()\ncall=attempt(lambda: out.backward(inputs=(item for item in [mid, mid, x, unused, x])))\n\nreport = {'call': call, 'x': state(x.grad), 'unused': state(unused.grad), 'mid': state(mid.grad), 'out': state(out.grad)}\n",
+      "expected": {
+        "call": {
+          "none": true
+        },
+        "x": {
+          "values": [
+            5.0,
+            7.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "unused": null,
+        "mid": {
+          "values": [
+            1.0,
+            1.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "out": null
+      }
+    },
+    {
       "name": "binding-nonleaf",
       "kind": "binding",
       "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\n\nx = tensor([2., 3.])\nunused = tensor([4., 5.])\nplain = tensor([1., 1.], False)\nmid = x*x\nout = (mid+x).sum()\ncall=attempt(lambda: out.backward(inputs=[mid]))\n\nreport = {'call': call, 'x': state(x.grad), 'unused': state(unused.grad), 'mid': state(mid.grad), 'out': state(out.grad)}\n",
@@ -7761,6 +7825,36 @@
       "name": "setup-invalid-target",
       "kind": "setup",
       "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\nx=tensor([2.,3.]);mid=x+x;out=mid.sum()\nwith torch.no_grad():plain=mid.sum()\ncall=attempt(lambda:out.backward(inputs=[mid,1]))\nmid.sum().backward()\nreport={'call':call,'retained':state(mid.grad),'leaf':state(x.grad)}\n",
+      "expected": {
+        "call": {
+          "error": "RuntimeError"
+        },
+        "retained": {
+          "values": [
+            1.0,
+            1.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        },
+        "leaf": {
+          "values": [
+            2.0,
+            2.0
+          ],
+          "shape": [
+            2
+          ],
+          "tracking": false
+        }
+      }
+    },
+    {
+      "name": "setup-repeated-invalid-target",
+      "kind": "setup",
+      "source": "\nimport warnings\n\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\n\ndef state(value):\n    return None if value is None else {'values': value.tolist(), 'shape': list(value.shape), 'tracking': value.requires_grad}\n\ndef attempt(call):\n    try:\n        return {'none': call() is None}\n    except Exception as error:\n        return {'error': type(error).__name__}\n\nx=tensor([2.,3.]);mid=x+x;out=mid.sum()\nwith torch.no_grad():plain=mid.sum()\ncall=attempt(lambda:out.backward(inputs=[mid,mid,1]))\nmid.sum().backward()\nreport={'call':call,'retained':state(mid.grad),'leaf':state(x.grad)}\n",
       "expected": {
         "call": {
           "error": "RuntimeError"
