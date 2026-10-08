@@ -320,6 +320,75 @@ Unregistering a JavaScript module alone is insufficient because Python's
 registration state without altering user globals. References the user retains
 remain tied to the old closed binding, not rebound to a new session.
 
+## Keep package composition distinct from verified-source transport
+
+The [package-source decision](https://github.com/isaacperez/tabgrad/issues/186#issuecomment-6052966373)
+separates artifact admission, installation composition and public module
+presentation. Replacing the positional package-source handoff must preserve
+these responsibilities rather than make the manifest a general module loader.
+The [installation component](../components/python-package-installation.md)
+describes the positional implementation; this decision defines its replacement
+contract.
+
+Artifact admission remains a closed contract in the delivered source loader.
+All expected paths, protocol versions, byte lengths, hashes and UTF-8 must
+validate before creating a runtime session or executing Python. Source
+correspondence follows the verified descriptor's path, not a semantic position
+in an array. Bootstrap source is separate from package source.
+
+The replacement handoff carries a bounded path-to-source collection. The
+verified bootstrap owns the fixed, ordered file/import pairs for the package
+root, autograd and optim. It validates the exact keys and string values before
+creating files, derives writes and ordinary imports from those pairs, and
+retains the different conflict checks for children and discoverable root/bridge
+names. Import targets are not supplied by the manifest or inferred from
+arbitrary paths. This contract adds neither nested-package support nor new
+public imports or operation coverage.
+
+The installer transfers that collection using a temporary native Python
+dictionary through the existing literal-dictionary, `set` and `destroy`
+interface. Its JavaScript proxy is independently owned and released after the
+private namespace acquires the Python dictionary. Population, namespace
+assignment, installation and cleanup failures must retain their primary and
+independent cleanup causes. Successful installation drops temporary source and
+bridge references; retirement still clears the private globals before
+releasing their proxy. The borrowed interpreter and host-owned proxies survive.
+
+The transaction's ordering and identity rules remain binding: bridge
+registration before ordinary package imports, acquisition recorded before
+module execution, no acquisition on reload, partial-write ownership, restored
+bytecode settings, and cleanup restricted to exact owned modules, registrations,
+files, paths and finders. Host replacements survive; retained old modules stay
+tied to their old closed session.
+
+Changing the install signature is a bridge-protocol change. The replacement
+uses protocol 3 with matching builder, loader and documentation; schema 1 and
+Pyodide 314.0.6 remain independent compatibility dimensions. Protocol 2 and 3
+artifacts must reject each other before Python executes. Migration and rollback
+operate on matching distributions, without a mixed-protocol fallback.
+
+Keeping the positional contract avoids migration and an extra proxy, but
+retains manual source associations. A single cross-language profile with
+adapters can centralize every declaration, but requires generation ordering and
+freshness checks across build, delivered admission and Python. A collection
+alone removes transport repetition but leaves separate file/import associations;
+descriptors alone leave positional transport. Combining a bounded collection
+with bootstrap-owned descriptors avoids those repetitions while retaining
+explicit copying, admission and public API edits. It deliberately does not
+provide one global declaration of every allowed path.
+
+The [decision evidence](https://github.com/isaacperez/tabgrad/issues/186#issuecomment-6052953731)
+compares both actual submodule additions and preserves the
+bounded real-Pyodide experiment, including its failed fixture and corrected
+results. That experiment establishes feasibility in the pinned Node/Pyodide
+environment, not browser equivalence, quantitative improvement or a verified
+production migration. Production verification must exercise the actual typed
+loader, protocol rejection, additional proxy failure paths and existing
+installation/cleanup and browser lifecycle consumers. Reconsider a shared
+profile if multiple compositions or repeated adapter maintenance justify its
+additional build ownership; neither the experiment nor this decision permits
+arbitrary module loading.
+
 ## Decision, alternatives, and limits of the evidence
 
 The [attachment research record](https://github.com/isaacperez/tabgrad/issues/43#issuecomment-5600702674)
