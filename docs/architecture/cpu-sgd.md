@@ -59,6 +59,12 @@ parameter list. Parameter objects, order and repeated occurrences remain
 observable; custom metadata is inert. Registration does not clone parameter
 payloads. Empty groups are valid, while an empty outer parameter iterable and
 a bare Tensor reject with the native ValueError and TypeError respectively.
+The [Python group-key domain](../reference/sgd.md#python-calls) limits reserved
+fields to exact builtin-string keys and additional metadata to inert,
+nonaliasing keys; it does not promise a hidden-alias detector. Dictionary
+subclasses retain their required native constructor calls. Internal admission
+uses literal stored fields after intrinsic validation, without extra caller
+dictionary queries, and registration retains the resulting parameter objects.
 Malformed parameters and duplicates across groups retain native errors.
 Duplicates within a group retain the pinned native warning and update once
 per occurrence rather than being silently deduplicated.

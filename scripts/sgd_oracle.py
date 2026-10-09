@@ -73,6 +73,102 @@ report = {'cases': [normalization_case(name) for name in (
 """
 
 
+CONSTRUCTOR_CALLBACK_SOURCE = """
+def constructor_callback_state(group, p, q):
+    data = {key: value for key, value in dict.items(group) if type(key) is str}
+    members = data['params']
+    return {'params': ['p' if value is p else 'q' if value is q else type(value).__name__ for value in members],
+            'names': data.get('param_names'), 'fields': list(data)}
+def constructor_callback_case(name):
+    p = tensor([2.]); q = tensor([3.])
+    events = []; warnings_seen = []; armed = False
+    marker = LookupError('constructor callback sentinel')
+    class Group(dict):
+        contains_calls = 0
+        params_reads = 0
+        params_writes = 0
+        def __getitem__(self, key):
+            events.append(['get', self.label, key])
+            if key == 'params':
+                self.params_reads += 1
+                if name == 'extraction-getter-replaces' and self.label == 'g0' and self.params_reads == 2: return [q]
+            elif name == 'option-getter-throw': raise marker
+            if armed and self.label == 'g0' and key == 'params':
+                if name == 'prior-getter-add': self['param_names'] = ['late']
+                if name == 'prior-getter-throw': raise marker
+            return super().__getitem__(key)
+        def __setitem__(self, key, value):
+            events.append(['set', self.label, key])
+            if key == 'params':
+                self.params_writes += 1
+                if name == 'first-setter-replaces' and self.label == 'g0' and self.params_writes == 1: value = [q]
+                if name == 'second-setter-invalid' and self.label == 'g0' and self.params_writes == 2: value = [17]
+            super().__setitem__(key, value)
+        def setdefault(self, key, default):
+            events.append(['default', self.label, key])
+            value = super().setdefault(key, default)
+            return 1 if name == 'default-return-lie' and key == 'momentum' else value
+        def __contains__(self, key):
+            events.append(['contains', self.label, key])
+            if key == 'param_names':
+                self.contains_calls += 1
+                if name == 'contains-current-sequence' and self.label == 'g2':
+                    return self.contains_calls == 2
+                if name == 'contains-mutates-earlier' and self.label == 'g1':
+                    first['param_names'] = ['late']
+                if name == 'contains-throw' and self.label == 'g1': raise marker
+                # Compare explicitly so hash-table probe multiplicity does not
+                # confound the count of constructor membership requests.
+                if name == 'collision-false' and self.label == 'g1': return metadata_key == key
+            return super().__contains__(key)
+    class MetadataKey:
+        def __hash__(self): return hash('param_names')
+        def __eq__(self, other):
+            events.append(['equality', other])
+            return False
+    first = Group(params=[p]); first.label = 'g0'
+    second = Group(params=[q]); second.label = 'g1'
+    groups = [first, second]
+    if name in ('first-setter-replaces', 'second-setter-invalid', 'extraction-getter-replaces'): groups = [first]
+    if name.startswith('prior-getter-'):
+        def later():
+            nonlocal armed
+            events.append(['iterate', 'g1'])
+            armed = True
+            yield q
+        dict.__setitem__(second, 'params', later())
+    if name == 'contains-current-sequence':
+        third = Group(params=[]); third.label = 'g2'; groups.append(third)
+    if name == 'collision-false':
+        metadata_key = MetadataKey()
+        dict.__setitem__(second, metadata_key, 7)
+    if name.startswith('warning-'):
+        dict.__setitem__(second, 'params', [q, q])
+        if name == 'warning-remove': dict.__setitem__(first, 'param_names', ['initial'])
+    def on_warning(message, category, *args, **kwargs):
+        warnings_seen.append(category.__name__)
+        events.append(['warning', category.__name__])
+        if name == 'warning-remove': dict.pop(first, 'param_names')
+        if name == 'warning-throw': raise marker
+    events.clear()
+    error = 'ok'; same_error = False
+    with warnings.catch_warnings():
+        warnings.simplefilter('always', UserWarning)
+        warnings.showwarning = on_warning
+        try: torch.optim.SGD(groups)
+        except Exception as caught:
+            error = type(caught).__name__; same_error = caught is marker
+    return {'name': name, 'error': error, 'same_error': same_error,
+            'events': events, 'warnings': warnings_seen,
+            'groups': [constructor_callback_state(group, p, q) for group in groups]}
+report = {'cases': [constructor_callback_case(name) for name in (
+    'ordinary-trace', 'prior-getter-add', 'prior-getter-throw',
+    'contains-current-sequence', 'contains-mutates-earlier', 'contains-throw',
+    'collision-false', 'warning-remove', 'warning-throw', 'option-getter-throw',
+    'first-setter-replaces', 'second-setter-invalid', 'extraction-getter-replaces', 'default-return-lie')]}
+"""
+
+
 REENTRY_SOURCE = """import warnings
 
 def run_case(name):
@@ -217,7 +313,12 @@ def sources() -> list[tuple[str, str, str]]:
             "constructor-normalization-progress",
             COMMON + NORMALIZATION_SOURCE,
             "constructor",
-        )
+        ),
+        (
+            "constructor-dictionary-callbacks",
+            COMMON + CONSTRUCTOR_CALLBACK_SOURCE,
+            "constructor",
+        ),
     ]
     for midpoint in (2**62 + 2**38, 2**63 - 2**38):
         for offset in (-1, 0, 1):

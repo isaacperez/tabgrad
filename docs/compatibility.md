@@ -369,6 +369,16 @@ It covers repeated scalar/singleton/matrix/empty training, groups and repeats,
 crossed aliases, absent/present/empty gradients, zero/nonfinite/group-negative
 rates, integer midpoint neighbors, binding/validation phases, native false
 forms, closure identity/errors and reset/detachment/view/history interactions.
+The constructor-dictionary family compares 14 cases for ordered getters,
+setters, default callbacks, previous-group reads, containment and warning
+effects, substituted parameter lists, original exceptions and partial progress.
+It includes nonaliasing colliding metadata and a default callback whose return
+differs from storage. The metadata control compares explicitly inside its
+containment callback, isolating constructor requests from hash-table probe
+variation; it does not qualify probe multiplicities across Python runtimes.
+These observations use the accepted
+[group-key domain](reference/sgd.md#python-calls); custom reserved-key aliases
+remain outside that guarantee.
 The dictionary-reentry trace compares 22 selected cases with the same native
 sources: occurrence-interleaved selection, changed/cleared current and later
 associations, repeated parameters, numerical aliases, recursive calls,
