@@ -1,3 +1,4 @@
+import { beginGpuPublication, endGpuPublication, type GpuProgressPath } from "./webgpu-progress-notification.js";
 import { TabgradError } from "../../shared/errors.js";
 import { ExecutionTicket, type SynchronousCompletion } from "../../execution/execution-ticket.js";
 import { GPU_DIAGNOSTIC_BYTES, decodeGpuFailure, encodeGpuFailure } from "./webgpu-failure-diagnostic.js";
@@ -25,16 +26,18 @@ export class SharedGpuCompletion<T> implements SynchronousCompletion<T> {
   readonly #header: Int32Array;
   readonly #decode: (payload: Uint8Array) => T;
   readonly #retire: () => void;
+  readonly #failed: (() => void) | undefined;
   #resultObserver: { promise: Promise<T>; resolve: (value: T) => void; reject: (error: unknown) => void } | undefined;
   #drainObserver: { promise: Promise<void>; resolve: () => void } | undefined;
   #outcome: { value: T } | { error: unknown } | undefined;
   #drainCallbacks: (() => void)[] | undefined;
   #retired = false;
 
-  constructor(control: Int32Array, payloadBytes: number, decode: (payload: Uint8Array) => T, retire: () => void) {
+  constructor(control: Int32Array, payloadBytes: number, decode: (payload: Uint8Array) => T, retire: () => void, failed?: () => void) {
     this.#control = control;
     this.#decode = decode;
     this.#retire = retire;
+    this.#failed = failed;
     this.buffer = new SharedArrayBuffer(PAYLOAD_OFFSET + payloadBytes);
     this.#header = new Int32Array(this.buffer, 0, HEADER_BYTES / 4);
     this.ticket = new ExecutionTicket(() => this.#observeResult(), () => this.#observeDrain(), this);
@@ -66,6 +69,7 @@ export class SharedGpuCompletion<T> implements SynchronousCompletion<T> {
         }
       } catch (error) {
         this.#outcome = { error };
+        this.#failed?.();
       }
     }
     if (this.#outcome !== undefined && this.#resultObserver !== undefined) {
@@ -116,27 +120,33 @@ export class SharedGpuCompletion<T> implements SynchronousCompletion<T> {
   }
 }
 
-export function publishSharedGpuSuccess(buffer: SharedArrayBuffer, control: Int32Array, bytes: Uint8Array): void {
+export function publishSharedGpuSuccess(buffer: SharedArrayBuffer, control: Int32Array, bytes: Uint8Array, progress?: GpuProgressPath): void {
   assertGpuConnectionActive(control);
+  beginGpuPublication(buffer, progress);
   sharedGpuPayload(buffer).set(bytes);
   const header = new Int32Array(buffer, 0, HEADER_BYTES / 4);
   Atomics.store(header, LENGTH, bytes.byteLength);
   Atomics.store(header, DRAINED, 1);
   Atomics.store(header, STATUS, SUCCESS);
+  endGpuPublication(buffer, progress);
   wakeGpuObservers(control);
 }
 
-export function publishSharedGpuDrain(buffer: SharedArrayBuffer, control: Int32Array): void {
+export function publishSharedGpuDrain(buffer: SharedArrayBuffer, control: Int32Array, progress?: GpuProgressPath): void {
+  beginGpuPublication(buffer, progress);
   Atomics.store(new Int32Array(buffer, 0, HEADER_BYTES / 4), DRAINED, 1);
+  endGpuPublication(buffer, progress);
   wakeGpuObservers(control);
 }
 
-export function publishSharedGpuFailure(buffer: SharedArrayBuffer, control: Int32Array, error: unknown): void {
+export function publishSharedGpuFailure(buffer: SharedArrayBuffer, control: Int32Array, error: unknown, progress?: GpuProgressPath): void {
   const encoded = encodeGpuFailure(error);
+  beginGpuPublication(buffer, progress);
   const header = new Int32Array(buffer, 0, HEADER_BYTES / 4);
   new Uint8Array(buffer, HEADER_BYTES, GPU_DIAGNOSTIC_BYTES).set(encoded);
   Atomics.store(header, LENGTH, encoded.byteLength);
   Atomics.store(header, STATUS, FAILURE);
+  endGpuPublication(buffer, progress);
   wakeGpuObservers(control);
 }
 

@@ -254,6 +254,14 @@ if representative evidence shows unacceptable ordinary cost, a simpler
 preserving notification mechanism, lost progress or retention beyond live work.
 
 
+The pending-completion owner keeps one changed flag per live admission, rather
+than a growing change counter. Its active index belongs to the consumer;
+shared notification words and publication flags belong to the paired endpoints.
+The notification directory prunes retired paths. Request lookup in the physical
+worker ends with its existing finite work promise, and late subscriptions only
+hint and acknowledge existing shared state. None of these private records is a
+public operation, a physical completion authority or a completed-request cache.
+
 ## Supervision is independent; reclamation is not guessed
 
 Controller close or lifetime abort retires the generation and wakes observers
