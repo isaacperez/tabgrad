@@ -52,6 +52,77 @@ function assertRetired(session) {
   assert.equal(session.diagnostics().liveAllocationBytes, 0);
 }
 
+for (const route of ["grad", "backward"]) {
+  for (const writers of [1, 8]) for (const calls of [1, 3]) {
+    test(`fresh controls are captured once (${route}, writers=${writers}, calls=${calls})`, async (context) => {
+      const gate = await gatedManifest(`fresh-captures-${route}-${writers}-${calls}`);
+      const create = WriterOutcomeLedger.prototype.create;
+      let counting = false, attachmentCaptures = 0, directCaptures = 0, stateWrites = 0;
+      // Count actual nonempty capture passes while every writer is pending.
+      // This private instrumentation disables canonical-ledger admission;
+      // these small cases qualify neither capacity nor elapsed time.
+      context.mock.method(WriterOutcomeLedger.prototype, "create", function () {
+        const outcome = create.call(this);
+        let state = outcome.state;
+        Object.defineProperty(outcome, "state", {
+          get() {
+            if (counting) {
+              assert.equal(state.kind, "pending");
+              const stack = new Error().stack;
+              if (stack.includes("captureWriterOutcomes") && stack.includes("Array.some")) {
+                if (stack.includes("#attachTensorControls")) attachmentCaptures += 1;
+                else if (stack.includes("#setIdentityControls")) directCaptures += 1;
+              }
+            }
+            return state;
+          },
+          set(next) { if (counting) stateWrites += 1; state = next; },
+        });
+        return outcome;
+      });
+      const session = createTestRuntimeSession({ ...gate, forceVariant: "scalar" });
+      try {
+        const { aggregate } = copiedAggregate(session, writers);
+        const input = session.tensor([2], { shape: [], requiresGrad: true });
+        const seed = session.tensor([1], { shape: [] });
+        // Precreate roots: each counted differentiation selects one multiply
+        // and one leaf, independently of writer count and repetitions.
+        const roots = Array.from({ length: calls }, () => input.mul(aggregate));
+        const outputs = [];
+        counting = true;
+        for (const root of roots) {
+          if (route === "grad") outputs.push(...session.grad(root, [input], seed));
+          else root.backward(seed);
+        }
+        counting = false;
+        assert.equal(stateWrites, 0);
+        assert.equal(attachmentCaptures, (route === "grad" ? 4 : 3) * calls,
+          "each attachment filters its union once, including through any installation helper");
+        assert.equal(directCaptures, route === "grad" ? calls : 1,
+          "raw detached-alias controls still require their own filtering");
+        gate.release();
+        if (route === "grad") {
+          for (const output of outputs) {
+            assert.deepEqual([...await output.toArray()], [writers * 2]);
+            assert.equal(output.requiresGrad, false);
+            output.close();
+          }
+          assert.equal(input.grad, null);
+        } else {
+          const gradient = input.grad;
+          assert.equal(input.grad, gradient);
+          assert.deepEqual([...await gradient.toArray()], [writers * 2 * calls]);
+        }
+      } finally {
+        counting = false;
+        gate.release();
+        await session.close();
+      }
+      assertRetired(session);
+    });
+  }
+}
+
 for (const forceVariant of ["scalar", "simd128"]) {
   test(`completed writer captures stay within admitted backward capacity (${forceVariant})`, async () => {
     const gate = await gatedManifest(`completed-captures-${forceVariant}`);
