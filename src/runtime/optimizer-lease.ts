@@ -21,4 +21,9 @@ export interface OptimizerLease {
   finalize(): void;
 }
 
-export type OptimizerLeaseFactory = (groups: readonly (readonly Tensor[])[]) => OptimizerLease;
+/** Construction-only handoff; the lease never retains this frontend callback. */
+export type OptimizerParameterCapture = (group: number, parameter: Tensor) => void;
+
+export type OptimizerLeaseFactory = (
+  groups: readonly (readonly Tensor[])[], capture: OptimizerParameterCapture,
+) => OptimizerLease;

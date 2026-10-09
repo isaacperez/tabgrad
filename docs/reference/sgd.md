@@ -130,6 +130,10 @@ reject with `INVALID_TENSOR`. Indexed getters run in parameter order and retain
 their effects and original exceptions. Registration rechecks lifetime after
 those accesses and acquires no optimizer roots on failed admission. Earlier
 validation failures keep their precedence over that admission check.
+The admitted indexed sequence also determines the copied public parameter
+arrays and the targets of `step` and `zeroGrad`. Later getter and iterator
+accesses retain their effects and original exceptions without replacing those
+admitted occurrences.
 
 ```javascript
 const p = session.tensor([2, 3], { requiresGrad: true });

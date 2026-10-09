@@ -72,7 +72,12 @@ export class SGD {
     this.#lease = internal[1] as OptimizerLease;
     this.paramGroups = internal[2] as SGDParameterGroup[];
     this.defaults = internal[3] as SGDOptions;
-    this.#registered = this.paramGroups.map((group) => [...group.params]);
+    const admitted = internal[4] as readonly (readonly Tensor[])[];
+    this.#registered = this.paramGroups.map((group, index) => {
+      // Preserve presentation access effects without replacing admitted targets.
+      [...group.params];
+      return admitted[index]!;
+    });
     this.#groups = [...this.paramGroups];
     this.#parameterArrays = this.paramGroups.map((group) => group.params);
     FINALIZER.register(this, this.#lease, this);
@@ -153,17 +158,23 @@ export function createSGD(parameters: unknown, options: unknown, register: Optim
   }
   // Complete intrinsic registration validation before rejecting native-valid
   // unsupported options, without admitting roots for a rejected constructor.
-  const lease = register(groups.map((group) => group.params));
+  const admitted: Tensor[][] = groups.map(() => []);
+  const lease = register(groups.map((group) => group.params), (index, parameter) => {
+    admitted[index]!.push(parameter);
+  });
   try {
     supported(defaults);
     for (const group of groups) supported(group);
-    for (const group of groups) {
+    for (let index = 0; index < groups.length; index += 1) {
+      const group = groups[index]!;
       if (new Set(group.params).size !== group.params.length) {
         console.warn("optimizer contains a parameter group with duplicate parameters; in future, this will cause an error; see github.com/pytorch/pytorch/issues/40967 for more information");
       }
-      group.params = [...group.params];
+      // Iteration remains observable, but indexed admission fixes membership.
+      [...group.params];
+      group.params = admitted[index]!.slice();
     }
-    return new SGD(CONSTRUCTION_TOKEN, lease, groups, defaults);
+    return new SGD(CONSTRUCTION_TOKEN, lease, groups, defaults, admitted);
   } catch (error) {
     try { lease.close(); }
     catch (cleanup) { throw new AggregateError([error, cleanup], "SGD construction and cleanup failed."); }

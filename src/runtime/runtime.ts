@@ -23,7 +23,7 @@ import { DerivativeHistory, type DerivativeNode, type DerivativePlan, type Deriv
 import { COPY_DERIVATIVE, COPY_SLICES_DERIVATIVE, IDENTITY_DERIVATIVE, PASS_DERIVATIVE, MUL_DERIVATIVE, SUM_DERIVATIVE } from "./autograd/derivative-recipes.js";
 import { copyTensorShape, equalTensorShapes, inferViewShape, tensorElementCount } from "./tensor-shape.js";
 import { createSGD, type SGD, type SGDOptions, type SGDParameterGroup } from "./sgd.js";
-import type { OptimizerCapture, OptimizerLease } from "./optimizer-lease.js";
+import type { OptimizerCapture, OptimizerLease, OptimizerParameterCapture } from "./optimizer-lease.js";
 import {
   ExecutableProgram,
   type ProgramProvenance,
@@ -832,13 +832,13 @@ export class RuntimeSession {
   sgd(parameters: Tensor[] | SGDParameterGroup[], options?: SGDOptions): SGD {
     this.#assertOpen();
     if (arguments.length > 2) throw new TypeError("sgd requires parameters and optional options.");
-    return createSGD(parameters, options, (groups) => this.#registerOptimizer(groups));
+    return createSGD(parameters, options, (groups, capture) => this.#registerOptimizer(groups, capture));
   }
 
-  #registerOptimizer(groups: readonly (readonly Tensor[])[]): OptimizerLease {
+  #registerOptimizer(groups: readonly (readonly Tensor[])[], capture?: OptimizerParameterCapture): OptimizerLease {
     this.#assertOpen();
     const previousGroups = new Set<TensorIdentity>();
-    const states = groups.map((group) => {
+    const states = groups.map((group, groupIndex) => {
       const identities = new Set<TensorIdentity>();
       const members: TensorState[] = [];
       const length = group.length;
@@ -855,10 +855,13 @@ export class RuntimeSession {
         if (previousGroups.has(state.identity)) throw new TabgradError("INVALID_TENSOR", "A parameter appears in more than one group.");
         identities.add(state.identity);
         members.push(state);
+        capture?.(groupIndex, handle!);
       }
       for (const identity of identities) previousGroups.add(identity);
       return Object.freeze(members);
     });
+    // Returned lease closures share this scope; release its frontend capture.
+    capture = undefined;
     // Later getters can close earlier exposures. Recheck captured internal
     // states before acquisition; no caller code runs between here and publication.
     this.#assertOpen();
