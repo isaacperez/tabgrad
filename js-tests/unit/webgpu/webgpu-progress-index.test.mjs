@@ -256,3 +256,15 @@ test("failure already drained before observation retires without enrollment", ()
   assert.deepEqual(f.events, ["drained"]); assert.equal(f.paths.size, 0);
   f.advance(); assert.deepEqual(f.events, ["drained"]);
 });
+
+test("subscription failure after reentrant retirement cannot retain a completed owner", () => {
+  const NativeSet = Set, owned = [];
+  globalThis.Set = class extends NativeSet { constructor(...args) { super(...args); owned.push(this); } };
+  let completion, pending;
+  try {
+    pending = new PendingGpuCompletions(() => { pending.delete(completion); throw Error("late transport error"); });
+  } finally { globalThis.Set = NativeSet; }
+  completion = { buffer: new SharedArrayBuffer(16), isDrained: () => false, refresh() {} };
+  pending.add(completion); pending.failed(completion); pending.advance(false);
+  assert(owned.every((set) => set.size === 0), "fallback owns only still-live obligations");
+});

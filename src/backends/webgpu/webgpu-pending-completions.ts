@@ -59,6 +59,7 @@ export class PendingGpuCompletions {
       this.#notifications?.delete(completion);
       if (this.#notifications?.size === 0) this.#notifications = undefined;
       this.#arming.delete(completion);
+      if (!this.#live.has(completion)) return;
       this.#fallback.add(completion);
       this.#ordered?.setActive(completion, true);
     }
