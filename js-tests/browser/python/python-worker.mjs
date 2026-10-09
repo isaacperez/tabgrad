@@ -89,7 +89,7 @@ else:
     finally { await aliasBinding.close(); }
     const finalizationBinding = await attachPython(interpreter);
     await checkPythonFinalizationFault(finalizationBinding, WebAssemblyCpuBackend);
-    await checkPythonSGDTeardown(attachPython, interpreter, WebAssemblyCpuBackend);
+    await checkPythonSGDTeardown(attachPython, interpreter, WebAssemblyCpuBackend, getTestRuntimeSemanticOwnership);
     if (gate !== undefined) interpreter.unregisterJsModule("_test_worker_gate");
     postMessage({ kind: "finished", answer, diagnostics,
       selectedVariant: interpreter.runPython("selected_variant") });

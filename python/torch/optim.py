@@ -291,7 +291,11 @@ class SGD:
         except JsException as error:
             _raise_gradient_failure(error)
             raise
-        self._finalizer = finalize(self, _finalize_lease, self._lease)
+        try:
+            self._finalizer = finalize(self, _finalize_lease, self._lease)
+        except BaseException:
+            _finalize_lease(self._lease)
+            raise
 
     def _check_structure(self) -> None:
         if self.state or len(self.param_groups) != len(self._groups):

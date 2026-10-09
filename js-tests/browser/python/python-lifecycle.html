@@ -222,7 +222,7 @@ else:
         finally { await aliasBinding.close(); }
         const finalizationBinding = await attachPython(interpreter);
         await checkPythonFinalizationFault(finalizationBinding, WebAssemblyCpuBackend);
-        await checkPythonSGDTeardown(attachPython, interpreter, WebAssemblyCpuBackend);
+        await checkPythonSGDTeardown(attachPython, interpreter, WebAssemblyCpuBackend, getTestRuntimeSemanticOwnership);
         await send("/__phase", { phase: "runtime-finished" });
         await send("/__result", { ok: true, answer, pyodide: interpreter.version, jspiAvailable });
       } catch (error) {
