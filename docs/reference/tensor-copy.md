@@ -68,7 +68,8 @@ child created from that parent after the update binds the parent's current entry
 Its traversed history is consumable once,
 even without numeric saves; direct-copy history can be reused. A cutoff at the
 output/base can succeed without executing an already consumed ancestor. A
-mixed request that needs that ancestor fails before partial differentiation.
+mixed request that needs that ancestor can fail after earlier recipes have
+succeeded.
 
 Views created in no-grad preserve special creation provenance, including
 active child views that have a real entry with absent upstream edges. Active
@@ -79,9 +80,11 @@ can still read it without resolving an active edge.
 
 Every numeric save of an executed derivative node is version checked, including
 plain or pruned input positions. A changed save raises `SAVED_VERSION_MISMATCH`
-before seed creation or history consumption. An unsaved old output remains
-valid. The [functional gradient reference](functional-gradients.md) owns
-first-order options and pruning.
+before that recipe admits derivative work; the request's seed may already exist
+and successful earlier history may already be consumed. An unsaved old output
+remains valid. See the [functional gradient reference](functional-gradients.md#history-consumption-and-validation)
+for global argument validation, per-recipe progress, retries and cutoffs, as
+well as first-order options and pruning.
 
 ## Deferred progress and errors
 
