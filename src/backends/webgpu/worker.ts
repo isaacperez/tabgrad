@@ -1,3 +1,5 @@
+import { GPU_PROGRESS_ACKNOWLEDGED, GPU_PROGRESS_FLAGS, isGpuProgressPath, markGpuProgress, type GpuProgressPath } from "./webgpu-progress-notification.js";
+import { wakeGpuObservers } from "./webgpu-connection.js";
 import { WebGpuBackend } from "./webgpu-backend.js";
 import type { ProgramBinding, ResidentAllocation } from "../../execution/backend.js";
 import { ExecutableProgram } from "../../execution/executable-program.js";
@@ -8,6 +10,10 @@ import { publishSharedGpuDrain, publishSharedGpuFailure, publishSharedGpuSuccess
 import { TabgradError } from "../../shared/errors.js";
 import { isRecord } from "../../shared/object-shape.js";
 import { encodeGpuFailure } from "./webgpu-failure-diagnostic.js";
+
+interface PhysicalRequest {
+  progress: GpuProgressPath | undefined;
+}
 
 interface PhysicalWorkerScope {
   addEventListener(type: "message", listener: (event: MessageEvent<unknown>) => void): void;
@@ -24,6 +30,7 @@ class PhysicalGpuWorker {
   #closing: Promise<void> | undefined;
   #metrics: SharedArrayBuffer | undefined;
   readonly #pending = new Set<Promise<void>>();
+  readonly #requests = new Map<number, PhysicalRequest>();
   readonly #allocations = new Map<number, ResidentAllocation>();
   readonly #identities = new WeakMap<ResidentAllocation, number>();
   #nextAllocation = 0;
@@ -59,14 +66,34 @@ class PhysicalGpuWorker {
       this.#closing ??= this.#close();
       return;
     }
+    if (message.kind === "watch-drain") { this.#watchDrain(message); return; }
     if (!(message.completion instanceof SharedArrayBuffer)) return;
     const completion = message.completion;
-    const work = this.#run(message, completion);
+    const request: PhysicalRequest = { progress: undefined };
+    const requestId = validRequestId(message.requestId) ? message.requestId : undefined;
+    if (requestId !== undefined) this.#requests.set(requestId, request);
+    const work = this.#run(message, completion, request);
     this.#pending.add(work);
-    void work.finally(() => this.#pending.delete(work));
+    void work.finally(() => {
+      this.#pending.delete(work);
+      if (requestId !== undefined && this.#requests.get(requestId) === request) this.#requests.delete(requestId);
+    });
   };
 
-  async #run(message: Record<string, unknown>, completion: SharedArrayBuffer): Promise<void> {
+  #watchDrain(message: Record<string, unknown>): void {
+    if (!validRequestId(message.requestId) || !(message.completion instanceof SharedArrayBuffer)
+      || message.completion.byteLength < 16 || !isGpuProgressPath(message.progress)) return;
+    const request = this.#requests.get(message.requestId);
+    if (request !== undefined) request.progress = message.progress;
+    // Late subscriptions still acknowledge authoritative state; no history or
+    // synthetic drain is needed once the producer has finished the request.
+    markGpuProgress(message.progress);
+    Atomics.or(new Int32Array(message.completion, 0, 4), GPU_PROGRESS_FLAGS, GPU_PROGRESS_ACKNOWLEDGED);
+    wakeGpuObservers(this.#control!);
+    this.#port!.postMessage({ kind: "progress" });
+  }
+
+  async #run(message: Record<string, unknown>, completion: SharedArrayBuffer, request: PhysicalRequest): Promise<void> {
     let drained: Promise<void> | undefined;
     try {
       assertGpuConnectionActive(this.#control!);
@@ -82,14 +109,14 @@ class PhysicalGpuWorker {
       this.#updateMetrics();
       // Success is published after drain so parked Python can retire pins
       // without needing Promise callbacks in its own realm.
-      publishSharedGpuSuccess(completion, this.#control!, result);
+      publishSharedGpuSuccess(completion, this.#control!, result, request.progress);
     } catch (error) {
       this.#updateMetrics();
-      publishSharedGpuFailure(completion, this.#control!, error);
+      publishSharedGpuFailure(completion, this.#control!, error, request.progress);
       this.#port!.postMessage({ kind: "progress" });
       await drained;
       this.#updateMetrics();
-      publishSharedGpuDrain(completion, this.#control!);
+      publishSharedGpuDrain(completion, this.#control!, request.progress);
     } finally {
       this.#port!.postMessage({ kind: "progress" });
     }
@@ -208,6 +235,10 @@ class PhysicalGpuWorker {
       this.#scope.postMessage({ kind: "lost" });
     }
   }
+}
+
+function validRequestId(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }
 
 /** Called only by the matching packaged physical-worker entry. */

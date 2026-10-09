@@ -6,6 +6,7 @@ import { isRecord } from "../../shared/object-shape.js";
 import type { WebGpuDiagnostics, WebGpuExecutionBackend } from "./webgpu-backend.js";
 import { GPU_ACCOUNTED, GPU_CONSUMED, GPU_CONTROL_LENGTH, GPU_METRIC_LENGTH, GPU_PULSE, assertGpuConnectionActive,
   readGpuMetrics, retireGpuConnection, type WebGpuConnection, type WebGpuConnectionData } from "./webgpu-connection.js";
+import { PendingGpuCompletions } from "./webgpu-pending-completions.js";
 import { SharedGpuCompletion } from "./webgpu-shared-completion.js";
 
 class ConnectedAllocation {
@@ -41,13 +42,14 @@ export class ConnectedWebGpuBackend implements WebGpuExecutionBackend {
   readonly capabilities: BackendCapabilities;
   readonly #connection: WebGpuConnectionData;
   readonly #control: Int32Array;
-  readonly #pending = new Set<{ refresh(): void }>();
+  readonly #pending: PendingGpuCompletions;
   readonly #allocations = new Map<number, ConnectedAllocation>();
   #closing: Promise<void> | undefined;
 
   constructor(connection: WebGpuConnectionData) {
     this.#connection = connection;
     this.#control = new Int32Array(connection.control);
+    this.#pending = new PendingGpuCompletions(this.#control, (subscription) => connection.port.postMessage(subscription));
     assertGpuConnectionActive(this.#control);
     try { Atomics.wait(this.#control, GPU_PULSE, Atomics.load(this.#control, GPU_PULSE), 0); }
     catch (cause) {
@@ -133,15 +135,16 @@ export class ConnectedWebGpuBackend implements WebGpuExecutionBackend {
   }
 
   readonly #onProgress = (): void => {
-    for (const completion of this.#pending) completion.refresh();
+    this.#pending.advance();
   };
 
   #request<T>(message: Record<string, unknown>, bytes: number, decode: (payload: Uint8Array) => T, transferables: Transferable[] = []): SharedGpuCompletion<T> {
     this.#onProgress();
     assertGpuConnectionActive(this.#control);
-    const completion = new SharedGpuCompletion(this.#control, bytes, decode, () => this.#pending.delete(completion));
-    this.#pending.add(completion);
-    try { this.#connection.port.postMessage({ ...message, completion: completion.buffer }, transferables); }
+    const completion: SharedGpuCompletion<T> = new SharedGpuCompletion(this.#control, bytes, decode, () => this.#pending.delete(completion),
+      () => this.#pending.failed(completion));
+    const requestId = this.#pending.add(completion);
+    try { this.#connection.port.postMessage({ ...message, requestId, completion: completion.buffer }, transferables); }
     catch (error) {
       this.#pending.delete(completion);
       retireGpuConnection(this.#control);
