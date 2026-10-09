@@ -148,7 +148,6 @@ class SGD:
             values = [{"params": values}]
         self.state: defaultdict[Tensor, dict[str, object]] = defaultdict(dict)
         self.param_groups: list[dict[str, object]] = []
-        seen: set[Tensor] = set()
         for value in values:
             if not isinstance(value, dict):
                 raise TypeError("param_group must be a dict")
@@ -163,7 +162,7 @@ class SGD:
             group["params"] = parameters
             names: list[object] = []
             extracted: list[object] = []
-            for parameter in parameters:
+            for parameter in cast("Iterable[object]", group["params"]):
                 if isinstance(parameter, tuple):
                     named = cast("tuple[object, ...]", parameter)
                     names.append(named[0])
@@ -177,47 +176,71 @@ class SGD:
                         "all optimizer params should be with/without names"
                     )
                 group["param_names"] = names
-            for parameter in extracted:
+            for parameter in cast("Iterable[object]", group["params"]):
                 if not isinstance(parameter, Tensor):
                     raise TypeError("optimizer can only optimize Tensors")
-                if not differentiable and not _bridge.isOptimizableParameter(
+                if not self.defaults.get(
+                    "differentiable", None
+                ) and not _bridge.isOptimizableParameter(
                     parameter._handle  # pyright: ignore[reportPrivateUsage]
                 ):
                     raise ValueError("can't optimize a non-leaf Tensor")
             for name, default in self.defaults.items():
                 group.setdefault(name, default)
-            actual = cast("list[Tensor]", extracted)
+            actual = cast("list[Tensor]", group["params"])
             if len(actual) != len(set(actual)):
                 warn(
                     "optimizer contains a parameter group with duplicate parameters; in future, this will cause an error; see github.com/pytorch/pytorch/issues/40967 for more information",
                     UserWarning,
                     stacklevel=2,
                 )
-            if any(
-                ("param_names" in group) != ("param_names" in previous)
-                for previous in self.param_groups
-            ):
-                raise ValueError(
-                    "all optimizer param groups should be with/without names"
-                )
-            if not seen.isdisjoint(actual):
+            seen: set[Tensor] = set()
+            for previous in self.param_groups:
+                seen.update(set(cast("Iterable[Tensor]", previous["params"])))
+                if ("param_names" in group) != ("param_names" in previous):
+                    current = (
+                        "with names" if "param_names" in group else "without names"
+                    )
+                    raise ValueError(
+                        "all optimizer param groups should be with/without names. "
+                        f"cannot add param group {current} to the optimizer"
+                    )
+            if not seen.isdisjoint(set(cast("Iterable[Tensor]", group["params"]))):
                 raise ValueError(
                     "some parameters appear in more than one parameter group"
                 )
-            seen.update(actual)
             self.param_groups.append(group)
         if fused and (differentiable or foreach):
             raise RuntimeError("fused does not support differentiable or foreach")
         _supported(self.defaults)
-        for group in self.param_groups:
-            _supported(group)
+        required_fields = set(self.defaults) | {"params"}
+        # Only native validation invokes caller dictionary protocols. Admission
+        # reads literal stored fields; metadata cannot impersonate these keys.
+        group_fields = [
+            {
+                key: value
+                for key, value in dict[str, object].items(group)
+                if type(key) is str and (key in required_fields or key == "param_names")
+            }
+            for group in self.param_groups
+        ]
+        for fields in group_fields:
+            if not required_fields.issubset(fields):
+                _unsupported()
+            _supported(fields)
+            stored_parameters = fields["params"]
+            if type(stored_parameters) is not list or any(
+                type(parameter) is not Tensor
+                for parameter in cast("list[object]", stored_parameters)
+            ):
+                _unsupported()
         if isinstance(params, set):
             _unsupported()
         self._registered = tuple(
-            tuple(cast("list[Tensor]", group["params"])) for group in self.param_groups
+            tuple(cast("list[Tensor]", fields["params"])) for fields in group_fields
         )
         self._groups = tuple(self.param_groups)
-        self._parameter_lists = tuple(group["params"] for group in self.param_groups)
+        self._parameter_lists = tuple(fields["params"] for fields in group_fields)
         try:
             self._lease = _bridge.registerSGD(
                 to_js(

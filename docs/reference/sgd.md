@@ -21,6 +21,14 @@ its `params` becomes an owned list of the original tensor objects. Nontracking
 leaves and retained nonleaves are valid. Unretained nonleaves reject. Repeats
 inside a group warn and update per occurrence; duplicates across groups reject.
 
+Reserved group fields (`params`, `param_names` and optimizer options) require
+keys of exact builtin `str` type. Additional metadata may use other key types
+when inert and nonaliasing: its keys must not impersonate reserved fields through
+custom equality. Dictionary subclasses and their native-phase callbacks remain
+covered within this domain. Hidden reserved-key aliases are outside the
+guarantee; detection or explicit rejection of every such violation is not
+promised.
+
 `defaults`, `param_groups` and initially empty `state` are inspectable. Changing
 a group's learning rate or inert metadata is valid. Replacing groups or parameter
 lists, changing membership or injecting state is excluded and rejects before
@@ -40,6 +48,15 @@ named tuples. If extraction fails, that list and earlier groups' progress
 remain visible; an iterable that fails before its list is complete leaves
 the original container in place. These invalid-call effects do not add support
 for named parameters.
+
+The constructor reads each group's parameters again at the native extraction,
+eligibility, duplicate-warning and disjointness phases. It reads previous
+groups before comparing names, including the additional containment call used
+to form a mismatch error. Getter, setter, default and warning effects retain
+their order, original exceptions and earlier progress. Internal admission and
+registration inspect the literal stored fields without extra virtual dictionary
+calls or custom-key comparisons. Native-valid unsupported options reject after
+intrinsic validation.
 
 Builtin bool/int/float rates include infinity and NaN. Negative global rates
 reject; negative group rates are valid. An actual update checks `-lr` against

@@ -47,6 +47,65 @@ gc.collect()
   } finally { await binding.close(); }
 });
 
+test("Python SGD registers final stored members and rejects late unsupported options", { timeout: 20_000 }, async () => {
+  const interpreter = await loadPyodide(); const binding = await attachPython(interpreter);
+  try {
+    await binding.runPythonAsync(`
+import torch, gc
+def check_constructor_registration():
+    for mode in ('setter', 'getter', 'later-members', 'later-option'):
+        p = torch.tensor([2.], dtype=torch.float32)
+        q = torch.tensor([3.], dtype=torch.float32)
+        class Group(dict):
+            reads = 0
+            writes = 0
+            def __getitem__(self, key):
+                if key == 'params':
+                    self.reads += 1
+                    if mode == 'getter' and self.reads == 2: return [q]
+                return dict.__getitem__(self, key)
+            def __setitem__(self, key, value):
+                if key == 'params':
+                    self.writes += 1
+                    if mode == 'setter' and self.writes == 1: value = [q]
+                dict.__setitem__(self, key, value)
+        class Later(dict):
+            def setdefault(self, key, default):
+                value = dict.setdefault(self, key, default)
+                if key == 'fused':
+                    dict.__setitem__(first, 'params' if mode == 'later-members' else 'momentum', [q] if mode == 'later-members' else 1)
+                return value
+        original = [p]
+        first = Group(params=original)
+        later = Later(params=[])
+        groups = [first, later] if mode.startswith('later-') else [first]
+        if mode == 'later-option':
+            try: torch.optim.SGD(groups, lr=0.5)
+            except NotImplementedError: pass
+            else: raise AssertionError('late unsupported option was ignored')
+            assert dict.__getitem__(first, 'momentum') == 1
+            assert dict.__getitem__(later, 'fused') is None
+            continue
+        optimizer = torch.optim.SGD(groups, lr=0.5)
+        assert first.reads == (6 if mode == 'later-members' else 5)
+        assert optimizer.param_groups[0] is first
+        assert dict.__getitem__(first, 'params') is not original
+        assert dict.__getitem__(first, 'params')[0] is q
+        p.grad = torch.tensor([1.], dtype=torch.float32)
+        q.grad = torch.tensor([1.], dtype=torch.float32)
+        optimizer.step()
+        assert p.tolist() == [2.] and q.tolist() == [2.5]
+check_constructor_registration()
+del check_constructor_registration
+gc.collect()
+`);
+    const session = interpreter.runPython("torch._runtime_session");
+    assert.ok(Object.values(getTestRuntimeOwnership(session)).every((count) => count === 0));
+    assert.ok(Object.entries(getTestRuntimeSemanticOwnership(session))
+      .filter(([key]) => !key.startsWith("collector")).every(([, count]) => count === 0));
+  } finally { await binding.close(); }
+});
+
 test("Python SGD host closures preserve close priority and original exceptions", { timeout: 20_000 }, async () => {
   const interpreter = await loadPyodide(); const binding = await attachPython(interpreter);
   try { await binding.runPythonAsync(pythonSGDHostChecks); }
