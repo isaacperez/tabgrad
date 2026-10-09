@@ -147,9 +147,28 @@ Each identity also records its structural root, derived once from its immediate
 parent's root or itself. Copy and current-history rebasing consult that root
 without walking the chain again. This adds one reference slot per identity;
 the root is already reachable through the unchanged base chain. It adds no
-semantic owning occurrence. Retention, retirement, cycle collection and tracking
-ancestry still follow their existing immediate-parent relationships. This
-constant root lookup does not bound other tracking or derivative-history work.
+semantic owning occurrence. Retention, retirement and cycle collection still
+follow their existing immediate-parent relationships.
+
+Tracking checks preserve own tracking, root and clean-history fast paths. A
+dirty view with negative tracking initially walks its immediate ancestry. Only
+a complete negative walk records that the existing nonroot ancestors are plain:
+their parent links are immutable, copy can promote only the structural root,
+and gradient reset can only deactivate tracking. Later dirty checks reuse that
+fact and read the current structural root's tracking. The root read remains
+necessary even without a numerical version advance, because tracking metadata
+can change before a write commits or a reset fails. A false root alone proves
+nothing about a tracked intermediate. Queries do not resolve or consume history.
+
+This adds one boolean initialized per identity, a dirty-path check, one write
+after the first negative traversal and constant own/root reads on later hits.
+It adds no references, semantic owners or cache registry; a single dirty query
+still pays the full walk. The fact survives numerical writes without an
+invalidation scan. These are structural-work bounds, without a total latency or
+physical-memory claim. Unproven positive ancestry and derivative-history work retain
+their existing costs. Any future promotion of an existing nonroot identity or
+reparenting must revisit this proof before reusing the fact.
+
 Storage retains its original value descriptor to preserve the producing
 operation's shape and provenance during formation, even when that original
 value has no owners. This is one descriptor per live storage, not a retained
