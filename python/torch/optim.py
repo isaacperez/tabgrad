@@ -3,7 +3,7 @@
 import math
 import struct
 from collections import defaultdict
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from typing import cast
 from warnings import warn
 from weakref import finalize
@@ -100,6 +100,41 @@ def _finalize_lease(lease: _bridge.OptimizerLease) -> None:
     lease.finalize()
 
 
+def _unnamed_groups_stable(owner: object, groups: Sequence[object]) -> bool:
+    if len(groups) < 2 or type(owner) is not SGD:
+        return False
+    # Outer iteration can replace defaults; screen the current storage first.
+    defaults = owner.defaults
+    if type(defaults) is not dict:
+        return False
+    for default_key in defaults:
+        if type(default_key) is not str:
+            return False
+    if "param_names" in defaults or not _false_form(defaults.get("differentiable")):
+        return False
+    for group in groups:
+        if type(group) is not dict:
+            return False
+        fields = cast("dict[object, object]", group)
+        for key in fields:
+            if type(key) is not str:
+                return False
+        if "param_names" in fields:
+            return False
+        members = fields.get("params")
+        if type(members) not in (list, tuple):
+            return False
+        identities: set[int] = set()
+        for parameter in cast("list[object] | tuple[object, ...]", members):
+            if type(parameter) is not Tensor:
+                return False
+            identity = id(parameter)
+            if identity in identities:
+                return False
+            identities.add(identity)
+    return True
+
+
 class SGD:
     """Preserve native basic SGD binding, groups, reset and sequential updates."""
 
@@ -148,6 +183,7 @@ class SGD:
             values = [{"params": values}]
         self.state: defaultdict[Tensor, dict[str, object]] = defaultdict(dict)
         self.param_groups: list[dict[str, object]] = []
+        unnamed_groups = _unnamed_groups_stable(self, values)
         for value in values:
             if not isinstance(value, dict):
                 raise TypeError("param_group must be a dict")
@@ -197,7 +233,9 @@ class SGD:
             seen: set[Tensor] = set()
             for previous in self.param_groups:
                 seen.update(set(cast("Iterable[Tensor]", previous["params"])))
-                if ("param_names" in group) != ("param_names" in previous):
+                if not unnamed_groups and (
+                    ("param_names" in group) != ("param_names" in previous)
+                ):
                     current = (
                         "with names" if "param_names" in group else "without names"
                     )

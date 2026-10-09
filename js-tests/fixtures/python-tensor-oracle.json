@@ -11085,6 +11085,353 @@
       }
     },
     {
+      "name": "constructor-guard-fallback",
+      "kind": "constructor",
+      "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\ndef constructor_guard_case(name):\n    p = tensor([2.]); q = tensor([3.])\n    first = {'params': [p]}; second = {'params': [q]}\n    groups = [first, second]; originals = [first['params'], second['params']]\n    events = []; marker = LookupError('constructor guard sentinel')\n    owner = None\n    if name == 'iterator-remove': first['param_names'] = ['initial']\n    if name.startswith('iterator-') or name == 'early-invalid':\n        def later():\n            events.append('iterate-later')\n            if name == 'iterator-sentinel' or name == 'early-invalid': raise marker\n            if name == 'iterator-remove': first.pop('param_names')\n            else: first['param_names'] = ['late']\n            events.append('remove-name' if name == 'iterator-remove' else 'add-name')\n            yield q\n        second['params'] = later(); originals[1] = second['params']\n        if name == 'early-invalid': first['params'] = [17]; originals[0] = first['params']\n    if name == 'warning-add': second['params'] = [q, q]; originals[1] = second['params']\n    def on_warning(message, category, *args, **kwargs):\n        events.append(['warning', category.__name__])\n        first['param_names'] = ['late']\n    if name.startswith('outer-defaults-'):\n        owner = object.__new__(torch.optim.SGD)\n        class FalseDifferentiable:\n            def __bool__(self):\n                events.append('differentiable-bool')\n                first['param_names'] = ['late']\n                return False\n        class Defaults(dict):\n            def get(self, key, default=None):\n                events.append(['defaults-get', key])\n                first['param_names'] = ['late']\n                return super().get(key, default)\n        def outer():\n            events.append('iterate-outer')\n            if name == 'outer-defaults-value': owner.defaults['differentiable'] = FalseDifferentiable()\n            else: owner.defaults = Defaults(owner.defaults)\n            yield from groups\n        supplied = outer()\n    else: supplied = groups\n    error = 'ok'; same_error = False; optimizer = None\n    with warnings.catch_warnings():\n        warnings.simplefilter('always', UserWarning)\n        warnings.showwarning = on_warning\n        try:\n            if owner is None: optimizer = torch.optim.SGD(supplied)\n            else: owner.__init__(supplied); optimizer = owner\n        except Exception as caught:\n            error = type(caught).__name__; same_error = caught is marker\n    states = []\n    for group, original in zip(groups, originals):\n        data = {key: value for key, value in dict.items(group) if type(key) is str}\n        members = data['params']\n        states.append({'members': ['p' if value is p else 'q' if value is q else type(value).__name__ for value in members]\n                       if type(members) is list else type(members).__name__,\n                       'same_container': members is original, 'names': data.get('param_names'), 'fields': list(data)})\n    return {'name': name, 'error': error, 'same_error': same_error, 'events': events, 'groups': states,\n            'group_identity': optimizer is None or all(a is b for a, b in zip(optimizer.param_groups, groups))}\nreport = {'cases': [constructor_guard_case(name) for name in (\n    'iterator-add', 'iterator-remove', 'iterator-sentinel', 'early-invalid',\n    'warning-add', 'outer-defaults-value', 'outer-defaults-dictionary')]}\n",
+      "expected": {
+        "cases": [
+          {
+            "name": "iterator-add",
+            "error": "ValueError",
+            "same_error": false,
+            "events": [
+              "iterate-later",
+              "add-name"
+            ],
+            "groups": [
+              {
+                "members": [
+                  "p"
+                ],
+                "same_container": false,
+                "names": [
+                  "late"
+                ],
+                "fields": [
+                  "params",
+                  "lr",
+                  "momentum",
+                  "dampening",
+                  "weight_decay",
+                  "nesterov",
+                  "maximize",
+                  "foreach",
+                  "differentiable",
+                  "fused",
+                  "param_names"
+                ]
+              },
+              {
+                "members": [
+                  "q"
+                ],
+                "same_container": false,
+                "names": null,
+                "fields": [
+                  "params",
+                  "lr",
+                  "momentum",
+                  "dampening",
+                  "weight_decay",
+                  "nesterov",
+                  "maximize",
+                  "foreach",
+                  "differentiable",
+                  "fused"
+                ]
+              }
+            ],
+            "group_identity": true
+          },
+          {
+            "name": "iterator-remove",
+            "error": "ok",
+            "same_error": false,
+            "events": [
+              "iterate-later",
+              "remove-name"
+            ],
+            "groups": [
+              {
+                "members": [
+                  "p"
+                ],
+                "same_container": false,
+                "names": null,
+                "fields": [
+                  "params",
+                  "lr",
+                  "momentum",
+                  "dampening",
+                  "weight_decay",
+                  "nesterov",
+                  "maximize",
+                  "foreach",
+                  "differentiable",
+                  "fused"
+                ]
+              },
+              {
+                "members": [
+                  "q"
+                ],
+                "same_container": false,
+                "names": null,
+                "fields": [
+                  "params",
+                  "lr",
+                  "momentum",
+                  "dampening",
+                  "weight_decay",
+                  "nesterov",
+                  "maximize",
+                  "foreach",
+                  "differentiable",
+                  "fused"
+                ]
+              }
+            ],
+            "group_identity": true
+          },
+          {
+            "name": "iterator-sentinel",
+            "error": "LookupError",
+            "same_error": true,
+            "events": [
+              "iterate-later"
+            ],
+            "groups": [
+              {
+                "members": [
+                  "p"
+                ],
+                "same_container": false,
+                "names": null,
+                "fields": [
+                  "params",
+                  "lr",
+                  "momentum",
+                  "dampening",
+                  "weight_decay",
+                  "nesterov",
+                  "maximize",
+                  "foreach",
+                  "differentiable",
+                  "fused"
+                ]
+              },
+              {
+                "members": "generator",
+                "same_container": true,
+                "names": null,
+                "fields": [
+                  "params"
+                ]
+              }
+            ],
+            "group_identity": true
+          },
+          {
+            "name": "early-invalid",
+            "error": "TypeError",
+            "same_error": false,
+            "events": [],
+            "groups": [
+              {
+                "members": [
+                  "int"
+                ],
+                "same_container": false,
+                "names": null,
+                "fields": [
+                  "params"
+                ]
+              },
+              {
+                "members": "generator",
+                "same_container": true,
+                "names": null,
+                "fields": [
+                  "params"
+                ]
+              }
+            ],
+            "group_identity": true
+          },
+          {
+            "name": "warning-add",
+            "error": "ValueError",
+            "same_error": false,
+            "events": [
+              [
+                "warning",
+                "UserWarning"
+              ]
+            ],
+            "groups": [
+              {
+                "members": [
+                  "p"
+                ],
+                "same_container": false,
+                "names": [
+                  "late"
+                ],
+                "fields": [
+                  "params",
+                  "lr",
+                  "momentum",
+                  "dampening",
+                  "weight_decay",
+                  "nesterov",
+                  "maximize",
+                  "foreach",
+                  "differentiable",
+                  "fused",
+                  "param_names"
+                ]
+              },
+              {
+                "members": [
+                  "q",
+                  "q"
+                ],
+                "same_container": false,
+                "names": null,
+                "fields": [
+                  "params",
+                  "lr",
+                  "momentum",
+                  "dampening",
+                  "weight_decay",
+                  "nesterov",
+                  "maximize",
+                  "foreach",
+                  "differentiable",
+                  "fused"
+                ]
+              }
+            ],
+            "group_identity": true
+          },
+          {
+            "name": "outer-defaults-value",
+            "error": "ValueError",
+            "same_error": false,
+            "events": [
+              "iterate-outer",
+              "differentiable-bool",
+              "differentiable-bool"
+            ],
+            "groups": [
+              {
+                "members": [
+                  "p"
+                ],
+                "same_container": false,
+                "names": [
+                  "late"
+                ],
+                "fields": [
+                  "params",
+                  "param_names",
+                  "lr",
+                  "momentum",
+                  "dampening",
+                  "weight_decay",
+                  "nesterov",
+                  "maximize",
+                  "foreach",
+                  "differentiable",
+                  "fused"
+                ]
+              },
+              {
+                "members": [
+                  "q"
+                ],
+                "same_container": false,
+                "names": null,
+                "fields": [
+                  "params",
+                  "lr",
+                  "momentum",
+                  "dampening",
+                  "weight_decay",
+                  "nesterov",
+                  "maximize",
+                  "foreach",
+                  "differentiable",
+                  "fused"
+                ]
+              }
+            ],
+            "group_identity": true
+          },
+          {
+            "name": "outer-defaults-dictionary",
+            "error": "ValueError",
+            "same_error": false,
+            "events": [
+              "iterate-outer",
+              [
+                "defaults-get",
+                "differentiable"
+              ],
+              [
+                "defaults-get",
+                "differentiable"
+              ]
+            ],
+            "groups": [
+              {
+                "members": [
+                  "p"
+                ],
+                "same_container": false,
+                "names": [
+                  "late"
+                ],
+                "fields": [
+                  "params",
+                  "param_names",
+                  "lr",
+                  "momentum",
+                  "dampening",
+                  "weight_decay",
+                  "nesterov",
+                  "maximize",
+                  "foreach",
+                  "differentiable",
+                  "fused"
+                ]
+              },
+              {
+                "members": [
+                  "q"
+                ],
+                "same_container": false,
+                "names": null,
+                "fields": [
+                  "params",
+                  "lr",
+                  "momentum",
+                  "dampening",
+                  "weight_decay",
+                  "nesterov",
+                  "maximize",
+                  "foreach",
+                  "differentiable",
+                  "fused"
+                ]
+              }
+            ],
+            "group_identity": true
+          }
+        ]
+      }
+    },
+    {
       "name": "integer-rounding-4611686293305294847",
       "kind": "integer",
       "source": "\nimport struct, warnings\nif '_inspect_version' not in globals():\n    def _inspect_version(value): return value._version\ndef tensor(data, tracked=True):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef bits(value):\n    if isinstance(value, list):\n        return [bits(item) for item in value]\n    return 'nan' if value != value else struct.unpack('<I', struct.pack('<f', value))[0]\ndef state(value):\n    return None if value is None else {'bits': bits(value.tolist()), 'shape': list(value.shape), 'tracking': value.requires_grad, 'version': _inspect_version(value)}\ndef attempt(call):\n    try:\n        call()\n        return 'ok'\n    except Exception as error:\n        return type(error).__name__\n\np = tensor([0.]); p.grad = tensor([1.], False)\ntorch.optim.SGD([p], lr=4611686293305294847).step()\nreport = {'parameter': state(p)}\n",

@@ -379,6 +379,13 @@ variation; it does not qualify probe multiplicities across Python runtimes.
 These observations use the accepted
 [group-key domain](reference/sgd.md#python-calls); custom reserved-key aliases
 remain outside that guarantee.
+The constructor-guard family adds seven fallback controls: later iterables
+adding/removing names or throwing, early invalid members leaving later iterators
+untouched, warning-induced names, and outer iteration replacing the current
+differentiable value or defaults dictionary. Expectations precede optimization
+and remain native-backed. Separate structural counters qualify named statement
+and classifier visits on scalar ordinary inputs, without a timing, hash-probe
+or whole-constructor growth claim.
 The dictionary-reentry trace compares 22 selected cases with the same native
 sources: occurrence-interleaved selection, changed/cleared current and later
 associations, repeated parameters, numerical aliases, recursive calls,
