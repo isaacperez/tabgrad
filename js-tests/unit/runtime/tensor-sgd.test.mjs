@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { readFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
 import { checkSGDCase, isDirectSGDCase } from "../../browser/helpers/sgd-cases.mjs";
 import { checkSGDHostGuards, checkSGDFaults, checkSGDFixedOwners } from "../../browser/helpers/sgd-lifetime.mjs";
 import { WebAssemblyCpuBackend } from "../../../dist/backends/cpu/cpu-backend.js";
@@ -14,6 +15,33 @@ let distributionUrl;
 before(async () => { distributionUrl = await fixtures.start(); });
 after(async () => { await fixtures.close(); });
 const oracle = JSON.parse(await readFile(new URL("../../fixtures/python-tensor-oracle.json", import.meta.url), "utf8"));
+
+test("SGD construction capture does not retain a frontend optimizer cycle", () => {
+  const result = execFileSync(process.execPath, ["--expose-gc", "--input-type=module", "-e", `
+import { readFile } from 'node:fs/promises';
+import { createRuntimeSession } from './dist/index.js';
+import { getTestRuntimeSemanticOwnership } from './dist/testing.js';
+globalThis.fetch = async url => new Response(await readFile(url));
+const session = createRuntimeSession();
+let parameter = session.tensor([2]); let optimizer = session.sgd([parameter]);
+parameter.optimizerCycle = optimizer;
+const weak = new WeakRef(optimizer);
+parameter = null; optimizer = null;
+let collected = false;
+const witness = new FinalizationRegistry(() => { collected = true; });
+let witnessTarget = {};
+witness.register(witnessTarget, null); witnessTarget = null;
+// WeakRef construction keeps its target alive through the current job.
+await new Promise(resolve => setImmediate(resolve));
+while (!collected) { globalThis.gc(); await new Promise(resolve => setImmediate(resolve)); }
+await new Promise(resolve => setImmediate(resolve));
+const owners = getTestRuntimeSemanticOwnership(session);
+console.log(JSON.stringify({ alive: weak.deref() !== undefined, exposures: owners.publicExposures,
+  registrations: owners.optimizerRegistrations, occurrences: owners.optimizerOccurrences }));
+await session.close();
+`], { encoding: "utf8", timeout: 30_000 });
+  assert.deepEqual(JSON.parse(result), { alive: false, exposures: 0, registrations: 0, occurrences: 0 });
+});
 
 for (const grouped of [false, true]) for (const hole of [0, 1, 2, "all", "undefined"]) {
   test(`SGD registration rejects ${grouped ? "grouped" : "flat"} parameter holes at ${hole} without roots`, async () => {
@@ -85,6 +113,86 @@ for (const grouped of [false, true]) for (const effect of ["none", "close-parame
 for (const forceVariant of ["scalar", "simd128"]) {
   const createSession = (extra = {}) => createTestRuntimeSession({
     manifestUrl: new URL("manifest.json", distributionUrl), forceVariant, ...extra,
+  });
+
+  for (const presentation of ["changing-index", "iterator", "repeated-iterator", "multiple-groups"]) {
+    test(`SGD publishes indexed-admitted parameters for ${presentation} (${forceVariant})`, async (context) => {
+      const session = createSession();
+      const p = session.tensor([2]); const q = session.tensor([10]);
+      const r = session.tensor([4]); const prior = session.tensor([7]);
+      const pGradient = session.tensor([3]); const qGradient = session.tensor([5]);
+      const rGradient = session.tensor([1]); const priorGradient = session.tensor([2]);
+      p.grad = pGradient; q.grad = qGradient; r.grad = rGradient; prior.grad = priorGradient;
+      const repeated = presentation === "repeated-iterator";
+      const admitted = presentation === "changing-index" ? [p] : repeated ? [p, p] : [p, r];
+      const parameters = [...admitted];
+      const accesses = [];
+      if (presentation === "changing-index") {
+        Object.defineProperty(parameters, 0, { get() {
+          accesses.push("index");
+          return accesses.length === 1 ? p : q;
+        } });
+      } else {
+        parameters[Symbol.iterator] = function* () {
+          accesses.push("iterator");
+          yield q; yield repeated ? q : r;
+        };
+      }
+      const group = { params: parameters, lr: 0.5, marker: "original group" };
+      const groups = presentation === "multiple-groups" ? [{ params: [prior], lr: 0.5 }, group] : [group];
+      const warnings = [];
+      context.mock.method(console, "warn", (message) => warnings.push(message));
+      let optimizer;
+      try {
+        optimizer = session.sgd(groups);
+        assert.equal(optimizer.paramGroups.at(-1), group);
+        assert.equal(group.marker, "original group");
+        assert.notEqual(group.params, parameters);
+        assert.equal(group.params.length, admitted.length);
+        for (let index = 0; index < admitted.length; index += 1) assert.equal(group.params[index], admitted[index]);
+        assert.deepEqual(accesses, presentation === "changing-index" ? ["index", "index", "index"] : ["iterator", "iterator"]);
+        assert.equal(warnings.length, repeated ? 1 : 0);
+        assert.equal(getTestRuntimeSemanticOwnership(session).optimizerOccurrences, admitted.length + (groups.length - 1));
+        optimizer.step();
+        assert.deepEqual(Array.from(await p.toArray()), [repeated ? -1 : 0.5]);
+        assert.deepEqual(Array.from(await q.toArray()), [10]);
+        assert.deepEqual(Array.from(await r.toArray()), [admitted.includes(r) ? 3.5 : 4]);
+        assert.deepEqual(Array.from(await prior.toArray()), [groups.length === 2 ? 6 : 7]);
+        assert.equal(getTestTensorVersion(p), repeated ? 2 : 1);
+        assert.equal(getTestTensorVersion(q), 0);
+        optimizer.zeroGrad();
+        assert.equal(p.grad, null);
+        if (admitted.includes(r)) assert.equal(r.grad, null);
+        assert.equal(q.grad, qGradient);
+        p.close();
+        assert.throws(() => optimizer.step(), { code: "CLOSED_TENSOR" });
+      } finally {
+        optimizer?.close();
+        for (const tensor of [p, q, r, prior, pGradient, qGradient, rGradient, priorGradient]) tensor.close();
+        await session.close();
+      }
+      assert.ok(Object.values(getTestRuntimeOwnership(session)).every(value => value === 0));
+      assert.equal(getTestRuntimeSemanticOwnership(session).identityReferences, 0);
+      assert.equal(getTestRuntimeSemanticOwnership(session).optimizerRegistrations, 0);
+    });
+  }
+
+  test(`SGD preserves a later iterator exception and retires registration (${forceVariant})`, async () => {
+    const session = createSession(); const p = session.tensor([2]); const q = session.tensor([10]);
+    const parameters = [p]; const sentinel = new Error("later SGD iteration"); let iterations = 0;
+    parameters[Symbol.iterator] = function* () {
+      iterations += 1;
+      if (iterations === 2) throw sentinel;
+      yield q;
+    };
+    const beforeOwners = getTestRuntimeOwnership(session);
+    const beforeSemantic = getTestRuntimeSemanticOwnership(session);
+    try {
+      assert.throws(() => session.sgd([{ params: parameters }]), error => error === sentinel);
+      assert.equal(iterations, 2);
+      assert.deepEqual(getTestRuntimeOwnership(session), beforeOwners);
+      assert.deepEqual(getTestRuntimeSemanticOwnership(session), beforeSemantic);
+    } finally { p.close(); q.close(); await session.close(); }
   });
 
   test(`the public JavaScript SGD example executes unchanged (${forceVariant})`, async (context) => {
