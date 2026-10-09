@@ -32,6 +32,8 @@ export class TensorIdentity {
   readonly detachmentCounter = { value: 0 };
   readonly shape: readonly number[];
   readonly familyBase: TensorIdentity;
+  /** A completed negative walk proved that existing nonroot ancestors stay plain. */
+  plainViewAncestors = false;
   historyVersion: number;
   #snapshot: TensorValue;
   constructor(readonly family: TensorFamily, value: TensorValue,
@@ -83,16 +85,19 @@ export class TensorState {
   get value(): TensorValue { return this.identity.value; }
   get history(): DerivativeNode<TensorValue> | null { return this.resolveHistory(this); }
   get requiresGrad(): boolean {
-    // Tracking can change only with a family write. A clean epoch preserves
-    // creation tracking or the tracked entry installed by lazy view rebasing.
+    // Preserve own tracking and the entry bound to a clean view epoch first.
     if (this.identity.requiresGrad) return true;
     if (this.identity.base === null) return false;
     if (this.identity.historyVersion === this.identity.family.version) return this.identity.entry !== null;
+    // Copy can promote only the structural root; reset only deactivates tracking.
+    // Read that root live, including changes before a numerical commit or failure.
+    if (this.identity.plainViewAncestors) return this.identity.familyBase.requiresGrad;
     let identity: TensorIdentity | null = this.identity;
     while (identity !== null) {
       if (identity.requiresGrad) return true;
       identity = identity.base;
     }
+    this.identity.plainViewAncestors = true;
     return false;
   }
 }
