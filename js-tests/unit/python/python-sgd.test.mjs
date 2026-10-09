@@ -230,7 +230,7 @@ test("Python SGD fixed-owner training retires optimizer and completed history", 
 
 test("Python SGD drains closed sessions, dropped writers and independent finalizer faults", { timeout: 30_000 }, async () => {
   const interpreter = await loadPyodide();
-  await checkPythonSGDTeardown(attachPython, interpreter, WebAssemblyCpuBackend);
+  await checkPythonSGDTeardown(attachPython, interpreter, WebAssemblyCpuBackend, getTestRuntimeSemanticOwnership);
 });
 
 test("the public Python SGD example executes unchanged", { timeout: 20_000 }, async () => {

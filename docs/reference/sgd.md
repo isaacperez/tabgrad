@@ -106,6 +106,10 @@ assert p.tolist() == [1.125, 1.6875]
 Run this ordinary script through a [managed binding](python-host.md). An optimizer
 keeps parameter wrappers alive. Its finalizer holds only a private semantic lease;
 binding close supplies deterministic session drain.
+If registering that finalizer fails, construction retires the unpublished lease
+and preserves the original exception. Independent cleanup failures remain
+available through binding close. Rollback does not close caller-owned parameter
+wrappers.
 
 ## JavaScript calls
 

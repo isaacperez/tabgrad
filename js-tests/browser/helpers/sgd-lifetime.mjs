@@ -338,7 +338,108 @@ else: raise AssertionError('saved version guard lost')
   }
 }
 
-export async function checkPythonSGDTeardown(attachPython, interpreter, CpuBackend) {
+export async function checkPythonSGDRegistrationRollback(attachPython, interpreter, CpuBackend, semantic) {
+  const binding = await attachPython(interpreter);
+  const session = interpreter.runPython("__import__('torch')._runtime_session");
+  interpreter.globals.set("_sgd_registration_ownership", () => semantic(session));
+  try {
+    await binding.runPythonAsync(`
+import torch, gc
+def check_registration_rollback():
+    # Vary groups, total parameters, repetitions and payload independently.
+    cases = [(1,4,1,1), (4,4,1,1), (1,0,1,1), (1,1,1,1),
+             (1,8,1,1), (1,4,4,1), (1,4,1,0), (1,4,1,16)]
+    for groups_count, count, repeats, length in cases:
+        parameters = [torch.tensor([2.] * length, dtype=torch.float32) for _ in range(count)]
+        gradient = torch.tensor([1.] * length, dtype=torch.float32) if count else None
+        if count: parameters[0].grad = gradient
+        groups = [{'params': parameters[index::groups_count]} for index in range(groups_count)]
+        for failure in (MemoryError, KeyboardInterrupt):
+            original = failure('registration sentinel')
+            previous = torch.optim.finalize
+            def reject(*args): raise original
+            try:
+                torch.optim.finalize = reject
+                for _ in range(repeats):
+                    before = _sgd_registration_ownership()
+                    try: torch.optim.SGD(groups)
+                    except BaseException as error: assert error is original
+                    else: raise AssertionError('registration failure was ignored')
+                    original.__traceback__ = None
+                    after = _sgd_registration_ownership()
+                    assert after.optimizerRegistrations == before.optimizerRegistrations, (groups_count, count, repeats, length, failure, before.optimizerRegistrations, after.optimizerRegistrations)
+                    assert after.optimizerOccurrences == before.optimizerOccurrences
+                    assert all(parameter.tolist() == [2.] * length for parameter in parameters)
+                    if count: assert parameters[0].grad is gradient
+            finally: torch.optim.finalize = previous
+        optimizer = torch.optim.SGD(groups)
+        assert _sgd_registration_ownership().optimizerRegistrations == 1
+        assert _sgd_registration_ownership().optimizerOccurrences == count
+        del parameters, groups
+        gc.collect()
+        assert sum(len(group['params']) for group in optimizer.param_groups) == count
+        assert all(parameter.tolist() == [2.] * length for group in optimizer.param_groups for parameter in group['params'])
+        del optimizer
+        gc.collect()
+        assert _sgd_registration_ownership().optimizerRegistrations == 0
+check_registration_rollback()
+del check_registration_rollback
+gc.collect()
+`);
+    equal([semantic(session).optimizerRegistrations, semantic(session).optimizerOccurrences,
+      session.diagnostics().liveTensorHandles, session.diagnostics().liveTensorValues], [0, 0, 0, 0], "rejected construction and successful drop");
+  } finally { interpreter.globals.delete("_sgd_registration_ownership"); await binding.close(); }
+  if (Object.entries(semantic(session)).some(([key, count]) => !key.startsWith("collector") && count !== 0)) {
+    throw new Error("registration checks left semantic owners after binding close");
+  }
+
+  const cleanup = await attachPython(interpreter);
+  const cleanupSession = interpreter.runPython("__import__('torch')._runtime_session");
+  const release = CpuBackend.prototype.release;
+  const faults = [new Error("registration rollback first release"), new Error("registration rollback second release")]; let releases = 0;
+  try {
+    await cleanup.runPythonAsync(`
+import torch, gc
+_rollback_parameters = [torch.tensor([value], dtype=torch.float32) + torch.tensor([value], dtype=torch.float32) for value in (2., 3.)]
+assert [parameter.tolist() for parameter in _rollback_parameters] == [[4.], [6.]]
+gc.collect()
+`);
+    CpuBackend.prototype.release = function (allocation) { release.call(this, allocation); throw faults[releases++]; };
+    await cleanup.runPythonAsync(`
+def check_registration_cleanup():
+    original = MemoryError('primary registration failure')
+    previous = torch.optim.finalize
+    def reject(*args):
+        for parameter in _rollback_parameters: parameter._handle.close()
+        raise original
+    try:
+        torch.optim.finalize = reject
+        try: torch.optim.SGD(_rollback_parameters)
+        except MemoryError as error: assert error is original
+        else: raise AssertionError('registration failure was ignored')
+    finally: torch.optim.finalize = previous
+    original.__traceback__ = None
+check_registration_cleanup()
+del check_registration_cleanup, _rollback_parameters
+gc.collect()
+`);
+    equal([semantic(cleanupSession).optimizerRegistrations, semantic(cleanupSession).optimizerOccurrences,
+      cleanupSession.diagnostics().liveTensorValues], [0, 0, 0], "logical rollback before independent cleanup faults");
+    equal(releases, 2, "every registration occurrence retires independently");
+    try { await cleanup.close(); throw new Error("registration rollback cleanup failures lost"); }
+    catch (error) {
+      if (!(error instanceof AggregateError) || !faults.every(fault => error.errors.includes(fault))) throw error;
+    }
+    await cleanup.close().catch(() => undefined);
+    equal(releases, 2, "terminal close does not retry retired occurrences");
+    if (Object.entries(semantic(cleanupSession)).some(([key, count]) => !key.startsWith("collector") && count !== 0)) {
+      throw new Error("registration cleanup faults left semantic owners after binding close");
+    }
+  } finally { CpuBackend.prototype.release = release; await cleanup.close().catch(() => undefined); }
+}
+
+export async function checkPythonSGDTeardown(attachPython, interpreter, CpuBackend, semantic) {
+  await checkPythonSGDRegistrationRollback(attachPython, interpreter, CpuBackend, semantic);
   for (const reset of [false, true]) for (const throwing of [false, true]) {
     const binding = await attachPython(interpreter);
     try {
