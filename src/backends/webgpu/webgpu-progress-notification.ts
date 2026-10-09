@@ -13,12 +13,15 @@ export type GpuProgressPath = readonly GpuProgressWord[];
 
 /** Validate the cloned private wire shape before constructing atomic views. */
 export function isGpuProgressPath(value: unknown): value is GpuProgressPath {
-  return Array.isArray(value) && value.length === LEVELS && value.every((word: unknown) => {
+  if (!Array.isArray(value) || value.length !== LEVELS) return false;
+  for (let index = 0; index < value.length; index += 1) {
+    const word: unknown = value[index];
     if (!isRecord(word) || !(word.buffer instanceof SharedArrayBuffer) || word.buffer.byteLength !== 4
       || typeof word.mask !== "number" || word.mask !== (word.mask | 0)) return false;
     const mask = word.mask >>> 0;
-    return mask !== 0 && (mask & (mask - 1)) === 0;
-  });
+    if (mask === 0 || (mask & (mask - 1)) !== 0) return false;
+  }
+  return true;
 }
 
 /** Leaf-to-root publication, paired with clear-and-recheck on the consumer. */

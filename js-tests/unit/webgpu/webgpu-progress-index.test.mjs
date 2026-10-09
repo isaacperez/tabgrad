@@ -268,3 +268,10 @@ test("subscription failure after reentrant retirement cannot retain a completed 
   pending.add(completion); pending.failed(completion); pending.advance(false);
   assert(owned.every((set) => set.size === 0), "fallback owns only still-live obligations");
 });
+
+test("sparse cloned notification paths are rejected before atomic publication", () => {
+  assert.equal(isGpuProgressPath(new Array(11)), false);
+  const directory = new GpuProgressNotifications(), value = {}, path = [...directory.add(value, 0)];
+  delete path[3]; assert.equal(isGpuProgressPath(path), false);
+  directory.delete(value);
+});
