@@ -33,9 +33,12 @@ let witnessTarget = {};
 witness.register(witnessTarget, null); witnessTarget = null;
 // WeakRef construction keeps its target alive through the current job.
 await new Promise(resolve => setImmediate(resolve));
-while (!collected) { globalThis.gc(); await new Promise(resolve => setImmediate(resolve)); }
-await new Promise(resolve => setImmediate(resolve));
-const owners = getTestRuntimeSemanticOwnership(session);
+// Independent registries need not deliver optimizer and Tensor cleanup together.
+let owners;
+do {
+  globalThis.gc(); await new Promise(resolve => setImmediate(resolve));
+  owners = getTestRuntimeSemanticOwnership(session);
+} while (!collected || owners.publicExposures !== 0 || owners.optimizerRegistrations !== 0 || owners.optimizerOccurrences !== 0);
 console.log(JSON.stringify({ alive: weak.deref() !== undefined, exposures: owners.publicExposures,
   registrations: owners.optimizerRegistrations, occurrences: owners.optimizerOccurrences }));
 await session.close();
