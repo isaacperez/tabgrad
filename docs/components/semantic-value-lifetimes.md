@@ -165,7 +165,7 @@ after the first negative traversal and constant own/root reads on later hits.
 It adds no references, semantic owners or cache registry; a single dirty query
 still pays the full walk. The fact survives numerical writes without an
 invalidation scan. These are structural-work bounds, without a total latency or
-physical-memory claim. Positive ancestry and derivative-history work retain
+physical-memory claim. Unproven positive ancestry and derivative-history work retain
 their existing costs. Any future promotion of an existing nonroot identity or
 reparenting must revisit this proof before reusing the fact.
 
