@@ -1,3 +1,4 @@
+import { GPU_ACCOUNTED } from "./webgpu-connection.js";
 import { ActiveGpuAdmissions } from "./webgpu-active-admissions.js";
 import { GPU_PROGRESS_ACKNOWLEDGED, GPU_PROGRESS_FLAGS, GPU_PROGRESS_PUBLISHING, GpuProgressNotifications, type GpuProgressPath } from "./webgpu-progress-notification.js";
 
@@ -25,13 +26,17 @@ export class PendingGpuCompletions {
   readonly #fallback = new Set<PendingCompletion>();
   readonly #publishing = new Set<PendingCompletion>();
   readonly #checked = new Set<PendingCompletion>();
+  readonly #control: Int32Array;
   readonly #subscribe: (subscription: GpuDrainSubscription) => void;
   #notifications: GpuProgressNotifications<PendingCompletion> | undefined;
   #ordered: ActiveGpuAdmissions<PendingCompletion> | undefined;
   #next = 0;
   #depth = 0;
 
-  constructor(subscribe: (subscription: GpuDrainSubscription) => void) { this.#subscribe = subscribe; }
+  constructor(control: Int32Array, subscribe: (subscription: GpuDrainSubscription) => void) {
+    this.#control = control;
+    this.#subscribe = subscribe;
+  }
 
   add(completion: PendingCompletion): number | undefined {
     const id = this.#next < Number.MAX_SAFE_INTEGER ? this.#next++ : undefined;
@@ -78,17 +83,9 @@ export class PendingGpuCompletions {
   }
 
   /** Terminal control remains authoritative and forces the original ordered scan. */
-  advance(terminal: boolean): void {
+  advance(): void {
     if (this.#live.size === 0) return;
-    if (terminal) {
-      // Make unresolved obligations eligible before callbacks can reenter.
-      for (const completion of this.#live.keys()) this.#ordered?.setActive(completion, true);
-      for (const [completion, state] of this.#live) {
-        state.changed = false;
-        completion.refresh();
-      }
-      return;
-    }
+    if (this.#isTerminal()) { this.#advanceTerminal(-1); return; }
     if (this.#next === Number.MAX_SAFE_INTEGER || this.#ordered === undefined) {
       for (const completion of this.#live.keys()) completion.refresh();
       return;
@@ -108,17 +105,34 @@ export class PendingGpuCompletions {
         state.changed = false;
         this.#checked.add(completion);
         completion.refresh();
+        if (this.#isTerminal()) { this.#advanceTerminal(cursor); return; }
         if (this.#next === Number.MAX_SAFE_INTEGER) {
           for (const [pending, admission] of this.#live) {
             if (admission.id === undefined || admission.id > cursor) pending.refresh();
           }
-          break;
+          return;
         }
         this.#notifications?.collect(this.#changed);
       }
+      if (this.#isTerminal()) this.#advanceTerminal(cursor);
     } finally {
       this.#depth -= 1;
       if (this.#depth === 0) this.#finishCheckpoint();
+    }
+  }
+
+  #isTerminal(): boolean {
+    return Atomics.load(this.#control, 0) !== 0 || Atomics.load(this.#control, GPU_ACCOUNTED) !== 0;
+  }
+
+  #advanceTerminal(cursor: number): void {
+    // Publish eligibility before callbacks can reenter, but keep this frame's
+    // original admission cursor: terminal state does not reorder earlier work.
+    for (const completion of this.#live.keys()) this.#ordered?.setActive(completion, true);
+    for (const [completion, state] of this.#live) {
+      if (state.id !== undefined && state.id <= cursor) continue;
+      state.changed = false;
+      completion.refresh();
     }
   }
 

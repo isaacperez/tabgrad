@@ -48,8 +48,8 @@ export class ConnectedWebGpuBackend implements WebGpuExecutionBackend {
 
   constructor(connection: WebGpuConnectionData) {
     this.#connection = connection;
-    this.#pending = new PendingGpuCompletions((subscription) => connection.port.postMessage(subscription));
     this.#control = new Int32Array(connection.control);
+    this.#pending = new PendingGpuCompletions(this.#control, (subscription) => connection.port.postMessage(subscription));
     assertGpuConnectionActive(this.#control);
     try { Atomics.wait(this.#control, GPU_PULSE, Atomics.load(this.#control, GPU_PULSE), 0); }
     catch (cause) {
@@ -135,7 +135,7 @@ export class ConnectedWebGpuBackend implements WebGpuExecutionBackend {
   }
 
   readonly #onProgress = (): void => {
-    this.#pending.advance(Atomics.load(this.#control, 0) !== 0 || Atomics.load(this.#control, GPU_ACCOUNTED) !== 0);
+    this.#pending.advance();
   };
 
   #request<T>(message: Record<string, unknown>, bytes: number, decode: (payload: Uint8Array) => T, transferables: Transferable[] = []): SharedGpuCompletion<T> {

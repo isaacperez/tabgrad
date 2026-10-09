@@ -8,12 +8,12 @@ import { SharedGpuCompletion, publishSharedGpuFailure, publishSharedGpuDrain, pu
 
 function owners(selective) {
   const paths = new Map();
-  const pending = selective ? new PendingGpuCompletions((packet) => {
+  const control = new Int32Array(new SharedArrayBuffer(16));
+  const pending = selective ? new PendingGpuCompletions(control, (packet) => {
     paths.set(packet.completion, packet.progress);
     markGpuProgress(packet.progress);
     Atomics.or(new Int32Array(packet.completion, 0, 4), 3, 1);
   }) : new Set();
-  const control = new Int32Array(new SharedArrayBuffer(16));
   const events = [];
   function add(label) {
     const completion = new SharedGpuCompletion(control, 0, () => undefined, () => {
@@ -28,7 +28,7 @@ function owners(selective) {
   }
   function drain(completion) { publishSharedGpuDrain(completion.buffer, control, paths.get(completion.buffer)); }
   function advance() {
-    if (selective) pending.advance(false);
+    if (selective) pending.advance();
     else for (const completion of pending) completion.refresh();
   }
   return { pending, paths, control, events, add, fail, drain, advance };
@@ -166,19 +166,19 @@ test("all current index/request collections empty after finite drain", () => {
   globalThis.Map = class extends NativeMap { constructor(...args) { super(...args); collections.push(this); } };
   globalThis.Set = class extends NativeSet { constructor(...args) { super(...args); if (constructingOwner) collections.push(this); } };
   try {
-    const pending = new PendingGpuCompletions((packet) => {
+    const control = new Int32Array(new SharedArrayBuffer(16));
+    const pending = new PendingGpuCompletions(control, (packet) => {
       markGpuProgress(packet.progress); Atomics.or(new Int32Array(packet.completion, 0, 4), 3, 1);
     });
     constructingOwner = false; // Later collection scratch sets are temporary, not owned history.
-    const control = new Int32Array(new SharedArrayBuffer(16));
     const entries = Array.from({ length: 128 }, () => {
       const completion = new SharedGpuCompletion(control, 0, () => undefined, () => pending.delete(completion), () => pending.failed(completion));
       pending.add(completion); publishSharedGpuFailure(completion.buffer, control, Error("held"));
       assert.throws(() => completion.read()); return completion;
     });
-    pending.advance(false);
+    pending.advance();
     entries.forEach((entry) => publishSharedGpuDrain(entry.buffer, control));
-    pending.advance(true);
+    Atomics.store(control, 3, 1); pending.advance();
     assert(collections.length > 0, "instrumentation observes real production collections");
     assert(collections.every((collection) => collection.size === 0));
   } finally { globalThis.Map = NativeMap; globalThis.Set = NativeSet; }
@@ -193,14 +193,15 @@ test("safe identity exhaustion preserves direct inspection without an admission 
   source = source.replace("#next = 0;", "#next = Number.MAX_SAFE_INTEGER - 1;");
   source = source.replace(/from "([^\"]+)"/g, (_, path) => `from ${JSON.stringify(new URL(path, url).href)}`);
   const { PendingGpuCompletions: BoundaryOwner } = await import(`data:text/javascript;base64,${Buffer.from(source).toString("base64")}`);
-  const pending = new BoundaryOwner(() => assert.fail("exhausted IDs use direct inspection"));
+  const control = new Int32Array(new SharedArrayBuffer(16));
+  const pending = new BoundaryOwner(control, () => assert.fail("exhausted IDs use direct inspection"));
   const events = [];
   for (let i = 0; i < 3; i += 1) {
     const completion = { buffer: new SharedArrayBuffer(16), isDrained: () => false,
       refresh() { events.push(i); } };
     pending.add(completion);
   }
-  pending.advance(false); assert.deepEqual(events, [0, 1, 2]);
+  pending.advance(); assert.deepEqual(events, [0, 1, 2]);
 });
 
 test("a changed hint after inspection remains eligible even at numeric change-history exhaustion", async () => {
@@ -213,19 +214,19 @@ test("a changed hint after inspection remains eligible even at numeric change-hi
   const { PendingGpuCompletions: BoundaryOwner } = await import(`data:text/javascript;base64,${Buffer.from(source).toString("base64")}`);
   let path, retired = 0, publishAfterRefresh = false;
   const control = new Int32Array(new SharedArrayBuffer(16));
-  const pending = new BoundaryOwner((packet) => {
+  const pending = new BoundaryOwner(control, (packet) => {
     path = packet.progress; markGpuProgress(path); Atomics.or(new Int32Array(packet.completion, 0, 4), 3, 1);
   });
   const completion = new SharedGpuCompletion(control, 0, () => undefined, () => { pending.delete(completion); retired += 1; }, () => pending.failed(completion));
   pending.add(completion); publishSharedGpuFailure(completion.buffer, control, Error("held"));
-  assert.throws(() => completion.read()); pending.advance(false);
+  assert.throws(() => completion.read()); pending.advance();
   const refresh = completion.refresh.bind(completion);
   completion.refresh = () => {
     refresh();
     if (publishAfterRefresh) { publishAfterRefresh = false; publishSharedGpuDrain(completion.buffer, control, path); }
   };
-  markGpuProgress(path); publishAfterRefresh = true; pending.advance(false);
-  pending.advance(false);
+  markGpuProgress(path); publishAfterRefresh = true; pending.advance();
+  pending.advance();
   assert.equal(retired, 1, "a new post-inspection hint cannot disappear at outer cleanup");
 });
 
@@ -262,10 +263,10 @@ test("subscription failure after reentrant retirement cannot retain a completed 
   globalThis.Set = class extends NativeSet { constructor(...args) { super(...args); owned.push(this); } };
   let completion, pending;
   try {
-    pending = new PendingGpuCompletions(() => { pending.delete(completion); throw Error("late transport error"); });
+    pending = new PendingGpuCompletions(new Int32Array(new SharedArrayBuffer(16)), () => { pending.delete(completion); throw Error("late transport error"); });
   } finally { globalThis.Set = NativeSet; }
   completion = { buffer: new SharedArrayBuffer(16), isDrained: () => false, refresh() {} };
-  pending.add(completion); pending.failed(completion); pending.advance(false);
+  pending.add(completion); pending.failed(completion); pending.advance();
   assert(owned.every((set) => set.size === 0), "fallback owns only still-live obligations");
 });
 

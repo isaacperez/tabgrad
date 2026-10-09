@@ -144,3 +144,19 @@ for (const failAt of Array.from({ length: 11 }, (_, index) => index + 1)) {
     } finally { await f.close(); }
   });
 }
+
+for (const accounted of [1, 2]) {
+  test(`accounting published by a callback reaches later inactive owners in this checkpoint: ${accounted}`, async () => {
+    const f = fixture();
+    const retired = [];
+    try {
+      const a = f.fail(), b = f.fail();
+      a.ticket.synchronous.onDrained(() => { retired.push("a"); Atomics.store(f.control, GPU_ACCOUNTED, accounted); });
+      b.ticket.synchronous.onDrained(() => retired.push("b"));
+      f.backend.prepare();
+      publishSharedGpuDrain(a.packet.completion, f.control, f.subscriptions[0].progress);
+      f.backend.prepare();
+      assert.deepEqual(retired, ["a", "b"], "later admission sees terminal state in the same checkpoint");
+    } finally { Atomics.store(f.control, GPU_ACCOUNTED, 1); await f.close(); }
+  });
+}
