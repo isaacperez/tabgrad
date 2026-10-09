@@ -69,6 +69,25 @@ Malformed parameters and duplicates across groups retain native errors.
 Duplicates within a group retain the pinned native warning and update once
 per occurrence rather than being silently deduplicated.
 
+A local constructor classifier can omit repeated name-presence comparisons
+only after outer materialization proves stable ordinary inputs: exact SGD,
+current builtin defaults with exact string keys and a supported builtin false
+`differentiable` value, no default names, exact dictionaries/string keys,
+unnamed builtin lists or tuples of canonical Tensor objects and no within-group
+repeat that could invoke a warning callback. It neither normalizes members nor
+validates handles early. Unknown inputs retain the native semantic path; this
+limits optimization rather than accepted calls. Metadata values are not inspected.
+The proof depends on canonical Tensor identity hashing, direct handle access
+and synchronous eligibility checks; changes to those boundaries require
+requalification of the classifier.
+
+Classification visits defaults keys, group keys and parameter occurrences once,
+with transient per-group identity sets. It adds work even when a late input
+requires fallback. The previous-parameter reads and set rebuilding still run
+for every prefix pair; each pair also checks the local classification flag.
+Thus eliminating name comparisons does not make the whole constructor linear
+or establish a latency advantage. No presence cache or watcher survives construction.
+
 Defaults, param_groups and initially empty basic state remain inspectable.
 Scalar learning-rate changes in existing groups are supported. A negative
 global constructor rate raises ValueError, but a negative group rate is

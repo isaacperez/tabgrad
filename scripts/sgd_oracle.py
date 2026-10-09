@@ -169,6 +169,71 @@ report = {'cases': [constructor_callback_case(name) for name in (
 """
 
 
+CONSTRUCTOR_GUARD_SOURCE = """
+def constructor_guard_case(name):
+    p = tensor([2.]); q = tensor([3.])
+    first = {'params': [p]}; second = {'params': [q]}
+    groups = [first, second]; originals = [first['params'], second['params']]
+    events = []; marker = LookupError('constructor guard sentinel')
+    owner = None
+    if name == 'iterator-remove': first['param_names'] = ['initial']
+    if name.startswith('iterator-') or name == 'early-invalid':
+        def later():
+            events.append('iterate-later')
+            if name == 'iterator-sentinel' or name == 'early-invalid': raise marker
+            if name == 'iterator-remove': first.pop('param_names')
+            else: first['param_names'] = ['late']
+            events.append('remove-name' if name == 'iterator-remove' else 'add-name')
+            yield q
+        second['params'] = later(); originals[1] = second['params']
+        if name == 'early-invalid': first['params'] = [17]; originals[0] = first['params']
+    if name == 'warning-add': second['params'] = [q, q]; originals[1] = second['params']
+    def on_warning(message, category, *args, **kwargs):
+        events.append(['warning', category.__name__])
+        first['param_names'] = ['late']
+    if name.startswith('outer-defaults-'):
+        owner = object.__new__(torch.optim.SGD)
+        class FalseDifferentiable:
+            def __bool__(self):
+                events.append('differentiable-bool')
+                first['param_names'] = ['late']
+                return False
+        class Defaults(dict):
+            def get(self, key, default=None):
+                events.append(['defaults-get', key])
+                first['param_names'] = ['late']
+                return super().get(key, default)
+        def outer():
+            events.append('iterate-outer')
+            if name == 'outer-defaults-value': owner.defaults['differentiable'] = FalseDifferentiable()
+            else: owner.defaults = Defaults(owner.defaults)
+            yield from groups
+        supplied = outer()
+    else: supplied = groups
+    error = 'ok'; same_error = False; optimizer = None
+    with warnings.catch_warnings():
+        warnings.simplefilter('always', UserWarning)
+        warnings.showwarning = on_warning
+        try:
+            if owner is None: optimizer = torch.optim.SGD(supplied)
+            else: owner.__init__(supplied); optimizer = owner
+        except Exception as caught:
+            error = type(caught).__name__; same_error = caught is marker
+    states = []
+    for group, original in zip(groups, originals):
+        data = {key: value for key, value in dict.items(group) if type(key) is str}
+        members = data['params']
+        states.append({'members': ['p' if value is p else 'q' if value is q else type(value).__name__ for value in members]
+                       if type(members) is list else type(members).__name__,
+                       'same_container': members is original, 'names': data.get('param_names'), 'fields': list(data)})
+    return {'name': name, 'error': error, 'same_error': same_error, 'events': events, 'groups': states,
+            'group_identity': optimizer is None or all(a is b for a, b in zip(optimizer.param_groups, groups))}
+report = {'cases': [constructor_guard_case(name) for name in (
+    'iterator-add', 'iterator-remove', 'iterator-sentinel', 'early-invalid',
+    'warning-add', 'outer-defaults-value', 'outer-defaults-dictionary')]}
+"""
+
+
 REENTRY_SOURCE = """import warnings
 
 def run_case(name):
@@ -317,6 +382,11 @@ def sources() -> list[tuple[str, str, str]]:
         (
             "constructor-dictionary-callbacks",
             COMMON + CONSTRUCTOR_CALLBACK_SOURCE,
+            "constructor",
+        ),
+        (
+            "constructor-guard-fallback",
+            COMMON + CONSTRUCTOR_GUARD_SOURCE,
             "constructor",
         ),
     ]

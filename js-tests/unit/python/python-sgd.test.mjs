@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { after, before, mock, test } from "node:test";
 import { readFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { loadPyodide } from "pyodide";
 import { attachPython } from "../../../dist/python.js";
 import { getTestTensorVersion, getTestRuntimeOwnership, getTestRuntimeSemanticOwnership } from "../../../dist/testing.js";
 import { pythonSGDChecks } from "../../browser/helpers/sgd-cases.mjs";
+import { pythonSGDConstructorCostSource } from "./sgd-constructor-cost.mjs";
 import { pythonSGDHostChecks, checkPythonSGDFixedOwners, checkPythonSGDTeardown } from "../../browser/helpers/sgd-lifetime.mjs";
 import { WebAssemblyCpuBackend } from "../../../dist/backends/cpu/cpu-backend.js";
 
@@ -237,4 +239,60 @@ test("the public Python SGD example executes unchanged", { timeout: 20_000 }, as
   const interpreter = await loadPyodide(); const binding = await attachPython(interpreter);
   try { await binding.runPythonAsync(source); }
   finally { await binding.close(); }
+});
+
+function assertConstructorWork(histories) {
+  for (const { dimensions: [G, P], rows } of histories) for (const { metrics, beforeKeys } of rows) {
+    assert.equal(metrics.nameComparisons ?? 0, 0);
+    assert.equal(metrics.nameGates ?? 0, G * (G - 1) / 2);
+    assert.equal(metrics.priorSetRebuilds ?? 0, G * (G - 1) / 2);
+    assert.equal(metrics.normalizedGroups, G);
+    assert.equal(metrics.normalizedParameters ?? 0, P);
+    assert.equal(metrics.classifierCalls, 1);
+    assert.equal(metrics.defaultKeys ?? 0, G > 1 ? 9 : 0);
+    assert.equal(metrics.classifierGroups ?? 0, G > 1 ? G : 0);
+    assert.equal(metrics.groupKeys ?? 0, G > 1 ? beforeKeys : 0);
+    assert.equal(metrics.classifierParameters ?? 0, G > 1 ? P : 0);
+    assert.equal(metrics.identityChecks ?? 0, G > 1 ? P : 0);
+    assert.equal(metrics.classifierFast ?? 0, G > 1 ? 1 : 0);
+  }
+}
+
+// Calibrate statement counters before using the independently varied matrix.
+test("Python SGD constructor work counters resolve prefix and classifier costs", { timeout: 30_000 }, async () => {
+  const interpreter = await loadPyodide(); const binding = await attachPython(interpreter);
+  const pilot = [];
+  for (const G of [1, 2, 3]) for (const P of [1, 2]) for (const K of [0, 1]) pilot.push([G, P, K, 1, "fresh"]);
+  try {
+    await binding.runPythonAsync(pythonSGDConstructorCostSource);
+    const source = await readFile(new URL("../../../python/torch/optim.py", import.meta.url));
+    assert.equal(interpreter.runPython("_COST_SOURCE_SHA"), createHash("sha256").update(source).digest("hex"));
+    console.log("SGD constructor source " + interpreter.runPython("_COST_SOURCE_SHA"));
+    interpreter.globals.set("_cost_dimensions", JSON.stringify(pilot));
+    await binding.runPythonAsync("_cost_results = constructor_cost_cases(json.loads(_cost_dimensions))");
+    const results = JSON.parse(interpreter.runPython("json.dumps(_cost_results)"));
+    assertConstructorWork(results);
+    for (const history of results) console.log("SGD constructor calibration " + JSON.stringify({ ...history, rows: history.rows.map(({ values, ...row }) => row) }));
+    const dimensions = [];
+    for (const G of [1, 2, 8, 32, 128]) for (const P of [1, 8, 128]) dimensions.push([G, P, 0, 1, "fresh"]);
+    for (const K of [0, 8, 64]) for (const R of [1, 4]) for (const regime of ["fresh", "reused"]) dimensions.push([32, 8, K, R, regime]);
+    dimensions.push([2, 0, 0, 1, "fresh"], [8, 0, 0, 1, "fresh"], [2, 0, 0, 4, "shared-empty"]);
+    interpreter.globals.set("_cost_dimensions", JSON.stringify(dimensions));
+    await binding.runPythonAsync("_cost_results = constructor_cost_cases(json.loads(_cost_dimensions))");
+    const primary = JSON.parse(interpreter.runPython("json.dumps(_cost_results)"));
+    assertConstructorWork(primary);
+    for (const history of primary) console.log("SGD constructor structural rows " + JSON.stringify({ ...history, rows: history.rows.map(({ values, ...row }) => row) }));
+    await binding.runPythonAsync("_cost_fallbacks = constructor_classifier_fallbacks(); gc.collect()");
+    const fallbacks = JSON.parse(interpreter.runPython("json.dumps(_cost_fallbacks)"));
+    assert.equal(fallbacks.length, 12);
+    for (const row of fallbacks) {
+      assert.equal(row.result, false); assert.deepEqual(row.events, []); assert.equal(row.unchanged, true);
+      assert.equal(row.metrics.classifierCalls, 1); assert.equal(row.metrics.classifierFast ?? 0, 0);
+      console.log("SGD classifier fallback " + JSON.stringify(row));
+    }
+    const session = interpreter.runPython("torch._runtime_session");
+    assert.ok(Object.values(getTestRuntimeOwnership(session)).every((count) => count === 0));
+    assert.ok(Object.entries(getTestRuntimeSemanticOwnership(session))
+      .filter(([key]) => !key.startsWith("collector")).every(([, count]) => count === 0));
+  } finally { await binding.close(); }
 });
