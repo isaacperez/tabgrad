@@ -1492,15 +1492,20 @@ export class RuntimeSession {
   #attachTensorControls(handle: Tensor, groups: readonly (readonly WriterOutcome[])[]): void {
     const identity = requireTensorState(handle).identity;
     if (identity.controls.length === 0 && groups.every(group => group.length === 0)) return;
-    this.#setIdentityControls(identity, captureWriterOutcomes([identity.controls, ...groups]));
+    this.#installIdentityControls(identity, captureWriterOutcomes([identity.controls, ...groups]));
   }
 
   #setIdentityControls(identity: TensorIdentity, controls: readonly WriterOutcome[]): void {
     if (identity.controls.length === 0 && controls.length === 0) return;
-    const next = captureWriterOutcomes([controls]);
-    retainWriterOutcomes(next);
+    this.#installIdentityControls(identity, captureWriterOutcomes([controls]));
+  }
+
+  // Install a fresh capture before any callback or suspension. Retain it
+  // before releasing the old snapshot, which must be released as acquired.
+  #installIdentityControls(identity: TensorIdentity, captured: readonly WriterOutcome[]): void {
+    retainWriterOutcomes(captured);
     releaseWriterOutcomes(identity.controls);
-    identity.controls = next;
+    identity.controls = captured;
   }
 
   #accumulateGradient(owner: TensorIdentity, incoming: Tensor, share: boolean): void {
@@ -1536,7 +1541,7 @@ export class RuntimeSession {
       const outcome = this.#writers.create();
       this.#retainValue(source);
       retainWriterOutcomes(prerequisites);
-      this.#setIdentityControls(requireTensorState(acquired).identity,
+      this.#installIdentityControls(requireTensorState(acquired).identity,
         captureWriterOutcomes([requireTensorState(acquired).identity.controls, [outcome]]));
       this.#pendingCopies += 1;
       this.#enqueue(this.#copyEffect(source, prerequisites, outcome),

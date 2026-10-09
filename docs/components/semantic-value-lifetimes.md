@@ -40,6 +40,13 @@ must traverse the same snapshot. Pending-only snapshots retain their reuse.
 A delivered failure still belongs to subsequent captures: delivering its error
 responsibility does not turn the captured failure into success.
 
+Identity control replacement filters and deduplicates raw controls before
+acquiring their references. An attachment or gradient acquisition that has
+just made that capture installs it directly, without rebuilding it between
+capture and installation. Installation retains the new snapshot before
+releasing the old one. This immediate handoff does not authorize reusing a
+snapshot across callbacks, history resolution or asynchronous boundaries.
+
 An `OperationRecord` is an immutable description of admitted numerical work,
 including its input values and definition. Shared storage's link to that producer is an owning
 edge, not a permanent historical archive. The session removes the link when the
