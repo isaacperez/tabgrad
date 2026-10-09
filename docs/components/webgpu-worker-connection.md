@@ -175,6 +175,85 @@ before semantic retirement can trigger a nested allocation release. Work
 whose drain is still outstanding remains owned; the check is not an early
 release policy.
 
+## Preserve progress with selective drain inspection
+
+An observed failure can remain physically live across later observations. Its
+resources must remain owned, but its unchanged drain state does not need to be
+read on every checkpoint. The accepted
+[progress decision](https://github.com/isaacperez/tabgrad/issues/211#issuecomment-6078519433)
+uses shared notification for those failures and a consumer index that preserves
+the original order of progress. The
+[research evidence](https://github.com/isaacperez/tabgrad/issues/211#issuecomment-6078192180)
+records the alternatives, controlled publication schedules and independent
+challenge. This decision refines inspection work within the existing connection;
+shared result and drain fields remain authoritative.
+
+A completion joins the notification directory only after its error has been
+observed while drain is still outstanding. The consumer sends a private drain
+subscription with the request identity, completion record and shared notification
+path. Until acknowledgment is visible in shared state, the consumer continues
+inspecting that completion directly. The physical worker installs the path on
+its live request and acknowledges it. A subscription arriving after completion
+still receives a hint and acknowledgment, without creating completed-request
+history or fabricating physical drain.
+
+The producer marks the path before and after publishing a changed shared record.
+A distinct publication-in-progress bit lets the consumer retain an inspection
+obligation after claiming a hint during publication. That obligation persists
+until a refresh starts with publication no longer in progress, or the completion
+retires. A hint nominates a record for inspection; it cannot replace the shared
+status, bounded diagnostic or drain field. Acknowledgment and publication state
+use separate bits, so installing a subscription cannot accidentally claim that
+physical work finished. Port delivery remains optional for blocked consumers.
+
+The consumer maintains one balanced index of live admissions, augmented by
+counts of entries eligible for inspection. Unresolved results, unacknowledged subscriptions, changed
+records and publications in progress remain eligible. Each checkpoint keeps an
+admission cursor rather than copying the candidates of its ancestors. Eligibility
+survives nested checkpoints until the outermost pass finishes. A checkpoint
+collects newly published hints after semantic callbacks and considers them in
+admission order; an earlier admission already passed by its cursor belongs to
+another checkpoint. Retirement removes transport ownership before invoking
+semantic callbacks, preserving nested release and exactly-once cleanup.
+
+Request identities are private to this connection. The worker's lookup retains
+only live accepted work and removes it on settlement. Notification branches and
+index nodes are removed with their current owners. Identity exhaustion,
+subscription failure or notification allocation failure must preserve direct
+inspection and the original observed error rather than introduce an admission
+limit or lose cleanup. Terminal generation or accounting changes make every
+live obligation eligible and preserve the original ordered shared-state
+inspection, including truthful unknown physical completion.
+
+Ordinary successful requests allocate no notification path and perform no
+notification-marking atomics. They still pay for live request identity and lookup
+bookkeeping. The first undrained failure constructs the consumer index in
+O(L log L) work for L live admissions; selection, activation and retirement use
+O(log L) index operations. Shared notification paths add allocation and atomic
+work for enrolled failures. These costs are additional to necessary result
+inspection and physical ownership; fewer completion visits do not measure total
+execution time or process memory.
+
+Full scanning preserves behavior but repeats unchanged inspection. A shared
+pulse can skip a checkpoint with no publication, yet a new request's publication
+still forces it to inspect older unchanged failures. Enrolling every request
+avoids subscriptions but charges ordinary success for notification allocation
+and marking. A shared queue of changed identities is another possible design;
+its capacity, reuse, publication and nested-progress contracts require their own
+qualification. The accepted lazy directory and active-admission index have
+specific preservation evidence; the decision does not establish optimality.
+
+The controlled Node-worker prototype reduces completion visits without changing
+the recorded outcomes and cleanup. Its qualified ordinary one-float,
+128-observation timing cohort adds a median 3.826 microseconds per observation;
+the other three cohorts have unresolved measurement sensitivity. This accepted
+tradeoff establishes neither negligible overhead nor a general latency budget.
+Physical-GPU failure frequency, browser/Pyodide latency, process memory and
+whole-model impact remain outside those measurements. Reconsider the mechanism
+if representative evidence shows unacceptable ordinary cost, a simpler
+preserving notification mechanism, lost progress or retention beyond live work.
+
+
 ## Supervision is independent; reclamation is not guessed
 
 Controller close or lifetime abort retires the generation and wakes observers
