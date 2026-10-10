@@ -223,7 +223,11 @@ same-session equal-shape tensor subset. Native `copyCases` preserve effective
 `other` binding, boolean options, return identity, scalar/empty/matrix values,
 active/no-grad connectivity, saved invalidation, consumable view history and
 inherited special-view provenance. Packaged Node and browser Pyodide consume
-these same cases; direct CPU scalar/SIMD tests independently establish float32
+these same cases. Reset/view cases independently vary payload 1/8, source
+tracking, active/no-grad mode and tracked-base promotion. They preserve native
+rejection, independent alias tracking and accepted-copy identity/values;
+direct scalar/SIMD controls additionally check rejected version/history/ownership
+atomicity and guard-before-shape precedence. Direct CPU tests establish float32
 bits, snapshots, failure responsibility, real owner/lease release and finite
 admission. This scope excludes native broadcasting, number sources, conversion,
 GPU mutation and broader gradients. Deferred backend failure is a Tabgrad

@@ -60,6 +60,13 @@ the captured source edge receives the incoming gradient. Zero is not obtained
 by multiplying a possibly nonfinite seed by zero. Self/overlap follow the same
 edge rules.
 
+After numeric gradient reset detaches a computed base, its pre-existing views
+retain independent tracking. Active copy through a tracked view rejects while
+the base has no derivative history, even when the base no longer tracks.
+No-grad copy remains valid. An active tracked-source copy into the base can
+promote its current history, making a subsequent active copy through the old
+view valid again.
+
 Ordinary views resolve their current entry against the current base after an
 update; already bound outputs retain their old entries. Whole-storage view
 copy rebases the base and siblings. A pre-existing child resolves against the

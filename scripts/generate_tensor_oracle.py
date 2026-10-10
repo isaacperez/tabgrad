@@ -876,10 +876,43 @@ report.append(child.tolist())
 )
 
 
+COPY_RESET_CASES = tuple(
+    (
+        f"reset-view:length={length}:source={tracked}:no-grad={no_grad}:promoted={promoted}",
+        f"""
+from contextlib import nullcontext
+p = torch.tensor([2.] * {length}, dtype=torch.float32, requires_grad=True)
+x = torch.tensor([3.] * {length}, dtype=torch.float32, requires_grad=True)
+base = x*x
+destination = base.view({length})
+p.grad = base
+optimizer = torch.optim.SGD([p], lr=0.01)
+optimizer.zero_grad(set_to_none=False)
+if {promoted}:
+    promotion = torch.tensor([4.] * {length}, dtype=torch.float32, requires_grad=True)
+    base.copy_(promotion)
+source = torch.tensor([5.] * {length}, dtype=torch.float32, requires_grad={tracked})
+before = [base.requires_grad, destination.requires_grad, destination.tolist()]
+try:
+    with torch.no_grad() if {no_grad} else nullcontext():
+        returned = destination.copy_(source)
+    result = ['ok', returned is destination]
+except Exception as error:
+    result = [type(error).__name__]
+report = [before, result, base.tolist(), destination.tolist(), base.requires_grad, destination.requires_grad]
+""",
+    )
+    for length in (1, 8)
+    for tracked in (False, True)
+    for no_grad in (False, True)
+    for promoted in (False, True)
+)
+
+
 def copy_cases(oracle: _OracleModule) -> list[dict[str, object]]:
     """Capture supported copy workflows and effective native argument binding."""
     cases: list[dict[str, object]] = []
-    for name, source in COPY_CASES:
+    for name, source in (*COPY_CASES, *COPY_RESET_CASES):
         namespace: dict[str, object] = {"torch": oracle}
         exec(source, namespace)
         cases.append({"name": name, "source": source, "expected": namespace["report"]})

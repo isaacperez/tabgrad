@@ -2330,6 +2330,40 @@ assert torch._runtime_session.diagnostics().liveTensorHandles == 0
   }
 });
 
+test("Python reset-view copy rejection preserves translated error cause", { timeout: 20_000 }, async () => {
+  const { attachPython } = await import("../../../dist/python.js");
+  const interpreter = await getInterpreter();
+  const binding = await attachPython(interpreter);
+  try {
+    await binding.runPythonAsync(`
+import torch, gc
+def check_reset_view_rejection():
+    p = torch.tensor([2.], dtype=torch.float32, requires_grad=True)
+    x = torch.tensor([3.], dtype=torch.float32, requires_grad=True)
+    base = x*x
+    destination = base.view(1)
+    p.grad = base
+    optimizer = torch.optim.SGD([p], lr=0.01)
+    optimizer.zero_grad(set_to_none=False)
+    assert not base.requires_grad and destination.requires_grad
+    source = torch.tensor([5.], dtype=torch.float32, requires_grad=True)
+    try:
+        destination.copy_(source)
+    except RuntimeError as error:
+        assert error.__cause__.js_error.code == 'INPLACE_GRADIENT'
+    else:
+        raise AssertionError('Active reset-view copy must be rejected')
+    assert base.tolist() == destination.tolist() == [0.]
+check_reset_view_rejection()
+gc.collect()
+assert torch._runtime_session.diagnostics().liveTensorHandles == 0
+`);
+  } finally {
+    await binding.close();
+    interpreter.runPython("[globals().pop(name, None) for name in ('check_reset_view_rejection', 'torch', 'gc')]; None");
+  }
+});
+
 test("Python persistent CPU copies match pinned native workflows and binding", { timeout: 20_000 }, async (context) => {
   const oracle = JSON.parse(await readFile(new URL("../../fixtures/python-tensor-oracle.json", import.meta.url), "utf8"));
   const { attachPython } = await import("../../../dist/python.js");

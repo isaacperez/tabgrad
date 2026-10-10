@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { fileURLToPath } from "node:url";
+import { readFile } from "node:fs/promises";
 import { RuntimeFixtureServer } from "../../fixtures/runtime-fixture-server.mjs";
 
 // Capture actual state without a production test API. Native registration and
@@ -18,6 +19,9 @@ try {
   testing = await import("../../../dist/testing.js");
 } finally { globalThis.FinalizationRegistry = NativeFinalizationRegistry; }
 const { createTestRuntimeSession, getTestRuntimeOwnership, getTestRuntimeSemanticOwnership } = testing;
+const { completeRuntimeSession } = await import("../../../dist/runtime/runtime.js");
+const resetCopyCases = JSON.parse(await readFile(new URL("../../fixtures/python-tensor-oracle.json", import.meta.url), "utf8"))
+  .copyCases.filter(fixture => fixture.name.startsWith("reset-view:"));
 
 const fixtures = new RuntimeFixtureServer(fileURLToPath(new URL("../../../dist", import.meta.url)));
 let distributionUrl;
@@ -64,6 +68,58 @@ function assertRetired(session) {
 }
 
 for (const forceVariant of ["scalar", "simd128"]) {
+  for (const length of [1, 8]) for (const tracked of [false, true]) {
+    for (const noGrad of [false, true]) for (const promoted of [false, true]) {
+      test(`reset-view copy eligibility (${forceVariant}, length=${length}, source=${tracked}, no-grad=${noGrad}, promoted=${promoted})`, async () => {
+        const name = `reset-view:length=${length}:source=${tracked ? "True" : "False"}:no-grad=${noGrad ? "True" : "False"}:promoted=${promoted ? "True" : "False"}`;
+        const expected = resetCopyCases.find(fixture => fixture.name === name)?.expected;
+        assert.notEqual(expected, undefined, "the pinned native case must exist");
+        let publications = 0;
+        const session = createSession(forceVariant, { beforeCopyPublication() { publications += 1; } });
+        try {
+          const parameter = session.tensor(new Float32Array(length).fill(2), { requiresGrad: true });
+          const input = session.tensor(new Float32Array(length).fill(3), { requiresGrad: true });
+          const base = input.mul(input), destination = base.view([length]);
+          parameter.grad = base;
+          const optimizer = session.sgd([parameter]);
+          optimizer.zeroGrad(false); optimizer.close();
+          if (promoted) base.copy_(session.tensor(new Float32Array(length).fill(4), { requiresGrad: true }));
+          const source = session.tensor(new Float32Array(length).fill(5), { requiresGrad: tracked });
+          const mismatch = !noGrad && !promoted ? session.tensor(new Float32Array(length + 1)) : undefined;
+          const before = [base.requiresGrad, destination.requiresGrad, [...await destination.toArray()]];
+          await completeRuntimeSession(session);
+          const state = states.get(destination), root = states.get(base);
+          const entry = state.viewHistory, rootEntry = root.viewHistory, epoch = state.historyVersion;
+          const version = state.family.version, priorPublications = publications;
+          const owners = getTestRuntimeOwnership(session), semanticOwners = getTestRuntimeSemanticOwnership(session);
+          let result;
+          if (!noGrad && !promoted) {
+            assert.throws(() => destination.copy_(source), { code: "INPLACE_GRADIENT" });
+            // A mismatched source must still encounter the native guard first.
+            assert.throws(() => destination.copy_(mismatch), { code: "INPLACE_GRADIENT" });
+            assert.equal(state.viewHistory, entry);
+            assert.equal(root.viewHistory, rootEntry);
+            assert.equal(state.historyVersion, epoch);
+            assert.equal(state.family.version, version);
+            assert.equal(publications, priorPublications);
+            assert.deepEqual(getTestRuntimeOwnership(session), owners);
+            assert.deepEqual(getTestRuntimeSemanticOwnership(session), semanticOwners);
+            result = ["RuntimeError"];
+          } else {
+            const returned = noGrad ? session.noGrad(() => destination.copy_(source)) : destination.copy_(source);
+            result = ["ok", returned === destination];
+            await completeRuntimeSession(session);
+            assert.equal(state.family.version, version + 1);
+            assert.equal(publications, priorPublications + 1);
+          }
+          const actual = [before, result, [...await base.toArray()], [...await destination.toArray()], base.requiresGrad, destination.requiresGrad];
+          assert.deepEqual(actual, expected);
+        } finally { await session.close(); }
+        assertRetired(session);
+      });
+    }
+  }
+
   for (const operation of ["query", "add", "mul", "sum"]) {
     for (const depth of [1, 32, 512]) for (const calls of [1, 8]) {
       test(`negative tracking bounds repeated ancestry reads (${forceVariant}, ${operation}, D${depth}/C${calls})`, async () => {
