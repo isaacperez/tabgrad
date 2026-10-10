@@ -1629,7 +1629,8 @@ export class RuntimeSession {
     if (this.#recording && destination.specialView && (destination.requiresGrad || source.requiresGrad)) {
       throw new TabgradError("INPLACE_VIEW", "A view created in no_grad cannot be updated while recording gradients.");
     }
-    if (this.#recording && destination.requiresGrad && this.#familyBase(destination.identity).entry?.recipe === null) {
+    // A detached base has no entry but is still leaf-like for its tracked views.
+    if (this.#recording && destination.requiresGrad && (this.#familyBase(destination.identity).entry?.recipe ?? null) === null) {
       throw new TabgradError("INPLACE_GRADIENT", "A leaf requiring gradients, or its view, cannot be updated while recording.");
     }
     if (this.#mutationFailure !== undefined) {
