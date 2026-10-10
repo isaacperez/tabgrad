@@ -381,6 +381,76 @@ test("zero-edge derivative results preserve a failing explicit seed writer", asy
   assert.equal(closed[0].status, "fulfilled", "the observation delivered this causal responsibility");
 });
 
+for (const forceVariant of ["scalar", "simd128"]) {
+  for (const length of [1, 8]) {
+    for (const faulted of [false, true]) {
+      for (const retainedSibling of [false, true]) {
+        for (const dropHandles of [false, true]) {
+          test(`view-history retirement preserves accepted copy (${forceVariant}, length=${length}, fault=${faulted}, sibling=${retainedSibling}, drop=${dropHandles})`, { timeout: 10_000 }, async () => {
+            const release = WebAssemblyCpuBackend.prototype.release;
+            const fault = new Error("controlled previous view-history retirement failure");
+            let publications = 0, releases = 0, faults = 0, armed = false;
+            const session = createTestRuntimeSession({
+              manifestUrl: new URL("manifest.json", distributionUrl), forceVariant,
+              beforeCopyPublication: () => { publications += 1; },
+            });
+            try {
+              const tracked = { requiresGrad: true };
+              const parameter = session.tensor(new Float32Array(length).fill(2), tracked);
+              const input = session.tensor(new Float32Array(length).fill(3), tracked);
+              const base = input.mul(input), destination = base.view([length]);
+              const sibling = retainedSibling ? base.view([length]) : undefined;
+              assert.deepEqual([...await base.toArray()], new Array(length).fill(9));
+              input.close();
+              parameter.grad = base;
+              const optimizer = session.sgd([parameter]);
+              optimizer.zeroGrad(false); optimizer.close(); parameter.grad = null;
+              const promotion = session.tensor(new Float32Array(length).fill(4), tracked);
+              base.copy_(promotion); promotion.close();
+              await completeRuntimeSession(session);
+              const source = session.tensor(new Float32Array(length).fill(5), tracked);
+              const previousVersion = getTestTensorVersion(destination);
+              const previousPublications = publications;
+              armed = faulted;
+              WebAssemblyCpuBackend.prototype.release = function (allocation) {
+                release.call(this, allocation);
+                releases += 1;
+                if (armed) { armed = false; faults += 1; throw fault; }
+              };
+              if (faulted && !retainedSibling) {
+                assert.throws(() => destination.copy_(source), error => error === fault);
+              } else {
+                assert.equal(destination.copy_(source), destination);
+              }
+              assert.equal(publications - previousPublications, 1, "retirement cannot cancel the committed effect");
+              assert.equal(getTestTensorVersion(destination), previousVersion + 1);
+              assert.equal(faults, faulted && !retainedSibling ? 1 : 0, "a sibling delays old-history retirement");
+              if (dropHandles) { destination.close(); source.close(); }
+              await completeRuntimeSession(session);
+              assert.deepEqual([...await base.toArray()], new Array(length).fill(5));
+              if (sibling) assert.deepEqual([...await sibling.toArray()], new Array(length).fill(5));
+              assert.equal(getTestRuntimeOwnership(session).pendingCopies, 0);
+              if (faulted && retainedSibling) await assert.rejects(session.close(), error => error === fault);
+              else await session.close();
+              assert.equal(faults, faulted ? 1 : 0);
+              assert.ok(releases > 0, "canonical CPU releases actually ran");
+              assert.equal(publications - previousPublications, 1, "close cannot replay the effect");
+              for (const count of Object.values(getTestRuntimeOwnership(session))) assert.equal(count, 0);
+              assert.equal(session.diagnostics().liveTensorHandles, 0);
+              assert.equal(session.diagnostics().liveRequestLeases, 0);
+              assert.equal(session.diagnostics().liveAllocationBytes, 0);
+            } finally {
+              armed = false;
+              WebAssemblyCpuBackend.prototype.release = release;
+              await session.close().catch(() => undefined);
+            }
+          });
+        }
+      }
+    }
+  }
+}
+
 test("fallible old-backing retirement cannot erase a committed mandatory copy", async () => {
   const { WebAssemblyCpuBackend } = await import("../../../dist/backends/cpu/cpu-backend.js");
   const release = WebAssemblyCpuBackend.prototype.release;

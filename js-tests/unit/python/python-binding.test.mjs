@@ -2266,6 +2266,70 @@ test("managed results do not destroy a host-owned JavaScript object", {
   }
 });
 
+test("Python managed copy completes after previous view-history retirement fails", { timeout: 20_000 }, async () => {
+  const { attachPython } = await import("../../../dist/python.js");
+  const { WebAssemblyCpuBackend } = await import("../../../dist/backends/cpu/cpu-backend.js");
+  const interpreter = await getInterpreter();
+  const release = WebAssemblyCpuBackend.prototype.release;
+  const fault = new Error("controlled previous view-history retirement failure");
+  let armed = false, faults = 0;
+  interpreter.registerJsModule("_copy_retirement_test", { arm() { armed = true; } });
+  const binding = await attachPython(interpreter);
+  WebAssemblyCpuBackend.prototype.release = function (allocation) {
+    release.call(this, allocation);
+    if (armed) { armed = false; faults += 1; throw fault; }
+  };
+  try {
+    await binding.runPythonAsync(`
+import torch, gc
+from _copy_retirement_test import arm
+def check_copy_retirement():
+    p = torch.tensor([2.], dtype=torch.float32, requires_grad=True)
+    x = torch.tensor([3.], dtype=torch.float32, requires_grad=True)
+    base = x*x
+    destination = base.view(1)
+    assert base.tolist() == [9.]
+    del x
+    gc.collect()
+    p.grad = base
+    optimizer = torch.optim.SGD([p], lr=0.1)
+    optimizer.zero_grad(set_to_none=False)
+    p.grad = None
+    promotion = torch.tensor([4.], dtype=torch.float32, requires_grad=True)
+    assert base.copy_(promotion) is base
+    assert base.tolist() == [4.]
+    source = torch.tensor([5.], dtype=torch.float32, requires_grad=True)
+    arm()
+    try:
+        destination.copy_(source)
+    except RuntimeError as error:
+        assert "controlled previous view-history retirement failure" in str(error)
+        assert error.__cause__ is not None
+    else:
+        raise AssertionError("The injected cleanup failure must reach Python")
+    assert destination.tolist() == [5.]
+    del source, destination
+    gc.collect()
+    assert base.tolist() == [5.]
+check_copy_retirement()
+gc.collect()
+assert torch._runtime_session.diagnostics().liveTensorHandles == 0
+`);
+    assert.equal(faults, 1);
+    const session = interpreter.runPython("torch._runtime_session");
+    await binding.close();
+    assert.equal(session.diagnostics().liveTensorValues, 0);
+    assert.equal(session.diagnostics().liveRequestLeases, 0);
+    assert.equal(session.diagnostics().liveAllocationBytes, 0);
+  } finally {
+    armed = false;
+    WebAssemblyCpuBackend.prototype.release = release;
+    await binding.close();
+    interpreter.unregisterJsModule("_copy_retirement_test");
+    interpreter.runPython("[globals().pop(name, None) for name in ('check_copy_retirement', 'torch', 'gc', 'arm')]; import sys; sys.modules.pop('_copy_retirement_test', None); None");
+  }
+});
+
 test("Python persistent CPU copies match pinned native workflows and binding", { timeout: 20_000 }, async (context) => {
   const oracle = JSON.parse(await readFile(new URL("../../fixtures/python-tensor-oracle.json", import.meta.url), "utf8"));
   const { attachPython } = await import("../../../dist/python.js");
