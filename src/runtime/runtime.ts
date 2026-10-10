@@ -1672,10 +1672,15 @@ export class RuntimeSession {
     destination.family.current = next;
     destination.family.version = next.version;
     this.#setIdentityControls(destination.identity, []);
-    if (destination.isView && this.#recording) this.#resolveHistory(destination);
+    let failures: unknown[] | undefined;
+    if (destination.isView && this.#recording) {
+      // Rebasing installs the current history before retiring the old one.
+      // A retirement failure cannot abandon this already committed write.
+      try { this.#resolveHistory(destination); }
+      catch (error) { (failures ??= []).push(error); }
+    }
     this.#enqueue(this.#copyEffect(captured, prerequisites, outcome),
       () => this.#retireCopyEffect(captured, prerequisites, "Copy effect retirement failed."));
-    let failures: unknown[] | undefined;
     if (history !== previousHistory && previousHistory !== null) {
       try { this.#history.release(previousHistory); } catch (error) { (failures ??= []).push(error); }
     }
