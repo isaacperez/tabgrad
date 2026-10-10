@@ -120,11 +120,13 @@ does not imply that arbitrary data types are already supported.
 ## Shared completion separates publication from physical drain
 
 Each accepted physical request owns a bounded completion record. It contains
-fixed control fields, bounded failure diagnostics and a payload sized to the
-requested result. It is not a global queue of completed tensor data. The
-producer writes bytes and then atomically publishes their status. A shared
-pulse wakes the consumer; the consumer reads that pulse before checking status
-so publication between inspection and waiting cannot be missed.
+a control header of 16 bytes, a failure diagnostic region of 4096 bytes and
+payload capacity determined by the request. Execution returns an allocation
+mapping; readback returns float32 data. Published payload length can be smaller
+than its reserved capacity. The record is not a global queue of completed
+tensor data. The producer writes bytes and then atomically publishes their
+status. A shared pulse wakes the consumer; the consumer reads that pulse before
+checking status so publication between inspection and waiting cannot be missed.
 
 A successful result is published after the physical ticket drains. Python can
 then consume it and retire the request without running interpreter-local
@@ -310,12 +312,18 @@ completion.
 ## Costs and qualification boundaries
 
 Program transfer scales with the selected definition and required host
-bindings, not every operation ever recorded in the session. Result storage
-scales with demanded output, and resident identity maps scale with live owned
-allocations. Pending completion records scale with accepted, not-yet-retired
-work. Completed observation history is not a transport cache. A request that
-is still physically draining remains part of that live set even after its
-logical error is delivered.
+bindings, not every operation ever recorded in the session. For each execution,
+the completion payload reserves 16 bytes per selected program value for its
+allocation mapping. The published mapping uses 16 bytes per surviving entry:
+two Float64 numbers encoding a slot and its allocation ID. Retaining all
+selected allocations can fill the reservation; retiring intermediate
+allocations can reduce published length without reducing that capacity.
+Readback separately reserves 4 bytes per requested float32 element. These
+payload capacities exclude the fixed header and diagnostic region described
+above. Resident identity maps scale with live owned allocations. Pending
+completion records scale with accepted, not-yet-retired work. Completed
+observation history is not a transport cache. A request that is still physically
+draining remains part of that live set even after its logical error is delivered.
 
 Readback needs shared result storage and an independently owned host array;
 Python list conversion adds interpreter-side containers and numeric objects.
