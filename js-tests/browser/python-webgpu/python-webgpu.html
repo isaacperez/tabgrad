@@ -43,6 +43,9 @@
         await send("/__phase", { phase: "runtime-started" });
         await client.runPythonAsync(`
 import torch, gc
+import _test_grad
+from pyodide.code import eval_code_async
+await eval_code_async(str(_test_grad.source), globals=globals())
 session = torch._runtime_session
 gpu = torch.device('webgpu')
 assert gpu.type == 'webgpu' and gpu.index is None and str(gpu) == 'webgpu'
@@ -67,6 +70,32 @@ def check_gpu():
     cpu = torch.tensor([1., 2., 3., 4.], dtype=torch.float32)
     assert (cpu + cpu).tolist() == [2., 4., 6., 8.]
 check_gpu()
+def check_functional_subset():
+    import warnings
+    x = torch.tensor([2., 3.], dtype=torch.float32, device=gpu, requires_grad=True)
+    loss = (x * x).sum()
+    assert x.grad is None
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        assert loss.grad is None
+        assert len(caught) == 1 and caught[0].category is UserWarning
+    for call in [lambda: loss.backward(), lambda: torch.optim.SGD([x], lr=.1)]:
+        try: call()
+        except RuntimeError: pass
+        else: raise AssertionError('Persistent GPU state admitted')
+    for value in [x, torch.tensor([1., 1.], dtype=torch.float32)]:
+        try: x.grad = value
+        except RuntimeError: pass
+        else: raise AssertionError('GPU gradient assignment admitted')
+    for keyword in ['retain_graph', 'create_graph', 'allow_unused', 'is_grads_batched', 'materialize_grads']:
+        try: torch.autograd.grad(loss, x, **{keyword: True})
+        except RuntimeError: pass
+        else: raise AssertionError(keyword)
+    gradient, repeated = torch.autograd.grad(loss, (x, x))
+    assert gradient is not repeated and not gradient.requires_grad and gradient.device == gpu
+    assert gradient.tolist() == [4., 6.] and repeated.tolist() == [4., 6.]
+    assert x.grad is None
+check_functional_subset()
 def check_multiplication():
     import struct, _test_mul
     left, right = _test_mul.left.to_py(), _test_mul.right.to_py()

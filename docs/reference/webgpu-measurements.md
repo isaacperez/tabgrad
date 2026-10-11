@@ -200,3 +200,39 @@ costs: calibrate endpoint sensitivity and variation rather than inferring
 speed from operation count. No earlier GPU multiplication exists as a temporal
 baseline, and a comparison of unchanged addition cannot prove temporal
 equivalence below the method's sensitivity.
+
+## Functional-gradient workload
+
+`npm run measure:webgpu -- pilot grad` and, only after recording an adequate
+metric, `npm run measure:webgpu -- measure grad` use the public functional
+runtime rather than a private numerical recipe engine. This profile requires
+`bounded`. It differentiates fresh `sum(x * 1 * ... * 1)` branches and observes
+the first requested gradient. Inputs are uniform twos/ones, a synthetic
+integration distribution; exact corpus qualification remains separate.
+
+The eight rows vary one dimension at a time from 65,536 elements, depth one,
+one branch, one requested exposure and sixteen repetitions: payload 65 or
+1,048,576, depth eight, eight branches, four requests, or two/thirty-two
+repetitions. Repeated requests measure admission/exposure work while keeping
+numerical observation fixed. Each row owns fresh x/factor; pipelines are warm
+after a separately recorded cold small call. Three pilot or five decision
+rounds alternate row order. No requests or browsers overlap.
+
+Admission clocks cover the gradient call; completed-observation clocks cover
+formation, preparation when needed, submission, readback and completion.
+Graph construction, value checks, temporary handle closing and the subsequent
+drain check are outside those clocks. The report records both clocks separately,
+timer calibration, uploads, first-result readbacks, dispatches and surviving
+owners. The factor becomes resident once per row; each repetition uploads a
+four-byte seed. No forward value is observed or per-element host seed created.
+
+The fixed matrix uses at most 1,048,576 elements per tensor and thirty-two
+serialized invocations; it checks a 32 MiB session-owned high-water limit and
+fixed-owner cleanup after each completed iteration. Peak bytes are cumulative
+for the session, not fresh per-row peaks. The harness has a 65-second outer
+deadline. Reports use `test-results/webgpu-grad-{pilot,measure}-*.json`.
+Counters exclude process RSS, driver/compiler/interpreter memory and physical
+VRAM. Admission or small observation differences may be below resolution or
+overlap across rounds; preserve those unresolved metrics and reassess pilot
+adequacy when later samples contradict it. There is no earlier GPU functional
+result to support a before/after speedup, nor an isolated-kernel timing claim.

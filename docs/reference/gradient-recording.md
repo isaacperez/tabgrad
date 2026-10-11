@@ -3,7 +3,7 @@
 Use `torch.no_grad()` when a calculation should produce numbers without
 recording new reverse-mode history. It does not change existing tensors or
 disable explicit differentiation. This reference defines the bounded Python
-context and direct JavaScript callback contract over supported CPU float32
+context and direct JavaScript callback contract over supported CPU and WebGPU float32
 arithmetic and whole-storage contiguous views. The
 [functional gradient reference](functional-gradients.md) defines the derivative
 request itself.

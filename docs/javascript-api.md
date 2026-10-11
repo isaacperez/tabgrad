@@ -10,7 +10,8 @@ lets a reader see the complete lifecycle—admission, lazy recording, WebAssembl
 execution, observation, and release—without implying support for tensor
 features that have not been established by tests. An explicitly acquired
 [WebGPU session](reference/webgpu-runtime.md) also supports contiguous float32
-creation, addition, multiplication, total sum, views and asynchronous observation through this same API.
+creation, addition, multiplication, total sum, views, functional first-order
+gradients and asynchronous observation through this same API.
 Its operation domain and physical limits are separate from CPU support.
 
 `session.sgd(parameters, options?)` provides [basic CPU SGD](reference/sgd.md),
@@ -108,7 +109,7 @@ into a host `Float32Array`. Its default and supported metadata are:
 | Data type | `float32` |
 | Device | `cpu` by default; explicit `webgpu` in a GPU-enabled session |
 | Layout | `contiguous` |
-| Gradient tracking | `requiresGrad` defaults to `false`; `true` enables CPU functional gradients |
+| Gradient tracking | `requiresGrad` defaults to `false`; `true` enables functional gradients on the selected supported device |
 
 When supplied, `options.shape` must be an actual array of non-negative safe
 integers. Their product must equal the copied data length. The empty shape `[]`

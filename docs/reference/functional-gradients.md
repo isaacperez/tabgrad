@@ -1,11 +1,16 @@
 # Functional first-order gradients
 
-This reference defines differentiation through contiguous CPU float32 addition,
+This reference defines differentiation through contiguous CPU or WebGPU float32 addition,
 multiplication, total sum and shape-only views. It is for Python and JavaScript
 users who need gradients of one output with respect to named inputs. The result
 is a vector-Jacobian product: an incoming tensor weights the output elements,
 and the returned tensors describe that weighted output's sensitivity to each
 requested input. The runtime does not construct a full Jacobian matrix.
+
+All numerical operands and the seed belong to one selected device; there is no
+transfer or fallback. GPU use requires an explicitly enabled
+[direct session](webgpu-runtime.md) or [managed Python attachment](python-host.md).
+Omitting a seed creates the unit scalar on the output's device.
 
 The [history component](../components/derivative-history.md) explains ownership;
 the [functional derivative flow](../flows/functional-gradients.md) follows one
@@ -57,7 +62,7 @@ input shapes, dtype and device.
 
 `grad_outputs` may be a tensor, `None`, or a one-element sequence containing
 either. `None` supplies a unit seed only when the output has exactly one element,
-at any rank. A tensor seed must match the entire output shape, including empty
+at any rank. A tensor seed must match the output device and entire shape, including empty
 dimensions, and must not track gradients. For example, a seed `[2, 3]` for a
 vector output weights its first and second elements separately. A zero-element
 output requires an explicit zero-element seed of the same shape. Total sum of
@@ -143,6 +148,7 @@ without consuming independently owned derivative history.
 | `INVALID_GRADIENT` | An implicit seed was requested for a non-singleton output | `RuntimeError` |
 | `UNSUPPORTED_GRADIENT` | Explicit seed tracks gradients | `RuntimeError` |
 | `SHAPE_MISMATCH` | Seed and output shapes differ | `RuntimeError` |
+| `UNSUPPORTED_DEVICE` | Seed and output devices differ | Existing device-error contract |
 | `SAVED_VERSION_MISMATCH`, `INPLACE_VIEW` | Changed numeric save or dirty special-view derivative entry | `RuntimeError` |
 | `SAVED_DETACHED` | Saved tensor detached in place, including by numeric SGD gradient reset | `RuntimeError` |
 | `CONSUMED_HISTORY` | Selected derivative needs already consumed saved values | `RuntimeError` |
@@ -155,9 +161,12 @@ occur on ordinary observation and retain normal runtime failure context.
 ## Numerical and execution boundary
 
 Local derivative rules admit ordinary multiplication and addition, metadata
-views and one internal scalar expansion. Expansion reads one float32 scalar
-and fills a fresh contiguous output, including an empty output, through the CPU
-scalar or SIMD kernel. It is not a public broadcast operation. The raw export
+views and one internal scalar expansion. Expansion copies the stored scalar's
+binary32 bits into a fresh contiguous output, including an empty output,
+through the selected backend. The GPU shader uses unsigned storage copies,
+preserving signed zeros, subnormals, infinities and stored NaN payloads without
+arithmetic or per-element host seeds. Ordinary factory conversion still applies
+before a scalar is stored. It is not a public broadcast operation. The CPU raw export
 `tabgrad_expand_f32(input_offset, output_offset, length)` requires one readable
 aligned float32 input, a valid aligned output range and non-overlap when the
 output is nonempty. It accepts an empty output at the memory endpoint. ABI
@@ -169,9 +178,12 @@ remain bounded by the underlying operation references. Oracle cases use small,
 exactly representable values to establish derivative semantics rather than
 claiming bitwise equivalence for every floating-point graph.
 
-Functional calls do not automatically accumulate leaf gradients. Already
+Functional calls do not automatically accumulate leaf gradients. On CPU, already
 retained nonleaves can receive contributions, including at input cutoffs; the
 [backward reference](backward-gradients.md) owns persistent slot behavior.
-Optimizers, higher-order graphs, JVP, public broadcasting, axis reduction and
+GPU backward, non-null gradient assignment, persistent accumulation/retention,
+copy and SGD remain unsupported. Reading an absent GPU `.grad` returns `None`
+in Python or `null` in JavaScript; assigning `None`/`null` keeps it absent.
+Higher-order graphs, JVP, public broadcasting, axis reduction and
 broader dtype/device/layout remain excluded. These exclusions do not change
 ordinary nontracking computation or introduce a backend fallback.
