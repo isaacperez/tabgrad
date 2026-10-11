@@ -324,7 +324,7 @@ const RUNTIME_SESSION_ACCESS = new WeakMap<RuntimeSession, RuntimeSessionAccess>
 
 interface OptimizerRegistration {
   closed: boolean;
-  readonly groups: readonly (readonly TensorState[])[];
+  groups: readonly (readonly TensorState[])[];
 }
 
 interface OptimizerCaptureScope {
@@ -862,6 +862,8 @@ export class RuntimeSession {
     });
     // Returned lease closures share this scope; release its frontend capture.
     capture = undefined;
+    // Duplicate admission scratch must not become a second parameter owner.
+    previousGroups.clear();
     // Later getters can close earlier exposures. Recheck captured internal
     // states before acquisition; no caller code runs between here and publication.
     this.#assertOpen();
@@ -1020,12 +1022,14 @@ export class RuntimeSession {
     if (registration.closed) return;
     registration.closed = true;
     this.#optimizers.delete(registration);
+    const groups = registration.groups;
+    registration.groups = [];
     let failures: unknown[] | undefined;
     for (const scope of [...this.#optimizerCaptures]) if (scope.registration === registration) {
       try { this.#retireOptimizerCapture(scope); }
       catch (error) { (failures ??= []).push(error); }
     }
-    for (const group of registration.groups) for (const state of group) {
+    for (const group of groups) for (const state of group) {
       this.#optimizerOccurrences -= 1;
       try { this.#releaseIdentity(state.identity); }
       catch (error) { (failures ??= []).push(error); }

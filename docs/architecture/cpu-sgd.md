@@ -319,6 +319,9 @@ not close caller parameter/gradient objects, clear associations or cancel
 accepted writes. Pending effects retain captures until safe completion;
 session close drives drain/failure delivery and invalidates the optimizer.
 Python finalization retires its private lease under the same ownership rules.
+Retirement drops the private registration's parameter references, including
+construction scratch state. A surviving closed lease or finalizer callback
+does not keep those otherwise unowned parameter descriptors alive.
 
 The gradient-state authority owns cycles and logical retirement before
 fallible physical cleanup. Optimizer registration joins those owners rather
