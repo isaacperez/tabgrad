@@ -1,14 +1,19 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { browserDefinitions, browserVersion, resolveBrowser, runBrowserPage, selectBrowserDefinitions, startBrowserServer } from "./browser-harness.mjs";
 
 const profiles = [
   { page: "python-webgpu/python-webgpu.html" }, { page: "python-webgpu/python-webgpu-revocation.html" }, { page: "python-webgpu/python-webgpu-attachment.html" },
   { page: "python-webgpu/python-webgpu-revocation.html", operation: "sum" },
   { page: "python-webgpu/python-webgpu-revocation.html", operation: "mul" },
+  { page: "python-webgpu/python-webgpu-revocation.html", operation: "grad" },
   ...["device-loss", "worker-loss", "interpreter-loss"].map((mode) => ({ page: "python-webgpu/python-webgpu-loss.html", mode })),
 ];
 const server = await startBrowserServer(profiles.map(({ page }) => page), { crossOriginIsolation: true,
-  assets: ["python-webgpu/python-webgpu.mjs", "python-webgpu/python-webgpu-revocation.mjs", "python-webgpu/python-webgpu-delayed.mjs", "python-webgpu/python-webgpu-attachment.mjs", "python-webgpu/python-webgpu-loss.mjs", "helpers/float32-addition-oracle.mjs", "helpers/float32-sum-oracle.mjs", "helpers/float32-multiplication-oracle.mjs"] });
+  assets: ["python-webgpu/python-webgpu.mjs", "python-webgpu/python-webgpu-revocation.mjs", "python-webgpu/python-webgpu-delayed.mjs", "python-webgpu/python-webgpu-attachment.mjs", "python-webgpu/python-webgpu-loss.mjs", "helpers/float32-addition-oracle.mjs", "helpers/float32-sum-oracle.mjs", "helpers/float32-multiplication-oracle.mjs", "helpers/functional-gradient-cases.mjs", "helpers/functional-gradient-oracle.json"],
+  readAsset: (path) => readFile(String(path).endsWith("/helpers/functional-gradient-oracle.json")
+    ? new URL("../js-tests/fixtures/python-tensor-oracle.json", import.meta.url) : path),
+});
 try {
   for (const browser of selectBrowserDefinitions(process.env.TABGRAD_BROWSER ?? "Chrome", browserDefinitions)) {
     const executable = await resolveBrowser(browser);

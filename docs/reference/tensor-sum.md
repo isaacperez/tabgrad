@@ -46,11 +46,12 @@ supported call domain. Even apparently redundant options
 such as `dtype=None`,
 `dim=None`, `keepdim=False` or `out=None` are rejected, not silently ignored.
 
-Tracked CPU inputs participate in [functional gradients](functional-gradients.md).
+Tracked CPU and WebGPU inputs participate in
+[functional gradients](functional-gradients.md).
 The derivative expands the incoming scalar to the input shape, including empty
 dimensions; an interior sum does not assume that incoming scalar equals one.
-WebGPU does not support tracked inputs or gradients. Device selection is
-explicit; a GPU sum does not fall back to CPU.
+WebGPU does not support persistent gradient state or backward accumulation.
+Device selection is explicit; a GPU sum does not fall back to CPU.
 
 ## Admission, observation and ownership
 

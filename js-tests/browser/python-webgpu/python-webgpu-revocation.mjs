@@ -58,8 +58,8 @@ try {
 import torch, gc
 session = torch._runtime_session
 def caught_revocation():
-    x = torch.tensor([float(index % 32) for index in range(65536)], dtype=torch.float32, device='webgpu')
-    y = ${operation === "sum" ? "x.sum()" : operation === "mul" ? "x * x" : "x + x"}
+    x = torch.tensor([float(index % 32) for index in range(65536)], dtype=torch.float32, device='webgpu', requires_grad=${operation === "grad" ? "True" : "False"})
+    y = ${operation === "grad" ? "torch.autograd.grad((x * x).sum(), x)[0]" : operation === "sum" ? "x.sum()" : operation === "mul" ? "x * x" : "x + x"}
     try:
         y.tolist()
     except Exception as error:

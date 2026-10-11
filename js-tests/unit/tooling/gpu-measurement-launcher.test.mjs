@@ -85,3 +85,15 @@ test("managed GPU launcher retains interpreter-worker termination validation", (
   assert.deepEqual(observed.saved.browsers[0].result, observed.page);
   assert.equal(observed.saved.failure.diagnostics.failureKind, "application-result");
 });
+
+test("functional GPU launcher selects the bounded public-gradient page and records incomplete cleanup", () => {
+  for (const scenario of ["success", "cleanup"]) {
+    const observed = runLauncher("measure-webgpu.mjs", scenario, "pilot", "grad");
+    assert.equal(observed.saved.operation, "grad");
+    assert.equal(observed.saved.profile, "bounded");
+    assert.equal(observed.runs[0].page, "measurements/webgpu/webgpu-grad-measure.html");
+    assert.deepEqual(observed.runs[0].parameters, { mode: "pilot", operation: "grad", profile: "bounded" });
+    assert.equal(observed.saved.completed, scenario === "success");
+    assert.equal(observed.rejected, scenario !== "success");
+  }
+});

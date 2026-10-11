@@ -120,6 +120,11 @@ replace a parameter's current `TensorValue`, while gradient and optimizer state
 continue to attach to that stable parameter. Mutation advances logical storage
 versions and participates in the same effect order as other in-place work.
 
+Functional first-order GPU derivatives reuse these common history and operation
+owners. Their selected backend supplies scalar expansion and ordinary numerical
+execution; no separate GPU derivative engine is needed. Persistent associations,
+backward and optimizer updates remain in the CPU domain.
+
 The [CPU gradient-state contract](cpu-gradient-state.md) distinguishes leaf
 accumulation from retained nonleaf replacement. It separates semantic tensor
 identity and gradient association from public exposure and numerical aliases,

@@ -50,11 +50,12 @@ non-contiguous layouts, in-place multiplication, output-buffer
 mutation and `multiply` aliases are outside this contract. PyTorch supports
 many of these forms; their rejection is Tabgrad's intentional subset boundary.
 
-Tracked CPU operands participate in [functional gradients](functional-gradients.md).
+Tracked CPU and WebGPU operands participate in
+[functional gradients](functional-gradients.md).
 Each tracked input's derivative saves the opposite operand, including when that
 operand does not track. Numerical saved values have an independent lifetime
 from the forward execution dependencies described below.
-GPU gradient tracking and requests remain unsupported.
+GPU persistent gradient state and backward accumulation remain unsupported.
 
 ## Admission and resource ownership
 

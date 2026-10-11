@@ -36,7 +36,9 @@ to record; `DerivativeHistory.record` preserves the admitted recipe even when
 no input edge exists. The [recording reference](../reference/gradient-recording.md)
 owns the observable scope/view contract.
 
-A saved operand is a separate logical value pin. For `x * y`, differentiating
+A saved operand is a separate logical value pin on either supported device.
+WebGPU pins protect resident operands through the ordinary backend ownership
+boundary; history never owns physical buffers itself. For `x * y`, differentiating
 with respect to `x` needs `y`; differentiating with respect to `y` needs `x`.
 If only `x` tracks, the node saves only `y`, including when `y` is nontracking.
 Addition, sum and views save no numerical operands. Thus an edge can survive

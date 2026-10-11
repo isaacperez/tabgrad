@@ -15,7 +15,7 @@ multiplication saves the opposite operand for each tracked input, addition
 records its two edges, and sum records the input shape. Python wrappers only
 forward handles and present the returned metadata.
 
-Observing the loss executes the forward program. The CPU publishes values that
+Observing the loss executes the forward program. The selected backend publishes values that
 still have external owners, including history's saved pins. The runtime then
 reclaims normal producer ancestry. Losing the expression's temporary public
 handles does not lose derivative identity or the required operands: those
@@ -30,7 +30,7 @@ sequenceDiagram
     participant Frontend
     participant Runtime
     participant History
-    participant CPU
+    participant Backend
     Frontend->>Runtime: grad(loss, [x, y])
     Runtime->>Runtime: Validate handles, modes and seed
     Runtime->>History: Plan all requested ancestry
@@ -43,8 +43,8 @@ sequenceDiagram
     end
     Runtime-->>Frontend: Lazy gradient handles
     Frontend->>Runtime: Observe a gradient
-    Runtime->>CPU: Execute ordinary demanded program
-    CPU-->>Runtime: Publish resident result
+    Runtime->>Backend: Execute ordinary demanded program
+    Backend-->>Runtime: Publish resident result
     Runtime-->>Frontend: Owned observation copy
 ```
 
@@ -53,7 +53,9 @@ passes that incoming tensor to each branch. The `x * y` branch contributes
 `incoming * y` to `x` and `incoming * x` to `y`; `x * x` contributes twice to
 `x`. Pure additions combine the three contributions to `x`. None of these
 steps copies a tensor into host language arrays. They create the same lazy
-operations that a frontend could admit, plus the internal CPU scalar expansion.
+operations that a frontend could admit, plus internal scalar expansion on the
+same device. Implicit seeds use that device; explicit seeds must match it.
+WebGPU execution uses its ordinary pipeline, submission and drain owner.
 
 On return, the gradient tensors own their pending execution dependencies and
 no longer need the multiplication's saved pins. Observing `dx` may execute

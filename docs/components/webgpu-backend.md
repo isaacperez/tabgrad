@@ -16,7 +16,9 @@ public plugin interface or another semantic engine.
 ## What crosses the boundary
 
 The runtime consults immutable backend capabilities during operation admission.
-These describe computation kinds, gradient support and maximum tensor extent.
+These describe computation kinds, tracking/functional gradient support and
+maximum tensor extent. Persistent gradient state and updates remain in the
+common runtime's separate CPU domain; a functional capability does not admit them.
 Preparation validates the same computation domain; it does not reinterpret
 an unsupported operation or select a fallback implementation.
 
@@ -67,7 +69,10 @@ knowledge belongs to the kernel, not to tensor semantics or device acquisition.
 `WEBGPU_ADDITION_WORKGROUP_SIZE`, with width 64;
 [`kernels/multiplication.ts`](../../src/backends/webgpu/kernels/multiplication.ts)
 owns its separate `WEBGPU_MULTIPLICATION_WORKGROUP_SIZE`, also 64. Each shader
-uses its own constant in `@workgroup_size`. The backend imports both for
+uses its own constant in `@workgroup_size`.
+[`kernels/expansion.ts`](../../src/backends/webgpu/kernels/expansion.ts) owns the
+same-width unary scalar-copy launch for sum derivatives. It copies unsigned
+stored words to a separate output, without floating-point arithmetic. The backend imports all three for
 the dispatch-related capacity bound and the ceiling division that computes
 the number of groups. There is no second host declaration to keep aligned.
 
@@ -78,8 +83,13 @@ compute pass. Capacity admission also takes the minimum of the device's buffer,
 storage-binding and dispatch extents; sharing launch width does not remove any
 of those limits.
 
-The three storage bindings and unsigned binary32 arithmetic remain numerical
-kernel responsibilities. Another computation may own different geometry; this
+Derivative programs use the same storage-use accounting and physical completion
+as forward programs. Saved pins retain resident operands until common history
+transfers them to derivative work. No backend derivative graph or persistent
+gradient slot is introduced.
+
+Binary addition and multiplication own their three storage bindings and
+unsigned binary32 arithmetic. Another computation may own different geometry; this
 operation-specific constant is not a runtime-wide launch policy or a kernel
 registry. Changing its value would still require device-limit, dispatch and
 numerical qualification, not just changing a shared declaration.

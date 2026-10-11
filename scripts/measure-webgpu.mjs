@@ -6,18 +6,18 @@ import { fingerprintTypeScriptSources } from "./source-identity.mjs";
 
 const mode = process.argv[2];
 const operation = process.argv[3] ?? "add";
-const profile = process.argv[4] ?? (operation === "mul" ? "bounded" : "default");
-if (!["pilot", "measure"].includes(mode) || !["add", "mul", "sum"].includes(operation)
-    || !["default", "bounded"].includes(profile) || (operation === "mul" && profile !== "bounded")
+const profile = process.argv[4] ?? (["mul", "grad"].includes(operation) ? "bounded" : "default");
+if (!["pilot", "measure"].includes(mode) || !["add", "mul", "sum", "grad"].includes(operation)
+    || !["default", "bounded"].includes(profile) || (["mul", "grad"].includes(operation) && profile !== "bounded")
     || (operation === "sum" && profile !== "default") || process.argv.length > 5) {
-  throw new Error("Use: node scripts/measure-webgpu.mjs pilot|measure [add|mul|sum] [default|bounded] (mul requires bounded; sum requires default)");
+  throw new Error("Use: node scripts/measure-webgpu.mjs pilot|measure [add|mul|sum|grad] [default|bounded] (mul/grad require bounded; sum requires default)");
 }
 const sourceSha256 = await fingerprintTypeScriptSources(new URL("../src/", import.meta.url));
 const report = { mode, operation, profile, measuredAt: new Date().toISOString(), sourceSha256,
   platform: platform(), operatingSystemRelease: release(), architecture: arch(), node: process.version,
   operatingSystemVersion: platform() === "darwin" ? execFileSync("sw_vers", ["-productVersion"], { encoding: "utf8" }).trim() : release(),
   completed: false, browsers: [] };
-const stem = operation === "sum" ? "webgpu-sum-measure" : "webgpu-measure";
+const stem = operation === "sum" ? "webgpu-sum-measure" : operation === "grad" ? "webgpu-grad-measure" : "webgpu-measure";
 const page = `measurements/webgpu/${stem}.html`;
 const server = await startBrowserServer([page], { assets: [`measurements/webgpu/${stem}.mjs`] });
 try {

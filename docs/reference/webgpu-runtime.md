@@ -81,10 +81,16 @@ GPU `mul` accepts the same equal-shape operands and composes with addition,
 views and total sum. The [multiplication reference](tensor-multiplication.md)
 owns its call forms, exact stored-binary32 product rounding and exclusions.
 
-Dimensional reductions and gradients are outside this execution
-domain. Capability rejection happens before recording unsupported work.
-`requiresGrad: true` and GPU gradient requests use `UNSUPPORTED_GRADIENT`;
-unsupported computations use `BACKEND_CAPABILITY_MISMATCH`. Mixing CPU and GPU
+Creation accepts `requiresGrad: true`; `session.grad` returns resident-capable,
+untracked first-order gradients through add/mul/total sum/views under the
+[functional reference](functional-gradients.md). Shared history owns saved
+values; derivative operations use this backend, including internal scalar
+expansion, without a CPU numerical detour. Reading absent `.grad` remains valid.
+
+Dimensional reductions, backward, non-null gradient assignment and SGD are
+outside this GPU execution domain. Persistent-state calls use
+`UNSUPPORTED_GRADIENT`; unsupported computations use `BACKEND_CAPABILITY_MISMATCH`.
+Capability rejection happens before recording unsupported work. Mixing CPU and GPU
 operands is rejected, not interpreted as a transfer. CPU behavior remains
 governed by its own operation references.
 

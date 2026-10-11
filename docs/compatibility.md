@@ -180,6 +180,16 @@ implicit-seed and consumed-history error categories. Real Pyodide consumes that
 same source and expected result data. The generator uses one intra-operation
 and one inter-operation thread; no NumPy or native runtime is distributed.
 
+Packaged physical GPU fixtures reuse all twelve functional value cases through
+direct JavaScript adaptations and managed Python's unchanged native source with
+explicit device selection. Managed Python also reuses the five error cases and
+the recording/special-view corpus, with JSPI absent. Separate GPU controls
+qualify stored-bit scalar expansion, capability/state exclusions, causal
+failures and physical drain. These bounded cases establish the functional
+device domain, not persistent GPU training, every floating-point graph, other
+adapters, physical VRAM or a speed guarantee. Run versions and resource/timing
+observations belong in issue and verification evidence.
+
 The [recording scope reference](reference/gradient-recording.md) defines
 `torch.no_grad()` contexts and the direct JavaScript callback integration.
 `noGradCases` freeze native context returns, binding error classes, sequential
