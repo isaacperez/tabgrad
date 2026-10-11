@@ -16,6 +16,13 @@ before(async () => { distributionUrl = await fixtures.start(); });
 after(async () => { await fixtures.close(); });
 const oracle = JSON.parse(await readFile(new URL("../../fixtures/python-tensor-oracle.json", import.meta.url), "utf8"));
 
+test("retired private SGD leases release parameter descriptors even while callbacks remain held", () => {
+  const result = execFileSync(process.execPath, ["--expose-gc", "--max-old-space-size=512",
+    fileURLToPath(new URL("../../fixtures/optimizer-retirement-child.mjs", import.meta.url))],
+  { encoding: "utf8", timeout: 30_000 });
+  assert.equal(JSON.parse(result).length, 80);
+});
+
 test("SGD construction capture does not retain a frontend optimizer cycle", () => {
   const result = execFileSync(process.execPath, ["--expose-gc", "--input-type=module", "-e", `
 import { readFile } from 'node:fs/promises';
