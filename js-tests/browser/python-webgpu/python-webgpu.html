@@ -67,6 +67,42 @@ def check_gpu():
     cpu = torch.tensor([1., 2., 3., 4.], dtype=torch.float32)
     assert (cpu + cpu).tolist() == [2., 4., 6., 8.]
 check_gpu()
+def check_multiplication():
+    import struct, _test_mul
+    left, right = _test_mul.left.to_py(), _test_mul.right.to_py()
+    for depth in [1, 8]:
+        current = torch.tensor([struct.unpack('<f', struct.pack('<I', b))[0] for b in left], dtype=torch.float32, device=gpu)
+        factor = torch.tensor([struct.unpack('<f', struct.pack('<I', b))[0] for b in right], dtype=torch.float32, device=gpu)
+        for step in range(depth):
+            current = current * factor
+        actual = [struct.unpack('<I', struct.pack('<f', v))[0] for v in current.tolist()]
+        expected = _test_mul.expected(depth).to_py()
+        assert len(actual) == len(expected)
+        for index, (bits, reference) in enumerate(zip(actual, expected)):
+            assert bits == reference or (bits & 0x7fffffff) > 0x7f800000 and (reference & 0x7fffffff) > 0x7f800000, (depth, index, bits, reference)
+    forms = [lambda a, b: a * b, lambda a, b: a.mul(b), lambda a, b: a.mul(other=b),
+        lambda a, b: torch.mul(a, b), lambda a, b: torch.mul(a, other=b),
+        lambda a, b: torch.mul(input=a, other=b), lambda a, b: torch.mul(a, b, out=None)]
+    for shape in [(), (1,), (2, 3), (2, 1, 3), (0,), (2, 0, 3), (63,), (64,), (65,), (127,), (128,), (129,)]:
+        length = 1
+        for n in shape:
+            length *= n
+        values = [float(index + 1) for index in range(length)]
+        x = torch.tensor(values, dtype=torch.float32, device=gpu).view(shape)
+        for form in forms:
+            y = form(x, x)
+            assert y is not x and y.device == gpu and y.shape == shape
+            assert y.view(length).tolist() == [v * v for v in values]
+            assert y.view(length).tolist() == [v * v for v in values]
+            assert x.view(length).tolist() == values
+    a = torch.tensor(1. + 2. ** -23, dtype=torch.float32, device=gpu)
+    b = torch.tensor(1. - 2. ** -23, dtype=torch.float32, device=gpu)
+    c = torch.tensor(-1., dtype=torch.float32, device=gpu)
+    assert struct.pack('<f', (a * b + c).tolist()) == struct.pack('<I', 0)
+    assert (torch.tensor([2., -3., 4.], dtype=torch.float32, device=gpu)
+        * torch.tensor([5., 2., -1.], dtype=torch.float32, device=gpu)).sum().tolist() == 0.
+    assert session.diagnostics().liveRequestLeases == 0
+check_multiplication()
 def check_total_sum():
     import struct, _test_sum
     cases = _test_sum.cases.to_py()
@@ -108,12 +144,14 @@ check_numerical_transport()
 def check_uninterrupted_observation():
     import _test_gpu_observers
     before = _test_gpu_observers.count()
-    x = torch.tensor([float(index % 32) for index in range(65536)], dtype=torch.float32, device=gpu)
-    y = x + x
-    for iteration in range(32):
-        values = y.tolist()
-        assert len(values) == 65536 and values[31] == 62. and values[-1] == 62.
-        assert session.diagnostics().liveRequestLeases == 0
+    for operation in ['add', 'mul']:
+        x = torch.tensor([float(index % 32) for index in range(65536)], dtype=torch.float32, device=gpu)
+        y = x + x if operation == 'add' else x * x
+        expected = 62. if operation == 'add' else 961.
+        for iteration in range(32):
+            values = y.tolist()
+            assert len(values) == 65536 and values[31] == expected and values[-1] == expected
+            assert session.diagnostics().liveRequestLeases == 0
     assert _test_gpu_observers.count() == before
 check_uninterrupted_observation()
 gc.collect()

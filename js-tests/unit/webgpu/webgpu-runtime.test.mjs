@@ -12,7 +12,7 @@ test("GPU capability admission rejects unsupported operators before retaining wo
     const gpu = session.tensor([2], { device: "webgpu" });
     const cpu = session.tensor([3]);
     const before = session.diagnostics();
-    for (const operation of [() => gpu.mul(gpu), () => gpu.add(cpu), () => cpu.add(gpu),
+    for (const operation of [() => gpu.mul(cpu), () => cpu.mul(gpu), () => gpu.add(cpu), () => cpu.add(gpu),
       () => session.grad(gpu, [gpu]), () => session.tensor([1], { device: "webgpu", requiresGrad: true })]) {
       assert.throws(operation, (error) => error instanceof tabgrad.TabgradError
         && error.details.device === "webgpu");

@@ -5,8 +5,10 @@ import { ExecutionTicket } from "/execution/execution-ticket.js";
 
 const query = new URLSearchParams(location.search);
 const mode = query.get("mode");
+const operation = query.get("operation") ?? "add";
+const bounded = query.get("profile") === "bounded";
 const started = performance.now();
-const maximumBytes = 64 * 1024 * 1024;
+const maximumBytes = (bounded ? 32 : 64) * 1024 * 1024;
 const invocationBatch = 16;
 const samples = [];
 
@@ -42,10 +44,10 @@ function program(length, depth) {
   const values = [], computations = [];
   for (let slot = 0; slot < depth + 2; slot += 1) {
     const provenance = slot < 2 ? { operation: "tensor", source: "RuntimeSession.tensor" }
-      : { operation: "add", source: "Tensor.add" };
+      : { operation, source: `Tensor.${operation}` };
     values.push({ slot, storageSlot: slot, dtype: "float32", device: "webgpu", layout: "contiguous",
       shape: [length], source: slot < 2 ? "binding" : "computed", provenance });
-    if (slot >= 2) computations.push({ kind: "add-f32", inputs: [slot === 2 ? 0 : slot - 1, 1], output: slot, provenance });
+    if (slot >= 2) computations.push({ kind: `${operation}-f32`, inputs: [slot === 2 ? 0 : slot - 1, 1], output: slot, provenance });
   }
   return new ExecutableProgram(values, computations, depth === 0 ? 0 : depth + 1);
 }
@@ -73,7 +75,8 @@ function inputData(length, seed) {
 function expectedBoundary(left, right, depth) {
   let first = left[0], last = left.at(-1);
   for (let step = 0; step < depth; step += 1) {
-    first = Math.fround(first + right[0]); last = Math.fround(last + right.at(-1));
+    first = Math.fround(operation === "mul" ? first * right[0] : first + right[0]);
+    last = Math.fround(operation === "mul" ? last * right.at(-1) : last + right.at(-1));
   }
   return [first, last];
 }
@@ -148,7 +151,7 @@ async function publicObservation(length, depth) {
     const right = session.tensor(new Float32Array(length).fill(1), { device: "webgpu" });
     let current = session.tensor(new Float32Array(length).fill(1), { device: "webgpu" });
     for (let index = 0; index < depth; index += 1) {
-      const next = current.add(right); current.close(); current = next;
+      const next = current[operation](right); current.close(); current = next;
     }
     right.close();
     checkTimeBudget();
@@ -156,7 +159,8 @@ async function publicObservation(length, depth) {
     const result = await current.toArray();
     const milliseconds = performance.now() - start;
     checkTimeBudget(milliseconds);
-    if (result[0] !== depth + 1 || result.at(-1) !== depth + 1) throw new Error("Public observation mismatch.");
+    const expected = operation === "mul" ? 1 : depth + 1;
+    if (result[0] !== expected || result.at(-1) !== expected) throw new Error("Public observation mismatch.");
     current.close(); await session.close();
     checkTimeBudget();
     if (session.diagnostics().webgpu.peakOwnedBufferBytes > maximumBytes || milliseconds > 5_000) throw new Error("Public observation cap exceeded.");
@@ -171,20 +175,22 @@ try {
   const resolutionMilliseconds = timerResolution();
   await send("__phase", { phase: "runtime-started" });
   if (mode !== "pilot" && mode !== "measure") throw new Error("Explicit pilot or measure mode required.");
-  const lengths = [262_144, 1_048_576, 2_097_152];
+  if (!["add", "mul"].includes(operation) || (operation === "mul" && !bounded)) throw new Error("A bounded binary-operation profile is required for multiplication.");
+  const lengths = bounded ? [65_536, 262_144, 1_048_576] : [262_144, 1_048_576, 2_097_152];
+  const depths = bounded ? [1, 8] : [1, 8, 32];
   for (const length of lengths) {
-    for (const depth of mode === "pilot" ? [8] : [1, 8, 32]) {
+    for (const depth of mode === "pilot" ? [8] : depths) {
       samples.push(await measureCase(length, depth, false, mode === "pilot" ? 3 : 5));
     }
   }
   if (mode === "measure") {
-    for (const depth of [1, 8, 32]) samples.push(await measureCase(262_144, depth, true, 5));
+    for (const depth of depths) samples.push(await measureCase(lengths[0], depth, true, 5));
   }
-  const publicSamples = mode === "measure" ? [await publicObservation(1_048_576, 32)] : [];
+  const publicSamples = mode === "measure" ? [await publicObservation(1_048_576, depths.at(-1))] : [];
   checkTimeBudget();
   await send("__phase", { phase: "runtime-finished" });
   checkTimeBudget();
-  await send("__result", { ok: true, mode, resolutionMilliseconds, maximumBytes,
+  await send("__result", { ok: true, mode, operation, resolutionMilliseconds, maximumBytes,
     crossOriginIsolated, samples, publicSamples, elapsedMilliseconds: performance.now() - started });
 } catch (error) {
   await send("__result", { ok: false, mode, samples, error: { message: error.message, code: error.code } });

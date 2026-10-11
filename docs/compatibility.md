@@ -107,7 +107,7 @@ The [managed GPU connection reference](reference/python-host.md) defines the
 host helper, single-use attachment, independent physical worker and ordinary
 Python observation. `webgpu` is a Tabgrad device extension, not a native
 PyTorch device identifier. The packaged Python GPU fixtures combine the
-accepted exact float32 addition and total-sum corpora with scalar, nested, empty, chained,
+exact float32 addition, multiplication and total-sum corpora with scalar, nested, empty, chained,
 branched and contiguous-view cases; they explicitly remove JSPI before loading
 the pinned interpreter. CPU remains independently available in that binding.
 
@@ -120,7 +120,7 @@ Unacknowledged worker loss preserves last-known owned/pending counters and
 unknown-completion accounting rather than reporting successful drain or zero
 physical VRAM. Exact qualified browser, operating-system, adapter and artifact
 identities belong in the verification evidence. This evidence does not expand
-GPU support to multiplication, dimensional reductions, gradients or untested environments,
+GPU support to dimensional reductions, gradients or untested environments,
 and does not itself establish a release's support status.
 
 The [multiplication reference](reference/tensor-multiplication.md) defines the
@@ -133,6 +133,13 @@ runtime and Chrome/Firefox tests exercise composition, aliases, cleanup and
 ordinary Python observation, including both CPU variants in interpreter workers
 with JSPI disabled. Broadcasting, host-number operands, mutation, promotion and
 higher-order gradients remain explicit subset exclusions rather than claimed PyTorch errors.
+Physical GPU product qualification additionally compares an independent exact
+BigInt oracle across independently varied input exponents and repeated
+operations, with explicit underflow, exceptional values, workgroup tails and
+multiply/add rounding boundaries. Controlled failures protect preparation,
+provenance, drain and device-loss ownership; managed observation removes JSPI.
+These tests cover the declared product domain without qualifying GPU gradients
+or whole-model performance.
 
 The [total sum reference](reference/tensor-sum.md) defines unary total reduction
 and its numerical domain. Native `sumCases` record scalar metadata, input bits,

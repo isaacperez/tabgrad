@@ -10,7 +10,7 @@ lets a reader see the complete lifecycle—admission, lazy recording, WebAssembl
 execution, observation, and release—without implying support for tensor
 features that have not been established by tests. An explicitly acquired
 [WebGPU session](reference/webgpu-runtime.md) also supports contiguous float32
-creation, addition, total sum, views and asynchronous observation through this same API.
+creation, addition, multiplication, total sum, views and asynchronous observation through this same API.
 Its operation domain and physical limits are separate from CPU support.
 
 `session.sgd(parameters, options?)` provides [basic CPU SGD](reference/sgd.md),
