@@ -55,18 +55,20 @@ must not treat that retention as disposable scratch.
 
 ## Pipeline and readback lifetimes
 
-### Addition kernel launch geometry
+### Elementwise kernel launch geometry
 
-A workgroup is the set of shader invocations launched together. The addition
-kernel processes one element per invocation along a single dimension, so its
-launch width connects two physical facts: how many elements one group can
+A workgroup is the set of shader invocations launched together. Addition and
+multiplication each process one element per invocation along a single dimension,
+so each launch width connects two physical facts: how many elements one group can
 cover, and how many groups the host must dispatch for a given output. That
 knowledge belongs to the kernel, not to tensor semantics or device acquisition.
 
 [`kernels/addition.ts`](../../src/backends/webgpu/kernels/addition.ts) owns
-`WEBGPU_ADDITION_WORKGROUP_SIZE`, with width 64. Shader construction uses that
-same value in its `@workgroup_size` declaration. The backend imports it for
-both the dispatch-related capacity bound and the ceiling division that computes
+`WEBGPU_ADDITION_WORKGROUP_SIZE`, with width 64;
+[`kernels/multiplication.ts`](../../src/backends/webgpu/kernels/multiplication.ts)
+owns its separate `WEBGPU_MULTIPLICATION_WORKGROUP_SIZE`, also 64. Each shader
+uses its own constant in `@workgroup_size`. The backend imports both for
+the dispatch-related capacity bound and the ceiling division that computes
 the number of groups. There is no second host declaration to keep aligned.
 
 For a nonempty output of `n` elements, dispatch uses `ceil(n / 64)` groups. The
@@ -78,7 +80,7 @@ of those limits.
 
 The three storage bindings and unsigned binary32 arithmetic remain numerical
 kernel responsibilities. Another computation may own different geometry; this
-addition-specific constant is not a runtime-wide launch policy or a kernel
+operation-specific constant is not a runtime-wide launch policy or a kernel
 registry. Changing its value would still require device-limit, dispatch and
 numerical qualification, not just changing a shared declaration.
 
@@ -87,11 +89,13 @@ numerical qualification, not just changing a shared declaration.
 The acquired device is ready before the factory returns, but a compute pipeline
 is prepared only when numerical execution first needs it. Preparation is shared
 within that backend owner, separately for each computation kind. A prepared
-addition pipeline cannot satisfy a sum's preparation. Cache identity is bounded
+addition pipeline cannot satisfy multiplication or sum preparation. Cache identity
+is bounded
 by that owner's device lifetime and the selected kernel semantics; it retains
 neither uniforms nor partial buffers. The numerical implementation and its precision
 constraints are defined in the
-[addition decision](../architecture/webgpu-float32-addition.md), not in the
+[addition decision](../architecture/webgpu-float32-addition.md) and
+[multiplication reference](../reference/tensor-multiplication.md), not in the
 runtime's generic dispatch policy.
 
 Readback uses a dedicated staging allocation: encode a copy, submit it, map

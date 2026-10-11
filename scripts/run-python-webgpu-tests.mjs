@@ -4,10 +4,11 @@ import { browserDefinitions, browserVersion, resolveBrowser, runBrowserPage, sel
 const profiles = [
   { page: "python-webgpu/python-webgpu.html" }, { page: "python-webgpu/python-webgpu-revocation.html" }, { page: "python-webgpu/python-webgpu-attachment.html" },
   { page: "python-webgpu/python-webgpu-revocation.html", operation: "sum" },
+  { page: "python-webgpu/python-webgpu-revocation.html", operation: "mul" },
   ...["device-loss", "worker-loss", "interpreter-loss"].map((mode) => ({ page: "python-webgpu/python-webgpu-loss.html", mode })),
 ];
 const server = await startBrowserServer(profiles.map(({ page }) => page), { crossOriginIsolation: true,
-  assets: ["python-webgpu/python-webgpu.mjs", "python-webgpu/python-webgpu-revocation.mjs", "python-webgpu/python-webgpu-delayed.mjs", "python-webgpu/python-webgpu-attachment.mjs", "python-webgpu/python-webgpu-loss.mjs", "helpers/float32-addition-oracle.mjs", "helpers/float32-sum-oracle.mjs"] });
+  assets: ["python-webgpu/python-webgpu.mjs", "python-webgpu/python-webgpu-revocation.mjs", "python-webgpu/python-webgpu-delayed.mjs", "python-webgpu/python-webgpu-attachment.mjs", "python-webgpu/python-webgpu-loss.mjs", "helpers/float32-addition-oracle.mjs", "helpers/float32-sum-oracle.mjs", "helpers/float32-multiplication-oracle.mjs"] });
 try {
   for (const browser of selectBrowserDefinitions(process.env.TABGRAD_BROWSER ?? "Chrome", browserDefinitions)) {
     const executable = await resolveBrowser(browser);

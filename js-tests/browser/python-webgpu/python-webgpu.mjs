@@ -3,6 +3,13 @@ import { ExecutionTicket } from "/execution/execution-ticket.js";
 import { numericalPairs, exactAddition } from "/helpers/float32-addition-oracle.mjs";
 
 import { exactTotal, exactCases } from "/helpers/float32-sum-oracle.mjs";
+import { exactMultiplication, multiplicationPairs } from "/helpers/float32-multiplication-oracle.mjs";
+
+function expectedMultiplication(pairs, depth) {
+  let bits = pairs.left;
+  for (let step = 0; step < depth; step++) bits = bits.map((left, index) => exactMultiplication(left, pairs.right[index]));
+  return Array.from(bits);
+}
 
 function expectedAddition(pairs, depth) {
   let bits = pairs.left;
@@ -38,6 +45,9 @@ addEventListener("message", async ({ data }) => {
     });
     interpreter.registerJsModule("_test_gpu_observers", { count: () => asynchronousGpuObservers });
     if (data.numericalCorpus) {
+      const products = multiplicationPairs();
+      interpreter.registerJsModule("_test_mul", { left: Array.from(products.left), right: Array.from(products.right),
+        expected: (depth) => expectedMultiplication(products, depth) });
       const sums = exactCases();
       interpreter.registerJsModule("_test_sum", { cases: sums.map((bits) => Array.from(bits)),
         expected: sums.map((bits) => exactTotal(bits).bits) });
@@ -58,6 +68,7 @@ addEventListener("message", async ({ data }) => {
     Object.defineProperty(ExecutionTicket.prototype, "result", descriptor);
     interpreter.unregisterJsModule("_test_gpu_observers");
     if (data.numericalCorpus) {
+      interpreter.unregisterJsModule("_test_mul");
       interpreter.unregisterJsModule("_test_f32");
       interpreter.unregisterJsModule("_test_sum");
     }

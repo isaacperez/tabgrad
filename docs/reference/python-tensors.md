@@ -184,8 +184,9 @@ requirement or a second Python API.
 Managed GPU observation consumes authoritative shared completion from the
 independently progressing physical worker. It may park the interpreter, but
 does not require a local Promise callback to advance the calculation. GPU
-addition, shape-only views and observations share the ordinary runtime path;
-GPU multiplication, reduction and gradients are not enabled by attachment.
+addition, [multiplication](tensor-multiplication.md), total sum, shape-only views
+and observations share the ordinary runtime path. Dimensional reduction and
+GPU gradients remain outside their declared domains.
 Missing backend or unsupported computation is an explicit capability error,
 not implicit CPU execution.
 

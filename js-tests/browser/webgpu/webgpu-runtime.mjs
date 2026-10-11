@@ -2,6 +2,7 @@ import { createWebGpuRuntimeSession } from "/index.js";
 import { exactAddition, equivalentBits, numericalPairs } from "../helpers/float32-addition-oracle.mjs";
 
 import { exactTotal, exactCases } from "../helpers/float32-sum-oracle.mjs";
+import { exactMultiplication, multiplicationPairs } from "../helpers/float32-multiplication-oracle.mjs";
 
 const token = new URLSearchParams(location.search).get("token");
 async function send(endpoint, body) {
@@ -12,6 +13,68 @@ async function send(endpoint, body) {
 }
 
 function check(condition, message) { if (!condition) throw new Error(message); }
+
+async function exerciseMultiplication(session) {
+  const pairs = multiplicationPairs();
+  for (const depth of [1, 8]) {
+    let expected = pairs.left;
+    let current = session.tensor(new Float32Array(pairs.left.buffer), { device: "webgpu" });
+    const right = session.tensor(new Float32Array(pairs.right.buffer), { device: "webgpu" });
+    for (let step = 0; step < depth; step++) {
+      const next = current.mul(right); current.close(); current = next;
+      expected = expected.map((word, index) => exactMultiplication(word, pairs.right[index]));
+    }
+    const before = session.diagnostics().webgpu;
+    const actual = new Uint32Array((await current.toArray()).buffer);
+    check(actual.length === expected.length, "Truncated multiplication corpus");
+    for (let index = 0; index < actual.length; index++) {
+      check(equivalentBits(actual[index], expected[index]), `Product mismatch depth ${depth}, pair ${index}: ${actual[index].toString(16)} != ${expected[index].toString(16)}`);
+    }
+    check(session.diagnostics().webgpu.readbackBytes - before.readbackBytes === actual.byteLength,
+      "Multiplication read an intermediate to host");
+    current.close(); right.close();
+  }
+  for (const shape of [[], [1], [2, 3], [2, 1, 3], [0], [2, 0, 3], ...[63, 64, 65, 127, 128, 129].map((n) => [n])]) {
+    const length = shape.reduce((n, dimension) => n * dimension, 1);
+    const values = Float32Array.from({ length }, (_, index) => index % 2 ? -(index + 1) : index + 1);
+    const input = session.tensor(values, { shape, device: "webgpu" });
+    const alias = input.view(shape);
+    const product = alias.mul(alias);
+    check(JSON.stringify(product.shape) === JSON.stringify(shape), "Multiplication changed the input shape");
+    check(product !== alias && product.device === "webgpu", "Multiplication result identity changed");
+    input.close(); alias.close();
+    const actual = await product.toArray();
+    const completed = session.diagnostics().webgpu;
+    const again = await product.toArray();
+    check(again !== actual && actual.length === length && again.every((value, index) => value === values[index] ** 2), "Multiplication geometry/tail mismatch");
+    check(session.diagnostics().webgpu.kernelCalls === completed.kernelCalls, "Resident multiplication was recomputed");
+    product.close();
+  }
+  const input = session.tensor([1 + 2 ** -23], { shape: [], device: "webgpu" });
+  const right = session.tensor([1 - 2 ** -23], { shape: [], device: "webgpu" });
+  const offset = session.tensor([-1], { shape: [], device: "webgpu" });
+  const product = input.mul(right);
+  const productAlias = product.view([1]);
+  const result = product.add(offset);
+  input.close(); right.close(); offset.close(); product.close();
+  const before = session.diagnostics().webgpu;
+  const actual = new Uint32Array((await result.toArray()).buffer)[0];
+  check(actual === 0, "Multiply/add fused across an observable rounding boundary");
+  const after = session.diagnostics().webgpu;
+  check(after.kernelCalls - before.kernelCalls === 2 && after.readbackBytes - before.readbackBytes === 4, "Mixed multiplication/addition stages did not stay resident");
+  result.close();
+  check((await productAlias.toArray())[0] === 1 && session.diagnostics().webgpu.kernelCalls === after.kernelCalls,
+    "Retained product alias lost storage or recomputed");
+  productAlias.close();
+  // An unobserved result must not acquire physical buffers or retain inputs.
+  for (let repetition = 0; repetition < 16; repetition++) {
+    const tensor = session.tensor([2], { device: "webgpu" });
+    const unused = tensor.mul(tensor);
+    tensor.close(); unused.close();
+  }
+  // Session close below is the physical drain boundary; handle retirement can
+  // still have asynchronous releases queued here.
+}
 
 async function exerciseTotalSum(session) {
   for (const [index, bits] of exactCases().entries()) {
@@ -71,6 +134,17 @@ async function exerciseTotalSum(session) {
 }
 
 async function exercise(session) {
+  const x = session.tensor([2, -3, 4], { device: "webgpu" });
+  const weights = session.tensor([5, 2, -1], { device: "webgpu" });
+  const product = x.mul(weights);
+  const total = product.sum();
+  x.close(); weights.close(); product.close();
+  const beforeProduct = session.diagnostics().webgpu;
+  check((await total.toArray())[0] === 0, "Weighted GPU product mismatch");
+  check(session.diagnostics().webgpu.readbackBytes - beforeProduct.readbackBytes === 4,
+    "Weighted product read an intermediate back to the host");
+  total.close();
+  await exerciseMultiplication(session);
   await exerciseTotalSum(session);
   const pairs = numericalPairs();
   for (const depth of [1, 8]) {

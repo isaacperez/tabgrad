@@ -59,7 +59,7 @@ import torch, gc
 session = torch._runtime_session
 def caught_revocation():
     x = torch.tensor([float(index % 32) for index in range(65536)], dtype=torch.float32, device='webgpu')
-    y = ${operation === "sum" ? "x.sum()" : "x + x"}
+    y = ${operation === "sum" ? "x.sum()" : operation === "mul" ? "x * x" : "x + x"}
     try:
         y.tolist()
     except Exception as error:

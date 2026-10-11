@@ -2,7 +2,7 @@
 
 This contributor procedure separates device acquisition, pipeline preparation,
 host upload, resident execution and staging readback. It measures the concrete
-contiguous float32 addition backend, not whole-model throughput, native PyTorch
+contiguous float32 numerical backend, not whole-model throughput, native PyTorch
 performance or isolated hardware kernel time. Use the shared
 [performance policy](../performance.md) to decide whether its observation
 boundaries can answer a particular question.
@@ -169,3 +169,34 @@ three stages, so this range does not measure a stage-count transition. There
 is no earlier production GPU sum to serve as a before/after timing baseline.
 Descriptive cost, accuracy and resource evidence must not be relabeled as a
 speedup, CPU/GPU numerical equivalence or general scaling guarantee.
+
+## Multiplication and bounded binary comparison
+
+`npm run measure:webgpu -- pilot mul`, followed by `measure mul` only after
+adequate calibration, selects multiplication in the same resident binary
+procedure. `pilot add bounded` and `measure add bounded` select addition with
+exactly that bounded workload, including for an unchanged-operation comparison
+against a base revision. The runner records operation and profile; omitted
+arguments preserve the existing addition workload. Sum uses its separate page.
+
+The bounded profile uses 65,536, 262,144 and 1,048,576 elements, independently
+varying length and depth. Pilot depth is eight with three batches; decision
+depths are one and eight with five batches. Each batch has sixteen serialized
+invocations after three excluded warmup batches. The retained-intermediate
+comparison uses the smallest length at both depths. The descriptive public
+sample uses 1,048,576 elements and depth eight. Input generation, setup clocks,
+readback, release boundaries and sample checks follow the binary procedure
+above; expected products round at every operation. Multiplication by public
+sample ones is explicitly a separate integration distribution.
+
+This profile preflights and checks a 32 MiB owned-buffer cap; it does not
+increase the five-second phase or sixty-second workload budgets. It introduces
+no tensor larger than 1,048,576 elements. Reports for multiplication use
+`test-results/webgpu-mul-{pilot,measure}-*.json`; bounded addition retains the
+addition filename and identifies its profile inside the report. Owned counters
+resolve allocation/reuse obligations exactly but exclude shader compiler,
+driver, interpreter and process memory. Timing includes host and submission
+costs: calibrate endpoint sensitivity and variation rather than inferring
+speed from operation count. No earlier GPU multiplication exists as a temporal
+baseline, and a comparison of unchanged addition cannot prove temporal
+equivalence below the method's sensitivity.

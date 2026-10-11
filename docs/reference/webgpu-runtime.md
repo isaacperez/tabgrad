@@ -77,7 +77,11 @@ Admission requires the acquired device's sum workgroup and parameter-buffer
 limits before recording work. Kernels use input geometry, not the output's
 single element.
 
-GPU multiplication, dimensional reductions and gradients are outside this execution
+GPU `mul` accepts the same equal-shape operands and composes with addition,
+views and total sum. The [multiplication reference](tensor-multiplication.md)
+owns its call forms, exact stored-binary32 product rounding and exclusions.
+
+Dimensional reductions and gradients are outside this execution
 domain. Capability rejection happens before recording unsupported work.
 `requiresGrad: true` and GPU gradient requests use `UNSUPPORTED_GRADIENT`;
 unsupported computations use `BACKEND_CAPABILITY_MISMATCH`. Mixing CPU and GPU

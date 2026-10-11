@@ -36,23 +36,25 @@ result has the same shape, dtype and device as its inputs; `await result.toArray
 returns the ordinary independent flat `Float32Array`. Close JavaScript handles
 and their session under the existing explicit lifetime contract.
 
-The supported domain is two equal-shape contiguous CPU float32 tensors in one
-session. It includes scalar tensors, every supported contiguous rank,
+The supported domain is two equal-shape contiguous float32 tensors on the same
+device in one session: CPU, or `webgpu` with an attached ready GPU owner. It
+includes scalar tensors, every supported contiguous rank,
 singleton and empty dimensions, and whole-contiguous views. Shape equality
 compares every dimension: equal element counts, or broadcastable unequal
 shapes, are insufficient. Two rank-zero tensors multiply normally; a tensor
 and a Python or JavaScript number do not. The result owns distinct logical
 storage and never mutates either input or a live alias.
 
-Broadcasting, host-number operands, promotion, other dtypes or devices,
+Broadcasting, host-number operands, promotion, other dtypes or device mixing,
 non-contiguous layouts, in-place multiplication, output-buffer
 mutation and `multiply` aliases are outside this contract. PyTorch supports
 many of these forms; their rejection is Tabgrad's intentional subset boundary.
 
-Tracked operands participate in [functional gradients](functional-gradients.md).
+Tracked CPU operands participate in [functional gradients](functional-gradients.md).
 Each tracked input's derivative saves the opposite operand, including when that
 operand does not track. Numerical saved values have an independent lifetime
 from the forward execution dependencies described below.
+GPU gradient tracking and requests remain unsupported.
 
 ## Admission and resource ownership
 
@@ -66,7 +68,7 @@ a numerical backend. Its work depends on operand and rank metadata.
 Views, addition, multiplication and total sum compose before observation.
 Observation selects a finite graph using the common
 [program formation owner](../components/program-formation.md), then invokes the
-selected CPU kernels. Closing input handles after admission preserves a pending
+selected device kernels. Closing input handles after admission preserves a pending
 result. Repeated observation reuses completed numerical work. Abandoned pending
 work and completed ancestry follow the shared
 [semantic lifetime rules](../components/semantic-value-lifetimes.md).
@@ -78,12 +80,15 @@ consumers retain their logical values; the backend reuses private scratch only
 after all physical input occurrences finish. It allocates an output disjoint
 from both inputs before retiring them. Failure rollback preserves unrelated
 resident values and records multiplication provenance; a trap quarantines the
-context. The [CPU storage contract](../components/cpu-invocation-storage.md)
-owns those shared rules.
+CPU context. The [CPU storage contract](../components/cpu-invocation-storage.md)
+and [GPU physical owner](../components/webgpu-backend.md) define their respective
+reuse, failure and drain rules. GPU multiplication keeps intermediate values
+resident and uses no private scratch buffers beyond its distinct output.
 
 ## Numerical behavior
 
-Each element is multiplied in float32. Products can round, underflow to signed
+Each pair of stored binary32 elements has its exact product rounded once to
+nearest, ties to even. Products can underflow to signed
 zero or overflow to signed infinity. Subnormal values remain part of the
 domain. NaN propagates by classification, and zero times infinity produces
 NaN; NaN payload bits are not promised. A product followed by addition remains
@@ -98,6 +103,21 @@ separate multiply-add case distinguishes rounding after multiplication from
 fusion. These bounded comparisons do not imply universal native/browser bitwise
 identity or support for PyTorch's broader operand and dtype rules.
 
+The GPU shader uses integer arithmetic because WGSL floating-point evaluation
+permits flushing subnormals and relaxing non-finite and signed-zero behavior.
+It normalizes each nonzero finite significand to 24 bits, retains the complete
+48-bit product in two unsigned words, and rounds with all discarded bits.
+Subnormal output uses the same single rounding step with a larger shift;
+normal carry and overflow are applied afterwards. The bounds and carry argument
+are local to [the kernel](../../src/backends/webgpu/kernels/multiplication.ts).
+The [WGSL evaluation rules](https://www.w3.org/TR/2026/CRD-WGSL-20260921/#floating-point-evaluation)
+explain why ordinary shader `f32` multiplication is insufficient for this domain.
+An independent BigInt quotient/remainder oracle, calibrated against the native
+fixture and binary64 products, exercises exponent pairs, significand boundaries,
+all subnormal normalization distances, exceptional values and repeated products
+in physical direct and managed GPU tests. This is bounded qualification, not
+exhaustive enumeration of all operand pairs or all hardware.
+
 ## Errors and the kernel contract
 
 Malformed Python calls, non-tensor operands and invalid receivers raise
@@ -109,7 +129,7 @@ sessions with `DIFFERENT_SESSION`, and unequal shapes with `SHAPE_MISMATCH`.
 Incorrect JavaScript arity raises `TypeError`. Rejection records no operation
 or numerical request.
 
-The private raw export is
+On CPU the private raw export is
 `tabgrad_mul_f32(left_offset, right_offset, output_offset, length) -> status`.
 The scalar and SIMD modules share the unsigned 32-bit ABI and range validation.
 Every range must be four-byte aligned, start at or above the host arena, and
@@ -118,9 +138,11 @@ overlapping read-only inputs are legal. Zero length reads and writes nothing,
 including when all offsets are at memory's end. Status and module validation
 follow the [CPU ABI reference](../architecture/webassembly-cpu-backend.md#version-1-raw-abi-and-module-capabilities).
 
-The kernel performs linear work with constant local state and no input-sized
-scratch. SIMD processes four elements at a time and a scalar tail of up to
-three. Required materialization, output storage, upload and readback remain
+Both device kernels perform linear work with constant local state and no
+input-sized scratch. CPU SIMD processes four elements at a time and a scalar
+tail of up to three. GPU launch geometry is owned by its kernel and guarded at
+the output length; empty outputs dispatch no compute pass. Required
+materialization, output storage, upload and readback remain
 separate costs. Graph formation and retirement preserve their existing linear
 bounds in selected values and operand occurrences. Payload counters, aligned
 allocator reservations, WebAssembly capacity and process memory are different
