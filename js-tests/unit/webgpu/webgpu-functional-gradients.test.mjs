@@ -184,6 +184,55 @@ for (const phase of ["encoding", "submission", "readback"]) {
   });
 }
 
+for (const phase of ["encoding", "submission", "readback"]) {
+  test(`same-session GPU derivative ${phase} failures and recoveries retain only fixed owners`, async (context) => {
+    const cause = new Error(`recoverable ${phase} failure`);
+    let failing = false;
+    const acquired = executionDevice({ mapping: () => failing && phase === "readback" ? Promise.reject(cause) : Promise.resolve() });
+    const bind = acquired.createBindGroup, submit = acquired.queue.submit;
+    acquired.createBindGroup = (descriptor) => {
+      if (failing && phase === "encoding") throw cause;
+      return bind(descriptor);
+    };
+    acquired.queue.submit = (commands) => {
+      if (failing && phase === "submission") throw cause;
+      return submit(commands);
+    };
+    const session = await openSession(context, acquired);
+    try {
+      const input = session.tensor([2, 3], { device: "webgpu", requiresGrad: true });
+      await input.toArray();
+      await new Promise((resolve) => setImmediate(resolve));
+      const baseline = session.diagnostics();
+      const fixedBuffers = acquired.buffers.filter((buffer) => !buffer.destroyed);
+      assert.equal(fixedBuffers.length, 1);
+      for (let repetition = 0; repetition < 16; repetition++) {
+        for (const shouldFail of [true, false]) {
+          const product = input.mul(input), loss = product.sum(), [gradient] = session.grad(loss, [input]);
+          assert.equal(session.diagnostics().liveSavedValues, 0);
+          failing = shouldFail;
+          if (shouldFail) await assert.rejects(gradient.toArray(), (error) => error.cause === cause);
+          else assert.equal((await gradient.toArray()).length, 2);
+          // The double checks ownership and recovery, not derivative arithmetic.
+          gradient.close(); loss.close(); product.close();
+          await new Promise((resolve) => setImmediate(resolve));
+          const state = session.diagnostics();
+          for (const key of ["liveTensorHandles", "liveTensorValues", "liveOperationRecords", "liveMaterializationRecords", "liveDerivativeNodes", "liveSavedValues", "liveRequestLeases"]) {
+            assert.equal(state[key], baseline[key], `${key}: repetition ${repetition}, failure ${shouldFail}`);
+          }
+          assert.equal(state.webgpu.ownedBufferBytes, baseline.webgpu.ownedBufferBytes);
+          assert.equal(state.webgpu.pendingSubmissions, 0);
+          assert.equal(state.webgpu.unknownCompletionBytes, 0);
+          assert.deepEqual(acquired.buffers.filter((buffer) => !buffer.destroyed), fixedBuffers);
+        }
+      }
+      input.close();
+    } finally { await session.close(); }
+    assert.equal(session.diagnostics().webgpu.ownedBufferBytes, 0);
+    assert.ok(acquired.buffers.every((buffer) => buffer.destroyed));
+  });
+}
+
 test("pending GPU derivative close waits for actual drain", async (context) => {
   const gate = deferred(), started = deferred();
   const acquired = executionDevice({ completion() { started.resolve(); return gate.promise; } });

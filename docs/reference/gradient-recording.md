@@ -107,7 +107,9 @@ special no-grad origin independently of their bound entry. CPU
 [`copy_`](tensor-copy.md) adds version checks, dirty-view guards and rebasing
 under the [persistent update architecture](../architecture/cpu-tensor-updates.md).
 No decorator, general grad-mode setter, inference mode,
-forward AD, higher-order mode or GPU gradient support is provided.
+forward AD or higher-order mode is provided. CPU and WebGPU tracking support
+the same [functional gradient domain](functional-gradients.md); persistent
+gradient state remains CPU-only.
 
 ## Evidence and costs
 

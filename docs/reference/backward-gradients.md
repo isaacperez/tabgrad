@@ -119,5 +119,6 @@ pending work, rather than completed call count. Internal tests count these
 occurrences; public diagnostics retain their established shape. Logical counters
 establish no timing or total process-memory guarantee.
 
-GPU gradients, optimizers, public retention hooks, higher-order graphs, JVP,
-broader dtypes/layouts and general broadcasting remain outside this boundary.
+GPU backward and persistent gradient state, GPU optimizers, public retention
+hooks, higher-order graphs, JVP, broader dtypes/layouts and general broadcasting
+remain outside this boundary.
