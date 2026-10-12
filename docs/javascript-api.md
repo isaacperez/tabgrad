@@ -46,7 +46,7 @@ the captured previous mode on completion or failure. It shares the Python
 defines overlap, factory exceptions and views whose advertised tracking has no
 ordinary derivative accumulator.
 
-`Tensor.copy_(source)` preserves handle identity and updates its CPU alias family.
+`Tensor.copy_(source)` preserves handle identity and updates its CPU or WebGPU alias family.
 The [copy reference](reference/tensor-copy.md) defines active/no-grad guards,
 versions, captured reads, mandatory progress and failure.
 

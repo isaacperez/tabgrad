@@ -1,7 +1,7 @@
-# Persistent CPU tensor updates
+# Persistent tensor updates
 
-This chapter explains the accepted contract for an equal-shape contiguous CPU
-`float32` update. Its reader is a contributor who understands
+This chapter explains the accepted contract for an equal-shape contiguous
+`float32` update on the same CPU or WebGPU device. Its reader is a contributor who understands
 [semantic state](semantic-state.md) and needs to preserve tensor identity,
 deferred reads, differentiation and release while replacing a tensor's current
 numbers. Public release support is established separately by the
@@ -38,7 +38,7 @@ zero control cost nor implies that sharing is faster than another arrangement.
 ## Preserve the bounded observable contract
 
 The decision covers scalars, empty tensors and equal-shape whole-storage views
-of contiguous CPU `float32` values. General strides, offsets, broadcasting,
+of contiguous `float32` values on the same supported device. General strides, offsets, broadcasting,
 conversion and cross-device or cross-session copies are outside this domain.
 Those boundaries are not claims that PyTorch rejects the broader calls.
 
@@ -47,7 +47,8 @@ The Python contract is `Tensor.copy_(other, non_blocking=False)` and the
 its shape and alias identity, and advances its family version exactly once
 after successful admission, including self-copy, empty copy and equal-data
 copy. The source is captured before that transition, so whole-storage overlap
-is well defined. The CPU boolean option does not change numerical semantics.
+is well defined. The boolean option does not change semantics within this
+same-device domain; cross-device transfers remain excluded.
 
 The pinned native reference accepts positional source, `other=` and positional
 or keyword boolean `non_blocking`. Its effective `other` keyword differs from
@@ -123,9 +124,55 @@ later semantic error; the whole traversal is not transactional. The
 [CPU gradient-state contract](cpu-gradient-state.md#progress-and-failure-belong-to-executing-nodes)
 owns this rule for functional and accumulating differentiation. The
 [compatibility record](../compatibility.md#functional-failure-progress) identifies
-the existing functional implementation's whole-selected preflight discrepancy.
+the historical whole-selected preflight discrepancy and its correction.
 Admitted derivative operations own their captured numeric inputs independently
 after the history releases its saves.
+
+## WebGPU publication and request progression
+
+The GPU specialization was accepted under
+[research #264](https://github.com/isaacperez/tabgrad/issues/264#issuecomment-6118318280),
+with [bounded evidence](https://github.com/isaacperez/tabgrad/issues/264#issuecomment-6113557660)
+and [independent challenge](https://github.com/isaacperez/tabgrad/issues/264#issuecomment-6113558096).
+It extends immutable backing sharing between separately versioned families.
+The semantic runtime owns admission, history, writer outcomes and visibility;
+the ordinary execution request owns progression; the selected backend owns
+physical allocation, generation and drain. No backend mutation interface or
+destination-copy kernel is implied by a semantic copy.
+
+A host-ready captured source can publish without becoming GPU resident.
+A computed source must materialize through its ordinary finite program, while
+an already resident backing needs no duplicate allocation or byte copy. All
+paths, including self and empty copy, check captured causal outcomes and the
+current backend generation before publishing success. Later observation still
+uses the selected GPU; host readiness does not authorize CPU fallback.
+
+Mandatory requests attach a result driver to genuinely suspended work even
+when the public result is discarded. This driver does not require a consumer
+Promise or allocate one for completed local work. Ordinary managed Python
+observation advances synchronously readable predecessors through the same
+request and shared completion authority. It leaves unrelated caller-owned
+errors with their observers, and rejects when a remaining predecessor depends
+on an interpreter-local callback. Late notifications cannot advance a consumed
+step again. Logical publication unlinks a queue entry; source pins and physical
+leases retire independently after drain or accounted terminal loss.
+
+Active copy keeps its connected old-destination edge, including exact positive
+zeros for nonfinite incoming gradients. On GPU, these zeros use a stored scalar
+and the existing bit-preserving expansion through the ordinary program path;
+they are neither CPU arrays nor multiplication by zero. This domain supports
+functional differentiation and no-grad updates, not GPU backward, persistent
+gradient slots or SGD.
+
+A fresh immutable physical copy remains a preserving alternative, but adds a
+byte-copy/allocation path and its transport/completion ownership. Inplace or
+exclusive-write hybrids require snapshots for every entitled old owner and
+independent source family, read/write hazard protection, self/overlap handling
+and partial-failure isolation. Existing read-only resident bindings cannot
+become writable scratch. Sharing fits the present ownership boundaries; the
+decision establishes no latency, RSS or physical VRAM winner. Reconsider it on
+supported workload evidence of a concrete limit or qualified write benefit.
+Changes to the physical arrangement must preserve the same observable contract.
 
 ## Account for numeric ownership exactly once
 

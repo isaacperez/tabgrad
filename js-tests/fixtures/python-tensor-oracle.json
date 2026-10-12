@@ -16722,6 +16722,20 @@
       ]
     },
     {
+      "name": "active-copy-nonfinite-connected-zeros",
+      "source": "\nimport struct\nx = torch.tensor([2., 4.], dtype=torch.float32, requires_grad=True)\ns = torch.tensor([7., 9.], dtype=torch.float32, requires_grad=True)\nd = x + x\nd.copy_(s)\ng = torch.autograd.grad(d, (x, s), torch.tensor([float('nan'), float('inf')], dtype=torch.float32))\nreport = [[struct.unpack('<I', struct.pack('<f', value))[0] for value in tensor.tolist()] for tensor in g]\n",
+      "expected": [
+        [
+          0,
+          0
+        ],
+        [
+          2143289344,
+          2139095040
+        ]
+      ]
+    },
+    {
       "name": "view-copy-consumption-and-cutoff",
       "source": "\nx = torch.tensor([2., 4.], dtype=torch.float32, requires_grad=True)\ns = torch.tensor([[7., 9.]], dtype=torch.float32, requires_grad=True)\nb = x + x\nv = b.view(1, 2)\nold = v + v\nv.copy_(s)\ng = torch.autograd.grad(v, s, torch.tensor([[1., 1.]], dtype=torch.float32))[0]\ntry:\n    torch.autograd.grad(v, s, torch.tensor([[1., 1.]], dtype=torch.float32))\nexcept Exception as error:\n    consumed = type(error).__name__\ncutoff = torch.autograd.grad(v, b, torch.tensor([[1., 1.]], dtype=torch.float32))[0]\nold_g = torch.autograd.grad(old, x, torch.tensor([[1., 1.]], dtype=torch.float32))[0]\nreport = [v.tolist(), b.tolist(), g.tolist(), consumed, cutoff.tolist(), old_g.tolist()]\n",
       "expected": [

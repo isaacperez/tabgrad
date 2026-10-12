@@ -129,7 +129,7 @@ There is no queue or task scheduler. A competing entry rejects with
 releases the entry reservation, permitting a later script while the binding
 remains open. Repeated scripts share the host's existing Python globals.
 
-Before completion, the bridge joins mandatory CPU copy effects even if the
+Before completion, the bridge joins mandatory copy effects even if the
 script discarded their return or raised. Script failure stays primary when
 effect completion also fails; both are preserved. This joins the same runtime
 queue, without a second scheduler.

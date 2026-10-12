@@ -35,9 +35,15 @@ and returns executable structure separately from invocation bindings. It does
 not execute numerical work or change semantic ownership.
 
 Captured writer outcomes are checked before every observation fast path.
-Mandatory CPU copy effects use this same queue and keep source Q pins until
+Mandatory copy effects use this same queue and keep source Q pins until
 retirement; closing a handle cannot cancel them. Successful publication checks
 backend generation and predecessor/source outcomes.
+
+A mandatory shared-ticket request has an asynchronous result driver even
+without a consumer Promise. A synchronous observer can advance readable
+predecessors through this same queue without consuming their caller-owned
+outcomes. A predecessor requiring local callbacks still rejects synchronous
+observation. These paths share publication and physical retirement.
 
 Ready CPU host data takes a shorter route inside this same owner. It already has
 numerical storage, so the runtime copies that storage directly rather than

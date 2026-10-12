@@ -19,15 +19,15 @@ function closeHandles(handles) {
 }
 
 /** Run the native progress matrix through real handles; no internal node order is observed. */
-export async function checkGradientProgress(session, fixture) {
+export async function checkGradientProgress(session, fixture, device = "cpu") {
   const c = fixture.config;
   const shape = [];
   let level = c.x_data;
   while (Array.isArray(level)) { shape.push(level.length); level = level[0]; }
   const handles = [];
   try {
-    const x = keepHandle(handles, session.tensor(flatten(c.x_data), { shape, requiresGrad: true }));
-    const y = keepHandle(handles, session.tensor(flatten(c.y_data), { shape, requiresGrad: true }));
+    const x = keepHandle(handles, session.tensor(flatten(c.x_data), { shape, requiresGrad: true, device }));
+    const y = keepHandle(handles, session.tensor(flatten(c.y_data), { shape, requiresGrad: true, device }));
     const shared = c.kind === "shared" ? keepHandle(handles, x.mul(x)) : y;
     let good;
     if (c.good_first) good = keepHandle(handles, c.good_saved ? shared.mul(shared) : shared.add(shared));
@@ -44,7 +44,7 @@ export async function checkGradientProgress(session, fixture) {
     const changed = c.kind === "shared" ? y : x;
     // A self-copy changes the same native mutation version without changing numbers.
     session.noGrad(() => changed.copy_(changed));
-    const seed = keepHandle(handles, session.tensor(flatten(c.seed_data), { shape }));
+    const seed = keepHandle(handles, session.tensor(flatten(c.seed_data), { shape, device }));
     const tensors = { root, good, bad, shared, x, y };
     for (let index = 0; index < c.calls.length; index++) {
       const [output, inputs] = c.calls[index];
@@ -78,11 +78,11 @@ export async function checkGradientProgress(session, fixture) {
 }
 
 /** Shared fixture source observes the same Python calls and error categories in Pyodide. */
-export function pythonGradientProgressChecks(oracle) {
+export function pythonGradientProgressChecks(oracle, device = "cpu") {
   return oracle.gradientProgressCases.map(fixture => `
 import torch, json, gc
 def check_gradient_progress_fixture():
-${fixture.source.trimEnd().split("\n").map(line => `    ${line}`).join("\n")}
+${fixture.source.replaceAll("dtype=torch.float32", `dtype=torch.float32, device=${JSON.stringify(device)}`).trimEnd().split("\n").map(line => `    ${line}`).join("\n")}
     assert report == json.loads(${JSON.stringify(JSON.stringify(fixture.expected))}), ${JSON.stringify(fixture.name)}
 check_gradient_progress_fixture()
 gc.collect()

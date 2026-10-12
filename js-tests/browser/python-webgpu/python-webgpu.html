@@ -44,8 +44,10 @@
         await client.runPythonAsync(`
 import torch, gc
 import _test_grad
+import _test_copy
 from pyodide.code import eval_code_async
 await eval_code_async(str(_test_grad.source), globals=globals())
+await eval_code_async(str(_test_copy.source), globals=globals())
 session = torch._runtime_session
 gpu = torch.device('webgpu')
 assert gpu.type == 'webgpu' and gpu.index is None and str(gpu) == 'webgpu'
@@ -188,6 +190,16 @@ assert session.diagnostics().liveRequestLeases == 0
 assert session.diagnostics().liveTensorHandles == 0
 assert session.diagnostics().webgpu.ownedBufferBytes == 0
 `);
+        // The last work in this entry has no tensor observation to drive it.
+        await client.runPythonAsync(`
+def dropped_gpu_copy():
+    x = torch.tensor([2., 3.], dtype=torch.float32, device='webgpu')
+    p = torch.tensor([0., 0.], dtype=torch.float32, device='webgpu')
+    p.copy_(x*x)
+dropped_gpu_copy()
+gc.collect()
+`);
+        await client.runPythonAsync("gc.collect(); assert session.diagnostics().liveRequestLeases == 0; assert session.diagnostics().liveTensorHandles == 0; assert session.diagnostics().webgpu.ownedBufferBytes == 0");
         await client.close();
         const result = await finished;
         if (result.diagnostics.webgpu.state !== "closed") throw new Error("Graceful GPU close was classified as loss.");

@@ -1,9 +1,9 @@
-# Persistent CPU tensor copy
+# Persistent tensor copy
 
 Use `destination.copy_(other, non_blocking=False)` in Python or
 `destination.copy_(source)` in JavaScript to replace an existing tensor's
 numbers while preserving its public identity and whole-storage aliases.
-This reference covers same-session, exactly equal-shape contiguous CPU
+This reference covers same-session, same-device, exactly equal-shape contiguous CPU or WebGPU
 float32 tensors, including scalar and empty shapes. The
 [accepted architecture](../architecture/cpu-tensor-updates.md) owns the design;
 [compatibility evidence](../compatibility.md#python-tensor-evidence) bounds the
@@ -13,7 +13,7 @@ PyTorch claim.
 
 Python accepts one tensor as positional `other` or `other=`, and an optional
 built-in boolean `non_blocking` positionally or by keyword. Both boolean values
-have the same CPU behavior. The method returns the identical Python object;
+have the same behavior in this same-device domain. The method returns the identical Python object;
 JavaScript likewise returns the identical handle. Native PyTorch 2.14.0's
 effective keyword is `other`, although its documentation names `src`.
 `src=` is not accepted. Invalid binding and nonboolean options raise `TypeError`.
@@ -26,7 +26,7 @@ self-copy, identical values and empty tensors. Version counters are private;
 this interface does not expose native `_version`, `is_leaf` or `grad_fn`.
 
 Broadcasting, scalar-number sources, conversion, cross-session copy, arbitrary
-strides/offsets and GPU mutation are excluded. These include calls that native
+strides/offsets and cross-device transfer are excluded. These include calls that native
 PyTorch accepts; their rejection is a Tabgrad subset limit. Shape/domain
 failures raise `RuntimeError` in Python. Invalid handles and unsupported domains
 have structured JavaScript errors. Binding, gradient/view guards, domain and
@@ -101,6 +101,13 @@ discarding its return does not cancel it. Publication waits for predecessor,
 source and backend generation success even for host-ready, resident, self or
 empty copies. JavaScript observations, managed Python entry completion and
 session close join this work. Observation returns an independent copy.
+
+For GPU copy, ordinary Python observation progresses readable shared-ticket
+predecessors without interpreter-local callbacks. A discarded computed copy
+also finishes at managed entry completion. Host-ready sources can publish
+logically without an upload; this does not promise residency. Every observation
+still uses the selected device. Connected zero derivatives stay on that device.
+GPU persistent gradient slots, backward and SGD remain excluded.
 
 Each gradient result also carries the captured root, traversed-history and
 explicit-seed outcomes, even when its numbers are a constant zero or a cutoff

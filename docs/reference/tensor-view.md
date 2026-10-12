@@ -96,9 +96,8 @@ special creation provenance and saved-version failures.
 This operation covers shape changes of whole contiguous float32 storage in
 the frontend/device domains stated above.
 It does not provide dtype reinterpretation, reshape with copy fallback,
-`view_as`, transpose, slicing, offsets, arbitrary strides. Equal-shape CPU mutation through
-[`copy_`](tensor-copy.md) updates the shared alias family; GPU views remain
-read-only.
+`view_as`, transpose, slicing, offsets, arbitrary strides. Same-device equal-shape mutation through
+[`copy_`](tensor-copy.md) updates the shared alias family on CPU or WebGPU.
 There is no public storage-pointer interface.
 
 Admission costs are proportional to source and target rank, not payload size

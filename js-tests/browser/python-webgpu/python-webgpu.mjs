@@ -5,6 +5,8 @@ import { numericalPairs, exactAddition } from "/helpers/float32-addition-oracle.
 import { exactTotal, exactCases } from "/helpers/float32-sum-oracle.mjs";
 import { exactMultiplication, multiplicationPairs } from "/helpers/float32-multiplication-oracle.mjs";
 import { pythonFunctionalGradientChecks } from "/helpers/functional-gradient-cases.mjs";
+import { pythonCopyFixtureChecks } from "/helpers/python-copy-cases.mjs";
+import { pythonGradientProgressChecks } from "/helpers/gradient-progress-cases.mjs";
 
 function expectedMultiplication(pairs, depth) {
   let bits = pairs.left;
@@ -48,7 +50,9 @@ addEventListener("message", async ({ data }) => {
     if (data.numericalCorpus) {
       const response = await fetch("/helpers/functional-gradient-oracle.json");
       if (!response.ok) throw new Error("Native functional oracle unavailable");
-      interpreter.registerJsModule("_test_grad", { source: pythonFunctionalGradientChecks(await response.json(), "webgpu") });
+      const oracle = await response.json();
+      interpreter.registerJsModule("_test_grad", { source: pythonFunctionalGradientChecks(oracle, "webgpu") });
+      interpreter.registerJsModule("_test_copy", { source: pythonCopyFixtureChecks(oracle, "webgpu") + pythonGradientProgressChecks(oracle, "webgpu") });
       const products = multiplicationPairs();
       interpreter.registerJsModule("_test_mul", { left: Array.from(products.left), right: Array.from(products.right),
         expected: (depth) => expectedMultiplication(products, depth) });
@@ -73,6 +77,7 @@ addEventListener("message", async ({ data }) => {
     interpreter.unregisterJsModule("_test_gpu_observers");
     if (data.numericalCorpus) {
       interpreter.unregisterJsModule("_test_grad");
+      interpreter.unregisterJsModule("_test_copy");
       interpreter.unregisterJsModule("_test_mul");
       interpreter.unregisterJsModule("_test_f32");
       interpreter.unregisterJsModule("_test_sum");

@@ -182,7 +182,8 @@ Functional calls do not automatically accumulate leaf gradients. On CPU, already
 retained nonleaves can receive contributions, including at input cutoffs; the
 [backward reference](backward-gradients.md) owns persistent slot behavior.
 GPU backward, non-null gradient assignment, persistent accumulation/retention,
-copy and SGD remain unsupported. Reading an absent GPU `.grad` returns `None`
+and SGD remain unsupported. Same-device [`copy_`](tensor-copy.md) supports
+functional copy derivatives and no-grad parameter updates. Reading an absent GPU `.grad` returns `None`
 in Python or `null` in JavaScript; assigning `None`/`null` keeps it absent.
 Higher-order graphs, JVP, public broadcasting, axis reduction and
 broader dtype/device/layout remain excluded. These exclusions do not change

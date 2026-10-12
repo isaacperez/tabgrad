@@ -94,6 +94,12 @@ Capability rejection happens before recording unsupported work. Mixing CPU and G
 operands is rejected, not interpreted as a transfer. CPU behavior remains
 governed by its own operation references.
 
+Same-device equal-shape [`copy_`](tensor-copy.md) updates a tensor and its
+whole-storage aliases while preserving public identity and captured old reads.
+Source and destination remain independently mutable families even when they
+share immutable resident storage. Functional copy derivatives and no-grad
+parameter updates use this same runtime and backend.
+
 Allocation admission is bounded by the acquired device's buffer and storage
 binding limits and the encoder's one-dimensional dispatch capacity. For the
 64-invocation workgroups used by this backend, the latter permits at most
