@@ -4,6 +4,7 @@ import type { ExecutableProgram, LoweredComputation, ProgramSlot } from "../../e
 import { tensorElementCount } from "../../runtime/tensor-shape.js";
 import { WEBGPU_ADDITION_SOURCE, WEBGPU_ADDITION_WORKGROUP_SIZE } from "./kernels/addition.js";
 import { WEBGPU_MULTIPLICATION_SOURCE, WEBGPU_MULTIPLICATION_WORKGROUP_SIZE } from "./kernels/multiplication.js";
+import { WEBGPU_COEFFICIENT_ADDITION_SOURCE, WEBGPU_COEFFICIENT_ADDITION_WORKGROUP_SIZE, WEBGPU_COEFFICIENT_UNIFORM_BYTES } from "./kernels/coefficient-addition.js";
 import { WEBGPU_EXPANSION_SOURCE, WEBGPU_EXPANSION_WORKGROUP_SIZE } from "./kernels/expansion.js";
 import { WEBGPU_SUM_SOURCE, WEBGPU_SUM_GROUP_ELEMENTS, WEBGPU_SUM_PARTIAL_BYTES, WEBGPU_SUM_WORKGROUP_BYTES, WEBGPU_SUM_WORKGROUP_SIZE } from "./kernels/sum.js";
 import { ExecutionTicket } from "../../execution/execution-ticket.js";
@@ -51,6 +52,8 @@ interface GpuReadback {
   mapping?: Promise<Float32Array>;
 }
 
+type WebGpuComputationKind = "add-f32" | "add-alpha-f32" | "mul-f32" | "sum-f32" | "expand-f32";
+
 /** Owns the acquired device, its private buffers, pipelines and physical completion. */
 export class WebGpuBackend implements WebGpuExecutionBackend {
   readonly synchronousObservation = false;
@@ -64,8 +67,8 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
   readonly #limits: WebGpuDiagnostics["limits"];
   #failure: TabgradError | undefined;
   #closed = false;
-  readonly #pipelines = new Map<"add-f32" | "mul-f32" | "sum-f32" | "expand-f32", GPUComputePipeline>();
-  readonly #preparations = new Map<"add-f32" | "mul-f32" | "sum-f32" | "expand-f32", Promise<void>>();
+  readonly #pipelines = new Map<WebGpuComputationKind, GPUComputePipeline>();
+  readonly #preparations = new Map<WebGpuComputationKind, Promise<void>>();
   #ownedBytes = 0;
   #peakBytes = 0;
   #pendingSubmissions = 0;
@@ -87,10 +90,15 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
       && device.limits.maxComputeWorkgroupStorageSize >= WEBGPU_SUM_WORKGROUP_BYTES
       && device.limits.maxComputeWorkgroupSizeX >= WEBGPU_SUM_WORKGROUP_SIZE
       && device.limits.maxComputeInvocationsPerWorkgroup >= WEBGPU_SUM_WORKGROUP_SIZE;
-    this.capabilities = Object.freeze({ device: "webgpu", computations: Object.freeze(sumSupported ? ["add-f32", "mul-f32", "sum-f32", "expand-f32"] as const : ["add-f32", "mul-f32", "expand-f32"] as const),
+    const computations: WebGpuComputationKind[] = ["add-f32"];
+    if (device.limits.maxBufferSize >= WEBGPU_COEFFICIENT_UNIFORM_BYTES) computations.push("add-alpha-f32");
+    computations.push("mul-f32");
+    if (sumSupported) computations.push("sum-f32");
+    computations.push("expand-f32");
+    this.capabilities = Object.freeze({ device: "webgpu", computations: Object.freeze(computations),
       gradients: true, maximumTensorBytes: Math.min(this.#limits.maxBufferSize,
         this.#limits.maxStorageBufferBindingSize, 0xffffffff * 4,
-        this.#limits.maxComputeWorkgroupsPerDimension * Math.min(WEBGPU_ADDITION_WORKGROUP_SIZE, WEBGPU_MULTIPLICATION_WORKGROUP_SIZE, WEBGPU_EXPANSION_WORKGROUP_SIZE) * 4) });
+        this.#limits.maxComputeWorkgroupsPerDimension * Math.min(WEBGPU_ADDITION_WORKGROUP_SIZE, WEBGPU_COEFFICIENT_ADDITION_WORKGROUP_SIZE, WEBGPU_MULTIPLICATION_WORKGROUP_SIZE, WEBGPU_EXPANSION_WORKGROUP_SIZE) * 4) });
     void device.lost.then((info) => {
       if (!this.#closed) this.#retire(new TabgradError("BACKEND_STATUS_ERROR", "The WebGPU device was lost.", {
         backend: "webgpu", device: "webgpu", phase: "device-loss", reason: info.reason,
@@ -120,7 +128,7 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
     const requested = program?.computations.map((computation) => computation.kind) ?? ["add-f32"];
     const pending: Promise<void>[] = [];
     for (const kind of new Set(requested)) {
-      if ((kind !== "add-f32" && kind !== "mul-f32" && kind !== "sum-f32" && kind !== "expand-f32") || !this.capabilities.computations.includes(kind)) {
+      if ((kind !== "add-f32" && kind !== "add-alpha-f32" && kind !== "mul-f32" && kind !== "sum-f32" && kind !== "expand-f32") || !this.capabilities.computations.includes(kind)) {
         throw new TabgradError("BACKEND_CAPABILITY_MISMATCH", "Unsupported WebGPU computation.", {
           backend: "webgpu", phase: "preparation",
           programValueSlot: program?.computations.find((computation) => computation.kind === kind)?.output,
@@ -145,10 +153,11 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
     return pending.length === 0 ? undefined : Promise.all(pending).then(() => undefined);
   }
 
-  async #compile(kind: "add-f32" | "mul-f32" | "sum-f32" | "expand-f32"): Promise<void> {
+  async #compile(kind: WebGpuComputationKind): Promise<void> {
     const pipeline = await this.#checked("preparation", () => {
       const code = kind === "sum-f32" ? WEBGPU_SUM_SOURCE
         : kind === "mul-f32" ? WEBGPU_MULTIPLICATION_SOURCE
+        : kind === "add-alpha-f32" ? WEBGPU_COEFFICIENT_ADDITION_SOURCE
         : kind === "expand-f32" ? WEBGPU_EXPANSION_SOURCE : WEBGPU_ADDITION_SOURCE;
       const module = this.#device.createShaderModule({ code });
       return this.#device.createComputePipelineAsync({ layout: "auto", compute: { module, entryPoint: "main" } });
@@ -249,13 +258,23 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
         this.#encodeSum(encoder, inputs[0]!, output, storage);
         return;
       }
-      if (computation.kind !== "add-f32" && computation.kind !== "mul-f32" && computation.kind !== "expand-f32") throw new Error("Unsupported WebGPU computation.");
+      if (computation.kind !== "add-f32" && computation.kind !== "add-alpha-f32" && computation.kind !== "mul-f32" && computation.kind !== "expand-f32") throw new Error("Unsupported WebGPU computation.");
       const pipeline = this.#pipelines.get(computation.kind);
       if (pipeline === undefined) throw new Error("WebGPU computation was not prepared.");
       const workgroupSize = computation.kind === "mul-f32" ? WEBGPU_MULTIPLICATION_WORKGROUP_SIZE
+        : computation.kind === "add-alpha-f32" ? WEBGPU_COEFFICIENT_ADDITION_WORKGROUP_SIZE
         : computation.kind === "expand-f32" ? WEBGPU_EXPANSION_WORKGROUP_SIZE : WEBGPU_ADDITION_WORKGROUP_SIZE;
+      const entries = [...inputs, output].map((allocation, binding) => ({ binding, resource: { buffer: allocation.buffer } }));
+      if (computation.kind === "add-alpha-f32") {
+        const coefficient = this.#allocate(WEBGPU_COEFFICIENT_UNIFORM_BYTES, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST);
+        storage.created.add(coefficient);
+        // Each dispatch retains its own packet, including writes before a failed submit.
+        storage.queuedWrites = true;
+        this.#device.queue.writeBuffer(coefficient.buffer, 0, new Uint32Array([computation.alphaBits!, 0, 0, 0]));
+        entries.push({ binding: 3, resource: { buffer: coefficient.buffer } });
+      }
       const bindGroup = this.#device.createBindGroup({ layout: pipeline.getBindGroupLayout(0),
-        entries: [...inputs, output].map((allocation, binding) => ({ binding, resource: { buffer: allocation.buffer } })) });
+        entries });
       const pass = encoder.beginComputePass();
       pass.setPipeline(pipeline); pass.setBindGroup(0, bindGroup);
       pass.dispatchWorkgroups(Math.ceil(output.byteLength / 4 / workgroupSize)); pass.end();

@@ -29,6 +29,17 @@ export interface LoweredComputation {
   readonly provenance: ProgramProvenance;
 }
 
+/** Validate captured metadata at semantic creation and program reconstruction. */
+export function assertComputationCoefficient(kind: LoweredComputation["kind"], alphaBits: number | undefined): void {
+  if (kind === "add-alpha-f32") {
+    if (!Number.isInteger(alphaBits) || alphaBits! < 0 || alphaBits! > 0xffff_ffff) {
+      throw new TypeError("Coefficient addition requires captured binary32 bits.");
+    }
+  } else if (alphaBits !== undefined) {
+    throw new TypeError("This operation has no coefficient.");
+  }
+}
+
 export class ExecutableProgram {
   readonly formatVersion = 6;
   readonly domain: "webassembly-cpu" | "webgpu";
@@ -55,15 +66,15 @@ export class ExecutableProgram {
     const storageUseCounts = new Array<number>(values.length).fill(0);
     this.computations = Object.freeze(
       computations.map((computation) => {
-        for (const input of computation.inputs) {
+        const captured = { ...computation };
+        assertComputationCoefficient(captured.kind, captured.alphaBits);
+        captured.inputs = Object.freeze([...captured.inputs]);
+        captured.provenance = Object.freeze({ ...captured.provenance });
+        for (const input of captured.inputs) {
           inputUseCounts[input]! += 1;
           storageUseCounts[values[input]!.storageSlot]! += 1;
         }
-        return Object.freeze({
-          ...computation,
-          inputs: Object.freeze([...computation.inputs]),
-          provenance: Object.freeze({ ...computation.provenance }),
-        });
+        return Object.freeze(captured);
       }),
     );
     this.inputUseCounts = Object.freeze(inputUseCounts);

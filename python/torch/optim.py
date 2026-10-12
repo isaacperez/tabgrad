@@ -1,4 +1,4 @@
-"""Basic CPU SGD through the shared semantic runtime and ordinary programs."""
+"""Basic SGD through the shared semantic runtime and ordinary programs."""
 
 import math
 import struct

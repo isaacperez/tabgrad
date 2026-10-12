@@ -1,3 +1,5 @@
+import { pythonTensorDeviceSource as pythonBackwardDeviceSource } from "./python-tensor-device.mjs";
+
 /** Qualify public backward state against the same frozen native sources as Python. */
 function nestedValues(values, shape) {
   if (shape.length === 0) return values[0];
@@ -216,14 +218,7 @@ export async function checkBackwardCase(session, fixture, inspectVersion, device
 }
 
 /** Select only tensor creation's device; frozen native calls and results stay unchanged. */
-export function pythonBackwardDeviceSource(source, device) {
-  if (device === "cpu") return source;
-  if (device !== "webgpu") throw new Error("Unknown backward fixture device");
-  return `import torch
-def _backward_tensor(data, **kwargs):
-    return torch.tensor(data, device="webgpu", **kwargs)
-${source.replaceAll("torch.tensor(", "_backward_tensor(")}`;
-}
+export { pythonBackwardDeviceSource };
 
 export function pythonBackwardChecks(oracle, device = "cpu") {
   return pythonBackwardDeviceSource(oracle.backwardCases.map(fixture => `

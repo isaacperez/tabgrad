@@ -111,8 +111,8 @@ export async function checkSGDFaults(createSession, version, ownership, semantic
 }
 
 /** Fixed-owner checkpoints distinguish logical pins, allocator capacity and host memory. */
-export async function checkSGDFixedOwners(session, length, ownership, semantic) {
-  const p = session.tensor(new Float32Array(length).fill(1), { requiresGrad: true });
+export async function checkSGDFixedOwners(session, length, ownership, semantic, device = "cpu", complete) {
+  const p = session.tensor(new Float32Array(length).fill(1), { device, requiresGrad: true });
   const alias = p.view([length]); const keptProduct = p.mul(p); const keptSave = keptProduct.sum();
   const optimizer = session.sgd([p], { lr: 0.001 }); const snapshots = [];
   let gradient;
@@ -129,6 +129,10 @@ export async function checkSGDFixedOwners(session, length, ownership, semantic) 
         const value = await p.toArray();
         if (value.length !== length || !Number.isFinite(value[0])) throw new Error("fixed-owner training result invalid");
       }
+      if (device === "webgpu") {
+        if (typeof complete !== "function") throw new Error("GPU ownership checkpoints require independent drain");
+        await complete(session);
+      }
       const elapsed = performance.now() - start;
       const diagnostic = session.diagnostics();
       const owners = ownership(session); const identities = semantic(session);
@@ -136,7 +140,8 @@ export async function checkSGDFixedOwners(session, length, ownership, semantic) 
       snapshots.push({ steps, batchSteps: steps - previous, milliseconds: elapsed, owners,
         semantic: Object.fromEntries(Object.entries(identities).filter(([key]) => !key.startsWith("collector"))),
         history: { nodes: diagnostic.liveDerivativeNodes, saves: diagnostic.liveSavedValues, operations: diagnostic.liveOperationRecords, materializations: diagnostic.liveMaterializationRecords, values: diagnostic.liveTensorValues },
-        physical: { liveBytes: diagnostic.liveAllocationBytes, reservedBytes: diagnostic.reservedAllocationBytes, wasmBytes: diagnostic.wasmMemoryBytes },
+        physical: device === "cpu" ? { liveBytes: diagnostic.liveAllocationBytes, reservedBytes: diagnostic.reservedAllocationBytes, wasmBytes: diagnostic.wasmMemoryBytes }
+          : { ownedBytes: diagnostic.webgpu.ownedBufferBytes, pending: diagnostic.webgpu.pendingSubmissions, unknown: diagnostic.webgpu.unknownCompletionBytes },
         host: typeof process !== "undefined" && process.memoryUsage ? process.memoryUsage()
           : globalThis.performance.memory ? { jsHeapUsedBytes: globalThis.performance.memory.usedJSHeapSize } : null });
       previous = steps;

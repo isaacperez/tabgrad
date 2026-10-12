@@ -57,7 +57,7 @@ export function coefficientBits(alpha: number): number {
   return new Uint32Array(new Float32Array([alpha]).buffer)[0]!;
 }
 
-/** Session-constructed basic CPU SGD with ordinary runtime mutation ownership. */
+/** Session-constructed basic SGD with ordinary runtime mutation ownership. */
 export class SGD {
   readonly defaults: SGDOptions;
   readonly paramGroups: SGDParameterGroup[];

@@ -14,7 +14,8 @@ creation, addition, multiplication, total sum, views, functional first-order
 gradients and asynchronous observation through this same API.
 Its operation domain and physical limits are separate from CPU support.
 
-`session.sgd(parameters, options?)` provides [basic CPU SGD](reference/sgd.md),
+`session.sgd(parameters, options?)` provides [basic SGD](reference/sgd.md) on CPU
+and an enabled WebGPU device,
 including groups, closures, reset and independently owned optimizer lifetime.
 
 Python does not sit between this API and the runtime. Any Python compatibility

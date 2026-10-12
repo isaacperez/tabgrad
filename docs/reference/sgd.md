@@ -1,9 +1,13 @@
-# Basic CPU SGD
+# Basic SGD
 
-Ordinary SGD operates on contiguous CPU float32 tensors. The
+Ordinary SGD operates on contiguous float32 tensors on CPU or an enabled
+WebGPU device. A group may contain parameters from both devices; each
+parameter's gradient and numerical update remain on its own device. The
 [SGD architecture](../architecture/cpu-sgd.md) owns numerical, ordering and
-lifetime decisions; the [compatibility evidence](../compatibility.md#cpu-sgd-evidence)
-identifies the native reference and qualified environments.
+lifetime decisions; the [GPU arithmetic chapter](../architecture/webgpu-sgd.md)
+owns its single-rounding and immutable coefficient response. The compatibility
+evidence identifies the [CPU reference](../compatibility.md#cpu-sgd-evidence)
+and [qualified GPU environment](../compatibility.md#gpu-sgd-evidence).
 
 ## Python calls
 
@@ -41,7 +45,7 @@ before the closure. Invalid Python binding and intrinsic constructor errors
 preserve their class and phase, without promising exact wording. Native-valid
 options outside this subset reject explicitly. Named parameters, tensor rates,
 custom scalar/truthiness types, hooks, group addition, state serialization,
-momentum, higher-order training and GPU optimization are excluded.
+momentum and higher-order training are excluded.
 
 Constructor normalization publishes a fresh parameter list before extracting
 named tuples. If extraction fails, that list and earlier groups' progress
@@ -111,6 +115,11 @@ and preserves the original exception. Independent cleanup failures remain
 available through binding close. Rollback does not close caller-owned parameter
 wrappers.
 
+For GPU execution, acquire the [managed GPU connection](python-host.md#acquire-a-managed-gpu-connection)
+and create parameters and assigned gradients with `device='webgpu'`. The
+ordinary calls above keep their form. Numerical reset writes positive zero on
+the gradient's device. CPU remains the default tensor device.
+
 ## JavaScript calls
 
 ```typescript
@@ -171,6 +180,9 @@ Physical failure creates the existing terminal mutation barrier and reaches
 observation or session drain.
 
 Fixed-owner checks retain optimizer, parameter, gradient, alias and old saved
-history across 16/64/128 drained steps at lengths 32/4096/65536. Logical ownership
-and allocated/reserved Wasm bytes are distinct from host heap/RSS. These bounded
-observations establish no universal memory or speed claim.
+history across 16/64/128 drained steps. CPU checks vary lengths 32/4096/65536;
+GPU cohorts independently vary payload, parameters, groups, duplicates, aliases,
+depth, pending windows and repetitions. GPU checkpoints distinguish numerical
+result availability from physical drain. Logical ownership, Wasm capacity and
+counted GPU buffers are distinct from process RSS and private device memory.
+These bounded observations establish no universal memory or speed claim.

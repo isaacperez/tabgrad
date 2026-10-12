@@ -1,30 +1,9 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
+import { coefficientSentinels } from "../../browser/helpers/float32-coefficient-oracle.mjs";
 
 const bits = (value) => new Uint32Array(new Float32Array([value]).buffer)[0];
-// Independently derived single-rounding sentinels from the accepted CPU SGD
-// numerical contract. In particular, a residual below a binary64 sum's ULP
-// must break a binary32 midpoint tie, including either overflow boundary.
-const sentinels = [
-  [0, 0x3f800000, 0x3f800000, 0x3f800000],
-  [bits(2 ** -24), 0x3f800001, 0x3f800000, 0x3f800002],
-  [0, 1, 0x3f000000, 0], [1, 1, 0x3f000000, 2],
-  [0x80000000, 0x80000001, 0x3f000000, 0x80000000],
-  [0x80000001, 0x80000001, 0x3f000000, 0x80000002],
-  [0xff7fffff, 0x7f7fffff, 0x40000000, 0x7f7fffff],
-  [0x7f7fffff, 0xff7fffff, 0x40000000, 0xff7fffff],
-  [bits(2 ** -80), 0x3f800001, 0x3fc00000, 0x3fc00002],
-  [bits(-(2 ** -80)), 0x3f800001, 0x3fc00000, 0x3fc00001],
-  [0x80000000, 0, 0xbf800000, 0x80000000],
-  [0, 0, 0xbf800000, 0],
-  [bits(-(2 ** -80)), bits(31), bits(1082401 * 2 ** 103), 0x7f7fffff],
-  [bits(2 ** -80), bits(-31), bits(1082401 * 2 ** 103), 0xff7fffff],
-  [bits(2 ** -80), bits(31), bits(1082401 * 2 ** 103), 0x7f800000],
-  [bits(-(2 ** -80)), bits(-31), bits(1082401 * 2 ** 103), 0xff800000],
-  [0x7f800000, 0xff7fffff, 0x40000000, 0x7f800000],
-  [0xff800000, 0x7f7fffff, 0x40000000, 0xff800000],
-];
 
 for (const variant of ["scalar", "simd128"]) {
   test(`coefficient addition preserves one rounding and validates ranges (${variant})`, async () => {
@@ -37,7 +16,7 @@ for (const variant of ["scalar", "simd128"]) {
     const input = new Uint32Array(memory.buffer, base, 8);
     const gradient = new Uint32Array(memory.buffer, base + 32, 8);
     const output = new Uint32Array(memory.buffer, base + 64, 8);
-    for (const [p, g, alpha, expected] of sentinels) {
+    for (const [p, g, alpha, expected] of coefficientSentinels) {
       input.fill(p); gradient.fill(g);
       for (const length of [1, 4, 5, 6, 7, 8]) {
         output.fill(0xdeadbeef);

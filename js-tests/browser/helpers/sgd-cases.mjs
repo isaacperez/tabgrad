@@ -1,3 +1,5 @@
+import { pythonTensorDeviceSource } from "./python-tensor-device.mjs";
+
 function nested(values, shape) {
   if (shape.length === 0) return values[0];
   const width = shape.slice(1).reduce((count, length) => count * length, 1);
@@ -20,12 +22,12 @@ export function isDirectSGDCase(fixture) {
 }
 
 /** Direct presentation uses the same frozen native observations, with its own binding types. */
-export async function checkSGDCase(session, fixture, inspectVersion) {
+export async function checkSGDCase(session, fixture, inspectVersion, device = "cpu") {
   const state = (value) => tensorState(value, inspectVersion);
   const handles = new Set();
   const optimizers = [];
   const keep = (value) => { if (value !== null) handles.add(value); return value; };
-  const tensor = (data, tracking = true, shape) => keep(session.tensor(data, { requiresGrad: tracking, ...(shape === undefined ? {} : { shape }) }));
+  const tensor = (data, tracking = true, shape) => keep(session.tensor(data, { device, requiresGrad: tracking, ...(shape === undefined ? {} : { shape }) }));
   const optimizer = (parameters, options) => { const result = session.sgd(parameters, options); optimizers.push(result); return result; };
   const attempt = (call) => {
     try { call(); return "ok"; }
@@ -135,11 +137,12 @@ export async function checkSGDCase(session, fixture, inspectVersion) {
 }
 
 /** Execute the maintained native sources through the real Python presentation. */
-export function pythonSGDChecks(oracle) {
+export function pythonSGDChecks(oracle, device = "cpu") {
+  const cases = oracle.sgdCases.map(fixture => ({ ...fixture, source: pythonTensorDeviceSource(fixture.source, device) }));
   return `
 import torch, json, gc
 def _check_sgd_native():
-    for fixture in json.loads(${JSON.stringify(JSON.stringify(oracle.sgdCases))}):
+    for fixture in json.loads(${JSON.stringify(JSON.stringify(cases))}):
         namespace = {'torch': torch, '_inspect_version': lambda value: inspect_sgd_version(value._handle)}
         try:
             exec(fixture['source'], namespace)

@@ -92,8 +92,12 @@ same operations, histories and mandatory effects. Leaf slots retain canonical
 identity across accumulation; selected nonleaf slots can be replaced. Assignment
 and clearing preserve exposed gradients and their aliases.
 
-Dimensional reductions and SGD are outside this GPU execution domain. Optimizer calls use
-`UNSUPPORTED_GRADIENT`; unsupported computations use `BACKEND_CAPABILITY_MISMATCH`.
+[Basic SGD](sgd.md) uses ordinary coefficient computations, immutable
+per-computation metadata and device-local numerical reset. Groups may mix
+enabled CPU/GPU parameters while each gradient stays on its parameter's device.
+Its arithmetic has one rounding of the exact product plus parameter, as defined
+by the [GPU SGD chapter](../architecture/webgpu-sgd.md). Dimensional reductions
+and broader optimizer modes remain excluded. Unsupported computations use `BACKEND_CAPABILITY_MISMATCH`.
 Capability rejection happens before recording unsupported work. Mixing CPU and GPU
 operands is rejected, not interpreted as a transfer. CPU behavior remains
 governed by its own operation references.
