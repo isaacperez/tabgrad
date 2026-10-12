@@ -1,6 +1,6 @@
 # From backward to a persistent gradient
 
-A caller starts this flow by invoking `Tensor.backward` on one tracked CPU
+A caller starts this flow by invoking `Tensor.backward` on one tracked CPU or WebGPU
 output. It completes when accepted gradient effects have published or their
 failure obligations have reached observation, managed entry completion or
 session close. The [backward reference](../reference/backward-gradients.md)
@@ -21,7 +21,7 @@ sequenceDiagram
     participant Runtime
     participant History
     participant Effects
-    participant CPU
+    participant Backend
     Caller->>Runtime: backward(output, seed, inputs)
     Runtime->>Runtime: Validate global metadata, set retained inputs, reserve capacity
     Runtime->>History: Plan selected dependency readiness
@@ -31,7 +31,7 @@ sequenceDiagram
         History->>History: Validate and consume executing recipe
     end
     Runtime-->>Caller: None/void
-    Effects->>CPU: Execute mandatory captured work in order
+    Effects->>Backend: Execute mandatory captured work in order
     Caller->>Runtime: Observe gradient or join completion/close
     Runtime-->>Caller: Values or owned failure
 ```

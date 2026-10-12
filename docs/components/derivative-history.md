@@ -73,7 +73,7 @@ aliases continue to use the ordinary
 ## Validate, traverse and transfer ownership
 
 Functional differentiation follows the
-[CPU per-node contract](../architecture/cpu-gradient-state.md#progress-and-failure-belong-to-executing-nodes).
+[Per-node contract](../architecture/cpu-gradient-state.md#progress-and-failure-belong-to-executing-nodes).
 The [versioned evidence](../compatibility.md#functional-failure-progress) bounds
 its correspondence with native scheduling and failure progress.
 
@@ -180,7 +180,7 @@ backend capability profile; mutation versions use the independent shared counter
 [functional API reference](../reference/functional-gradients.md).
 
 Persistent gradient state belongs to the semantic tensor/effect owners under
-the [CPU gradient-state contract](../architecture/cpu-gradient-state.md).
+the [gradient-state contract](../architecture/cpu-gradient-state.md).
 Traversal delivers each ready incoming contribution before validating its
 recipe. Backward validates selected nonleaf recipes even when ancestor numerical
 contributions are pruned; functional cutoffs do not. Retention hooks weakly refer
