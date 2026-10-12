@@ -235,8 +235,8 @@ PyTorch compatibility or coverage of every CPU variant in every Python/browser c
 record must still identify its exact environment and interface dimensions
 under the rules below.
 
-The [persistent copy reference](reference/tensor-copy.md) defines the CPU
-same-session equal-shape tensor subset. Native `copyCases` preserve effective
+The [persistent copy reference](reference/tensor-copy.md) defines the
+same-session, same-device equal-shape CPU and WebGPU tensor subset. Native `copyCases` preserve effective
 `other` binding, boolean options, return identity, scalar/empty/matrix values,
 active/no-grad connectivity, saved invalidation, consumable view history and
 inherited special-view provenance. Packaged Node and browser Pyodide consume
@@ -247,9 +247,23 @@ direct scalar/SIMD controls additionally check rejected version/history/ownershi
 atomicity and guard-before-shape precedence. Direct CPU tests establish float32
 bits, snapshots, failure responsibility, real owner/lease release and finite
 admission. This scope excludes native broadcasting, number sources, conversion,
-GPU mutation and broader gradients. Deferred backend failure is a Tabgrad
-integration contract. Existing read-only GPU consumers retain their separate
-qualification; CPU mutation does not expand that GPU domain.
+cross-device transfer and broader gradients. Deferred backend failure is a Tabgrad
+integration contract.
+
+Packaged physical GPU tests consume the 34 applicable copy cases and all 13
+per-recipe progress cases with explicit device selection and unchanged native
+expectations. The 16 reset-view cases first require persistent gradient slots
+and SGD, so they retain CPU qualification only. A native nonfinite-seed case
+checks exact positive destination-zero bits and the passed source contribution.
+Direct GPU probes additionally cover stored bits, scalar/empty/tail geometry,
+resident sharing with old reads, source-family independence and fixed-owner
+functional-gradient/noGrad update cycles. Controlled shared-ticket and backend
+tests cover dropped effects, synchronous observation, causal failure, generation
+loss, late drain, pending close and unknown completion. Managed Python includes
+an observation-free dropped-copy entry without JSPI. These bounded tests neither
+qualify GPU persistent gradient state/backward/SGD nor claim a temporal/RSS/VRAM
+advantage or portability across adapters. Exact run environments remain in
+verification evidence.
 
 ### Functional failure progress
 

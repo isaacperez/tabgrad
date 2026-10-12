@@ -4,6 +4,7 @@ import { ExecutionTicket, type ExecutionStep } from "../execution/execution-tick
 export interface QueuedExecutionRequest {
   next: QueuedExecutionRequest | undefined;
   advance(): void;
+  advanceSynchronously(): boolean;
 }
 
 type Outcome<T> =
@@ -37,6 +38,7 @@ export class ExecutionRequest<T> implements QueuedExecutionRequest {
   #input: Exclude<Outcome<unknown>, { kind: "pending" }> | undefined;
   #outcome: Outcome<T> = { kind: "pending" };
   #completion: Completion<T> | undefined;
+  #asyncProgress = false;
   readonly #advanceQueue: () => void;
   readonly #retire: () => void;
   readonly #publish: () => void;
@@ -70,7 +72,7 @@ export class ExecutionRequest<T> implements QueuedExecutionRequest {
           this.#drains ??= [];
           this.#drains.push(pending.step);
         }
-        if (!(pending.step instanceof ExecutionTicket) || pending.step.synchronous === undefined || this.#completion !== undefined) {
+        if (!(pending.step instanceof ExecutionTicket) || pending.step.synchronous === undefined || this.#completion !== undefined || this.#asyncProgress) {
           this.#observePending(pending);
         }
       }
@@ -111,7 +113,8 @@ export class ExecutionRequest<T> implements QueuedExecutionRequest {
     this.#completion = undefined;
   }
 
-  read(): T {
+  /** Drive readable predecessors without consuming their caller-owned outcome. */
+  advanceSynchronously(): boolean {
     while (this.#waiting !== undefined) {
       const pending = this.#waiting;
       if (!(pending.step instanceof ExecutionTicket) || pending.step.synchronous === undefined) break;
@@ -124,6 +127,18 @@ export class ExecutionRequest<T> implements QueuedExecutionRequest {
       }
       this.#resume(pending, input);
     }
+    return this.#outcome.kind !== "pending";
+  }
+
+  /** Mandatory work progresses even when no public consumer asks for a Promise. */
+  startAsyncProgress(): void {
+    if (this.#steps === undefined) return;
+    this.#asyncProgress = true;
+    if (this.#waiting !== undefined) this.#observePending(this.#waiting);
+  }
+
+  read(): T {
+    this.advanceSynchronously();
     if (this.#outcome.kind === "success") return this.#outcome.value;
     if (this.#outcome.kind === "failure") throw this.#outcome.error;
     throw new Error("The execution request has not reached a terminal result.");

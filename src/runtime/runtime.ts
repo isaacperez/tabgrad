@@ -1221,7 +1221,7 @@ export class RuntimeSession {
       ? this.tensor([1], { shape: result.value.shape, device: result.value.device }) : this.#borrowValue(explicitSeed.value);
     this.#attachTensorControls(seed, [result.value.outcomes, explicitSeed?.value.outcomes ?? []]);
     try {
-      const gradients = this.#history.execute(plan, seed, this.#derivativeOperations(),
+      const gradients = this.#history.execute(plan, seed, this.#derivativeOperations(result.value.device),
         effects === 0 && this.#writers.references === 0 ? undefined
           : (node, incoming, traversed) => this.#receiveGradient(node, incoming, traversed, destinations));
       for (const gradient of gradients) {
@@ -1458,7 +1458,7 @@ export class RuntimeSession {
     return this.#expose(identity);
   }
 
-  #derivativeOperations() {
+  #derivativeOperations(device: TensorDevice = "cpu") {
     return {
       borrow: (value: TensorValue) => this.#borrowValue(value),
       add: (left: Tensor, right: Tensor) => this.#combineIncoming(left, right),
@@ -1474,10 +1474,17 @@ export class RuntimeSession {
         return result;
       },
       expand: (value: Tensor, shape: readonly number[]) => this.#expand(value, shape),
-      zeros: (shape: readonly number[]) => this.tensor(new Float32Array(tensorElementCount(shape)), { shape }),
+      zeros: (shape: readonly number[]) => this.#zeros(shape, device),
       close: (value: Tensor) => value.close(),
       inherit: (value: Tensor, source: Tensor) => this.#attachTensorControls(value, [requireTensorState(source).value.outcomes]),
     };
+  }
+
+  #zeros(shape: readonly number[], device: TensorDevice): Tensor {
+    if (device === "cpu") return this.tensor(new Float32Array(tensorElementCount(shape)), { shape });
+    const scalar = this.tensor([0], { shape: [], device });
+    try { return this.#expand(scalar, shape); }
+    finally { scalar.close(); }
   }
 
   #bindIncomingIdentity(identity: TensorIdentity, source: TensorIdentity): void {
@@ -1557,7 +1564,7 @@ export class RuntimeSession {
       this.#installIdentityControls(requireTensorState(acquired).identity,
         captureWriterOutcomes([requireTensorState(acquired).identity.controls, [outcome]]));
       this.#pendingCopies += 1;
-      this.#enqueue(this.#copyEffect(source, prerequisites, outcome),
+      this.#enqueueEffect(this.#copyEffect(source, prerequisites, outcome),
         () => this.#retireCopyEffect(source, prerequisites, "Gradient acquisition retirement failed."),
         () => this.#replaceGradient(owner, requireTensorState(acquired).identity));
     } finally { acquired.close(); }
@@ -1646,8 +1653,8 @@ export class RuntimeSession {
     const source = requireTensorState(sourceHandle);
     assertTensorOpen(source);
     if (source.session !== this) throw new TabgradError("DIFFERENT_SESSION", "Copy tensors must belong to this session.");
-    if (destination.value.device !== "cpu" || source.value.device !== "cpu") {
-      throw new TabgradError("UNSUPPORTED_DEVICE", "Persistent copy requires CPU tensors.");
+    if (destination.value.device !== source.value.device) {
+      throw new TabgradError("UNSUPPORTED_DEVICE", "Persistent copy requires tensors on the same device.");
     }
     if (this.#recording && destination.specialView && (destination.requiresGrad || source.requiresGrad)) {
       throw new TabgradError("INPLACE_VIEW", "A view created in no_grad cannot be updated while recording gradients.");
@@ -1703,7 +1710,7 @@ export class RuntimeSession {
       try { this.#resolveHistory(destination); }
       catch (error) { (failures ??= []).push(error); }
     }
-    this.#enqueue(this.#copyEffect(captured, prerequisites, outcome),
+    this.#enqueueEffect(this.#copyEffect(captured, prerequisites, outcome),
       () => this.#retireCopyEffect(captured, prerequisites, "Copy effect retirement failed."));
     if (history !== previousHistory && previousHistory !== null) {
       try { this.#history.release(previousHistory); } catch (error) { (failures ??= []).push(error); }
@@ -1769,7 +1776,7 @@ export class RuntimeSession {
   }
 
   async #complete(): Promise<void> {
-    // Managed entry must join its mandatory CPU effects, while an unrelated
+    // Managed entry must join its mandatory effects, while an unrelated
     // failed GPU observation may still own a separately supervised drain lease.
     if (this.#pendingCopies !== 0) {
       if (this.#copyCompletion === undefined) {
@@ -1889,7 +1896,15 @@ export class RuntimeSession {
     this.#assertOpen();
     const host = this.#materializations.get(state.value)?.kind === "host";
     const backend = this.#backendFor(state.value.device, "observe");
-    if (!backend.synchronousObservation || this.#requestHead !== undefined || (!host && !backend.ready)) {
+    if (backend.synchronousObservation) {
+      while (this.#requestHead !== undefined && this.#requestHead.advanceSynchronously()) {
+        // Each terminal predecessor unlinks itself through common publication.
+      }
+    }
+    // A terminal writer failure is observable without a ready numerical backend.
+    // Let the ordinary observation owner deliver it, including loss while waiting.
+    if (!backend.synchronousObservation || this.#requestHead !== undefined
+        || (!host && !backend.ready && failedWriterOutcome(state.value.outcomes) === undefined)) {
       throw new TabgradError(
         "SYNCHRONOUS_OBSERVATION_UNAVAILABLE",
         "Synchronous observation requires local readiness and no pending asynchronous predecessor.",
@@ -2349,6 +2364,11 @@ export class RuntimeSession {
       catch (error) { (failures ??= []).push(error); }
     }
     throwCleanupFailures(failures, "Completed program dependency cleanup failed.");
+  }
+
+  #enqueueEffect(steps: Generator<ExecutionStep, void, unknown>, release: () => void,
+    admit?: () => void): void {
+    this.#enqueue(steps, release, admit).startAsyncProgress();
   }
 
   #enqueue<T>(steps: Generator<ExecutionStep, T, unknown>, release?: () => void,

@@ -4,6 +4,8 @@ import { exactAddition, equivalentBits, numericalPairs } from "../helpers/float3
 import { exactTotal, exactCases } from "../helpers/float32-sum-oracle.mjs";
 import { exactMultiplication, multiplicationPairs } from "../helpers/float32-multiplication-oracle.mjs";
 import { checkFunctionalGradients, checkGpuExpansion } from "../helpers/functional-gradient-cases.mjs";
+import { checkGradientProgress } from "../helpers/gradient-progress-cases.mjs";
+import { checkGpuCopy } from "../helpers/gpu-copy-cases.mjs";
 
 const token = new URLSearchParams(location.search).get("token");
 async function send(endpoint, body) {
@@ -137,7 +139,10 @@ async function exerciseTotalSum(session) {
 async function exercise(session) {
   const response = await fetch("/helpers/functional-gradient-oracle.json");
   check(response.ok, "Native functional oracle unavailable");
-  await checkFunctionalGradients(session, await response.json(), "webgpu");
+  const oracle = await response.json();
+  await checkFunctionalGradients(session, oracle, "webgpu");
+  for (const fixture of oracle.gradientProgressCases) await checkGradientProgress(session, fixture, "webgpu");
+  await checkGpuCopy(session);
   await checkGpuExpansion(session);
   const x = session.tensor([2, -3, 4], { device: "webgpu" });
   const weights = session.tensor([5, 2, -1], { device: "webgpu" });

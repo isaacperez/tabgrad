@@ -180,3 +180,43 @@ test("ticket Promise factories are invoked only on observation and share one res
   assert.equal(ticket.drained, ticket.drained);
   assert.equal(drains, 1);
 });
+
+test("mandatory shared requests progress without a Promise result consumer", async () => {
+  const result = deferred(), drain = deferred();
+  let subscriptions = 0;
+  const { request, counts } = invocation((function* () {
+    return yield new ExecutionTicket(() => { subscriptions += 1; return result.promise; }, drain.promise, {
+      read() { return 17; }, isDrained() { return false; },
+    });
+  })());
+  request.startAsyncProgress(); request.startAsyncProgress();
+  assert.equal(subscriptions, 1);
+  result.resolve(17); await Promise.resolve();
+  assert.equal(request.read(), 17);
+  assert.deepEqual(counts, { published: 1, retired: 0 });
+  drain.resolve(); await Promise.resolve(); await Promise.resolve();
+  assert.deepEqual(counts, { published: 1, retired: 1 });
+});
+
+test("queue progression consumes shared steps without delivering another caller's failure", async () => {
+  const failure = new Error("preceding observer owns this failure");
+  const { request, counts } = invocation((function* () {
+    yield new ExecutionTicket(Promise.resolve(), Promise.resolve(), {
+      read() { throw failure; }, isDrained() { return true; },
+    });
+  })());
+  assert.equal(request.advanceSynchronously(), true);
+  assert.deepEqual(counts, { published: 1, retired: 1 });
+  assert.throws(() => request.read(), error => error === failure);
+  const pending = deferred();
+  const unreadable = invocation((function* () { yield pending.promise; return 3; })());
+  assert.equal(unreadable.request.advanceSynchronously(), false);
+  pending.resolve(); assert.equal(await unreadable.request.asPromise(), 3);
+});
+
+test("mandatory ready local requests do not allocate a ticket result observer", () => {
+  const { request, counts } = invocation((function* () { return 42; })());
+  request.startAsyncProgress();
+  assert.equal(request.read(), 42);
+  assert.deepEqual(counts, { published: 1, retired: 1 });
+});

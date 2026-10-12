@@ -761,6 +761,18 @@ report = [returned is d, d.tolist(), d.requires_grad, [t.tolist() for t in g], a
 """,
     ),
     (
+        "active-copy-nonfinite-connected-zeros",
+        """
+import struct
+x = torch.tensor([2., 4.], dtype=torch.float32, requires_grad=True)
+s = torch.tensor([7., 9.], dtype=torch.float32, requires_grad=True)
+d = x + x
+d.copy_(s)
+g = torch.autograd.grad(d, (x, s), torch.tensor([float('nan'), float('inf')], dtype=torch.float32))
+report = [[struct.unpack('<I', struct.pack('<f', value))[0] for value in tensor.tolist()] for tensor in g]
+""",
+    ),
+    (
         "view-copy-consumption-and-cutoff",
         """
 x = torch.tensor([2., 4.], dtype=torch.float32, requires_grad=True)

@@ -44,7 +44,7 @@ creation, seed and input forms, saved-history consumption, errors and limits.
 Use [CPU backward and persistent gradients](backward-gradients.md) for backward
 calls, gradient identity, accumulation, retention, reset and lifetime.
 
-Use [Persistent CPU tensor copy](tensor-copy.md) for identity-preserving updates,
+Use [Persistent tensor copy](tensor-copy.md) for identity-preserving updates,
 recording, alias versions, derivative guards and deferred failure.
 
 Use [Gradient recording scopes](gradient-recording.md) for Python `no_grad`,

@@ -185,7 +185,7 @@ Shared producer dependencies detach once after successful publication, even
 when several aliases remain. No alias scan is needed to publish materialization
 or determine whether the last storage owner has disappeared. Saved derivative
 operands add references at these same semantic owners; physical allocation and
-completion remain backend responsibilities. CPU copy moves the family current/version once at admission while older R/Q
+completion remain backend responsibilities. Same-device copy moves the family current/version once at admission while older R/Q
 pins retain immutable backing. Publication releases no second F pin. The
 [copy reference](../reference/tensor-copy.md) defines the finite capture budgets.
 
