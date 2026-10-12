@@ -13,11 +13,12 @@ test("GPU capability admission rejects unsupported operators before retaining wo
     const cpu = session.tensor([3]);
     const before = session.diagnostics();
     for (const operation of [() => gpu.mul(cpu), () => cpu.mul(gpu), () => gpu.add(cpu), () => cpu.add(gpu),
-      () => gpu.backward(), () => session.sgd([gpu], { lr: 0.1 })]) {
+      () => session.sgd([gpu], { lr: 0.1 })]) {
       assert.throws(operation, (error) => error instanceof tabgrad.TabgradError
         && error.details.device === "webgpu");
       assert.deepEqual(session.diagnostics(), before);
     }
+    assert.throws(() => gpu.backward(), { code: "GRADIENT_NOT_TRACKED" });
     assert.throws(() => session.grad(gpu, [gpu]), { code: "GRADIENT_NOT_TRACKED" });
     const added = gpu.add(gpu);
     assert.equal(added.device, "webgpu");

@@ -7,6 +7,8 @@ import { exactMultiplication, multiplicationPairs } from "/helpers/float32-multi
 import { pythonFunctionalGradientChecks } from "/helpers/functional-gradient-cases.mjs";
 import { pythonCopyFixtureChecks } from "/helpers/python-copy-cases.mjs";
 import { pythonGradientProgressChecks } from "/helpers/gradient-progress-cases.mjs";
+import { pythonBackwardChecks, pythonBackwardDeviceSource } from "/helpers/backward-cases.mjs";
+import { pythonBackwardLifetimeChecks } from "/helpers/backward-lifetime.mjs";
 
 function expectedMultiplication(pairs, depth) {
   let bits = pairs.left;
@@ -53,6 +55,9 @@ addEventListener("message", async ({ data }) => {
       const oracle = await response.json();
       interpreter.registerJsModule("_test_grad", { source: pythonFunctionalGradientChecks(oracle, "webgpu") });
       interpreter.registerJsModule("_test_copy", { source: pythonCopyFixtureChecks(oracle, "webgpu") + pythonGradientProgressChecks(oracle, "webgpu") });
+      interpreter.registerJsModule("_test_backward", {
+        source: pythonBackwardDeviceSource(pythonBackwardChecks(oracle) + pythonBackwardLifetimeChecks, "webgpu"),
+      });
       const products = multiplicationPairs();
       interpreter.registerJsModule("_test_mul", { left: Array.from(products.left), right: Array.from(products.right),
         expected: (depth) => expectedMultiplication(products, depth) });
@@ -78,6 +83,7 @@ addEventListener("message", async ({ data }) => {
     if (data.numericalCorpus) {
       interpreter.unregisterJsModule("_test_grad");
       interpreter.unregisterJsModule("_test_copy");
+      interpreter.unregisterJsModule("_test_backward");
       interpreter.unregisterJsModule("_test_mul");
       interpreter.unregisterJsModule("_test_f32");
       interpreter.unregisterJsModule("_test_sum");

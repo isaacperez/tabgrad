@@ -848,7 +848,7 @@ export class RuntimeSession {
         const state = requireTensorState(handle);
         assertTensorOpen(state);
         if (state.session !== this) throw new TabgradError("DIFFERENT_SESSION", "SGD parameters must belong to this session.");
-        this.#requireCpuGradientState(state.value.device, "SGD");
+        this.#requireCpuOptimizerState(state.value.device, "SGD");
         if (state.history?.recipe !== null && state.history !== null && !state.identity.retained) {
           throw new TabgradError("INVALID_TENSOR", "Cannot optimize a non-leaf tensor without retained gradients.");
         }
@@ -1215,7 +1215,8 @@ export class RuntimeSession {
     const effectControls = this.#gradientControlBound(plan.order, destinations, effects);
     const outcomes = captureWriterOutcomes([result.value.outcomes, ...plan.outcomes, explicitSeed?.value.outcomes ?? []]);
     if (outcomes.length !== 0 || effects !== 0) {
-      this.#checkGradientCapacity(plan, explicitSeed, requested.length * 4, outcomes.length + effectControls, effects, destinations);
+      this.#checkGradientCapacity(plan, explicitSeed, requested.length * 4, outcomes.length + effectControls, effects, destinations,
+        result.value.device);
     }
     const seed = explicitSeed === undefined
       ? this.tensor([1], { shape: result.value.shape, device: result.value.device }) : this.#borrowValue(explicitSeed.value);
@@ -1245,9 +1246,14 @@ export class RuntimeSession {
     let assigned: TensorIdentity | null = null;
     if (handle !== null) {
       const state = this.#gradientInput(handle);
-      this.#requireCpuGradientState(owner.value.device, "grad assignment");
-      this.#requireCpuGradientState(state.value.device, "grad assignment");
+      this.#requireGradientState(owner.value.device, "grad assignment");
+      this.#requireGradientState(state.value.device, "grad assignment");
       if (state.identity === owner.identity) throw new TabgradError("INVALID_GRADIENT", "A tensor cannot be its own gradient.");
+      if (owner.value.device !== state.value.device) {
+        throw new TabgradError("UNSUPPORTED_DEVICE", "Assigned gradient must match its owner's device.", {
+          operation: "grad assignment", device: state.value.device,
+        });
+      }
       if (!equalTensorShapes(owner.shape, state.shape)) throw new TabgradError("SHAPE_MISMATCH", "Assigned gradient must match its owner's shape.");
       assigned = state.identity;
     }
@@ -1280,7 +1286,7 @@ export class RuntimeSession {
 
   #backwardImpl(result: TensorState, seedHandle: unknown, options: unknown): void {
     assertTensorOpen(result);
-    this.#requireCpuGradientState(result.value.device, "backward");
+    this.#requireGradientState(result.value.device, "backward");
     if (options !== undefined && (options === null || typeof options !== "object" || Array.isArray(options))) {
       throw new TypeError("backward options must be an object.");
     }
@@ -1298,9 +1304,14 @@ export class RuntimeSession {
       }
     }
     const explicitSeed = seedHandle === undefined ? undefined : this.#gradientInput(seedHandle);
-    if (explicitSeed !== undefined) this.#requireCpuGradientState(explicitSeed.value.device, "grad");
+    if (explicitSeed !== undefined) this.#requireGradientState(explicitSeed.value.device, "grad");
     if (explicitSeed !== undefined && !equalTensorShapes(result.shape, explicitSeed.shape)) {
       throw new TabgradError("SHAPE_MISMATCH", "Gradient seed must match output shape.");
+    }
+    if (explicitSeed !== undefined && result.value.device !== explicitSeed.value.device) {
+      throw new TabgradError("UNSUPPORTED_DEVICE", "The gradient seed must match the output device.", {
+        operation: "backward", device: explicitSeed.value.device,
+      });
     }
     if (explicitSeed === undefined && tensorElementCount(result.shape) !== 1) {
       throw new TabgradError("INVALID_GRADIENT", "An implicit gradient requires an output with exactly one element.");
@@ -1312,7 +1323,7 @@ export class RuntimeSession {
       const seen = new Set<TensorIdentity>();
       for (const handle of selected.inputs) {
         const state = this.#gradientInput(handle);
-        this.#requireCpuGradientState(state.value.device, "grad");
+        this.#requireGradientState(state.value.device, "grad");
         if (!state.requiresGrad) throw new TabgradError("GRADIENT_NOT_TRACKED", "Requested input must require gradients.");
         const entry = state.history;
         if (!state.identity.trueLeaf && entry !== null) {
@@ -1345,8 +1356,9 @@ export class RuntimeSession {
     const effects = this.#reserveGradientEffects(plan.order, destinations);
     const controls = captureWriterOutcomes([result.value.outcomes, explicitSeed?.value.outcomes ?? []]).length
       + this.#gradientControlBound(plan.order, destinations, effects);
-    this.#checkGradientCapacity(plan, explicitSeed, requested.length * 10, controls, effects, destinations);
-    const seed = explicitSeed === undefined ? this.tensor([1], { shape: result.shape }) : this.#borrowValue(explicitSeed.value);
+    this.#checkGradientCapacity(plan, explicitSeed, requested.length * 10, controls, effects, destinations, result.value.device);
+    const seed = explicitSeed === undefined
+      ? this.tensor([1], { shape: result.shape, device: result.value.device }) : this.#borrowValue(explicitSeed.value);
     if (explicitSeed !== undefined) {
       const identity = requireTensorState(seed).identity;
       this.#bindIncomingIdentity(identity, explicitSeed.identity);
@@ -1354,14 +1366,14 @@ export class RuntimeSession {
     }
     this.#attachTensorControls(seed, [result.value.outcomes, explicitSeed?.value.outcomes ?? []]);
     try {
-      const returned = this.#history.execute(plan, seed, this.#derivativeOperations(),
+      const returned = this.#history.execute(plan, seed, this.#derivativeOperations(result.value.device),
         (node, incoming, traversed) => this.#receiveGradient(node, incoming, traversed, destinations), true, false);
       for (const handle of returned) handle.close();
     } finally { seed.close(); }
   }
 
   #checkGradientCapacity(plan: DerivativePlan<TensorValue>, explicitSeed: TensorState | undefined,
-    requestedOwners: number, controls: number, effects: number, destinations: ReadonlySet<TensorIdentity>): void {
+    requestedOwners: number, controls: number, effects: number, destinations: ReadonlySet<TensorIdentity>, device: TensorDevice): void {
     let nodeElements = 0;
     let edgeElements = 0;
     for (const node of plan.order) {
@@ -1386,8 +1398,10 @@ export class RuntimeSession {
     // Old controls may occur in every temporary container. Under closed
     // dispatch each new receiver effect has at most four references, including
     // retain-before-release overlap. Keep the old estimate outside that proof.
-    // Already-admitted calls must not inspect dispatch or traverse the plan again.
-    if (owners + additionalOwners > this.#updateLimits.owners
+    // This proof requires CPU execution, not merely a ready CPU backend in a
+    // session that also executes suspended GPU work. Already-admitted calls
+    // must not inspect dispatch or traverse the plan again.
+    if (device === "cpu" && owners + additionalOwners > this.#updateLimits.owners
       && owners + refinedOwners <= this.#updateLimits.owners
       && this.#liveBackingBytes + additionalBytes <= this.#updateLimits.backingBytes
       && this.#requestHead === undefined && !this.#advancing
@@ -1594,11 +1608,15 @@ export class RuntimeSession {
     }
   }
 
-  #requireCpuGradientState(device: TensorDevice, operation: string): void {
+  #requireGradientState(device: TensorDevice, operation: string): void {
     const backend = this.#backendFor(device, operation);
     this.#requireGradients(backend, operation);
+  }
+
+  #requireCpuOptimizerState(device: TensorDevice, operation: string): void {
+    this.#requireGradientState(device, operation);
     if (device !== "cpu") {
-      throw new TabgradError("UNSUPPORTED_GRADIENT", "Persistent gradient state is supported only on CPU.", {
+      throw new TabgradError("UNSUPPORTED_GRADIENT", "Optimizers are supported only on CPU.", {
         operation, device,
       });
     }

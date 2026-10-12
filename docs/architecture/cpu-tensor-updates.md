@@ -161,8 +161,9 @@ Active copy keeps its connected old-destination edge, including exact positive
 zeros for nonfinite incoming gradients. On GPU, these zeros use a stored scalar
 and the existing bit-preserving expansion through the ordinary program path;
 they are neither CPU arrays nor multiplication by zero. This domain supports
-functional differentiation and no-grad updates, not GPU backward, persistent
-gradient slots or SGD.
+functional differentiation, backward gradient effects and no-grad updates.
+The [gradient-state specialization](cpu-gradient-state.md#device-specialization-and-asynchronous-gpu-completion)
+owns GPU slots and accumulation; GPU SGD remains outside this contract.
 
 A fresh immutable physical copy remains a preserving alternative, but adds a
 byte-copy/allocation path and its transport/completion ownership. Inplace or

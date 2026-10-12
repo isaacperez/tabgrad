@@ -104,7 +104,7 @@ drains.
 This separation allows a completed forward to release ordinary records while
 retaining exactly the saved logical state that backward still needs.
 
-The [persistent CPU update contract](cpu-tensor-updates.md) specializes these
+The [persistent tensor update contract](cpu-tensor-updates.md) specializes these
 rules for active and no-grad copies, current versus bound derivative entries,
 consumable state and causal outcomes carried by payload-free derivatives.
 
@@ -120,12 +120,12 @@ replace a parameter's current `TensorValue`, while gradient and optimizer state
 continue to attach to that stable parameter. Mutation advances logical storage
 versions and participates in the same effect order as other in-place work.
 
-Functional first-order GPU derivatives reuse these common history and operation
+Functional and stateful first-order GPU derivatives reuse these common history and operation
 owners. Their selected backend supplies scalar expansion and ordinary numerical
-execution; no separate GPU derivative engine is needed. Persistent associations,
-backward and optimizer updates remain in the CPU domain.
+execution; no separate GPU derivative engine is needed. Persistent associations
+and backward use these same owners; optimizer updates remain in the CPU domain.
 
-The [CPU gradient-state contract](cpu-gradient-state.md) distinguishes leaf
+The [gradient-state contract](cpu-gradient-state.md) distinguishes leaf
 accumulation from retained nonleaf replacement. It separates semantic tensor
 identity and gradient association from public exposure and numerical aliases,
 and defines native per-node progress, partial effects and cycle responsibility.

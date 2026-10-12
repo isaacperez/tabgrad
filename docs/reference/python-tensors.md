@@ -58,7 +58,8 @@ bound by Python: there is no silent inference of an integer or default dtype.
   `webgpu` is a Tabgrad extension, not an upstream PyTorch device name.
 - Gradient and pinned-memory flags must be booleans. `requires_grad=True`
   enables tracking; `pin_memory` must remain false.
-  CPU and WebGPU support tracking for [functional gradients](functional-gradients.md).
+  CPU and WebGPU support tracking for [functional gradients](functional-gradients.md)
+  and [backward accumulation](backward-gradients.md).
 - Creation converts to float32 and owns a copy. Later input mutations cannot
   change the tensor. Integer overflow during conversion raises `OverflowError`.
 - Ragged inputs, mixed numerical/container depth and cycles are rejected.
@@ -185,9 +186,10 @@ Managed GPU observation consumes authoritative shared completion from the
 independently progressing physical worker. It may park the interpreter, but
 does not require a local Promise callback to advance the calculation. GPU
 addition, [multiplication](tensor-multiplication.md), total sum, shape-only views
-and functional gradients share the ordinary runtime path. Dimensional reduction,
-GPU backward accumulation and persistent gradient state remain outside their
-declared domains.
+and functional gradients share the ordinary runtime path.
+[Backward and persistent gradient slots](backward-gradients.md) use that same
+path, including immediate ordinary Python observation. Dimensional reduction
+and GPU optimizers remain outside their declared domains.
 Missing backend or unsupported computation is an explicit capability error,
 not implicit CPU execution.
 

@@ -1,4 +1,4 @@
-# CPU backward and persistent gradient state
+# Backward and persistent gradient state
 
 Functional differentiation returns tensors to its caller. Training also needs
 a gradient associated with each parameter: successive backward calls can add
@@ -6,10 +6,10 @@ to it, another tensor can be assigned to it, and clearing the association must
 leave previously exposed gradients alive. These are observable tensor
 semantics, not just a place to store derivative numbers.
 
-This chapter owns the accepted integration contract for contiguous CPU
+This chapter owns the integration contract for contiguous CPU and WebGPU
 float32 backward and persistent gradients. Read [semantic state](semantic-state.md),
 [automatic differentiation](autograd-and-training.md) and
-[persistent CPU updates](cpu-tensor-updates.md) for the shared foundations.
+[persistent tensor updates](cpu-tensor-updates.md) for the shared foundations.
 The [compatibility record](../compatibility.md#python-tensor-evidence) and
 [backward API reference](../reference/backward-gradients.md) establish
 implemented public behavior; architectural acceptance alone establishes no
@@ -148,7 +148,7 @@ Updating a gradient can invalidate a save of its gradient or parameter family.
 Per-tensor tracking, history entry, provenance and gradient association must be
 separated coherently from shared numerical value/version ownership. Each
 invocation owns its selection, readiness, contributions and failure progress.
-The extension reuses operation admission, executable programs, CPU kernels,
+The extension reuses operation admission, executable programs, selected backend kernels,
 requests, tickets and materialization. No second derivative executor or special
 training numerical loop owns these operations.
 
@@ -175,6 +175,43 @@ no fallback to old bytes, automatic retry, rollback or resume. Mandatory failure
 delivery and repeated observation of a captured failure remain distinct.
 These deferred execution/close rules are Tabgrad host integration, not a claim
 that native CPU tensors expose promises.
+
+## Device specialization and asynchronous GPU completion
+
+The semantic association, alias versions, incoming-identity acquisition and
+cycle owners are the same for CPU and WebGPU. The selected backend executes
+ordinary derivative operations; implicit seeds and connected zero derivatives
+stay on the output device. Assignment checks device before shape, while
+backward's global seed shape check precedes its unsupported-transfer boundary.
+Disconnected tracked targets do not create numerical work on another device.
+
+GPU acquisition and accumulation use the existing
+[mandatory persistent-update path](cpu-tensor-updates.md#webgpu-publication-and-request-progression).
+The runtime installs an association at admission with captured causal controls,
+so immediate `.grad` access returns its canonical identity even while its
+numbers are pending. Clearing or replacing that association cannot cancel the
+accepted effect. Completion does not reinstall an old slot: association
+publication belongs to admission, not to a late transport callback.
+
+Source generation, publication failure, observation, shared-ticket progress and
+independent physical drain remain owned by the existing request and GPU owners.
+Ordinary Python can observe the pending slot without interpreter-local progress
+or JSPI. Direct observation may publish its host result before physical drain
+releases pins; managed completion and close join those remaining obligations.
+Immutable storage sharing does not grant writable shader bindings or silently
+move derivative data to CPU.
+
+GPU plans keep the conservative gradient owner reservation. A ready CPU backend
+in a session with GPU enabled is not proof of closed CPU execution. The
+CPU-specific refinement remains confined to its demonstrated device/dispatch
+conditions; byte and pending-effect admission are independent. A rejected
+reservation does not consume recipes or publish planned gradient effects;
+earlier required input-retention setup remains observable.
+
+This specialization preserves the already selected identity, storage and
+effect arrangement. It adds no executor, collector or backend mutation
+interface. GPU optimizer arithmetic, wider derivative modes and transfers need
+their own contracts and qualification.
 
 ## Public exposure does not own the association
 

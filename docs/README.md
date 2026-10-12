@@ -72,7 +72,7 @@ link to its primary source, but they must not create a competing version.
 | WebAssembly CPU kernel language, binary interface, modules, and memory ownership | [`architecture/webassembly-cpu-backend.md`](architecture/webassembly-cpu-backend.md) |
 | CPU intermediate reuse decision, semantic retention and physical last-use boundary | [`architecture/cpu-intermediate-reuse.md`](architecture/cpu-intermediate-reuse.md) |
 | Persistent same-device updates, alias versions, derivative fidelity and effect ownership | [`architecture/cpu-tensor-updates.md`](architecture/cpu-tensor-updates.md) |
-| CPU backward, persistent gradient identity, partial progress and cycle responsibility | [`architecture/cpu-gradient-state.md`](architecture/cpu-gradient-state.md) |
+| Backward, persistent gradient identity, partial progress and cycle responsibility | [`architecture/cpu-gradient-state.md`](architecture/cpu-gradient-state.md) |
 | Supported backward calls, gradient slots, reset and lifetime | [`reference/backward-gradients.md`](reference/backward-gradients.md) |
 | Basic CPU SGD calls, groups, reset and host lifetime | [`reference/sgd.md`](reference/sgd.md) |
 | Ordinary CPU SGD calls, reset/update ordering and optimizer ownership | [`architecture/cpu-sgd.md`](architecture/cpu-sgd.md) |

@@ -38,6 +38,7 @@ reports tracking. Ordinary creation defaults to nontracking.
 `Tensor.backward(gradient?, options?)` and read/write `Tensor.grad` use the
 [backward reference](reference/backward-gradients.md). Gradient slots preserve
 semantic identity independently of numerical aliases and public exposure leases.
+The bounded first-order domain covers both CPU and an enabled WebGPU device.
 
 `RuntimeSession.noGrad(callback)` disables new derivative recording for a
 synchronous or Promise-returning callback, preserving its result and restoring

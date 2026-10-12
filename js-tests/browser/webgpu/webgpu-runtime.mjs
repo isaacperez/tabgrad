@@ -6,6 +6,11 @@ import { exactMultiplication, multiplicationPairs } from "../helpers/float32-mul
 import { checkFunctionalGradients, checkGpuExpansion } from "../helpers/functional-gradient-cases.mjs";
 import { checkGradientProgress } from "../helpers/gradient-progress-cases.mjs";
 import { checkGpuCopy } from "../helpers/gpu-copy-cases.mjs";
+import { checkBackwardCase, isDirectBackwardCase } from "../helpers/backward-cases.mjs";
+import { checkBackwardLifetime } from "../helpers/backward-lifetime.mjs";
+import { getTestRuntimeSemanticOwnership, getTestTensorVersion } from "/testing.js";
+import { completeRuntimeSession } from "/runtime/runtime.js";
+import { checkGpuBackwardResources } from "../helpers/gpu-backward-cases.mjs";
 
 const token = new URLSearchParams(location.search).get("token");
 async function send(endpoint, body) {
@@ -143,6 +148,11 @@ async function exercise(session) {
   await checkFunctionalGradients(session, oracle, "webgpu");
   for (const fixture of oracle.gradientProgressCases) await checkGradientProgress(session, fixture, "webgpu");
   await checkGpuCopy(session);
+  for (const fixture of oracle.backwardCases) {
+    if (isDirectBackwardCase(fixture)) await checkBackwardCase(session, fixture, getTestTensorVersion, "webgpu");
+  }
+  await checkBackwardLifetime(session, getTestRuntimeSemanticOwnership, "webgpu", completeRuntimeSession);
+  const backwardResources = await checkGpuBackwardResources(session);
   await checkGpuExpansion(session);
   const x = session.tensor([2, -3, 4], { device: "webgpu" });
   const weights = session.tensor([5, 2, -1], { device: "webgpu" });
@@ -230,6 +240,7 @@ async function exercise(session) {
   const cpuResult = cpu.mul(cpu);
   check((await cpuResult.toArray())[0] === 25, "CPU computation changed in GPU-enabled session");
   cpu.close(); cpuResult.close();
+  return backwardResources;
 }
 
 let session;
@@ -238,7 +249,7 @@ try {
   await send("__phase", { phase: "assets-loaded" });
   session = await createWebGpuRuntimeSession();
   await send("__phase", { phase: "runtime-started" });
-  await exercise(session);
+  const backwardResources = await exercise(session);
   await session.close();
   const diagnostics = session.diagnostics();
   check(diagnostics.webgpu.ownedBufferBytes === 0 && diagnostics.webgpu.pendingSubmissions === 0
@@ -246,7 +257,7 @@ try {
   check(diagnostics.liveTensorHandles === 0 && diagnostics.liveTensorValues === 0
     && diagnostics.liveMaterializationRecords === 0 && diagnostics.liveRequestLeases === 0, "Semantic resources did not retire");
   await send("__phase", { phase: "runtime-finished" });
-  await send("__result", { ok: true, diagnostics });
+  await send("__result", { ok: true, diagnostics, backwardResources });
 } catch (error) {
   await session?.close();
   await send("__result", { ok: false, error: { message: error.message, code: error.code, details: error.details } });

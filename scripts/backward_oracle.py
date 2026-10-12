@@ -250,6 +250,31 @@ def sources() -> list[tuple[str, str, str]]:
                 "setup",
             )
         )
+    cases.append(
+        (
+            "acquisition-stored-seed-bits",
+            """
+import struct
+def words(value):
+    return [struct.unpack('<I', struct.pack('<f', item))[0] for item in value.tolist()]
+bits = [0x80000000, 1, 0x7f7fffff, 0x7f800000]
+values = [struct.unpack('<f', struct.pack('<I', word))[0] for word in bits]
+p = torch.tensor([0., 0., 0., 0.], dtype=torch.float32, requires_grad=True)
+seed = torch.tensor(values, dtype=torch.float32)
+p.backward(seed)
+gradient = p.grad
+initial = words(gradient)
+cloned = gradient is not seed
+with torch.no_grad(): seed.copy_(torch.tensor([1., 1., 1., 1.], dtype=torch.float32))
+after_seed = words(gradient)
+same = p.grad is gradient
+p.grad = None
+report = {'initial': initial, 'cloned': cloned, 'same': same,
+          'afterSeed': after_seed, 'afterClear': words(gradient)}
+""",
+            "bits",
+        )
+    )
     return cases
 
 

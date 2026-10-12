@@ -39,20 +39,22 @@ test("GPU functional gradients use resident derivative operations without accumu
   assert.equal(session.diagnostics().liveDerivativeNodes, 0);
 });
 
-test("functional GPU support does not admit persistent gradient state or CPU backward GPU inputs", async (context) => {
+test("GPU gradient state preserves device boundaries and optimizer exclusion", async (context) => {
   const session = await openSession(context, executionDevice());
   try {
     const gpu = session.tensor([2], { device: "webgpu", requiresGrad: true });
     const gpuSeed = session.tensor([1], { device: "webgpu" });
     const cpu = session.tensor([3], { requiresGrad: true }), cpuSeed = session.tensor([1]);
     const before = session.diagnostics();
-    for (const action of [() => gpu.backward(), () => session.sgd([gpu], { lr: 0.1 }),
-      () => { gpu.grad = gpuSeed; }, () => { gpu.grad = cpuSeed; }, () => { cpu.grad = gpuSeed; },
-      () => cpu.backward(gpuSeed), () => cpu.backward(undefined, { inputs: [gpu] })]) {
-      assert.throws(action, (error) => error.code === "UNSUPPORTED_GRADIENT" && error.details.device === "webgpu");
+    assert.throws(() => session.sgd([gpu], { lr: 0.1 }), { code: "UNSUPPORTED_GRADIENT" });
+    for (const action of [() => { gpu.grad = cpuSeed; }, () => { cpu.grad = gpuSeed; },
+      () => cpu.backward(gpuSeed)]) {
+      assert.throws(action, { code: "UNSUPPORTED_DEVICE" });
       assert.deepEqual(session.diagnostics(), before);
     }
-    assert.equal(gpu.grad, null); gpu.grad = null;
+    cpu.backward(undefined, { inputs: [gpu] });
+    assert.equal(cpu.grad, null); assert.equal(gpu.grad, null);
+    gpu.grad = gpuSeed; assert.equal(gpu.grad, gpuSeed); gpu.grad = null;
     cpu.backward();
     const accumulated = cpu.grad;
     assert.deepEqual([...await accumulated.toArray()], [1]); accumulated.close();

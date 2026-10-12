@@ -103,13 +103,13 @@ not establish that a particular derivative request is valid.
 
 Views of plain and tracked bases, active and disabled child creation and
 absent-edge nodes preserve their native provenance. Active children inherit
-special no-grad origin independently of their bound entry. CPU
+special no-grad origin independently of their bound entry. Same-device
 [`copy_`](tensor-copy.md) adds version checks, dirty-view guards and rebasing
 under the [persistent update architecture](../architecture/cpu-tensor-updates.md).
 No decorator, general grad-mode setter, inference mode,
 forward AD or higher-order mode is provided. CPU and WebGPU tracking support
-the same [functional gradient domain](functional-gradients.md); persistent
-gradient state remains CPU-only.
+the same [functional gradient domain](functional-gradients.md) and
+[persistent gradient state](backward-gradients.md).
 
 ## Evidence and costs
 

@@ -1,7 +1,7 @@
-# CPU backward and persistent gradients
+# Backward and persistent gradients
 
 This reference defines first-order backward and gradient associations for
-contiguous CPU float32 addition, multiplication, total sum, shape-only views
+contiguous CPU or WebGPU float32 addition, multiplication, total sum, shape-only views
 and supported copy history. The [gradient-state architecture](../architecture/cpu-gradient-state.md)
 owns identity, retention, progress and cycle responsibilities; the
 [compatibility record](../compatibility.md#cpu-backward-evidence) bounds native correspondence.
@@ -39,12 +39,20 @@ Tracked seeds are valid. False boolean and integer mode forms are accepted;
 are explicitly unsupported. Invalid Python bindings retain their native error
 class; exact native wording is not promised.
 
+The output and an explicit seed must use the same device. Shape validation
+precedes this unsupported-transfer boundary. Disconnected tracked inputs on
+another enabled device remain ignored; selection does not create a transfer.
+An implicit seed and all generated derivative values use the output's device.
+
 Every tensor has an initially absent `.grad`. Assignment accepts `None` or a
 same-session tensor with matching metadata. It preserves the exact assigned
 object, tracking and history. Assignment to the identical owner rejects;
 assignment to a distinct view of its storage is valid. Assignment alone does
 not install nonleaf retention. Reading an absent unretained nonleaf gradient
 emits `UserWarning`; reading a retained or assigned slot does not.
+Device matching is checked before shape matching; a rejected assignment leaves
+the previous association intact. Python reports metadata rejection as
+`RuntimeError`; JavaScript uses `UNSUPPORTED_DEVICE` or `SHAPE_MISMATCH`.
 
 ## JavaScript calls
 
@@ -104,6 +112,15 @@ reservation. The [history component](../components/derivative-history.md#costs-a
 describes that bounded refinement. Byte and pending-effect limits remain
 independent.
 
+On GPU, the association is installed when its mandatory effect is admitted;
+`.grad` access does not wait for numerical completion. Ordinary managed Python
+can immediately observe that slot through shared completion, without JSPI.
+Clearing it cannot cancel accepted work or allow a late completion to reinstall
+it. Observation may finish before physical drain; completion and close join
+the separately retained pins. GPU admission keeps the conservative owner
+reservation: a prepared CPU backend in the same session does not establish the
+closed-CPU refinement for suspended GPU work.
+
 Live history strongly owns leaf accumulator identities and weakly refers to
 retained nonleaf destinations. Views strongly own base identities. Unreachable
 association cycles are collected by the runtime. Explicit JavaScript close and
@@ -119,6 +136,6 @@ pending work, rather than completed call count. Internal tests count these
 occurrences; public diagnostics retain their established shape. Logical counters
 establish no timing or total process-memory guarantee.
 
-GPU backward and persistent gradient state, GPU optimizers, public retention
-hooks, higher-order graphs, JVP, broader dtypes/layouts and general broadcasting
+GPU optimizers, public retention hooks, higher-order graphs, JVP,
+broader dtypes/layouts, cross-device transfers and general broadcasting
 remain outside this boundary.

@@ -7943,6 +7943,33 @@
           "tracking": false
         }
       }
+    },
+    {
+      "name": "acquisition-stored-seed-bits",
+      "kind": "bits",
+      "source": "\nimport struct\ndef words(value):\n    return [struct.unpack('<I', struct.pack('<f', item))[0] for item in value.tolist()]\nbits = [0x80000000, 1, 0x7f7fffff, 0x7f800000]\nvalues = [struct.unpack('<f', struct.pack('<I', word))[0] for word in bits]\np = torch.tensor([0., 0., 0., 0.], dtype=torch.float32, requires_grad=True)\nseed = torch.tensor(values, dtype=torch.float32)\np.backward(seed)\ngradient = p.grad\ninitial = words(gradient)\ncloned = gradient is not seed\nwith torch.no_grad(): seed.copy_(torch.tensor([1., 1., 1., 1.], dtype=torch.float32))\nafter_seed = words(gradient)\nsame = p.grad is gradient\np.grad = None\nreport = {'initial': initial, 'cloned': cloned, 'same': same,\n          'afterSeed': after_seed, 'afterClear': words(gradient)}\n",
+      "expected": {
+        "initial": [
+          2147483648,
+          1,
+          2139095039,
+          2139095040
+        ],
+        "cloned": true,
+        "same": true,
+        "afterSeed": [
+          2147483648,
+          1,
+          2139095039,
+          2139095040
+        ],
+        "afterClear": [
+          2147483648,
+          1,
+          2139095039,
+          2139095040
+        ]
+      }
     }
   ],
   "sgdCases": [

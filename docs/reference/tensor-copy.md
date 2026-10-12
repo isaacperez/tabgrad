@@ -107,7 +107,8 @@ predecessors without interpreter-local callbacks. A discarded computed copy
 also finishes at managed entry completion. Host-ready sources can publish
 logically without an upload; this does not promise residency. Every observation
 still uses the selected device. Connected zero derivatives stay on that device.
-GPU persistent gradient slots, backward and SGD remain excluded.
+[Backward gradient slots](backward-gradients.md) use these same mandatory
+effects on GPU; GPU SGD remains excluded.
 
 Each gradient result also carries the captured root, traversed-history and
 explicit-seed outcomes, even when its numbers are a constant zero or a cutoff

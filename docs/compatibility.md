@@ -260,8 +260,8 @@ resident sharing with old reads, source-family independence and fixed-owner
 functional-gradient/noGrad update cycles. Controlled shared-ticket and backend
 tests cover dropped effects, synchronous observation, causal failure, generation
 loss, late drain, pending close and unknown completion. Managed Python includes
-an observation-free dropped-copy entry without JSPI. These bounded tests neither
-qualify GPU persistent gradient state/backward/SGD nor claim a temporal/RSS/VRAM
+an observation-free dropped-copy entry without JSPI. This copy corpus alone does
+not qualify GPU backward state or SGD and does not claim a temporal/RSS/VRAM
 advantage or portability across adapters. Exact run environments remain in
 verification evidence.
 
@@ -394,6 +394,33 @@ and process RSS are different measurements. Passing numerical and lifecycle
 checks establish neither a speed comparison nor bounded total process memory.
 Exact distribution identities, browser versions, command outcomes and material
 cost measurements belong to the change's verification evidence.
+
+### GPU backward evidence
+
+Packaged direct and managed GPU fixtures reuse the registered native backward
+corpus with unchanged expected results, selecting the device only at tensor
+creation. The direct path selects the JavaScript-applicable cases and private
+version controls; Python consumes all native calling forms, warning and
+identity observations. Ordinary same-entry `.grad` access and `tolist()` run
+with JSPI absent. Native CPU expectations establish these covered semantic
+traces, not native CUDA scheduling or arbitrary floating-point graph identity.
+
+Additional device-boundary checks preserve rejected gradient associations and
+device-before-shape assignment validation. Disconnected tracked targets on
+another enabled backend remain ignored. Unsupported seed transfer is explicit;
+it is not described as a native-invalid call. Separate controls cover mandatory
+cleared/dropped acquisition, authoritative failure delivery, capacity admission,
+retained nonleaf replacement and source pins through drain.
+
+Actual wrapper collection, own-view/mutual cycles and repeated gradient reset
+exercise the same semantic owners on GPU. Fixed-owner accumulation cohorts vary
+payload, aliases, root count, depth and repetitions independently, retain the
+acquisition and first-accumulation checkpoints, and check steady owning counts
+after physical drain. A retained calculation separately preserves an old
+gradient snapshot. These are logical/resource invariants in the named prepared
+Chrome/Apple environment; they establish neither universal RSS/VRAM bounds nor
+a temporal advantage. GPU SGD, transfers, broader modes/types/layouts and other
+device qualification remain separate.
 
 ### CPU SGD evidence
 

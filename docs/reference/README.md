@@ -41,7 +41,7 @@ product signatures, equal-shape inputs, numerical behavior and CPU limits.
 Use [Functional first-order gradients](functional-gradients.md) for tracked
 creation, seed and input forms, saved-history consumption, errors and limits.
 
-Use [CPU backward and persistent gradients](backward-gradients.md) for backward
+Use [Backward and persistent gradients](backward-gradients.md) for backward
 calls, gradient identity, accumulation, retention, reset and lifetime.
 
 Use [Persistent tensor copy](tensor-copy.md) for identity-preserving updates,

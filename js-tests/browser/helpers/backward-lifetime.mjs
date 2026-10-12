@@ -3,60 +3,63 @@ function equal(actual, expected, label) {
   if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new Error(`${label}: ${JSON.stringify(actual)} != ${JSON.stringify(expected)}`);
 }
 
-export async function checkBackwardLifetime(session, semanticOwnership) {
-  await checkTrackingEpochTransitions(session);
-  const x = session.tensor([2, 3], { requiresGrad: true });
-  const assigned = session.tensor([10, 20]); x.grad = assigned;
+export async function checkBackwardLifetime(session, semanticOwnership, device = "cpu", complete) {
+  await checkTrackingEpochTransitions(session, device);
+  const x = session.tensor([2, 3], { requiresGrad: true, device });
+  const assigned = session.tensor([10, 20], { device }); x.grad = assigned;
   const product = x.mul(x); const root = product.sum(); product.close(); x.close();
   root.backward(); root.close();
   equal([...await assigned.toArray()], [14, 26], 'closed leaf exposure retains accumulator endpoint');
   assigned.close();
 
-  const leaf = session.tensor([2, 3], { requiresGrad: true });
-  const mid = leaf.add(leaf); const child = mid.sum(); const untracked = session.tensor([1, 1]);
+  const leaf = session.tensor([2, 3], { requiresGrad: true, device });
+  const mid = leaf.add(leaf); const child = mid.sum(); const untracked = session.tensor([1, 1], { device });
   try { child.backward(undefined, { inputs: [mid, untracked] }); throw new Error('untracked input accepted'); }
   catch (error) { if (error.code !== 'GRADIENT_NOT_TRACKED') throw error; }
-  const prior = session.tensor([10, 20]); mid.grad = prior;
+  const prior = session.tensor([10, 20], { device }); mid.grad = prior;
   mid.close(); child.backward(); child.close(); untracked.close();
   equal([...await prior.toArray()], [10, 20], 'closed nonleaf exposure leaves only weak retention hook');
   prior.close(); leaf.close();
 
-  const a = session.tensor([2, 3], { requiresGrad: true }); const b = session.tensor([5, 7], { requiresGrad: true });
+  const a = session.tensor([2, 3], { requiresGrad: true, device }); const b = session.tensor([5, 7], { requiresGrad: true, device });
   a.grad = b; b.grad = a; a.close();
   equal([...await b.grad.toArray()], [2, 3], 'external root preserves mutual association');
   b.grad.close(); b.close();
   session.diagnostics();
 
-  const owner = session.tensor([2, 3], { requiresGrad: true });
+  const owner = session.tensor([2, 3], { requiresGrad: true, device });
   let baseline;
   for (let iteration = 0; iteration < 32; iteration += 1) {
     const square = owner.mul(owner); const output = square.sum(); square.close(); output.backward(); output.close();
     let gradient = owner.grad;
     equal([...await gradient.toArray()], [4, 6], 'association reset permits fresh acquisition');
+    if (complete !== undefined) await complete(session);
     if (semanticOwnership !== undefined) {
       const now = semanticOwnership(session);
       const live = Object.fromEntries(Object.entries(now).filter(([key]) => !key.startsWith('collector')));
       if (baseline === undefined) baseline = live; else equal(live, baseline, 'fixed roots bound semantic owning occurrences');
     }
     const alias = gradient.view([1, 2]);
-    const zero = session.tensor([0, 0]);
+    const zero = session.tensor([0, 0], { device });
     session.noGrad(() => gradient.copy_(zero)); zero.close();
     owner.grad = null; gradient.close();
     equal([...await alias.toArray()], [0, 0], 'clearing preserves exposed former gradient alias');
     alias.close();
   }
   owner.close();
+  // GPU observation may publish before its separate physical drain releases pins.
+  if (complete !== undefined) await complete(session);
   const diagnostics = session.diagnostics();
   equal([diagnostics.liveTensorHandles, diagnostics.liveTensorValues, diagnostics.liveDerivativeNodes, diagnostics.liveSavedValues, diagnostics.liveAllocationBytes], [0, 0, 0, 0, 0], 'semantic lifetime teardown');
 }
 
 /** Existing aliases observe base promotion, lazy resolution and special provenance. */
-export async function checkTrackingEpochTransitions(session) {
+export async function checkTrackingEpochTransitions(session, device = "cpu") {
   for (const throughView of [false, true]) {
-    const base = session.tensor([0, 0]); const ordinary = base.view([2]); const nested = ordinary.view([1, 2]);
+    const base = session.tensor([0, 0], { device }); const ordinary = base.view([2]); const nested = ordinary.view([1, 2]);
     const special = session.noGrad(() => base.view([2]));
     const specialNested = session.noGrad(() => special.view([1, 2]));
-    const source = session.tensor([5, 7], { requiresGrad: true }); const handles = [base, ordinary, nested, special, specialNested];
+    const source = session.tensor([5, 7], { requiresGrad: true, device }); const handles = [base, ordinary, nested, special, specialNested];
     equal(handles.map(handle => handle.requiresGrad), [false, false, false, false, false], 'initial plain tracking');
     (throughView ? ordinary : base).copy_(source);
     equal(handles.map(handle => handle.requiresGrad), [true, true, true, true, true], 'old aliases see active promotion');
@@ -67,7 +70,7 @@ export async function checkTrackingEpochTransitions(session) {
       try { handle.sum(); throw new Error('dirty special view admitted an active operation'); }
       catch (error) { if (error.code !== 'INPLACE_VIEW') throw error; }
     }
-    const plain = session.tensor([9, 11]); session.noGrad(() => base.copy_(plain));
+    const plain = session.tensor([9, 11], { device }); session.noGrad(() => base.copy_(plain));
     equal(handles.map(handle => handle.requiresGrad), [true, true, true, true, true], 'plain no-grad write preserves promoted tracking');
     const child = nested.view([2]); equal(child.requiresGrad, true, 'new child of unresolved old ordinary alias');
     base.close(); equal(nested.requiresGrad, true, 'closed base exposure preserves promoted tracking');

@@ -30,7 +30,7 @@ Semantic tensor identity is distinct from the public object that exposes it.
 Closing an exposure retires its public lease; an assigned gradient or live true
 leaf endpoint can still own that identity. Numerical aliases can share value
 and version state while their tracking, history and gradient associations differ.
-The [CPU gradient-state contract](cpu-gradient-state.md) specializes those
+The [gradient-state contract](cpu-gradient-state.md) specializes those
 distinctions, canonical exposure and cycle responsibility without prescribing
 one implemented class for each semantic record.
 
@@ -184,7 +184,7 @@ An optimizer update can replace the current `TensorValue` of a parameter.
 `TensorState` and the differentiable leaf identity remain stable, so gradients
 and optimizer state continue to attach to the parameter the user knows.
 
-[Persistent CPU tensor updates](cpu-tensor-updates.md) defines the bounded
+[Persistent tensor updates](cpu-tensor-updates.md) defines the bounded
 specialization: independent alias versions can share immutable numerical
 backings while captured reads and writer outcomes retain separate ownership.
 
