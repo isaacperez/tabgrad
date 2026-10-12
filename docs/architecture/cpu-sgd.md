@@ -1,4 +1,4 @@
-# Ordinary CPU SGD
+# Ordinary basic SGD
 
 An optimizer updates parameters using their associated gradients. Familiar
 PyTorch training code resets gradients, computes a loss, calls backward and
@@ -7,8 +7,10 @@ the calls also expose defaults, argument errors, tensor identity, aliases and
 partial progress. Those observations constrain the implementation even when
 Tabgrad performs the numerical work differently.
 
-This chapter owns the accepted ordinary contiguous CPU float32 basic SGD
-contract. It is for contributors preserving that behavior, rather than an
+This chapter owns the common contiguous float32 basic SGD semantic contract
+and its CPU physical response. The [WebGPU specialization](webgpu-sgd.md)
+owns GPU coefficient arithmetic, immutable metadata and device-local reset.
+It is for contributors preserving that behavior, rather than an
 installation tutorial or a claim that SGD is released. The
 [compatibility record](../compatibility.md) establishes implemented support.
 Read [gradient state](cpu-gradient-state.md) for tensor identities and
@@ -355,8 +357,10 @@ Validate when an update actually occurs: an absent gradient skips the update,
 while an empty gradient still requires coefficient validation.
 
 Capture the resulting coefficient bits as immutable per-invocation metadata
-through the ordinary operation record, program formation and validation, CPU
-dispatch, and versioned private Wasm ABI/artifact contract. Later group-rate
+through the ordinary operation record, program formation and validation. CPU
+dispatch and its versioned private Wasm ABI preserve that capture; the
+[GPU specialization](webgpu-sgd.md#immutable-coefficient-data-follows-invocation-ownership)
+owns its physical metadata. Later group-rate
 mutation must not change already captured work. The ordinary arithmetic owner
 supplies this update; no optimizer-private loop or whole-step compilation is
 introduced. Public alpha=1 addition and separately rounded public tensor
@@ -364,7 +368,7 @@ multiplication keep their contracts; this decision does not add public general
 alpha-add. Forward, backward, reset and optimizer effects continue through the
 ordinary operation/program/request/backend path.
 
-### Rounding and the physical response
+### Rounding and the CPU physical response
 
 For the selected PyTorch 2.14.0 arm64 wheel, require one nearest/ties-even
 float32 rounding of the exact float32 coefficient-times-gradient plus

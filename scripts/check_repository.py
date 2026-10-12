@@ -107,6 +107,7 @@ ARCHITECTURE_DOCUMENTS = {
     "docs/architecture/webassembly-cpu-backend.md",
     "docs/architecture/webgpu-float32-addition.md",
     "docs/architecture/webgpu-float32-sum.md",
+    "docs/architecture/webgpu-sgd.md",
     "docs/architecture/webgpu-integration.md",
 }
 TIMELESS_DOCUMENTS = ARCHITECTURE_DOCUMENTS | {

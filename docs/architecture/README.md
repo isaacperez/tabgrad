@@ -166,8 +166,10 @@ Read the documents in this order when learning the architecture:
    [Backward and gradient state](cpu-gradient-state.md) defines persistent
    gradient identity, leaf accumulation, nonleaf retention, per-node failure
    progress and cycle responsibility over that same execution path.
-   [Ordinary CPU SGD](cpu-sgd.md) specializes native optimizer calls, gradient
+   [Ordinary basic SGD](cpu-sgd.md) specializes native optimizer calls, gradient
    reset, sequential updates, closure lifetime and optimizer ownership.
+   [Basic SGD on WebGPU](webgpu-sgd.md) explains its GPU numerical response,
+   immutable coefficient capture and independent physical drain.
 10. [Reusable programs and compiled callables](reusable-programs.md) explains how
    stable repeated work avoids repeated formation while retaining fresh runtime
    state.

@@ -121,7 +121,7 @@ follow the executing node, including saved positions whose requested
 contribution is pruned. Unexecuted cutoff/connectivity-only nodes need no such
 save validation. Successful earlier recipes and gradient commits can survive a
 later semantic error; the whole traversal is not transactional. The
-[CPU gradient-state contract](cpu-gradient-state.md#progress-and-failure-belong-to-executing-nodes)
+[Gradient-state contract](cpu-gradient-state.md#progress-and-failure-belong-to-executing-nodes)
 owns this rule for functional and accumulating differentiation. The
 [compatibility record](../compatibility.md#functional-failure-progress) identifies
 the historical whole-selected preflight discrepancy and its correction.
@@ -163,7 +163,8 @@ and the existing bit-preserving expansion through the ordinary program path;
 they are neither CPU arrays nor multiplication by zero. This domain supports
 functional differentiation, backward gradient effects and no-grad updates.
 The [gradient-state specialization](cpu-gradient-state.md#device-specialization-and-asynchronous-gpu-completion)
-owns GPU slots and accumulation; GPU SGD remains outside this contract.
+owns GPU slots and accumulation. Copy and gradient effects alone do not define
+optimizer arithmetic; the [GPU SGD contract](webgpu-sgd.md) owns that response.
 
 A fresh immutable physical copy remains a preserving alternative, but adds a
 byte-copy/allocation path and its transport/completion ownership. Inplace or
