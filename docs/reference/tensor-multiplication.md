@@ -55,7 +55,7 @@ Tracked CPU and WebGPU operands participate in
 Each tracked input's derivative saves the opposite operand, including when that
 operand does not track. Numerical saved values have an independent lifetime
 from the forward execution dependencies described below.
-GPU persistent gradient state and backward accumulation remain unsupported.
+[Backward accumulation](backward-gradients.md) uses this same operation on both devices.
 
 ## Admission and resource ownership
 

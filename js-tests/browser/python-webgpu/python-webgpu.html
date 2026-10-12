@@ -45,9 +45,28 @@
 import torch, gc
 import _test_grad
 import _test_copy
+import _test_backward
 from pyodide.code import eval_code_async
 await eval_code_async(str(_test_grad.source), globals=globals())
 await eval_code_async(str(_test_copy.source), globals=globals())
+def check_gradient_device_errors():
+    p = torch.tensor([2., 3.], dtype=torch.float32, device='webgpu', requires_grad=True)
+    old = torch.tensor([10., 20.], dtype=torch.float32, device='webgpu')
+    p.grad = old
+    for data in [[1., 1.], [1.]]:
+        other = torch.tensor(data, dtype=torch.float32)
+        try: p.grad = other
+        except RuntimeError: pass
+        else: raise AssertionError('mixed-device gradient assignment accepted')
+        assert p.grad is old
+    seed = torch.tensor([1., 1.], dtype=torch.float32)
+    try: p.backward(seed)
+    except RuntimeError: pass
+    else: raise AssertionError('mixed-device backward seed accepted')
+    assert p.grad is old
+check_gradient_device_errors()
+gc.collect()
+await eval_code_async(str(_test_backward.source), globals=globals())
 session = torch._runtime_session
 gpu = torch.device('webgpu')
 assert gpu.type == 'webgpu' and gpu.index is None and str(gpu) == 'webgpu'
@@ -81,7 +100,7 @@ def check_functional_subset():
         warnings.simplefilter('always')
         assert loss.grad is None
         assert len(caught) == 1 and caught[0].category is UserWarning
-    for call in [lambda: loss.backward(), lambda: torch.optim.SGD([x], lr=.1)]:
+    for call in [lambda: torch.optim.SGD([x], lr=.1)]:
         try: call()
         except RuntimeError: pass
         else: raise AssertionError('Persistent GPU state admitted')
@@ -197,6 +216,16 @@ def dropped_gpu_copy():
     p = torch.tensor([0., 0.], dtype=torch.float32, device='webgpu')
     p.copy_(x*x)
 dropped_gpu_copy()
+gc.collect()
+`);
+        await client.runPythonAsync("gc.collect(); assert session.diagnostics().liveRequestLeases == 0; assert session.diagnostics().liveTensorHandles == 0; assert session.diagnostics().webgpu.ownedBufferBytes == 0");
+        // Gradient acquisition remains mandatory after its association and wrappers disappear.
+        await client.runPythonAsync(`
+def dropped_gpu_backward():
+    p = torch.tensor([2., 3.], dtype=torch.float32, device='webgpu', requires_grad=True)
+    (p*p).sum().backward()
+    p.grad = None
+dropped_gpu_backward()
 gc.collect()
 `);
         await client.runPythonAsync("gc.collect(); assert session.diagnostics().liveRequestLeases == 0; assert session.diagnostics().liveTensorHandles == 0; assert session.diagnostics().webgpu.ownedBufferBytes == 0");

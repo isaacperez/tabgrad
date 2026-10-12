@@ -87,8 +87,12 @@ untracked first-order gradients through add/mul/total sum/views under the
 values; derivative operations use this backend, including internal scalar
 expansion, without a CPU numerical detour. Reading absent `.grad` remains valid.
 
-Dimensional reductions, backward, non-null gradient assignment and SGD are
-outside this GPU execution domain. Persistent-state calls use
+First-order [backward and persistent gradients](backward-gradients.md) use these
+same operations, histories and mandatory effects. Leaf slots retain canonical
+identity across accumulation; selected nonleaf slots can be replaced. Assignment
+and clearing preserve exposed gradients and their aliases.
+
+Dimensional reductions and SGD are outside this GPU execution domain. Optimizer calls use
 `UNSUPPORTED_GRADIENT`; unsupported computations use `BACKEND_CAPABILITY_MISMATCH`.
 Capability rejection happens before recording unsupported work. Mixing CPU and GPU
 operands is rejected, not interpreted as a transfer. CPU behavior remains

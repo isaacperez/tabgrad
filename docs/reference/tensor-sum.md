@@ -50,7 +50,7 @@ Tracked CPU and WebGPU inputs participate in
 [functional gradients](functional-gradients.md).
 The derivative expands the incoming scalar to the input shape, including empty
 dimensions; an interior sum does not assume that incoming scalar equals one.
-WebGPU does not support persistent gradient state or backward accumulation.
+[Backward accumulation](backward-gradients.md) uses this same derivative on both devices.
 Device selection is explicit; a GPU sum does not fall back to CPU.
 
 ## Admission, observation and ownership

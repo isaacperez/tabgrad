@@ -20,10 +20,10 @@ function attempt(call) {
 
 class BackwardCase {
   handles = [];
-  constructor(session, inspectVersion) { this.session = session; this.inspectVersion = inspectVersion; }
+  constructor(session, inspectVersion, device) { this.session = session; this.inspectVersion = inspectVersion; this.device = device; }
   keep(handle) { this.handles.push(handle); return handle; }
   tensor(values, tracked = true, shape) {
-    return this.keep(this.session.tensor(values, { requiresGrad: tracked, ...(shape === undefined ? {} : { shape }) }));
+    return this.keep(this.session.tensor(values, { device: this.device, requiresGrad: tracked, ...(shape === undefined ? {} : { shape }) }));
   }
   async close() {
     const failures = [];
@@ -186,10 +186,22 @@ async function setupCase(c, name) {
   return { call, retained: await state(c.gradient(mid)), leaf: await state(c.gradient(x)) };
 }
 
-export async function checkBackwardCase(session, fixture, inspectVersion) {
-  const c = new BackwardCase(session, inspectVersion);
+async function seedBitsCase(c) {
+  const words = new Uint32Array([0x80000000, 1, 0x7f7fffff, 0x7f800000]);
+  const p = c.tensor([0, 0, 0, 0]), seed = c.tensor(new Float32Array(words.buffer), false);
+  p.backward(seed); const gradient = c.gradient(p);
+  const initial = [...new Uint32Array((await gradient.toArray()).buffer)], cloned = gradient !== seed;
+  c.session.noGrad(() => seed.copy_(c.tensor([1, 1, 1, 1], false)));
+  const afterSeed = [...new Uint32Array((await gradient.toArray()).buffer)], same = p.grad === gradient;
+  p.grad = null;
+  return { initial, cloned, same, afterSeed, afterClear: [...new Uint32Array((await gradient.toArray()).buffer)] };
+}
+
+export async function checkBackwardCase(session, fixture, inspectVersion, device = "cpu") {
+  const c = new BackwardCase(session, inspectVersion, device);
   try {
-    const report = fixture.kind === "binding" ? await bindingCase(c, fixture.name.slice(8))
+    const report = fixture.kind === "bits" ? await seedBitsCase(c)
+      : fixture.kind === "binding" ? await bindingCase(c, fixture.name.slice(8))
       : fixture.kind === "transition" ? await transitionCase(c, fixture.name)
         : fixture.kind === "shape" ? await shapeCase(c, fixture.name)
           : fixture.kind === "seed-alias" ? await seedAliasCase(c, fixture.name)
@@ -203,8 +215,18 @@ export async function checkBackwardCase(session, fixture, inspectVersion) {
   } finally { await c.close(); }
 }
 
-export function pythonBackwardChecks(oracle) {
-  return oracle.backwardCases.map(fixture => `
+/** Select only tensor creation's device; frozen native calls and results stay unchanged. */
+export function pythonBackwardDeviceSource(source, device) {
+  if (device === "cpu") return source;
+  if (device !== "webgpu") throw new Error("Unknown backward fixture device");
+  return `import torch
+def _backward_tensor(data, **kwargs):
+    return torch.tensor(data, device="webgpu", **kwargs)
+${source.replaceAll("torch.tensor(", "_backward_tensor(")}`;
+}
+
+export function pythonBackwardChecks(oracle, device = "cpu") {
+  return pythonBackwardDeviceSource(oracle.backwardCases.map(fixture => `
 import torch, json, gc
 def check_backward_fixture():
 ${fixture.source.trimEnd().split("\n").map(line => `    ${line}`).join("\n")}
@@ -214,5 +236,5 @@ gc.collect()
 assert torch._runtime_session.diagnostics().liveTensorHandles == 0
 assert torch._runtime_session.diagnostics().liveSavedValues == 0
 assert torch._runtime_session.diagnostics().liveDerivativeNodes == 0
-`).join("\n");
+`).join("\n"), device);
 }

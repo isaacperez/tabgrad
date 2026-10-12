@@ -178,13 +178,13 @@ remain bounded by the underlying operation references. Oracle cases use small,
 exactly representable values to establish derivative semantics rather than
 claiming bitwise equivalence for every floating-point graph.
 
-Functional calls do not automatically accumulate leaf gradients. On CPU, already
+Functional calls do not automatically accumulate leaf gradients. On CPU and WebGPU, already
 retained nonleaves can receive contributions, including at input cutoffs; the
 [backward reference](backward-gradients.md) owns persistent slot behavior.
-GPU backward, non-null gradient assignment, persistent accumulation/retention,
-and SGD remain unsupported. Same-device [`copy_`](tensor-copy.md) supports
-functional copy derivatives and no-grad parameter updates. Reading an absent GPU `.grad` returns `None`
-in Python or `null` in JavaScript; assigning `None`/`null` keeps it absent.
+Same-device [`copy_`](tensor-copy.md) supports functional copy derivatives and
+no-grad parameter updates. [Backward](backward-gradients.md) owns explicit
+accumulation, canonical gradient slots, assignment and clearing on both devices.
+GPU SGD remains unsupported.
 Higher-order graphs, JVP, public broadcasting, axis reduction and
 broader dtype/device/layout remain excluded. These exclusions do not change
 ordinary nontracking computation or introduce a backend fallback.

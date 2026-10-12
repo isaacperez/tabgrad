@@ -220,7 +220,7 @@ class Tensor:
         create_graph: object = False,
         inputs: object = None,
     ) -> None:
-        """Accumulate first-order CPU gradients through the shared semantic runtime."""
+        """Accumulate first-order same-device gradients through the shared runtime."""
         _backward_mode("retain_graph", retain_graph, optional=True)
         _backward_mode("create_graph", create_graph)
         requested = _backward_inputs(inputs)
@@ -418,6 +418,7 @@ def _raise_gradient_failure(error: JsException) -> NoReturn:
         "SAVED_DETACHED",
         "INPLACE_VIEW",
         "UNSUPPORTED_GRADIENT",
+        "UNSUPPORTED_DEVICE",
     }:
         raise RuntimeError(str(error)) from error
     raise error
