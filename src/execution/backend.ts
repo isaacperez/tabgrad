@@ -15,7 +15,7 @@ export interface ProgramBinding {
 export interface BackendCapabilities {
   readonly device: TensorDevice;
   readonly computations: readonly LoweredComputation["kind"][];
-  /** Tracking and functional derivatives; persistent state has its own CPU domain. */
+  /** Tracking, functional derivatives and persistent gradient state. */
   readonly gradients: boolean;
   readonly maximumTensorBytes: number;
 }

@@ -12,7 +12,7 @@ coefficient and lifetime boundaries. The [ordinary SGD contract](cpu-sgd.md)
 owns calls, group and callback phases, gradient capture, reset metadata,
 identity, versions and partial progress. Read that contract first, then this
 chapter for the GPU response. The [SGD reference](../reference/sgd.md) and
-[compatibility record](../compatibility.md#cpu-sgd-evidence) establish actual
+[compatibility record](../compatibility.md#gpu-sgd-evidence) establish actual
 public support; architectural acceptance does not establish it.
 
 ## Preserve the stored update

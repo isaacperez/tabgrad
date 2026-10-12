@@ -828,7 +828,7 @@ export class RuntimeSession {
     }));
   }
 
-  /** Construct basic CPU SGD without copying parameter payloads. */
+  /** Construct basic SGD without copying parameter payloads. */
   sgd(parameters: Tensor[] | SGDParameterGroup[], options?: SGDOptions): SGD {
     this.#assertOpen();
     if (arguments.length > 2) throw new TypeError("sgd requires parameters and optional options.");
