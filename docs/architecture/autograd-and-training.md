@@ -123,7 +123,8 @@ versions and participates in the same effect order as other in-place work.
 Functional and stateful first-order GPU derivatives reuse these common history and operation
 owners. Their selected backend supplies scalar expansion and ordinary numerical
 execution; no separate GPU derivative engine is needed. Persistent associations
-and backward use these same owners; optimizer updates remain in the CPU domain.
+and backward use these same owners. Optimizer updates also follow their selected
+device's ordinary computation contract.
 
 The [gradient-state contract](cpu-gradient-state.md) distinguishes leaf
 accumulation from retained nonleaf replacement. It separates semantic tensor
@@ -133,8 +134,10 @@ These obligations reuse the common path; they do not establish release support.
 
 ## Optimizers use the ordinary path
 
-The [ordinary CPU SGD contract](cpu-sgd.md) defines the accepted basic call
+The [ordinary basic SGD contract](cpu-sgd.md) defines the accepted basic call
 domain, native reset/update ordering and optimizer ownership requirements.
+Its [WebGPU specialization](webgpu-sgd.md) owns coefficient arithmetic and
+immutable per-computation data without replacing those shared owners.
 Its numerical and lifecycle qualification requirements do not establish
 released support; the compatibility record remains the evidence authority.
 
