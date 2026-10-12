@@ -134,8 +134,9 @@ payload bytes or a minimum requirement.
 An owner rejection can instead use `S * (controls - E + 1) + 4E`, where `E`
 is the planned receiver-effect count. Old pending or failed controls still
 multiply the temporary-container bound. Newly created effects need at most
-four references each, including retain-before-release overlap, only under
-closed canonical dispatch. The runtime checks that dispatch by descriptors,
+four references each, including retain-before-release overlap, only for a CPU
+differentiation plan under closed canonical dispatch. A ready CPU backend does
+not qualify a GPU plan. The runtime checks that dispatch by descriptors,
 without invoking user getters, after ordinary argument normalization. It
 requires an empty request queue, no active advancement or reachable formation
 or publication hook, and canonical runtime, CPU and writer-ledger methods.
