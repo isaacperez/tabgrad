@@ -134,6 +134,23 @@ test("loss during shared predecessor observation delivers the writer failure bef
   await completeRuntimeSession(session); await session.close();
 });
 
+test("synchronous observation delivers an already failed writer on a lost backend exactly once", async () => {
+  const backend = new CopyBackend(), session = createConnectedRuntimeSession(backend);
+  const p = gpu(session, [0]), source = gpu(session, [2]);
+  const failure = new TabgradError("BACKEND_STATUS_ERROR", "lost before copy");
+  backend.failure = failure; backend.ready = false;
+  p.copy_(source);
+  assert.equal(getTestRuntimeOwnership(session).undeliveredEffects, 1);
+  assert.throws(() => observeTensorSynchronously(session, p), {
+    code: failure.code, message: failure.message, cause: failure,
+  });
+  assert.equal(getTestRuntimeOwnership(session).undeliveredEffects, 0);
+  await completeRuntimeSession(session);
+  // An unmodified tensor has no writer failure to discharge: availability still applies.
+  assert.throws(() => observeTensorSynchronously(session, source), error => error === failure);
+  await session.close();
+});
+
 for (const shape of [[], [0], [2]]) {
   test(`host/self GPU copy checks lost generation for shape ${JSON.stringify(shape)}`, async () => {
     const backend = new CopyBackend(), session = createConnectedRuntimeSession(backend);

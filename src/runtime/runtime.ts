@@ -1571,13 +1571,18 @@ export class RuntimeSession {
   }
 
   #backendFor(device: TensorDevice, operation: string): ExecutionBackend {
+    const backend = this.#selectBackend(device, operation);
+    backend.assertAvailable();
+    return backend;
+  }
+
+  #selectBackend(device: TensorDevice, operation: string): ExecutionBackend {
     const backend = device === "cpu" ? this.#backend : device === "webgpu" ? this.#gpuBackend : undefined;
     if (backend === undefined) {
       throw new TabgradError("UNSUPPORTED_DEVICE", "The selected device is not enabled in this session.", {
         operation, device, contract: "enabled-device",
       });
     }
-    backend.assertAvailable();
     return backend;
   }
 
@@ -1895,20 +1900,24 @@ export class RuntimeSession {
   #observeSynchronously(state: TensorState): Float32Array {
     this.#assertOpen();
     const host = this.#materializations.get(state.value)?.kind === "host";
-    const backend = this.#backendFor(state.value.device, "observe");
+    const backend = this.#selectBackend(state.value.device, "observe");
     if (backend.synchronousObservation) {
       while (this.#requestHead !== undefined && this.#requestHead.advanceSynchronously()) {
         // Each terminal predecessor unlinks itself through common publication.
       }
     }
     // A terminal writer failure is observable without a ready numerical backend.
-    // Let the ordinary observation owner deliver it, including loss while waiting.
-    if (!backend.synchronousObservation || this.#requestHead !== undefined
-        || (!host && !backend.ready && failedWriterOutcome(state.value.outcomes) === undefined)) {
-      throw new TabgradError(
-        "SYNCHRONOUS_OBSERVATION_UNAVAILABLE",
-        "Synchronous observation requires local readiness and no pending asynchronous predecessor.",
-      );
+    // Let the ordinary observation owner deliver it, including loss before entry
+    // or while waiting. Pending predecessors still prevent ordered observation.
+    const failedWriter = this.#requestHead === undefined && failedWriterOutcome(state.value.outcomes) !== undefined;
+    if (!failedWriter) {
+      backend.assertAvailable();
+      if (!backend.synchronousObservation || this.#requestHead !== undefined || (!host && !backend.ready)) {
+        throw new TabgradError(
+          "SYNCHRONOUS_OBSERVATION_UNAVAILABLE",
+          "Synchronous observation requires local readiness and no pending asynchronous predecessor.",
+        );
+      }
     }
     const captured = state.value;
     this.#checkCapturedAdmission([captured]);
