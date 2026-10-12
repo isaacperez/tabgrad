@@ -290,11 +290,11 @@ class Tensor:
         return left.mul(other)
 
     def copy_(self: object, other: object, non_blocking: object = False) -> Tensor:
-        """Replace this CPU tensor's current value while preserving its identity.
+        """Replace this tensor's current value while preserving its identity.
 
-        Equal-shape contiguous float32 tensors must share the runtime session.
+        Equal-shape contiguous float32 tensors must share the session and device.
         Gradient recording follows the active no_grad context. non_blocking is
-        accepted as a bool; CPU publication uses the same ordered runtime path.
+        accepted as a bool; publication uses the same ordered runtime path.
         """
         if not isinstance(self, Tensor) or not hasattr(self, "_handle"):
             raise TypeError("copy_ requires a tensor destination.")
