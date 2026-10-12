@@ -828,7 +828,7 @@ export class RuntimeSession {
     }));
   }
 
-  /** Construct basic CPU SGD without copying parameter payloads. */
+  /** Construct basic SGD without copying parameter payloads. */
   sgd(parameters: Tensor[] | SGDParameterGroup[], options?: SGDOptions): SGD {
     this.#assertOpen();
     if (arguments.length > 2) throw new TypeError("sgd requires parameters and optional options.");
@@ -848,7 +848,7 @@ export class RuntimeSession {
         const state = requireTensorState(handle);
         assertTensorOpen(state);
         if (state.session !== this) throw new TabgradError("DIFFERENT_SESSION", "SGD parameters must belong to this session.");
-        this.#requireCpuOptimizerState(state.value.device, "SGD");
+        this.#requireGradientState(state.value.device, "SGD");
         if (state.history?.recipe !== null && state.history !== null && !state.identity.retained) {
           throw new TabgradError("INVALID_TENSOR", "Cannot optimize a non-leaf tensor without retained gradients.");
         }
@@ -1069,7 +1069,7 @@ export class RuntimeSession {
       this.#history.release(history);
     } else if (!identity.trueLeaf) identity.entry = null;
     identity.requiresGrad = false;
-    const scalar = this.tensor([0]);
+    const scalar = this.tensor([0], { device: identity.family.current.device });
     let zeros: Tensor | undefined;
     let failures: unknown[] | undefined;
     try {
@@ -1611,15 +1611,6 @@ export class RuntimeSession {
   #requireGradientState(device: TensorDevice, operation: string): void {
     const backend = this.#backendFor(device, operation);
     this.#requireGradients(backend, operation);
-  }
-
-  #requireCpuOptimizerState(device: TensorDevice, operation: string): void {
-    this.#requireGradientState(device, operation);
-    if (device !== "cpu") {
-      throw new TabgradError("UNSUPPORTED_GRADIENT", "Optimizers are supported only on CPU.", {
-        operation, device,
-      });
-    }
   }
 
   #requireComputation(value: TensorValue, definition: NumericalOperationDefinition): void {

@@ -9,6 +9,11 @@ import { pythonCopyFixtureChecks } from "/helpers/python-copy-cases.mjs";
 import { pythonGradientProgressChecks } from "/helpers/gradient-progress-cases.mjs";
 import { pythonBackwardChecks, pythonBackwardDeviceSource } from "/helpers/backward-cases.mjs";
 import { pythonBackwardLifetimeChecks } from "/helpers/backward-lifetime.mjs";
+import { pythonSGDChecks } from "/helpers/sgd-cases.mjs";
+import { pythonSGDHostChecks } from "/helpers/sgd-lifetime.mjs";
+import { pythonTensorDeviceSource } from "/helpers/python-tensor-device.mjs";
+import { getTestTensorVersion } from "/testing.js";
+import { gpuSGDCheckpoint } from "/helpers/gpu-sgd-cases.mjs";
 
 function expectedMultiplication(pairs, depth) {
   let bits = pairs.left;
@@ -48,11 +53,19 @@ addEventListener("message", async ({ data }) => {
         return descriptor.get.call(this);
       },
     });
-    interpreter.registerJsModule("_test_gpu_observers", { count: () => asynchronousGpuObservers });
+    interpreter.registerJsModule("_test_gpu_observers", { count: () => asynchronousGpuObservers,
+      revocationProgress: () => postMessage({ kind: "test-revoked-script-progress" }) });
     if (data.numericalCorpus) {
       const response = await fetch("/helpers/functional-gradient-oracle.json");
       if (!response.ok) throw new Error("Native functional oracle unavailable");
       const oracle = await response.json();
+      interpreter.globals.set("inspect_sgd_version", getTestTensorVersion);
+      interpreter.registerJsModule("_test_sgd", {
+        source: pythonSGDChecks(oracle, "webgpu") + pythonTensorDeviceSource(pythonSGDHostChecks, "webgpu"),
+      });
+      interpreter.registerJsModule("_test_sgd_resource", {
+        report: session => postMessage({ kind: "sgd-checkpoint", snapshot: gpuSGDCheckpoint(session) }),
+      });
       interpreter.registerJsModule("_test_grad", { source: pythonFunctionalGradientChecks(oracle, "webgpu") });
       interpreter.registerJsModule("_test_copy", { source: pythonCopyFixtureChecks(oracle, "webgpu") + pythonGradientProgressChecks(oracle, "webgpu") });
       interpreter.registerJsModule("_test_backward", {
@@ -84,6 +97,9 @@ addEventListener("message", async ({ data }) => {
       interpreter.unregisterJsModule("_test_grad");
       interpreter.unregisterJsModule("_test_copy");
       interpreter.unregisterJsModule("_test_backward");
+      interpreter.unregisterJsModule("_test_sgd");
+      interpreter.unregisterJsModule("_test_sgd_resource");
+      interpreter.globals.delete("inspect_sgd_version");
       interpreter.unregisterJsModule("_test_mul");
       interpreter.unregisterJsModule("_test_f32");
       interpreter.unregisterJsModule("_test_sum");

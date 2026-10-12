@@ -47,9 +47,9 @@ test("GPU implicit backward seed and assigned tracked gradient stay on their dev
     assert.equal(p.grad, ownView);
     assert.throws(() => { p.grad = p; }, { code: "INVALID_GRADIENT" });
     assert.equal(p.grad, ownView);
-    assert.throws(() => session.sgd([p], { lr: 0.1 }), {
-      code: "UNSUPPORTED_GRADIENT", message: "Optimizers are supported only on CPU.",
-    });
+    const optimizer = session.sgd([p], { lr: 0.1 });
+    assert.equal(optimizer.paramGroups[0].params[0], p);
+    optimizer.close();
   } finally { await session.close(); }
 });
 

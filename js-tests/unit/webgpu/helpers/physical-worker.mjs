@@ -40,6 +40,9 @@ globalThis.postMessage = (message) => parentPort.postMessage(message);
 parentPort.on("message", (message) => {
   if (message.kind === "inspect") parentPort.postMessage({ kind: "inspection",
     buffersDestroyed: acquired.buffers.every((buffer) => buffer.destroyed), deviceDestroyed: acquired.destroyed,
+    shaderCount: acquired.shaderSources.length, dispatches: acquired.dispatches,
+    coefficientPackets: acquired.bindingGroups.filter(entries => entries.length === 4)
+      .map(entries => [...new Uint32Array(entries[3].resource.buffer.data)]),
     liveRequests: [...requestMaps].reduce((total, map) => total + map.size, 0), observedRequestMaps: requestMaps.size });
 });
 startWebGpuWorker();

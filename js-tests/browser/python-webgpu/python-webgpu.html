@@ -4,6 +4,7 @@
   <body>
     <script type="module">
       import { connectPythonWorker, createWebGpuWorker } from "/python.js";
+      import { checkPythonGpuSGDResources } from "/helpers/gpu-sgd-cases.mjs";
       const token = new URLSearchParams(location.search).get("token");
       const lifetime = new AbortController();
       let worker;
@@ -46,6 +47,7 @@ import torch, gc
 import _test_grad
 import _test_copy
 import _test_backward
+import _test_sgd
 from pyodide.code import eval_code_async
 await eval_code_async(str(_test_grad.source), globals=globals())
 await eval_code_async(str(_test_copy.source), globals=globals())
@@ -67,6 +69,24 @@ def check_gradient_device_errors():
 check_gradient_device_errors()
 gc.collect()
 await eval_code_async(str(_test_backward.source), globals=globals())
+await eval_code_async(str(_test_sgd.source), globals=globals())
+def check_mixed_sgd():
+    p = torch.tensor([2.], dtype=torch.float32, requires_grad=True)
+    q = torch.tensor([3.], dtype=torch.float32, device='webgpu', requires_grad=True)
+    pg = torch.tensor([4.], dtype=torch.float32)
+    qg = torch.tensor([6.], dtype=torch.float32, device='webgpu')
+    p.grad = pg; q.grad = qg
+    optimizer = torch.optim.SGD([{'params': [p, q], 'lr': .125}])
+    before = torch._runtime_session.diagnostics().webgpu.readbackBytes
+    optimizer.step()
+    assert torch._runtime_session.diagnostics().webgpu.readbackBytes == before
+    assert p.tolist() == [1.5] and q.tolist() == [2.25]
+    optimizer.zero_grad(False)
+    assert p.grad is pg and q.grad is qg
+    assert pg.device == torch.device('cpu') and qg.device == torch.device('webgpu')
+    assert pg.tolist() == [0.] and qg.tolist() == [0.]
+check_mixed_sgd()
+gc.collect()
 session = torch._runtime_session
 gpu = torch.device('webgpu')
 assert gpu.type == 'webgpu' and gpu.index is None and str(gpu) == 'webgpu'
@@ -100,10 +120,9 @@ def check_functional_subset():
         warnings.simplefilter('always')
         assert loss.grad is None
         assert len(caught) == 1 and caught[0].category is UserWarning
-    for call in [lambda: torch.optim.SGD([x], lr=.1)]:
-        try: call()
-        except RuntimeError: pass
-        else: raise AssertionError('Persistent GPU state admitted')
+    optimizer = torch.optim.SGD([x], lr=.1)
+    assert optimizer.param_groups[0]['params'][0] is x
+    del optimizer
     for value in [x, torch.tensor([1., 1.], dtype=torch.float32)]:
         try: x.grad = value
         except RuntimeError: pass
@@ -229,12 +248,13 @@ dropped_gpu_backward()
 gc.collect()
 `);
         await client.runPythonAsync("gc.collect(); assert session.diagnostics().liveRequestLeases == 0; assert session.diagnostics().liveTensorHandles == 0; assert session.diagnostics().webgpu.ownedBufferBytes == 0");
+        const sgdResources = await checkPythonGpuSGDResources(client, () => next("sgd-checkpoint"));
         await client.close();
         const result = await finished;
         if (result.diagnostics.webgpu.state !== "closed") throw new Error("Graceful GPU close was classified as loss.");
         await controller.close();
         await send("/__phase", { phase: "runtime-finished" });
-        await send("/__result", { ok: true, ...environment, diagnostics: result.diagnostics });
+        await send("/__result", { ok: true, ...environment, diagnostics: result.diagnostics, sgdResources });
       } catch (error) {
         failed(error);
         await controller?.close().catch(() => undefined);

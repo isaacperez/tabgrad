@@ -39,19 +39,21 @@ test("GPU functional gradients use resident derivative operations without accumu
   assert.equal(session.diagnostics().liveDerivativeNodes, 0);
 });
 
-test("GPU gradient state preserves device boundaries and optimizer exclusion", async (context) => {
+test("GPU gradient state preserves device boundaries and optimizer registration", async (context) => {
   const session = await openSession(context, executionDevice());
   try {
     const gpu = session.tensor([2], { device: "webgpu", requiresGrad: true });
     const gpuSeed = session.tensor([1], { device: "webgpu" });
     const cpu = session.tensor([3], { requiresGrad: true }), cpuSeed = session.tensor([1]);
     const before = session.diagnostics();
-    assert.throws(() => session.sgd([gpu], { lr: 0.1 }), { code: "UNSUPPORTED_GRADIENT" });
     for (const action of [() => { gpu.grad = cpuSeed; }, () => { cpu.grad = gpuSeed; },
       () => cpu.backward(gpuSeed)]) {
       assert.throws(action, { code: "UNSUPPORTED_DEVICE" });
       assert.deepEqual(session.diagnostics(), before);
     }
+    const optimizer = session.sgd([gpu], { lr: 0.1 });
+    assert.equal(optimizer.paramGroups[0].params[0], gpu);
+    optimizer.close();
     cpu.backward(undefined, { inputs: [gpu] });
     assert.equal(cpu.grad, null); assert.equal(gpu.grad, null);
     gpu.grad = gpuSeed; assert.equal(gpu.grad, gpuSeed); gpu.grad = null;

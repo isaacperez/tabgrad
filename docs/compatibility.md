@@ -419,8 +419,8 @@ acquisition and first-accumulation checkpoints, and check steady owning counts
 after physical drain. A retained calculation separately preserves an old
 gradient snapshot. These are logical/resource invariants in the named prepared
 Chrome/Apple environment; they establish neither universal RSS/VRAM bounds nor
-a temporal advantage. GPU SGD, transfers, broader modes/types/layouts and other
-device qualification remain separate.
+a temporal advantage. Basic GPU SGD has its own evidence below; transfers,
+broader modes/types/layouts and other device qualification remain separate.
 
 ### CPU SGD evidence
 
@@ -496,3 +496,34 @@ pinned native build. The same Python sources execute in Node Pyodide and the
 managed Chrome/Firefox profiles; host close checks qualify Tabgrad admission
 separately. This preserves the existing dictionary-subclass domain and does
 not qualify structural tampering or custom reset values.
+
+### GPU SGD evidence
+
+The packaged managed Python GPU fixture executes all 86 unchanged native SGD
+sources and the host callback/close-priority checks. Direct JavaScript selects
+the same 30 applicable numerical/state cases. Both use the ordinary optimizer,
+program and copy owners with CPU defaults and same-device gradients; mixed
+enabled CPU/GPU groups are checked separately. The named physical environment
+is Chrome 154.0.8037.98 on macOS 26.6.2 with the nonfallback Apple metal-3 adapter,
+and the managed profiles run without JSPI. The native reference remains the
+pinned CPU PyTorch build; it does not establish native CUDA execution.
+
+An independent exact integer reference compares 33,403 production triples in
+57 uniform-coefficient groups through actual SGD, plus empty and launch-boundary
+controls. The corpus covers independently derived sentinels, native cancellation,
+the full selected exceptional grid, fixed random operands/coefficients,
+alignment distances, midpoint residuals and overflow cancellation. CPU and GPU
+consume the same preserved single-rounding sentinels. Shared multiplication
+arithmetic retains its exact rendered source and physical product qualification.
+NaN category is compared; payload and sign remain excluded.
+
+Controlled tests inspect immutable packets, kind-bounded preparation, invalid
+transported words before empty execution, queued-write/pre-submit failure,
+mutation barriers, once-delivered responsibility and confirmed/unknown drain.
+Physical direct and managed cohorts vary payload, parameter/group count,
+duplicates, aliases, depth, pending windows and repetitions independently.
+Held saves retain their obligations; completed work and collected optimizer
+cycles retire transient history, captures, controls and counted buffers.
+Results are separate from physical drain and from private device memory.
+These bounded observations do not qualify every GPU/compiler, private VRAM/RSS,
+isolated kernel timing, broader optimizers or full model training.

@@ -54,12 +54,18 @@ try {
   const environment = await ready;
   await report("/__phase", { phase: "assets-loaded" });
   await report("/__phase", { phase: "runtime-started" });
+  const revokedProgress = operation.startsWith("sgd-") ? next("test-revoked-script-progress") : undefined;
   const running = client.runPythonAsync(`
 import torch, gc
 session = torch._runtime_session
 def caught_revocation():
     x = torch.tensor([float(index % 32) for index in range(65536)], dtype=torch.float32, device='webgpu', requires_grad=${operation === "grad" ? "True" : "False"})
-    y = ${operation === "grad" ? "torch.autograd.grad((x * x).sum(), x)[0]" : operation === "sum" ? "x.sum()" : operation === "mul" ? "x * x" : "x + x"}
+${operation.startsWith("sgd-") ? `    gradient = torch.tensor([1.] * 65536, dtype=torch.float32, device='webgpu')
+    x.grad = gradient
+    optimizer = torch.optim.SGD([x], lr=0.125)
+    ${operation === "sgd-reset" ? "optimizer.zero_grad(False)" : "optimizer.step()"}
+    y = ${operation === "sgd-reset" ? "gradient" : "x"}`
+  : `    y = ${operation === "grad" ? "torch.autograd.grad((x * x).sum(), x)[0]" : operation === "sum" ? "x.sum()" : operation === "mul" ? "x * x" : "x + x"}`}
     try:
         y.tolist()
     except Exception as error:
@@ -70,6 +76,7 @@ def caught_revocation():
     assert session.diagnostics().webgpu.pendingSubmissions > 0
     cpu = torch.tensor([2., 3.], dtype=torch.float32)
     assert (cpu + cpu).tolist() == [4., 6.]
+${operation.startsWith("sgd-") ? "    import _test_gpu_observers; _test_gpu_observers.revocationProgress()" : ""}
 caught_revocation()
 gc.collect()
 assert session.diagnostics().liveRequestLeases == 1
@@ -80,9 +87,16 @@ assert session.diagnostics().liveRequestLeases == 1
   void cleanup.then(() => { cleanupSettled = true; });
   // This resolves while the real producer acknowledgement remains gated.
   // It establishes independent wakeup, not an assumed timeout-based ordering.
-  await running;
+  if (revokedProgress === undefined) await running;
+  else {
+    let entrySettled = false;
+    void running.then(() => { entrySettled = true; }, () => { entrySettled = true; });
+    await revokedProgress;
+    if (entrySettled) throw new Error("SGD entry acknowledged mandatory writes before producer drain.");
+  }
   if (cleanupSettled) throw new Error("Revocation claimed physical drain before acknowledgement.");
   gpuWorker.postMessage({ kind: "test-release-drain" });
+  if (revokedProgress !== undefined) await running;
   await cleanup;
   await client.runPythonAsync(`
 gc.collect()

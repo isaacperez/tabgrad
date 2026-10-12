@@ -49,7 +49,7 @@ function supported(options: SGDOptions): void {
   }
 }
 
-/** Checked native float32 scalar conversion. Arithmetic remains in Wasm. */
+/** Checked native float32 scalar conversion for backend coefficient arithmetic. */
 export function coefficientBits(alpha: number): number {
   if (Number.isFinite(alpha) && Math.abs(alpha) > 3.4028234663852886e38) {
     throw new RangeError("The SGD coefficient cannot be converted to float32 without overflow.");
@@ -57,7 +57,7 @@ export function coefficientBits(alpha: number): number {
   return new Uint32Array(new Float32Array([alpha]).buffer)[0]!;
 }
 
-/** Session-constructed basic CPU SGD with ordinary runtime mutation ownership. */
+/** Session-constructed basic SGD with ordinary runtime mutation ownership. */
 export class SGD {
   readonly defaults: SGDOptions;
   readonly paramGroups: SGDParameterGroup[];

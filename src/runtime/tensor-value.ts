@@ -1,5 +1,5 @@
 import type { TensorDevice } from "../execution/backend.js";
-import type { LoweredComputation, ProgramProvenance } from "../execution/executable-program.js";
+import { assertComputationCoefficient, type LoweredComputation, type ProgramProvenance } from "../execution/executable-program.js";
 import type { WriterOutcome } from "./writer-outcome.js";
 
 /** Mutable version only: captured descriptors never retain a family current. */
@@ -67,13 +67,7 @@ export class OperationRecord {
     inputs: readonly TensorValue[],
     readonly alphaBits?: number,
   ) {
-    if (definition.loweredKind === "add-alpha-f32") {
-      if (!Number.isInteger(alphaBits) || alphaBits! < 0 || alphaBits! > 0xffff_ffff) {
-        throw new TypeError("Coefficient addition requires captured binary32 bits.");
-      }
-    } else if (alphaBits !== undefined) {
-      throw new TypeError("This operation has no coefficient.");
-    }
+    assertComputationCoefficient(definition.loweredKind, alphaBits);
     this.definition = definition;
     this.inputs = Object.freeze([...inputs]);
     this.provenance = Object.freeze({

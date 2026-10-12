@@ -12,7 +12,7 @@ in the [backward reference](backward-gradients.md), including calling forms,
 warning categories, identity, reset and lifetime.
 
 `torch.optim.SGD` is described in the [SGD reference](sgd.md), including basic
-CPU groups, closures, numeric reset and the explicit optimizer exclusions.
+CPU and enabled GPU groups, closures, numeric reset and the explicit optimizer exclusions.
 
 The [wrapper component](../components/python-tensor-wrappers.md) explains the
 owners behind these calls. This page covers creation, metadata, addition

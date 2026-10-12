@@ -1,21 +1,10 @@
+import { WEBGPU_SIGNIFICAND_PRODUCT_SOURCE } from "./significand-product.js";
+
 /** One element per invocation; the host uses this same launch width. */
 export const WEBGPU_MULTIPLICATION_WORKGROUP_SIZE = 64;
 
 /** A full 24-by-24-bit product, rounded once without WGSL float relaxation. */
-export const WEBGPU_MULTIPLICATION_SOURCE = `
-// The product has at most 48 bits. Split operands at bit 16 so each partial
-// product and the cross-term fit u32; retain the carry from the low word.
-// A high part is <=255: cross <=2*255*65535, high_product <=255*255.
-// WGSL unsigned arithmetic wraps modulo 2^32; low < low_product detects the
-// sole low-word carry. The high word is therefore the exact remaining 16 bits.
-fn significand_product(left: u32, right: u32) -> vec2<u32> {
-  let low_product = (left & 65535u) * (right & 65535u);
-  let cross = (left >> 16u) * (right & 65535u) + (left & 65535u) * (right >> 16u);
-  let low = low_product + (cross << 16u);
-  let high = (left >> 16u) * (right >> 16u) + (cross >> 16u) + select(0u, 1u, low < low_product);
-  return vec2<u32>(low, high);
-}
-
+export const WEBGPU_MULTIPLICATION_SOURCE = `${WEBGPU_SIGNIFICAND_PRODUCT_SOURCE}
 // Distances are at least 23. Normal and subnormal outputs use one rounding
 // step, including all discarded bits, rather than rounding twice on underflow.
 fn round_product(product: vec2<u32>, distance: u32) -> u32 {
