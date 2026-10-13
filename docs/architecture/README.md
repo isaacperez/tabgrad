@@ -169,6 +169,9 @@ Read the documents in this order when learning the architecture:
    [Gradient result identity](functional-gradient-identity.md) separates incoming
    equivalence, numerical aliases and frontend exposure, including Python
    completion of additional failures before canonicalization.
+   [Scalar aliases in sum gradients](sum-gradient-aliases.md) separates live
+   scalar projections from immutable numerical captures and receiving layout,
+   with ordinary future-capture retention and optional expansion reuse.
    [Backward and gradient state](cpu-gradient-state.md) defines persistent
    gradient identity, leaf accumulation, nonleaf retention, per-node failure
    progress and cycle responsibility over that same execution path.
