@@ -142,10 +142,11 @@ failure state. Reusing only presentation tokens loses additional failures.
 Separate incoming equivalence, own conversion leases and completion of lost
 obligations preserve the examined relationships through the existing owners.
 
-This decision does not choose a representation for mutable scalar expansion.
-Initial scalar bits, numerical aliasing and leaf acquisition are independent
-contracts. Neither correct identity matrices nor fresh contiguous
-materialization alone proves their equivalence. Numerical rounding, broader
+Mutable scalar expansion follows the separate
+[sum-gradient alias contract](sum-gradient-aliases.md). Initial scalar bits,
+numerical aliasing and leaf acquisition are independent contracts. Neither correct
+identity matrices nor fresh contiguous materialization alone proves their
+equivalence. Numerical rounding, broader
 layouts, higher-order derivatives, whole models and other adapters also remain
 outside this decision. Reconsider its token/provenance rules when an added
 operation produces a materially different native equivalence class, and its
@@ -168,5 +169,6 @@ while 114 complete observations match and six scalar-expansion mutation
 observations differ. Additional copy/provenance controls cover shape,
 versions, acquisition and active-copy guards. Structural failure/retirement
 and guard controls do not establish general native equivalence or temporal
-performance. The independent scalar-expansion question is recorded in
+performance. The separate
+[scalar-expansion alias decision](sum-gradient-aliases.md) is recorded in
 [#279](https://github.com/isaacperez/tabgrad/issues/279).

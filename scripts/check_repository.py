@@ -106,6 +106,7 @@ ARCHITECTURE_DOCUMENTS = {
     "docs/architecture/python-observation.md",
     "docs/architecture/reusable-programs.md",
     "docs/architecture/semantic-state.md",
+    "docs/architecture/sum-gradient-aliases.md",
     "docs/architecture/webassembly-cpu-backend.md",
     "docs/architecture/webgpu-float32-addition.md",
     "docs/architecture/webgpu-float32-sum.md",

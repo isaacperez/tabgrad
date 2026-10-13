@@ -73,6 +73,7 @@ link to its primary source, but they must not create a competing version.
 | CPU intermediate reuse decision, semantic retention and physical last-use boundary | [`architecture/cpu-intermediate-reuse.md`](architecture/cpu-intermediate-reuse.md) |
 | Persistent same-device updates, alias versions, derivative fidelity and effect ownership | [`architecture/cpu-tensor-updates.md`](architecture/cpu-tensor-updates.md) |
 | Gradient result equivalence, frontend exposure and additional causal obligations | [`architecture/functional-gradient-identity.md`](architecture/functional-gradient-identity.md) |
+| Total-sum gradient scalar aliases, receiving acquisition and expansion retention | [`architecture/sum-gradient-aliases.md`](architecture/sum-gradient-aliases.md) |
 | Backward, persistent gradient identity, partial progress and cycle responsibility | [`architecture/cpu-gradient-state.md`](architecture/cpu-gradient-state.md) |
 | Supported backward calls, gradient slots, reset and lifetime | [`reference/backward-gradients.md`](reference/backward-gradients.md) |
 | Basic SGD calls, groups, reset and host lifetime | [`reference/sgd.md`](reference/sgd.md) |
