@@ -197,7 +197,7 @@ class Tensor:
                 UserWarning,
                 stacklevel=2,
             )
-        handle = self._handle.grad
+        handle = _bridge.gradientExposure(self._handle)
         return (
             None
             if handle is None or isinstance(handle, JsNull)
@@ -354,16 +354,30 @@ class Tensor:
         try:
             key = _bridge.exposureKey(handle)
             existing = _live_wrappers.get(key)
-            if existing is not None:
-                return existing
+            if existing is not None and _bridge.exposureOpen(existing._handle):
+                if _bridge.sameExposure(handle, existing._handle):
+                    return existing
+                if _bridge.resultNeedsCompletion(handle, existing._handle):
+                    _bridge.completeGradient(handle)
+                # Common progress can call user code that closes the exposure.
+                if _bridge.exposureOpen(existing._handle):
+                    handle.close()
+                    return existing
+                # The replacement lease must also survive that progression.
+                key = _bridge.exposureKey(handle)
             result = object.__new__(Tensor)
             result._handle = handle
             # The callback retains the JS handle, never its Python wrapper.
             finalize(result, _bridge.releaseExposure, handle)
             _live_wrappers[key] = result
             return result
-        except BaseException:
-            handle.close()
+        except BaseException as error:
+            try:
+                handle.close()
+            except BaseException as cleanup:
+                raise BaseExceptionGroup(
+                    "Tensor wrapper conversion and cleanup failed.", [error, cleanup]
+                ) from None
             raise
 
 

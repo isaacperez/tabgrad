@@ -71,6 +71,12 @@ booleans. Unknown options and malformed handles reject; enabled modes report
 runtime as Python. Repeated reads return the same open handle. Closing an
 exposure retires that lease; a later slot read can reacquire an independently
 closeable exposure. Weak canonical lookup does not keep unused tensors alive.
+Python conversion of a property read owns a fresh lease, independently of a
+JavaScript caller's canonical handle. Reusing an equivalent Python object
+retires only that fresh lease. Any otherwise-lost causal obligations are
+completed before reuse, with conditional waiting/earlier failure and no gradient
+payload readback under the
+[identity contract](../architecture/functional-gradient-identity.md).
 
 Leaf accumulation updates the existing gradient identity and numerical alias
 family without recording new history. Clearing leaves old exposures and aliases

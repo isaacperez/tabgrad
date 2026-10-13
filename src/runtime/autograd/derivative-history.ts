@@ -68,6 +68,8 @@ function derivativePriority<Value>(node: DerivativeNode<Value>): number {
 /** Numerical and handle ownership stays with the runtime's ordinary admission path. */
 export interface DerivativeOperations<Value, Gradient> {
   borrow(value: Value): Gradient;
+  clone(value: Gradient, shape: readonly number[]): Gradient;
+  rebase(value: Gradient, shape: readonly number[]): Gradient;
   add(left: Gradient, right: Gradient): Gradient;
   mul(left: Gradient, right: Gradient): Gradient;
   view(value: Gradient, shape: readonly number[]): Gradient;
@@ -308,7 +310,7 @@ export class DerivativeHistory<Value> {
           releaseTemporary(incoming, temporaries, operations);
         }
       }
-      if (collectResults) for (const node of plan.requested) results.push(operations.view(gradients.get(node)!, node.shape));
+      if (collectResults) for (const node of plan.requested) results.push(operations.pass?.(gradients.get(node)!, node.shape) ?? operations.view(gradients.get(node)!, node.shape));
     } catch (error) {
       failures = [error];
     }

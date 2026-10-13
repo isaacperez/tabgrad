@@ -1,5 +1,5 @@
 import { TabgradError, throwCleanupFailures } from "../../shared/errors.js";
-import { getRecordingMode, enterNoGradScope, restoreRecordingMode, observeTensorSynchronously, completeRuntimeSession, shouldWarnUnretainedGradient, finalizeTensorExposure, registerOptimizerLease, isOptimizableParameter, type RuntimeSession, type Tensor } from "../../runtime/runtime.js";
+import { getTensorIncomingIdentity, isTensorExposureOpen, acquireGradientExposure, gradientExposureNeedsCompletion, completeGradientExposure, getRecordingMode, enterNoGradScope, restoreRecordingMode, observeTensorSynchronously, completeRuntimeSession, shouldWarnUnretainedGradient, finalizeTensorExposure, registerOptimizerLease, isOptimizableParameter, type RuntimeSession, type Tensor } from "../../runtime/runtime.js";
 import type { OptimizerLease } from "../../runtime/optimizer-lease.js";
 import type { TensorDevice } from "../../execution/backend.js";
 
@@ -34,7 +34,7 @@ function boundedFloat32View(view: PythonBufferView): Float32Array {
 /** @internal Translate buffer borrowing into an owned runtime tensor import. */
 export class PythonRuntimeBridge {
   #managedEntry = false;
-  readonly #exposureKeys = new WeakMap<Tensor, number>();
+  readonly #exposureKeys = new WeakMap<object, number>();
   #nextExposureKey = 0;
   constructor(readonly session: RuntimeSession) {}
 
@@ -92,9 +92,27 @@ export class PythonRuntimeBridge {
     return this.session.grad(output, inputs, gradient === null ? undefined : gradient);
   }
 
+  resultNeedsCompletion(result: Tensor, canonical: Tensor): boolean {
+    return gradientExposureNeedsCompletion(result, canonical);
+  }
+
+  completeGradient(handle: Tensor): void {
+    if (!this.#managedEntry) {
+      throw new TabgradError("PYTHON_SYNC_CONTEXT_REQUIRED", "Gradient completion requires an active managed script entry.");
+    }
+    completeGradientExposure(this.session, handle);
+  }
+
+  gradientExposure(handle: Tensor): Tensor | null { return acquireGradientExposure(handle); }
+
+  exposureOpen(handle: Tensor): boolean { return isTensorExposureOpen(handle); }
+
+  sameExposure(left: Tensor, right: Tensor): boolean { return left === right; }
+
   exposureKey(handle: Tensor): number {
-    let key = this.#exposureKeys.get(handle);
-    if (key === undefined) { key = this.#nextExposureKey++; this.#exposureKeys.set(handle, key); }
+    const identity = getTensorIncomingIdentity(handle);
+    let key = this.#exposureKeys.get(identity);
+    if (key === undefined) { key = this.#nextExposureKey++; this.#exposureKeys.set(identity, key); }
     return key;
   }
 
