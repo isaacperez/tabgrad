@@ -83,6 +83,7 @@ TEXT_NAMES = {
     "LICENSE",
 }
 ARCHITECTURE_DOCUMENTS = {
+    "docs/architecture/float32-matrix-product.md",
     "docs/architecture/README.md",
     "docs/architecture/autograd-and-training.md",
     "docs/architecture/backend-execution.md",
