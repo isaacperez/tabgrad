@@ -3879,7 +3879,7 @@
       ]
     }
   ],
-  "gradientIdentitySource": "\ndef filled(shape, value):\n    if not shape:\n        return value\n    return [filled(shape[1:], value) for _ in range(shape[0])]\n\n\ndef identity_report(shape, kind, repetitions):\n    def make(value, tracked=True, dims=shape):\n        return torch.tensor(filled(dims, value), dtype=torch.float32, requires_grad=tracked)\n\n    x, y = make(2), make(3)\n    seed = make(1, False)\n    anchors = [x, y, seed]\n    if kind == 'direct':\n        output, targets = x, [x]\n    elif kind == 'add':\n        output, targets = x + y, [x, y]\n    elif kind == 'repeated-add':\n        output, targets = x + x, [x]\n    elif kind == 'mul':\n        output, targets = x * y, [x, y]\n    elif kind == 'equal-mul':\n        y = make(2)\n        anchors[1] = y\n        output, targets = x * y, [x, y]\n    elif kind == 'sum':\n        output, targets = (x + y).sum(), [x, y]\n        seed = make(1, False, ())\n        anchors[2] = seed\n    elif kind == 'view-same':\n        v = x.view(shape)\n        anchors.append(v)\n        output, targets = v + y, [x, y, v]\n    elif kind == 'view-reshape':\n        elements = 1\n        for size in shape:\n            elements *= size\n        v = x.view((elements,))\n        anchors.append(v)\n        output, targets = v, [x, v]\n        seed = make(1, False, (elements,))\n        anchors[2] = seed\n    elif kind == 'retained':\n        middle = x + y\n        middle.backward(seed, inputs=[middle])\n        output, targets = middle + make(4, False), [x, y, middle]\n        anchors.append(middle)\n    elif kind == 'branched':\n        output, targets = (x + y) + x, [x, y]\n    elif kind == 'copy':\n        destination = make(5, False)\n        destination.copy_(x)\n        anchors.append(destination)\n        output, targets = destination + y, [x, y, destination]\n    elif kind == 'separate-calls':\n        output, targets = x + y, [x, y]\n        other_seed = make(4, False)\n        anchors.append(other_seed)\n    elif kind == 'seed-view':\n        original = seed\n        seed = seed.view(shape)\n        anchors += [original, seed]\n        output, targets = x + y, [x, y]\n    else:\n        raise ValueError(kind)\n    targets *= repetitions\n    if kind == 'separate-calls':\n        results = (torch.autograd.grad(output, targets, grad_outputs=seed)\n                   + torch.autograd.grad(output, targets, grad_outputs=seed)\n                   + torch.autograd.grad(output, targets, grad_outputs=other_seed))\n    else:\n        results = torch.autograd.grad(output, targets, grad_outputs=seed)\n    if kind == 'retained':\n        anchors.append(middle.grad)\n    all_values = list(results) + anchors\n    report = {\n        'identity': [[a is b for b in all_values] for a in results],\n        'shape': [list(a.shape) for a in results],\n        'values': [a.tolist() for a in results],\n        'tracking': [a.requires_grad for a in results],\n    }\n    try:\n        with torch.no_grad():\n            results[0].copy_(make(0, False, tuple(results[0].shape)))\n        report['mutationError'] = None\n    except Exception as error:\n        report['mutationError'] = type(error).__name__\n    report['after'] = [a.tolist() for a in all_values]\n    return report\n",
+  "gradientIdentitySource": "\ndef filled(shape, value):\n    if not shape:\n        return value\n    return [filled(shape[1:], value) for _ in range(shape[0])]\n\n\ndef identity_report(shape, kind, repetitions):\n    def make(value, tracked=True, dims=shape):\n        return torch.tensor(filled(dims, value), dtype=torch.float32, requires_grad=tracked)\n\n    x, y = make(2), make(3)\n    seed = make(1, False)\n    anchors = [x, y, seed]\n    if kind == 'direct':\n        output, targets = x, [x]\n    elif kind == 'add':\n        output, targets = x + y, [x, y]\n    elif kind == 'repeated-add':\n        output, targets = x + x, [x]\n    elif kind == 'mul':\n        output, targets = x * y, [x, y]\n    elif kind == 'equal-mul':\n        y = make(2)\n        anchors[1] = y\n        output, targets = x * y, [x, y]\n    elif kind == 'sum':\n        output, targets = (x + y).sum(), [x, y]\n        seed = make(1, False, ())\n        anchors[2] = seed\n    elif kind == 'view-same':\n        v = x.view(shape)\n        anchors.append(v)\n        output, targets = v + y, [x, y, v]\n    elif kind == 'view-reshape':\n        elements = 1\n        for size in shape:\n            elements *= size\n        v = x.view((elements,))\n        anchors.append(v)\n        output, targets = v, [x, v]\n        seed = make(1, False, (elements,))\n        anchors[2] = seed\n    elif kind == 'retained':\n        middle = x + y\n        middle.backward(seed, inputs=[middle])\n        output, targets = middle + make(4, False), [x, y, middle]\n        anchors.append(middle)\n    elif kind == 'branched':\n        output, targets = (x + y) + x, [x, y]\n    elif kind == 'copy':\n        destination = make(5, False)\n        destination.copy_(x)\n        anchors.append(destination)\n        output, targets = destination + y, [x, y, destination]\n    elif kind == 'separate-calls':\n        output, targets = x + y, [x, y]\n        other_seed = make(4, False)\n        anchors.append(other_seed)\n    elif kind == 'seed-no-grad-view':\n        original = seed\n        with torch.no_grad():\n            seed = seed.view(shape)\n        anchors += [original, seed]\n        output, targets = x + y, [x, y]\n    elif kind == 'seed-view':\n        original = seed\n        seed = seed.view(shape)\n        anchors += [original, seed]\n        output, targets = x + y, [x, y]\n    else:\n        raise ValueError(kind)\n    targets *= repetitions\n    if kind == 'separate-calls':\n        results = (torch.autograd.grad(output, targets, grad_outputs=seed)\n                   + torch.autograd.grad(output, targets, grad_outputs=seed)\n                   + torch.autograd.grad(output, targets, grad_outputs=other_seed))\n    else:\n        results = torch.autograd.grad(output, targets, grad_outputs=seed)\n    if kind == 'retained':\n        anchors.append(middle.grad)\n    all_values = list(results) + anchors\n    report = {\n        'identity': [[a is b for b in all_values] for a in results],\n        'shape': [list(a.shape) for a in results],\n        'values': [a.tolist() for a in results],\n        'tracking': [a.requires_grad for a in results],\n    }\n    try:\n        with torch.no_grad():\n            results[0].copy_(make(0, False, tuple(results[0].shape)))\n        report['mutationError'] = None\n    except Exception as error:\n        report['mutationError'] = type(error).__name__\n    report['after'] = [a.tolist() for a in all_values]\n    if kind == 'seed-no-grad-view':\n        try:\n            results[0].copy_(make(5, True, tuple(results[0].shape)))\n            report['activeCopyError'] = None\n        except Exception as error:\n            report['activeCopyError'] = type(error).__name__\n    return report\n",
   "gradientIdentityCases": [
     {
       "shape": [],
@@ -5975,6 +5975,182 @@
     },
     {
       "shape": [],
+      "kind": "seed-no-grad-view",
+      "repetitions": 1,
+      "expected": {
+        "identity": [
+          [
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            true
+          ],
+          [
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            true
+          ]
+        ],
+        "shape": [
+          [],
+          []
+        ],
+        "values": [
+          1.0,
+          1.0
+        ],
+        "tracking": [
+          false,
+          false
+        ],
+        "mutationError": null,
+        "after": [
+          0.0,
+          0.0,
+          2.0,
+          3.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "activeCopyError": "RuntimeError"
+      }
+    },
+    {
+      "shape": [],
+      "kind": "seed-no-grad-view",
+      "repetitions": 3,
+      "expected": {
+        "identity": [
+          [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            true
+          ],
+          [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            true
+          ],
+          [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            true
+          ],
+          [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            true
+          ],
+          [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            true
+          ],
+          [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            true
+          ]
+        ],
+        "shape": [
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        "values": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "tracking": [
+          false,
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "mutationError": null,
+        "after": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          2.0,
+          3.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "activeCopyError": "RuntimeError"
+      }
+    },
+    {
+      "shape": [],
       "kind": "separate-calls",
       "repetitions": 1,
       "expected": {
@@ -8403,6 +8579,202 @@
       "shape": [
         0
       ],
+      "kind": "seed-no-grad-view",
+      "repetitions": 1,
+      "expected": {
+        "identity": [
+          [
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            true
+          ],
+          [
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            true
+          ]
+        ],
+        "shape": [
+          [
+            0
+          ],
+          [
+            0
+          ]
+        ],
+        "values": [
+          [],
+          []
+        ],
+        "tracking": [
+          false,
+          false
+        ],
+        "mutationError": null,
+        "after": [
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        "activeCopyError": "RuntimeError"
+      }
+    },
+    {
+      "shape": [
+        0
+      ],
+      "kind": "seed-no-grad-view",
+      "repetitions": 3,
+      "expected": {
+        "identity": [
+          [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            true
+          ],
+          [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            true
+          ],
+          [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            true
+          ],
+          [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            true
+          ],
+          [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            true
+          ],
+          [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            true
+          ]
+        ],
+        "shape": [
+          [
+            0
+          ],
+          [
+            0
+          ],
+          [
+            0
+          ],
+          [
+            0
+          ],
+          [
+            0
+          ],
+          [
+            0
+          ]
+        ],
+        "values": [
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        "tracking": [
+          false,
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "mutationError": null,
+        "after": [
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        "activeCopyError": "RuntimeError"
+      }
+    },
+    {
+      "shape": [
+        0
+      ],
       "kind": "separate-calls",
       "repetitions": 1,
       "expected": {
@@ -11689,6 +12061,280 @@
             0.0
           ]
         ]
+      }
+    },
+    {
+      "shape": [
+        2
+      ],
+      "kind": "seed-no-grad-view",
+      "repetitions": 1,
+      "expected": {
+        "identity": [
+          [
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            true
+          ],
+          [
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            true
+          ]
+        ],
+        "shape": [
+          [
+            2
+          ],
+          [
+            2
+          ]
+        ],
+        "values": [
+          [
+            1.0,
+            1.0
+          ],
+          [
+            1.0,
+            1.0
+          ]
+        ],
+        "tracking": [
+          false,
+          false
+        ],
+        "mutationError": null,
+        "after": [
+          [
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0
+          ],
+          [
+            2.0,
+            2.0
+          ],
+          [
+            3.0,
+            3.0
+          ],
+          [
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0
+          ]
+        ],
+        "activeCopyError": "RuntimeError"
+      }
+    },
+    {
+      "shape": [
+        2
+      ],
+      "kind": "seed-no-grad-view",
+      "repetitions": 3,
+      "expected": {
+        "identity": [
+          [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            true
+          ],
+          [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            true
+          ],
+          [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            true
+          ],
+          [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            true
+          ],
+          [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            true
+          ],
+          [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            true
+          ]
+        ],
+        "shape": [
+          [
+            2
+          ],
+          [
+            2
+          ],
+          [
+            2
+          ],
+          [
+            2
+          ],
+          [
+            2
+          ],
+          [
+            2
+          ]
+        ],
+        "values": [
+          [
+            1.0,
+            1.0
+          ],
+          [
+            1.0,
+            1.0
+          ],
+          [
+            1.0,
+            1.0
+          ],
+          [
+            1.0,
+            1.0
+          ],
+          [
+            1.0,
+            1.0
+          ],
+          [
+            1.0,
+            1.0
+          ]
+        ],
+        "tracking": [
+          false,
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "mutationError": null,
+        "after": [
+          [
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0
+          ],
+          [
+            2.0,
+            2.0
+          ],
+          [
+            3.0,
+            3.0
+          ],
+          [
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0
+          ]
+        ],
+        "activeCopyError": "RuntimeError"
       }
     },
     {
@@ -15700,6 +16346,342 @@
         1,
         2
       ],
+      "kind": "seed-no-grad-view",
+      "repetitions": 1,
+      "expected": {
+        "identity": [
+          [
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            true
+          ],
+          [
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            true
+          ]
+        ],
+        "shape": [
+          [
+            1,
+            2
+          ],
+          [
+            1,
+            2
+          ]
+        ],
+        "values": [
+          [
+            [
+              1.0,
+              1.0
+            ]
+          ],
+          [
+            [
+              1.0,
+              1.0
+            ]
+          ]
+        ],
+        "tracking": [
+          false,
+          false
+        ],
+        "mutationError": null,
+        "after": [
+          [
+            [
+              0.0,
+              0.0
+            ]
+          ],
+          [
+            [
+              0.0,
+              0.0
+            ]
+          ],
+          [
+            [
+              2.0,
+              2.0
+            ]
+          ],
+          [
+            [
+              3.0,
+              3.0
+            ]
+          ],
+          [
+            [
+              0.0,
+              0.0
+            ]
+          ],
+          [
+            [
+              0.0,
+              0.0
+            ]
+          ],
+          [
+            [
+              0.0,
+              0.0
+            ]
+          ]
+        ],
+        "activeCopyError": "RuntimeError"
+      }
+    },
+    {
+      "shape": [
+        1,
+        2
+      ],
+      "kind": "seed-no-grad-view",
+      "repetitions": 3,
+      "expected": {
+        "identity": [
+          [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            true
+          ],
+          [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            true
+          ],
+          [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            true
+          ],
+          [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            true
+          ],
+          [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            true
+          ],
+          [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            true
+          ]
+        ],
+        "shape": [
+          [
+            1,
+            2
+          ],
+          [
+            1,
+            2
+          ],
+          [
+            1,
+            2
+          ],
+          [
+            1,
+            2
+          ],
+          [
+            1,
+            2
+          ],
+          [
+            1,
+            2
+          ]
+        ],
+        "values": [
+          [
+            [
+              1.0,
+              1.0
+            ]
+          ],
+          [
+            [
+              1.0,
+              1.0
+            ]
+          ],
+          [
+            [
+              1.0,
+              1.0
+            ]
+          ],
+          [
+            [
+              1.0,
+              1.0
+            ]
+          ],
+          [
+            [
+              1.0,
+              1.0
+            ]
+          ],
+          [
+            [
+              1.0,
+              1.0
+            ]
+          ]
+        ],
+        "tracking": [
+          false,
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "mutationError": null,
+        "after": [
+          [
+            [
+              0.0,
+              0.0
+            ]
+          ],
+          [
+            [
+              0.0,
+              0.0
+            ]
+          ],
+          [
+            [
+              0.0,
+              0.0
+            ]
+          ],
+          [
+            [
+              0.0,
+              0.0
+            ]
+          ],
+          [
+            [
+              0.0,
+              0.0
+            ]
+          ],
+          [
+            [
+              0.0,
+              0.0
+            ]
+          ],
+          [
+            [
+              2.0,
+              2.0
+            ]
+          ],
+          [
+            [
+              3.0,
+              3.0
+            ]
+          ],
+          [
+            [
+              0.0,
+              0.0
+            ]
+          ],
+          [
+            [
+              0.0,
+              0.0
+            ]
+          ],
+          [
+            [
+              0.0,
+              0.0
+            ]
+          ]
+        ],
+        "activeCopyError": "RuntimeError"
+      }
+    },
+    {
+      "shape": [
+        1,
+        2
+      ],
       "kind": "separate-calls",
       "repetitions": 1,
       "expected": {
@@ -19156,6 +20138,290 @@
             []
           ]
         ]
+      }
+    },
+    {
+      "shape": [
+        2,
+        0
+      ],
+      "kind": "seed-no-grad-view",
+      "repetitions": 1,
+      "expected": {
+        "identity": [
+          [
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            true
+          ],
+          [
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            true
+          ]
+        ],
+        "shape": [
+          [
+            2,
+            0
+          ],
+          [
+            2,
+            0
+          ]
+        ],
+        "values": [
+          [
+            [],
+            []
+          ],
+          [
+            [],
+            []
+          ]
+        ],
+        "tracking": [
+          false,
+          false
+        ],
+        "mutationError": null,
+        "after": [
+          [
+            [],
+            []
+          ],
+          [
+            [],
+            []
+          ],
+          [
+            [],
+            []
+          ],
+          [
+            [],
+            []
+          ],
+          [
+            [],
+            []
+          ],
+          [
+            [],
+            []
+          ],
+          [
+            [],
+            []
+          ]
+        ],
+        "activeCopyError": "RuntimeError"
+      }
+    },
+    {
+      "shape": [
+        2,
+        0
+      ],
+      "kind": "seed-no-grad-view",
+      "repetitions": 3,
+      "expected": {
+        "identity": [
+          [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            true
+          ],
+          [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            true
+          ],
+          [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            true
+          ],
+          [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            true
+          ],
+          [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            true
+          ],
+          [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            true
+          ]
+        ],
+        "shape": [
+          [
+            2,
+            0
+          ],
+          [
+            2,
+            0
+          ],
+          [
+            2,
+            0
+          ],
+          [
+            2,
+            0
+          ],
+          [
+            2,
+            0
+          ],
+          [
+            2,
+            0
+          ]
+        ],
+        "values": [
+          [
+            [],
+            []
+          ],
+          [
+            [],
+            []
+          ],
+          [
+            [],
+            []
+          ],
+          [
+            [],
+            []
+          ],
+          [
+            [],
+            []
+          ],
+          [
+            [],
+            []
+          ]
+        ],
+        "tracking": [
+          false,
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "mutationError": null,
+        "after": [
+          [
+            [],
+            []
+          ],
+          [
+            [],
+            []
+          ],
+          [
+            [],
+            []
+          ],
+          [
+            [],
+            []
+          ],
+          [
+            [],
+            []
+          ],
+          [
+            [],
+            []
+          ],
+          [
+            [],
+            []
+          ],
+          [
+            [],
+            []
+          ],
+          [
+            [],
+            []
+          ],
+          [
+            [],
+            []
+          ],
+          [
+            [],
+            []
+          ]
+        ],
+        "activeCopyError": "RuntimeError"
       }
     },
     {

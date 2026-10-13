@@ -61,6 +61,12 @@ def identity_report(shape, kind, repetitions):
         output, targets = x + y, [x, y]
         other_seed = make(4, False)
         anchors.append(other_seed)
+    elif kind == 'seed-no-grad-view':
+        original = seed
+        with torch.no_grad():
+            seed = seed.view(shape)
+        anchors += [original, seed]
+        output, targets = x + y, [x, y]
     elif kind == 'seed-view':
         original = seed
         seed = seed.view(shape)
@@ -91,6 +97,12 @@ def identity_report(shape, kind, repetitions):
     except Exception as error:
         report['mutationError'] = type(error).__name__
     report['after'] = [a.tolist() for a in all_values]
+    if kind == 'seed-no-grad-view':
+        try:
+            results[0].copy_(make(5, True, tuple(results[0].shape)))
+            report['activeCopyError'] = None
+        except Exception as error:
+            report['activeCopyError'] = type(error).__name__
     return report
 """
 
@@ -112,6 +124,7 @@ def gradient_identity_cases(oracle: object) -> list[dict[str, object]]:
             "branched",
             "copy",
             "seed-view",
+            "seed-no-grad-view",
             "separate-calls",
         ):
             for repetitions in (1,) if kind == "separate-calls" else (1, 3):

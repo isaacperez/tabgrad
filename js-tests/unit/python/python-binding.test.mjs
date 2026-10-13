@@ -2775,3 +2775,47 @@ else:
     interpreter.runPython("[globals().pop(name, None) for name in ('torch','x','y','seed','root','input','source')]; None");
   }
 });
+
+test("Python callback replacement preserves a no-grad seed view's mutation guard", { timeout: 20_000 }, async context => {
+  const { attachPython } = await import("../../../dist/python.js");
+  const { WebAssemblyCpuBackend } = await import("../../../dist/backends/cpu/cpu-backend.js");
+  const { ExecutionTicket } = await import("../../../dist/execution/execution-ticket.js");
+  const interpreter = await getInterpreter(), binding = await attachPython(interpreter);
+  try {
+    await binding.runPythonAsync(`
+import torch, gc
+x = torch.tensor([2.,3.], dtype=torch.float32, requires_grad=True)
+y = torch.tensor([4.,5.], dtype=torch.float32, requires_grad=True)
+original = torch.tensor([7.,9.], dtype=torch.float32)
+with torch.no_grad(): seed = original.view((2,))
+source = torch.tensor([1.,2.], dtype=torch.float32, requires_grad=True)
+root = x+y
+producer = torch.tensor([10.,20.], dtype=torch.float32)
+payload = producer+producer
+`);
+    const session = interpreter.runPython("torch._runtime_session"), seed = interpreter.runPython("seed._handle");
+    const execute = WebAssemblyCpuBackend.prototype.execute;
+    const replacement = context.mock.method(WebAssemblyCpuBackend.prototype, "execute", function (...args) {
+      const result = execute.apply(this, args);
+      return new ExecutionTicket(() => Promise.resolve(result).then(value => { seed.close(); return value; }),
+        Promise.resolve(), { read() { seed.close(); return result; }, isDrained: () => true });
+    });
+    await binding.runPythonAsync(`
+with torch.no_grad(): root.copy_(payload)
+a,b = torch.autograd.grad(root, (x,y), seed)
+assert a is b and a is not seed
+try:
+    a.copy_(source)
+except RuntimeError:
+    pass
+else:
+    raise AssertionError('replacement lost the no-grad seed view copy guard')
+`);
+    replacement.mock.restore();
+    await binding.runPythonAsync("del x,y,original,seed,source,root,producer,payload,a,b\ngc.collect()");
+    assert.equal(session.diagnostics().liveTensorHandles, 0);
+  } finally {
+    context.mock.restoreAll(); await binding.close();
+    interpreter.runPython("[globals().pop(name, None) for name in ('torch','gc','x','y','original','seed','source','root','producer','payload','a','b')]; None");
+  }
+});

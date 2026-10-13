@@ -181,10 +181,11 @@ implicit-seed and consumed-history error categories. Real Pyodide consumes that
 same source and expected result data. The generator uses one intra-operation
 and one inter-operation thread; no NumPy or native runtime is distributed.
 
-The maintained `gradientIdentityCases` additionally record 125 identity,
+The maintained `gradientIdentityCases` additionally record 135 identity,
 shape, initial-value and tracking observations across scalar, empty, vector
 and matrix shapes, distinct/repeated targets, seeds, ordinary views, retained
-slots, copy/branched paths, equal products and separate calls. Non-expansion
+slots, copy/branched paths, equal products and separate calls, including no-grad
+seed-view guards. Non-expansion
 mutation observations match the pinned oracle; six observed sum-expansion
 mutations differ. Expansion alias/version/acquisition equivalence remains
 incomplete and is tracked in

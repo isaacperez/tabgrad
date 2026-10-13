@@ -1228,7 +1228,7 @@ export class RuntimeSession {
         result.value.device);
     }
     const seed = explicitSeed === undefined
-      ? this.tensor([1], { shape: result.value.shape, device: result.value.device }) : this.#detachedAlias(explicitSeed.identity);
+      ? this.tensor([1], { shape: result.value.shape, device: result.value.device }) : this.#detachedAlias(explicitSeed.identity, false, true);
     if (explicitSeed !== undefined) this.#bindIncomingIdentity(requireTensorState(seed).identity, explicitSeed.identity);
     this.#attachTensorControls(seed, [result.value.outcomes, explicitSeed?.value.outcomes ?? []]);
     try {

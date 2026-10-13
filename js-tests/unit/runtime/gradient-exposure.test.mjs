@@ -127,3 +127,28 @@ test("matching incoming gradients share numbers while JS slots and close leases 
   } finally { for (const handle of handles.reverse()) handle.close(); await session.close(); }
   for (const value of Object.values(getTestRuntimeOwnership(session))) assert.equal(value, 0);
 });
+
+for (const shape of [[], [0], [2], [1,2], [2,0]]) {
+  test(`explicit no-grad seed view preserves copy guards and base lifetime (${shape})`, async () => {
+    const session = createTestRuntimeSession({ manifestUrl: new URL("manifest.json", distributionUrl), forceVariant: "scalar" });
+    const size = shape.reduce((count, axis) => count * axis, 1), handles = [];
+    const own = value => { handles.push(value); return value; };
+    try {
+      const x = own(session.tensor(new Float32Array(size).fill(2), { shape, requiresGrad: true }));
+      const y = own(session.tensor(new Float32Array(size).fill(3), { shape, requiresGrad: true }));
+      const original = own(session.tensor(new Float32Array(size).fill(7), { shape }));
+      const seed = own(session.noGrad(() => original.view(shape)));
+      original.close();
+      const output = own(x.add(y)), gradients = session.grad(output, [x,y,x], seed).map(own);
+      const source = own(session.tensor(new Float32Array(size).fill(4), { shape, requiresGrad: true }));
+      assert.throws(() => seed.copy_(source), { code: "INPLACE_VIEW" });
+      for (const gradient of gradients) assert.throws(() => gradient.copy_(source), { code: "INPLACE_VIEW" });
+      seed.close();
+      const zeros = own(session.tensor(new Float32Array(size), { shape }));
+      session.noGrad(() => gradients[0].copy_(zeros));
+      assert.deepEqual([...await gradients[1].toArray()], new Array(size).fill(0));
+      assert.equal(gradients[1].requiresGrad, false);
+    } finally { for (const handle of handles.reverse()) handle.close(); await session.close(); }
+    for (const value of Object.values(getTestRuntimeOwnership(session))) assert.equal(value, 0);
+  });
+}
