@@ -7,6 +7,12 @@ import { captureWriterOutcomes, type WriterOutcome } from "./writer-outcome.js";
 /** Numerical aliases share one current value and mutation counter. */
 export class TensorFamily {
   identities = 1;
+  /** Retained semantic projections, including associations and view bases. */
+  projectionIdentities = 0;
+  /** Eligibility only; immutable captures never own the family current. */
+  projectionMetadata: WeakRef<TensorValue> | undefined;
+  /** Optional ordinary value pin, invalidated by scalar writes/final retirement. */
+  projectionCache: TensorValue | undefined;
   readonly versionCounter = { value: 0 };
   get version(): number { return this.versionCounter.value; }
   set version(value: number) { this.versionCounter.value = value; }
@@ -20,7 +26,11 @@ export class TensorIdentity {
   /** Native incoming identity occurrences, independent of numerical alias members. */
   incomingIdentity: { owners: number };
   incomingDense = true;
+  /** Receiving class survives dense execution, until a qualifying view resets it. */
+  incomingZeroStride = false;
   acquisitionFamily: TensorFamily | undefined;
+  acquisitionProjection: ((identity: TensorIdentity) => TensorValue) | undefined;
+  projectScalar: ((identity: TensorIdentity) => TensorValue) | undefined;
   controls: readonly WriterOutcome[] = [];
   #snapshotControls: readonly WriterOutcome[] = this.controls;
   gradient: TensorIdentity | null = null;
@@ -48,13 +58,13 @@ export class TensorIdentity {
   }
   get isView(): boolean { return this.base !== null; }
   get value(): TensorValue {
+    const current = this.projectScalar?.(this) ?? this.family.current;
     if (!this.isView && this.controls.length === 0
-      && this.family.current.detachmentCounter === this.detachmentCounter
-      && (this.shape === this.family.current.shape || equalTensorShapes(this.shape, this.family.current.shape))) return this.family.current;
-    if (this.#snapshot.storage !== this.family.current.storage || this.#snapshot.version !== this.family.version
+      && current.detachmentCounter === this.detachmentCounter
+      && (this.shape === current.shape || equalTensorShapes(this.shape, current.shape))) return current;
+    if (this.#snapshot.storage !== current.storage || this.#snapshot.version !== this.family.version
       || this.#snapshot.detachmentCounter !== this.detachmentCounter || this.#snapshot.detachmentVersion !== this.detachmentCounter.value
-      || this.#snapshotControls !== this.controls || (this.controls.length === 0 && this.#snapshot.outcomes !== this.family.current.outcomes)) {
-      const current = this.family.current;
+      || this.#snapshotControls !== this.controls || (this.controls.length === 0 && this.#snapshot.outcomes !== current.outcomes)) {
       this.#snapshot = new TensorValue({ ...current, shape: this.shape }, null, current.storage);
       this.#snapshot.references = 0;
       this.#snapshot.versionCounter = this.family.versionCounter;

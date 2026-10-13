@@ -93,6 +93,12 @@ The condition depends on incoming tensor identity ownership and dense layout,
 not merely numerical storage or operation name. View-derived seeds can share
 the caller's numerical family; direct caller-held seeds, expanded sum seeds and
 contributions with other incoming consumers can require independent clones.
+For total-sum incoming gradients, a scalar, an expanded singleton and an empty
+reshape can have different receiving classes. Rank-zero views can restore a
+dense class; qualifying empty reshapes can allow acquisition of a scalar-derived
+alias. These distinctions remain semantic even after dense execution. The
+[sum-gradient contract](../architecture/sum-gradient-aliases.md) owns their
+examined conditions; they do not expose general strides.
 Cloning preserves captured float32 bits, including signed zero and exceptional
 values. Ordinary first-order gradients are untracked; assigned tracked gradients
 retain their existing history.

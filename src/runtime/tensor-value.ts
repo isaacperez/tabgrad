@@ -1,5 +1,6 @@
 import type { TensorDevice } from "../execution/backend.js";
 import { assertComputationCoefficient, type LoweredComputation, type ProgramProvenance } from "../execution/executable-program.js";
+import type { TensorFamily } from "./tensor-family.js";
 import type { WriterOutcome } from "./writer-outcome.js";
 
 /** Mutable version only: captured descriptors never retain a family current. */
@@ -28,6 +29,8 @@ export class TensorValue {
   // are shared by every whole-storage alias.
   readonly storage: StorageState;
   readonly provenance: ProgramProvenance;
+  projectionFamily: WeakRef<TensorFamily> | undefined;
+  projectionSource: WeakRef<TensorValue> | undefined;
   references = 1;
   versionCounter: TensorVersionCounter | null = null;
   detachmentCounter: TensorVersionCounter | null = null;

@@ -20612,6 +20612,7623 @@
       }
     }
   ],
+  "sumGradientAliasSource": "\ndef sum_filled(shape, value):\n    if not shape:\n        return value\n    return [sum_filled(shape[1:], value) for _ in range(shape[0])]\n\n\ndef sum_make(shape, value, tracked=False):\n    return torch.tensor(sum_filled(shape, value), dtype=torch.float32, requires_grad=tracked)\n\n\ndef sum_sample(values):\n    return [[list(value.shape), value.tolist(), probe_version(value), value.requires_grad]\n            for value in values]\n\n\ndef sum_error(error):\n    message = str(error)\n    if 'no_grad' in message or 'no grad' in message or 'view created' in message:\n        category = 'view-guard'\n    elif 'single memory location' in message or 'overlap' in message:\n        category = 'overlap'\n    elif 'modified by an inplace' in message or 'saved for differentiation was modified' in message:\n        category = 'saved-version'\n    else:\n        category = 'other'\n    return [type(error).__name__, category]\n\n\ndef sum_alias_report(shape, method, action, path, tracked_seed=False):\n    x = sum_make(shape, 2, True)\n    seed = sum_make((), 3, tracked_seed)\n    middle = x\n    for dimensions in path:\n        middle = middle.view(dimensions)\n    output = middle.sum()\n    targets = [x, middle] if path else [x]\n    if method == 'functional':\n        results = list(torch.autograd.grad(output, targets, seed))\n    else:\n        output.backward(seed, inputs=targets)\n        results = [target.grad for target in targets]\n    values = results + [seed]\n    report = {'before': sum_sample(values),\n              'identity': [[a is b for b in values] for a in results], 'error': None}\n    try:\n        if action == 'seed':\n            with torch.no_grad():\n                seed.copy_(sum_make((), 4))\n        elif action == 'result':\n            with torch.no_grad():\n                results[0].copy_(sum_make(shape, 0))\n        elif action == 'self':\n            with torch.no_grad():\n                results[0].copy_(results[0])\n        elif action == 'same-family':\n            alias = results[0].view(shape)\n            with torch.no_grad():\n                results[0].copy_(alias)\n        elif action == 'active':\n            results[0].copy_(sum_make(shape, 0, True))\n        elif action == 'captured':\n            prior = results[0] + results[0]\n            with torch.no_grad():\n                seed.copy_(sum_make((), 4))\n            report['captured'] = prior.tolist()\n        elif action == 'saved':\n            parameter = sum_make(shape, 2, True)\n            loss = (results[0] * parameter).sum()\n            with torch.no_grad():\n                seed.copy_(sum_make((), 4))\n            try:\n                report['derived'] = torch.autograd.grad(loss, parameter)[0].tolist()\n            except Exception as error:\n                report['savedError'] = sum_error(error)\n    except Exception as error:\n        report['error'] = sum_error(error)\n    report['after'] = sum_sample(values)\n    return report\n\n\ndef sum_seed_report(shape, path, method):\n    origin = sum_make((), 3)\n    z = sum_make(shape, 2, True)\n    seed = torch.autograd.grad(z.sum(), z, origin)[0]\n    for dimensions in path:\n        seed = seed.view(dimensions)\n    x = sum_make(shape, 2, True)\n    view = x.view(tuple(seed.shape))\n    if method == 'functional':\n        results = list(torch.autograd.grad(view, [x, view], seed))\n    else:\n        view.backward(seed, inputs=[x, view])\n        results = [x.grad, view.grad]\n    values = results + [seed, origin]\n    report = {'before': sum_sample(values),\n              'identity': [[a is b for b in values] for a in results]}\n    with torch.no_grad():\n        origin.copy_(sum_make((), 4))\n    report['after'] = sum_sample(values)\n    return report\n\n\ndef sum_empty_promotion(shape, dimensions):\n    x = sum_make(shape, 2, True)\n    seed = sum_make((), 3)\n    x.view(dimensions).sum().backward(seed, inputs=[x])\n    gradient = x.grad\n    source = sum_make(shape, 5, True)\n    report = {'before': sum_sample([gradient, seed])}\n    gradient.copy_(source)\n    derived = torch.autograd.grad(gradient.sum(), source)[0]\n    report['after'] = sum_sample([gradient, seed, derived])\n    return report\n",
+  "sumGradientAliasCases": [
+    {
+      "name": "()/functional/seed",
+      "expression": "sum_alias_report((), 'functional', 'seed', ())",
+      "expected": {
+        "before": [
+          [
+            [],
+            3.0,
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [],
+            4.0,
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "()/functional/result",
+      "expression": "sum_alias_report((), 'functional', 'result', ())",
+      "expected": {
+        "before": [
+          [
+            [],
+            3.0,
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [],
+            0.0,
+            1,
+            false
+          ],
+          [
+            [],
+            0.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "()/functional/self",
+      "expression": "sum_alias_report((), 'functional', 'self', ())",
+      "expected": {
+        "before": [
+          [
+            [],
+            3.0,
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [],
+            3.0,
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "()/functional/same-family",
+      "expression": "sum_alias_report((), 'functional', 'same-family', ())",
+      "expected": {
+        "before": [
+          [
+            [],
+            3.0,
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [],
+            3.0,
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "()/functional/active",
+      "expression": "sum_alias_report((), 'functional', 'active', ())",
+      "expected": {
+        "before": [
+          [
+            [],
+            3.0,
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": [
+          "RuntimeError",
+          "view-guard"
+        ],
+        "after": [
+          [
+            [],
+            3.0,
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "()/functional/captured",
+      "expression": "sum_alias_report((), 'functional', 'captured', ())",
+      "expected": {
+        "before": [
+          [
+            [],
+            3.0,
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "captured": 6.0,
+        "after": [
+          [
+            [],
+            4.0,
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "()/functional/saved",
+      "expression": "sum_alias_report((), 'functional', 'saved', ())",
+      "expected": {
+        "before": [
+          [
+            [],
+            3.0,
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "savedError": [
+          "RuntimeError",
+          "saved-version"
+        ],
+        "after": [
+          [
+            [],
+            4.0,
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "()/backward/seed",
+      "expression": "sum_alias_report((), 'backward', 'seed', ())",
+      "expected": {
+        "before": [
+          [
+            [],
+            3.0,
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [],
+            4.0,
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "()/backward/result",
+      "expression": "sum_alias_report((), 'backward', 'result', ())",
+      "expected": {
+        "before": [
+          [
+            [],
+            3.0,
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [],
+            0.0,
+            1,
+            false
+          ],
+          [
+            [],
+            0.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "()/backward/self",
+      "expression": "sum_alias_report((), 'backward', 'self', ())",
+      "expected": {
+        "before": [
+          [
+            [],
+            3.0,
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [],
+            3.0,
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "()/backward/same-family",
+      "expression": "sum_alias_report((), 'backward', 'same-family', ())",
+      "expected": {
+        "before": [
+          [
+            [],
+            3.0,
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [],
+            3.0,
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "()/backward/active",
+      "expression": "sum_alias_report((), 'backward', 'active', ())",
+      "expected": {
+        "before": [
+          [
+            [],
+            3.0,
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [],
+            0.0,
+            1,
+            true
+          ],
+          [
+            [],
+            0.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "()/backward/captured",
+      "expression": "sum_alias_report((), 'backward', 'captured', ())",
+      "expected": {
+        "before": [
+          [
+            [],
+            3.0,
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "captured": 6.0,
+        "after": [
+          [
+            [],
+            4.0,
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "()/backward/saved",
+      "expression": "sum_alias_report((), 'backward', 'saved', ())",
+      "expected": {
+        "before": [
+          [
+            [],
+            3.0,
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "savedError": [
+          "RuntimeError",
+          "saved-version"
+        ],
+        "after": [
+          [
+            [],
+            4.0,
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(1,)/functional/seed",
+      "expression": "sum_alias_report((1,), 'functional', 'seed', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              1
+            ],
+            [
+              3.0
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              1
+            ],
+            [
+              4.0
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(1,)/functional/result",
+      "expression": "sum_alias_report((1,), 'functional', 'result', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              1
+            ],
+            [
+              3.0
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              1
+            ],
+            [
+              0.0
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            0.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(1,)/functional/self",
+      "expression": "sum_alias_report((1,), 'functional', 'self', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              1
+            ],
+            [
+              3.0
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              1
+            ],
+            [
+              3.0
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(1,)/functional/same-family",
+      "expression": "sum_alias_report((1,), 'functional', 'same-family', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              1
+            ],
+            [
+              3.0
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              1
+            ],
+            [
+              3.0
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(1,)/functional/active",
+      "expression": "sum_alias_report((1,), 'functional', 'active', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              1
+            ],
+            [
+              3.0
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": [
+          "RuntimeError",
+          "view-guard"
+        ],
+        "after": [
+          [
+            [
+              1
+            ],
+            [
+              3.0
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(1,)/functional/captured",
+      "expression": "sum_alias_report((1,), 'functional', 'captured', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              1
+            ],
+            [
+              3.0
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "captured": [
+          6.0
+        ],
+        "after": [
+          [
+            [
+              1
+            ],
+            [
+              4.0
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(1,)/functional/saved",
+      "expression": "sum_alias_report((1,), 'functional', 'saved', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              1
+            ],
+            [
+              3.0
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "savedError": [
+          "RuntimeError",
+          "saved-version"
+        ],
+        "after": [
+          [
+            [
+              1
+            ],
+            [
+              4.0
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(1,)/backward/seed",
+      "expression": "sum_alias_report((1,), 'backward', 'seed', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              1
+            ],
+            [
+              3.0
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              1
+            ],
+            [
+              3.0
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(1,)/backward/result",
+      "expression": "sum_alias_report((1,), 'backward', 'result', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              1
+            ],
+            [
+              3.0
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              1
+            ],
+            [
+              0.0
+            ],
+            2,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(1,)/backward/self",
+      "expression": "sum_alias_report((1,), 'backward', 'self', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              1
+            ],
+            [
+              3.0
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              1
+            ],
+            [
+              3.0
+            ],
+            2,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(1,)/backward/same-family",
+      "expression": "sum_alias_report((1,), 'backward', 'same-family', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              1
+            ],
+            [
+              3.0
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              1
+            ],
+            [
+              3.0
+            ],
+            2,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(1,)/backward/active",
+      "expression": "sum_alias_report((1,), 'backward', 'active', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              1
+            ],
+            [
+              3.0
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              1
+            ],
+            [
+              0.0
+            ],
+            2,
+            true
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(1,)/backward/captured",
+      "expression": "sum_alias_report((1,), 'backward', 'captured', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              1
+            ],
+            [
+              3.0
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "captured": [
+          6.0
+        ],
+        "after": [
+          [
+            [
+              1
+            ],
+            [
+              3.0
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(1,)/backward/saved",
+      "expression": "sum_alias_report((1,), 'backward', 'saved', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              1
+            ],
+            [
+              3.0
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "derived": [
+          3.0
+        ],
+        "after": [
+          [
+            [
+              1
+            ],
+            [
+              3.0
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(1, 1)/functional/seed",
+      "expression": "sum_alias_report((1, 1), 'functional', 'seed', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              1,
+              1
+            ],
+            [
+              [
+                3.0
+              ]
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              1,
+              1
+            ],
+            [
+              [
+                4.0
+              ]
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(1, 1)/functional/result",
+      "expression": "sum_alias_report((1, 1), 'functional', 'result', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              1,
+              1
+            ],
+            [
+              [
+                3.0
+              ]
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              1,
+              1
+            ],
+            [
+              [
+                0.0
+              ]
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            0.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(1, 1)/functional/self",
+      "expression": "sum_alias_report((1, 1), 'functional', 'self', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              1,
+              1
+            ],
+            [
+              [
+                3.0
+              ]
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              1,
+              1
+            ],
+            [
+              [
+                3.0
+              ]
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(1, 1)/functional/same-family",
+      "expression": "sum_alias_report((1, 1), 'functional', 'same-family', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              1,
+              1
+            ],
+            [
+              [
+                3.0
+              ]
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              1,
+              1
+            ],
+            [
+              [
+                3.0
+              ]
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(1, 1)/functional/active",
+      "expression": "sum_alias_report((1, 1), 'functional', 'active', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              1,
+              1
+            ],
+            [
+              [
+                3.0
+              ]
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": [
+          "RuntimeError",
+          "view-guard"
+        ],
+        "after": [
+          [
+            [
+              1,
+              1
+            ],
+            [
+              [
+                3.0
+              ]
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(1, 1)/functional/captured",
+      "expression": "sum_alias_report((1, 1), 'functional', 'captured', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              1,
+              1
+            ],
+            [
+              [
+                3.0
+              ]
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "captured": [
+          [
+            6.0
+          ]
+        ],
+        "after": [
+          [
+            [
+              1,
+              1
+            ],
+            [
+              [
+                4.0
+              ]
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(1, 1)/functional/saved",
+      "expression": "sum_alias_report((1, 1), 'functional', 'saved', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              1,
+              1
+            ],
+            [
+              [
+                3.0
+              ]
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "savedError": [
+          "RuntimeError",
+          "saved-version"
+        ],
+        "after": [
+          [
+            [
+              1,
+              1
+            ],
+            [
+              [
+                4.0
+              ]
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(1, 1)/backward/seed",
+      "expression": "sum_alias_report((1, 1), 'backward', 'seed', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              1,
+              1
+            ],
+            [
+              [
+                3.0
+              ]
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              1,
+              1
+            ],
+            [
+              [
+                3.0
+              ]
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(1, 1)/backward/result",
+      "expression": "sum_alias_report((1, 1), 'backward', 'result', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              1,
+              1
+            ],
+            [
+              [
+                3.0
+              ]
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              1,
+              1
+            ],
+            [
+              [
+                0.0
+              ]
+            ],
+            2,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(1, 1)/backward/self",
+      "expression": "sum_alias_report((1, 1), 'backward', 'self', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              1,
+              1
+            ],
+            [
+              [
+                3.0
+              ]
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              1,
+              1
+            ],
+            [
+              [
+                3.0
+              ]
+            ],
+            2,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(1, 1)/backward/same-family",
+      "expression": "sum_alias_report((1, 1), 'backward', 'same-family', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              1,
+              1
+            ],
+            [
+              [
+                3.0
+              ]
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              1,
+              1
+            ],
+            [
+              [
+                3.0
+              ]
+            ],
+            2,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(1, 1)/backward/active",
+      "expression": "sum_alias_report((1, 1), 'backward', 'active', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              1,
+              1
+            ],
+            [
+              [
+                3.0
+              ]
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              1,
+              1
+            ],
+            [
+              [
+                0.0
+              ]
+            ],
+            2,
+            true
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(1, 1)/backward/captured",
+      "expression": "sum_alias_report((1, 1), 'backward', 'captured', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              1,
+              1
+            ],
+            [
+              [
+                3.0
+              ]
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "captured": [
+          [
+            6.0
+          ]
+        ],
+        "after": [
+          [
+            [
+              1,
+              1
+            ],
+            [
+              [
+                3.0
+              ]
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(1, 1)/backward/saved",
+      "expression": "sum_alias_report((1, 1), 'backward', 'saved', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              1,
+              1
+            ],
+            [
+              [
+                3.0
+              ]
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "derived": [
+          [
+            3.0
+          ]
+        ],
+        "after": [
+          [
+            [
+              1,
+              1
+            ],
+            [
+              [
+                3.0
+              ]
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(0,)/functional/seed",
+      "expression": "sum_alias_report((0,), 'functional', 'seed', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              0
+            ],
+            [],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              0
+            ],
+            [],
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(0,)/functional/result",
+      "expression": "sum_alias_report((0,), 'functional', 'result', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              0
+            ],
+            [],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              0
+            ],
+            [],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(0,)/functional/self",
+      "expression": "sum_alias_report((0,), 'functional', 'self', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              0
+            ],
+            [],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              0
+            ],
+            [],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(0,)/functional/same-family",
+      "expression": "sum_alias_report((0,), 'functional', 'same-family', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              0
+            ],
+            [],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              0
+            ],
+            [],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(0,)/functional/active",
+      "expression": "sum_alias_report((0,), 'functional', 'active', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              0
+            ],
+            [],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": [
+          "RuntimeError",
+          "view-guard"
+        ],
+        "after": [
+          [
+            [
+              0
+            ],
+            [],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(0,)/functional/captured",
+      "expression": "sum_alias_report((0,), 'functional', 'captured', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              0
+            ],
+            [],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "captured": [],
+        "after": [
+          [
+            [
+              0
+            ],
+            [],
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(0,)/functional/saved",
+      "expression": "sum_alias_report((0,), 'functional', 'saved', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              0
+            ],
+            [],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "savedError": [
+          "RuntimeError",
+          "saved-version"
+        ],
+        "after": [
+          [
+            [
+              0
+            ],
+            [],
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(0,)/backward/seed",
+      "expression": "sum_alias_report((0,), 'backward', 'seed', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              0
+            ],
+            [],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              0
+            ],
+            [],
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(0,)/backward/result",
+      "expression": "sum_alias_report((0,), 'backward', 'result', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              0
+            ],
+            [],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              0
+            ],
+            [],
+            2,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(0,)/backward/self",
+      "expression": "sum_alias_report((0,), 'backward', 'self', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              0
+            ],
+            [],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              0
+            ],
+            [],
+            2,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(0,)/backward/same-family",
+      "expression": "sum_alias_report((0,), 'backward', 'same-family', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              0
+            ],
+            [],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              0
+            ],
+            [],
+            2,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(0,)/backward/active",
+      "expression": "sum_alias_report((0,), 'backward', 'active', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              0
+            ],
+            [],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              0
+            ],
+            [],
+            2,
+            true
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(0,)/backward/captured",
+      "expression": "sum_alias_report((0,), 'backward', 'captured', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              0
+            ],
+            [],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "captured": [],
+        "after": [
+          [
+            [
+              0
+            ],
+            [],
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(0,)/backward/saved",
+      "expression": "sum_alias_report((0,), 'backward', 'saved', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              0
+            ],
+            [],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "derived": [],
+        "after": [
+          [
+            [
+              0
+            ],
+            [],
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(2, 0)/functional/seed",
+      "expression": "sum_alias_report((2, 0), 'functional', 'seed', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              2,
+              0
+            ],
+            [
+              [],
+              []
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              2,
+              0
+            ],
+            [
+              [],
+              []
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(2, 0)/functional/result",
+      "expression": "sum_alias_report((2, 0), 'functional', 'result', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              2,
+              0
+            ],
+            [
+              [],
+              []
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              2,
+              0
+            ],
+            [
+              [],
+              []
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(2, 0)/functional/self",
+      "expression": "sum_alias_report((2, 0), 'functional', 'self', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              2,
+              0
+            ],
+            [
+              [],
+              []
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              2,
+              0
+            ],
+            [
+              [],
+              []
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(2, 0)/functional/same-family",
+      "expression": "sum_alias_report((2, 0), 'functional', 'same-family', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              2,
+              0
+            ],
+            [
+              [],
+              []
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              2,
+              0
+            ],
+            [
+              [],
+              []
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(2, 0)/functional/active",
+      "expression": "sum_alias_report((2, 0), 'functional', 'active', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              2,
+              0
+            ],
+            [
+              [],
+              []
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": [
+          "RuntimeError",
+          "view-guard"
+        ],
+        "after": [
+          [
+            [
+              2,
+              0
+            ],
+            [
+              [],
+              []
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(2, 0)/functional/captured",
+      "expression": "sum_alias_report((2, 0), 'functional', 'captured', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              2,
+              0
+            ],
+            [
+              [],
+              []
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "captured": [
+          [],
+          []
+        ],
+        "after": [
+          [
+            [
+              2,
+              0
+            ],
+            [
+              [],
+              []
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(2, 0)/functional/saved",
+      "expression": "sum_alias_report((2, 0), 'functional', 'saved', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              2,
+              0
+            ],
+            [
+              [],
+              []
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "savedError": [
+          "RuntimeError",
+          "saved-version"
+        ],
+        "after": [
+          [
+            [
+              2,
+              0
+            ],
+            [
+              [],
+              []
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(2, 0)/backward/seed",
+      "expression": "sum_alias_report((2, 0), 'backward', 'seed', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              2,
+              0
+            ],
+            [
+              [],
+              []
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              2,
+              0
+            ],
+            [
+              [],
+              []
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(2, 0)/backward/result",
+      "expression": "sum_alias_report((2, 0), 'backward', 'result', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              2,
+              0
+            ],
+            [
+              [],
+              []
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              2,
+              0
+            ],
+            [
+              [],
+              []
+            ],
+            2,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(2, 0)/backward/self",
+      "expression": "sum_alias_report((2, 0), 'backward', 'self', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              2,
+              0
+            ],
+            [
+              [],
+              []
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              2,
+              0
+            ],
+            [
+              [],
+              []
+            ],
+            2,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(2, 0)/backward/same-family",
+      "expression": "sum_alias_report((2, 0), 'backward', 'same-family', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              2,
+              0
+            ],
+            [
+              [],
+              []
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              2,
+              0
+            ],
+            [
+              [],
+              []
+            ],
+            2,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(2, 0)/backward/active",
+      "expression": "sum_alias_report((2, 0), 'backward', 'active', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              2,
+              0
+            ],
+            [
+              [],
+              []
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              2,
+              0
+            ],
+            [
+              [],
+              []
+            ],
+            2,
+            true
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(2, 0)/backward/captured",
+      "expression": "sum_alias_report((2, 0), 'backward', 'captured', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              2,
+              0
+            ],
+            [
+              [],
+              []
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "captured": [
+          [],
+          []
+        ],
+        "after": [
+          [
+            [
+              2,
+              0
+            ],
+            [
+              [],
+              []
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(2, 0)/backward/saved",
+      "expression": "sum_alias_report((2, 0), 'backward', 'saved', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              2,
+              0
+            ],
+            [
+              [],
+              []
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "derived": [
+          [],
+          []
+        ],
+        "after": [
+          [
+            [
+              2,
+              0
+            ],
+            [
+              [],
+              []
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(2,)/functional/seed",
+      "expression": "sum_alias_report((2,), 'functional', 'seed', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              2
+            ],
+            [
+              3.0,
+              3.0
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              2
+            ],
+            [
+              4.0,
+              4.0
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(2,)/functional/result",
+      "expression": "sum_alias_report((2,), 'functional', 'result', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              2
+            ],
+            [
+              3.0,
+              3.0
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": [
+          "RuntimeError",
+          "overlap"
+        ],
+        "after": [
+          [
+            [
+              2
+            ],
+            [
+              3.0,
+              3.0
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(2,)/functional/self",
+      "expression": "sum_alias_report((2,), 'functional', 'self', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              2
+            ],
+            [
+              3.0,
+              3.0
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              2
+            ],
+            [
+              3.0,
+              3.0
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(2,)/functional/same-family",
+      "expression": "sum_alias_report((2,), 'functional', 'same-family', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              2
+            ],
+            [
+              3.0,
+              3.0
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              2
+            ],
+            [
+              3.0,
+              3.0
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(2,)/functional/active",
+      "expression": "sum_alias_report((2,), 'functional', 'active', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              2
+            ],
+            [
+              3.0,
+              3.0
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": [
+          "RuntimeError",
+          "view-guard"
+        ],
+        "after": [
+          [
+            [
+              2
+            ],
+            [
+              3.0,
+              3.0
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(2,)/functional/captured",
+      "expression": "sum_alias_report((2,), 'functional', 'captured', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              2
+            ],
+            [
+              3.0,
+              3.0
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "captured": [
+          6.0,
+          6.0
+        ],
+        "after": [
+          [
+            [
+              2
+            ],
+            [
+              4.0,
+              4.0
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(2,)/functional/saved",
+      "expression": "sum_alias_report((2,), 'functional', 'saved', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              2
+            ],
+            [
+              3.0,
+              3.0
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "savedError": [
+          "RuntimeError",
+          "saved-version"
+        ],
+        "after": [
+          [
+            [
+              2
+            ],
+            [
+              4.0,
+              4.0
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(2,)/backward/seed",
+      "expression": "sum_alias_report((2,), 'backward', 'seed', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              2
+            ],
+            [
+              3.0,
+              3.0
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              2
+            ],
+            [
+              3.0,
+              3.0
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(2,)/backward/result",
+      "expression": "sum_alias_report((2,), 'backward', 'result', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              2
+            ],
+            [
+              3.0,
+              3.0
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              2
+            ],
+            [
+              0.0,
+              0.0
+            ],
+            2,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(2,)/backward/self",
+      "expression": "sum_alias_report((2,), 'backward', 'self', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              2
+            ],
+            [
+              3.0,
+              3.0
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              2
+            ],
+            [
+              3.0,
+              3.0
+            ],
+            2,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(2,)/backward/same-family",
+      "expression": "sum_alias_report((2,), 'backward', 'same-family', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              2
+            ],
+            [
+              3.0,
+              3.0
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              2
+            ],
+            [
+              3.0,
+              3.0
+            ],
+            2,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(2,)/backward/active",
+      "expression": "sum_alias_report((2,), 'backward', 'active', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              2
+            ],
+            [
+              3.0,
+              3.0
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              2
+            ],
+            [
+              0.0,
+              0.0
+            ],
+            2,
+            true
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(2,)/backward/captured",
+      "expression": "sum_alias_report((2,), 'backward', 'captured', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              2
+            ],
+            [
+              3.0,
+              3.0
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "captured": [
+          6.0,
+          6.0
+        ],
+        "after": [
+          [
+            [
+              2
+            ],
+            [
+              3.0,
+              3.0
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(2,)/backward/saved",
+      "expression": "sum_alias_report((2,), 'backward', 'saved', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              2
+            ],
+            [
+              3.0,
+              3.0
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "derived": [
+          3.0,
+          3.0
+        ],
+        "after": [
+          [
+            [
+              2
+            ],
+            [
+              3.0,
+              3.0
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(1, 2)/functional/seed",
+      "expression": "sum_alias_report((1, 2), 'functional', 'seed', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              1,
+              2
+            ],
+            [
+              [
+                3.0,
+                3.0
+              ]
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              1,
+              2
+            ],
+            [
+              [
+                4.0,
+                4.0
+              ]
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(1, 2)/functional/result",
+      "expression": "sum_alias_report((1, 2), 'functional', 'result', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              1,
+              2
+            ],
+            [
+              [
+                3.0,
+                3.0
+              ]
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": [
+          "RuntimeError",
+          "overlap"
+        ],
+        "after": [
+          [
+            [
+              1,
+              2
+            ],
+            [
+              [
+                3.0,
+                3.0
+              ]
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(1, 2)/functional/self",
+      "expression": "sum_alias_report((1, 2), 'functional', 'self', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              1,
+              2
+            ],
+            [
+              [
+                3.0,
+                3.0
+              ]
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              1,
+              2
+            ],
+            [
+              [
+                3.0,
+                3.0
+              ]
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(1, 2)/functional/same-family",
+      "expression": "sum_alias_report((1, 2), 'functional', 'same-family', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              1,
+              2
+            ],
+            [
+              [
+                3.0,
+                3.0
+              ]
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              1,
+              2
+            ],
+            [
+              [
+                3.0,
+                3.0
+              ]
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(1, 2)/functional/active",
+      "expression": "sum_alias_report((1, 2), 'functional', 'active', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              1,
+              2
+            ],
+            [
+              [
+                3.0,
+                3.0
+              ]
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": [
+          "RuntimeError",
+          "view-guard"
+        ],
+        "after": [
+          [
+            [
+              1,
+              2
+            ],
+            [
+              [
+                3.0,
+                3.0
+              ]
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(1, 2)/functional/captured",
+      "expression": "sum_alias_report((1, 2), 'functional', 'captured', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              1,
+              2
+            ],
+            [
+              [
+                3.0,
+                3.0
+              ]
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "captured": [
+          [
+            6.0,
+            6.0
+          ]
+        ],
+        "after": [
+          [
+            [
+              1,
+              2
+            ],
+            [
+              [
+                4.0,
+                4.0
+              ]
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(1, 2)/functional/saved",
+      "expression": "sum_alias_report((1, 2), 'functional', 'saved', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              1,
+              2
+            ],
+            [
+              [
+                3.0,
+                3.0
+              ]
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "savedError": [
+          "RuntimeError",
+          "saved-version"
+        ],
+        "after": [
+          [
+            [
+              1,
+              2
+            ],
+            [
+              [
+                4.0,
+                4.0
+              ]
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(1, 2)/backward/seed",
+      "expression": "sum_alias_report((1, 2), 'backward', 'seed', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              1,
+              2
+            ],
+            [
+              [
+                3.0,
+                3.0
+              ]
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              1,
+              2
+            ],
+            [
+              [
+                3.0,
+                3.0
+              ]
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(1, 2)/backward/result",
+      "expression": "sum_alias_report((1, 2), 'backward', 'result', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              1,
+              2
+            ],
+            [
+              [
+                3.0,
+                3.0
+              ]
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              1,
+              2
+            ],
+            [
+              [
+                0.0,
+                0.0
+              ]
+            ],
+            2,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(1, 2)/backward/self",
+      "expression": "sum_alias_report((1, 2), 'backward', 'self', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              1,
+              2
+            ],
+            [
+              [
+                3.0,
+                3.0
+              ]
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              1,
+              2
+            ],
+            [
+              [
+                3.0,
+                3.0
+              ]
+            ],
+            2,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(1, 2)/backward/same-family",
+      "expression": "sum_alias_report((1, 2), 'backward', 'same-family', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              1,
+              2
+            ],
+            [
+              [
+                3.0,
+                3.0
+              ]
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              1,
+              2
+            ],
+            [
+              [
+                3.0,
+                3.0
+              ]
+            ],
+            2,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(1, 2)/backward/active",
+      "expression": "sum_alias_report((1, 2), 'backward', 'active', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              1,
+              2
+            ],
+            [
+              [
+                3.0,
+                3.0
+              ]
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              1,
+              2
+            ],
+            [
+              [
+                0.0,
+                0.0
+              ]
+            ],
+            2,
+            true
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(1, 2)/backward/captured",
+      "expression": "sum_alias_report((1, 2), 'backward', 'captured', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              1,
+              2
+            ],
+            [
+              [
+                3.0,
+                3.0
+              ]
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "captured": [
+          [
+            6.0,
+            6.0
+          ]
+        ],
+        "after": [
+          [
+            [
+              1,
+              2
+            ],
+            [
+              [
+                3.0,
+                3.0
+              ]
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "(1, 2)/backward/saved",
+      "expression": "sum_alias_report((1, 2), 'backward', 'saved', ())",
+      "expected": {
+        "before": [
+          [
+            [
+              1,
+              2
+            ],
+            [
+              [
+                3.0,
+                3.0
+              ]
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "derived": [
+          [
+            3.0,
+            3.0
+          ]
+        ],
+        "after": [
+          [
+            [
+              1,
+              2
+            ],
+            [
+              [
+                3.0,
+                3.0
+              ]
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "view/(1,)/((),)/functional",
+      "expression": "sum_alias_report((1,), 'functional', 'seed', ((),))",
+      "expected": {
+        "before": [
+          [
+            [
+              1
+            ],
+            [
+              3.0
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false,
+            false
+          ],
+          [
+            false,
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              1
+            ],
+            [
+              4.0
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "seed/(1,)/((),)/functional",
+      "expression": "sum_seed_report((1,), ((),), 'functional')",
+      "expected": {
+        "before": [
+          [
+            [
+              1
+            ],
+            [
+              3.0
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false,
+            false,
+            false
+          ],
+          [
+            false,
+            true,
+            true,
+            false
+          ]
+        ],
+        "after": [
+          [
+            [
+              1
+            ],
+            [
+              4.0
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "view/(1,)/((),)/backward",
+      "expression": "sum_alias_report((1,), 'backward', 'seed', ((),))",
+      "expected": {
+        "before": [
+          [
+            [
+              1
+            ],
+            [
+              3.0
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false,
+            false
+          ],
+          [
+            false,
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              1
+            ],
+            [
+              4.0
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "seed/(1,)/((),)/backward",
+      "expression": "sum_seed_report((1,), ((),), 'backward')",
+      "expected": {
+        "before": [
+          [
+            [
+              1
+            ],
+            [
+              3.0
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false,
+            false,
+            false
+          ],
+          [
+            false,
+            true,
+            false,
+            false
+          ]
+        ],
+        "after": [
+          [
+            [
+              1
+            ],
+            [
+              4.0
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "view/(1,)/((), (1,))/functional",
+      "expression": "sum_alias_report((1,), 'functional', 'seed', ((), (1,)))",
+      "expected": {
+        "before": [
+          [
+            [
+              1
+            ],
+            [
+              3.0
+            ],
+            0,
+            false
+          ],
+          [
+            [
+              1
+            ],
+            [
+              3.0
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false,
+            false
+          ],
+          [
+            false,
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              1
+            ],
+            [
+              4.0
+            ],
+            1,
+            false
+          ],
+          [
+            [
+              1
+            ],
+            [
+              4.0
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "seed/(1,)/((), (1,))/functional",
+      "expression": "sum_seed_report((1,), ((), (1,)), 'functional')",
+      "expected": {
+        "before": [
+          [
+            [
+              1
+            ],
+            [
+              3.0
+            ],
+            0,
+            false
+          ],
+          [
+            [
+              1
+            ],
+            [
+              3.0
+            ],
+            0,
+            false
+          ],
+          [
+            [
+              1
+            ],
+            [
+              3.0
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false,
+            false,
+            false
+          ],
+          [
+            false,
+            true,
+            true,
+            false
+          ]
+        ],
+        "after": [
+          [
+            [
+              1
+            ],
+            [
+              4.0
+            ],
+            1,
+            false
+          ],
+          [
+            [
+              1
+            ],
+            [
+              4.0
+            ],
+            1,
+            false
+          ],
+          [
+            [
+              1
+            ],
+            [
+              4.0
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "view/(1,)/((), (1,))/backward",
+      "expression": "sum_alias_report((1,), 'backward', 'seed', ((), (1,)))",
+      "expected": {
+        "before": [
+          [
+            [
+              1
+            ],
+            [
+              3.0
+            ],
+            0,
+            false
+          ],
+          [
+            [
+              1
+            ],
+            [
+              3.0
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false,
+            false
+          ],
+          [
+            false,
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              1
+            ],
+            [
+              4.0
+            ],
+            1,
+            false
+          ],
+          [
+            [
+              1
+            ],
+            [
+              3.0
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "seed/(1,)/((), (1,))/backward",
+      "expression": "sum_seed_report((1,), ((), (1,)), 'backward')",
+      "expected": {
+        "before": [
+          [
+            [
+              1
+            ],
+            [
+              3.0
+            ],
+            0,
+            false
+          ],
+          [
+            [
+              1
+            ],
+            [
+              3.0
+            ],
+            0,
+            false
+          ],
+          [
+            [
+              1
+            ],
+            [
+              3.0
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false,
+            false,
+            false
+          ],
+          [
+            false,
+            true,
+            false,
+            false
+          ]
+        ],
+        "after": [
+          [
+            [
+              1
+            ],
+            [
+              4.0
+            ],
+            1,
+            false
+          ],
+          [
+            [
+              1
+            ],
+            [
+              3.0
+            ],
+            0,
+            false
+          ],
+          [
+            [
+              1
+            ],
+            [
+              4.0
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "view/(1, 1)/((1,), ())/functional",
+      "expression": "sum_alias_report((1, 1), 'functional', 'seed', ((1,), ()))",
+      "expected": {
+        "before": [
+          [
+            [
+              1,
+              1
+            ],
+            [
+              [
+                3.0
+              ]
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false,
+            false
+          ],
+          [
+            false,
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              1,
+              1
+            ],
+            [
+              [
+                4.0
+              ]
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "seed/(1, 1)/((1,), ())/functional",
+      "expression": "sum_seed_report((1, 1), ((1,), ()), 'functional')",
+      "expected": {
+        "before": [
+          [
+            [
+              1,
+              1
+            ],
+            [
+              [
+                3.0
+              ]
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false,
+            false,
+            false
+          ],
+          [
+            false,
+            true,
+            true,
+            false
+          ]
+        ],
+        "after": [
+          [
+            [
+              1,
+              1
+            ],
+            [
+              [
+                4.0
+              ]
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "view/(1, 1)/((1,), ())/backward",
+      "expression": "sum_alias_report((1, 1), 'backward', 'seed', ((1,), ()))",
+      "expected": {
+        "before": [
+          [
+            [
+              1,
+              1
+            ],
+            [
+              [
+                3.0
+              ]
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false,
+            false
+          ],
+          [
+            false,
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              1,
+              1
+            ],
+            [
+              [
+                4.0
+              ]
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "seed/(1, 1)/((1,), ())/backward",
+      "expression": "sum_seed_report((1, 1), ((1,), ()), 'backward')",
+      "expected": {
+        "before": [
+          [
+            [
+              1,
+              1
+            ],
+            [
+              [
+                3.0
+              ]
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false,
+            false,
+            false
+          ],
+          [
+            false,
+            true,
+            false,
+            false
+          ]
+        ],
+        "after": [
+          [
+            [
+              1,
+              1
+            ],
+            [
+              [
+                4.0
+              ]
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "view/(0,)/((1, 0),)/functional",
+      "expression": "sum_alias_report((0,), 'functional', 'seed', ((1, 0),))",
+      "expected": {
+        "before": [
+          [
+            [
+              0
+            ],
+            [],
+            0,
+            false
+          ],
+          [
+            [
+              1,
+              0
+            ],
+            [
+              []
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false,
+            false
+          ],
+          [
+            false,
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              0
+            ],
+            [],
+            1,
+            false
+          ],
+          [
+            [
+              1,
+              0
+            ],
+            [
+              []
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "seed/(0,)/((1, 0),)/functional",
+      "expression": "sum_seed_report((0,), ((1, 0),), 'functional')",
+      "expected": {
+        "before": [
+          [
+            [
+              0
+            ],
+            [],
+            0,
+            false
+          ],
+          [
+            [
+              1,
+              0
+            ],
+            [
+              []
+            ],
+            0,
+            false
+          ],
+          [
+            [
+              1,
+              0
+            ],
+            [
+              []
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false,
+            false,
+            false
+          ],
+          [
+            false,
+            true,
+            true,
+            false
+          ]
+        ],
+        "after": [
+          [
+            [
+              0
+            ],
+            [],
+            1,
+            false
+          ],
+          [
+            [
+              1,
+              0
+            ],
+            [
+              []
+            ],
+            1,
+            false
+          ],
+          [
+            [
+              1,
+              0
+            ],
+            [
+              []
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "view/(0,)/((1, 0),)/backward",
+      "expression": "sum_alias_report((0,), 'backward', 'seed', ((1, 0),))",
+      "expected": {
+        "before": [
+          [
+            [
+              0
+            ],
+            [],
+            0,
+            false
+          ],
+          [
+            [
+              1,
+              0
+            ],
+            [
+              []
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false,
+            false
+          ],
+          [
+            false,
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              0
+            ],
+            [],
+            1,
+            false
+          ],
+          [
+            [
+              1,
+              0
+            ],
+            [
+              []
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "seed/(0,)/((1, 0),)/backward",
+      "expression": "sum_seed_report((0,), ((1, 0),), 'backward')",
+      "expected": {
+        "before": [
+          [
+            [
+              0
+            ],
+            [],
+            0,
+            false
+          ],
+          [
+            [
+              1,
+              0
+            ],
+            [
+              []
+            ],
+            0,
+            false
+          ],
+          [
+            [
+              1,
+              0
+            ],
+            [
+              []
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false,
+            false,
+            false
+          ],
+          [
+            false,
+            true,
+            false,
+            false
+          ]
+        ],
+        "after": [
+          [
+            [
+              0
+            ],
+            [],
+            1,
+            false
+          ],
+          [
+            [
+              1,
+              0
+            ],
+            [
+              []
+            ],
+            0,
+            false
+          ],
+          [
+            [
+              1,
+              0
+            ],
+            [
+              []
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "view/(2, 0)/((0, 2),)/functional",
+      "expression": "sum_alias_report((2, 0), 'functional', 'seed', ((0, 2),))",
+      "expected": {
+        "before": [
+          [
+            [
+              2,
+              0
+            ],
+            [
+              [],
+              []
+            ],
+            0,
+            false
+          ],
+          [
+            [
+              0,
+              2
+            ],
+            [],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false,
+            false
+          ],
+          [
+            false,
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              2,
+              0
+            ],
+            [
+              [],
+              []
+            ],
+            1,
+            false
+          ],
+          [
+            [
+              0,
+              2
+            ],
+            [],
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "seed/(2, 0)/((0, 2),)/functional",
+      "expression": "sum_seed_report((2, 0), ((0, 2),), 'functional')",
+      "expected": {
+        "before": [
+          [
+            [
+              2,
+              0
+            ],
+            [
+              [],
+              []
+            ],
+            0,
+            false
+          ],
+          [
+            [
+              0,
+              2
+            ],
+            [],
+            0,
+            false
+          ],
+          [
+            [
+              0,
+              2
+            ],
+            [],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false,
+            false,
+            false
+          ],
+          [
+            false,
+            true,
+            true,
+            false
+          ]
+        ],
+        "after": [
+          [
+            [
+              2,
+              0
+            ],
+            [
+              [],
+              []
+            ],
+            1,
+            false
+          ],
+          [
+            [
+              0,
+              2
+            ],
+            [],
+            1,
+            false
+          ],
+          [
+            [
+              0,
+              2
+            ],
+            [],
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "view/(2, 0)/((0, 2),)/backward",
+      "expression": "sum_alias_report((2, 0), 'backward', 'seed', ((0, 2),))",
+      "expected": {
+        "before": [
+          [
+            [
+              2,
+              0
+            ],
+            [
+              [],
+              []
+            ],
+            0,
+            false
+          ],
+          [
+            [
+              0,
+              2
+            ],
+            [],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false,
+            false
+          ],
+          [
+            false,
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              2,
+              0
+            ],
+            [
+              [],
+              []
+            ],
+            1,
+            false
+          ],
+          [
+            [
+              0,
+              2
+            ],
+            [],
+            0,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "seed/(2, 0)/((0, 2),)/backward",
+      "expression": "sum_seed_report((2, 0), ((0, 2),), 'backward')",
+      "expected": {
+        "before": [
+          [
+            [
+              2,
+              0
+            ],
+            [
+              [],
+              []
+            ],
+            0,
+            false
+          ],
+          [
+            [
+              0,
+              2
+            ],
+            [],
+            0,
+            false
+          ],
+          [
+            [
+              0,
+              2
+            ],
+            [],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false,
+            false,
+            false
+          ],
+          [
+            false,
+            true,
+            false,
+            false
+          ]
+        ],
+        "after": [
+          [
+            [
+              2,
+              0
+            ],
+            [
+              [],
+              []
+            ],
+            1,
+            false
+          ],
+          [
+            [
+              0,
+              2
+            ],
+            [],
+            0,
+            false
+          ],
+          [
+            [
+              0,
+              2
+            ],
+            [],
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "view/(2,)/((1, 2),)/functional",
+      "expression": "sum_alias_report((2,), 'functional', 'seed', ((1, 2),))",
+      "expected": {
+        "before": [
+          [
+            [
+              2
+            ],
+            [
+              3.0,
+              3.0
+            ],
+            0,
+            false
+          ],
+          [
+            [
+              1,
+              2
+            ],
+            [
+              [
+                3.0,
+                3.0
+              ]
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false,
+            false
+          ],
+          [
+            false,
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              2
+            ],
+            [
+              4.0,
+              4.0
+            ],
+            1,
+            false
+          ],
+          [
+            [
+              1,
+              2
+            ],
+            [
+              [
+                4.0,
+                4.0
+              ]
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "seed/(2,)/((1, 2),)/functional",
+      "expression": "sum_seed_report((2,), ((1, 2),), 'functional')",
+      "expected": {
+        "before": [
+          [
+            [
+              2
+            ],
+            [
+              3.0,
+              3.0
+            ],
+            0,
+            false
+          ],
+          [
+            [
+              1,
+              2
+            ],
+            [
+              [
+                3.0,
+                3.0
+              ]
+            ],
+            0,
+            false
+          ],
+          [
+            [
+              1,
+              2
+            ],
+            [
+              [
+                3.0,
+                3.0
+              ]
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false,
+            false,
+            false
+          ],
+          [
+            false,
+            true,
+            true,
+            false
+          ]
+        ],
+        "after": [
+          [
+            [
+              2
+            ],
+            [
+              4.0,
+              4.0
+            ],
+            1,
+            false
+          ],
+          [
+            [
+              1,
+              2
+            ],
+            [
+              [
+                4.0,
+                4.0
+              ]
+            ],
+            1,
+            false
+          ],
+          [
+            [
+              1,
+              2
+            ],
+            [
+              [
+                4.0,
+                4.0
+              ]
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "view/(2,)/((1, 2),)/backward",
+      "expression": "sum_alias_report((2,), 'backward', 'seed', ((1, 2),))",
+      "expected": {
+        "before": [
+          [
+            [
+              2
+            ],
+            [
+              3.0,
+              3.0
+            ],
+            1,
+            false
+          ],
+          [
+            [
+              1,
+              2
+            ],
+            [
+              [
+                3.0,
+                3.0
+              ]
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false,
+            false
+          ],
+          [
+            false,
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              2
+            ],
+            [
+              3.0,
+              3.0
+            ],
+            1,
+            false
+          ],
+          [
+            [
+              1,
+              2
+            ],
+            [
+              [
+                3.0,
+                3.0
+              ]
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "seed/(2,)/((1, 2),)/backward",
+      "expression": "sum_seed_report((2,), ((1, 2),), 'backward')",
+      "expected": {
+        "before": [
+          [
+            [
+              2
+            ],
+            [
+              3.0,
+              3.0
+            ],
+            1,
+            false
+          ],
+          [
+            [
+              1,
+              2
+            ],
+            [
+              [
+                3.0,
+                3.0
+              ]
+            ],
+            0,
+            false
+          ],
+          [
+            [
+              1,
+              2
+            ],
+            [
+              [
+                3.0,
+                3.0
+              ]
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false,
+            false,
+            false
+          ],
+          [
+            false,
+            true,
+            false,
+            false
+          ]
+        ],
+        "after": [
+          [
+            [
+              2
+            ],
+            [
+              3.0,
+              3.0
+            ],
+            1,
+            false
+          ],
+          [
+            [
+              1,
+              2
+            ],
+            [
+              [
+                3.0,
+                3.0
+              ]
+            ],
+            0,
+            false
+          ],
+          [
+            [
+              1,
+              2
+            ],
+            [
+              [
+                4.0,
+                4.0
+              ]
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "tracked-seed/()/seed",
+      "expression": "sum_alias_report((), 'backward', 'seed', (), True)",
+      "expected": {
+        "before": [
+          [
+            [],
+            3.0,
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            true
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [],
+            4.0,
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            true
+          ]
+        ]
+      }
+    },
+    {
+      "name": "tracked-seed/()/active",
+      "expression": "sum_alias_report((), 'backward', 'active', (), True)",
+      "expected": {
+        "before": [
+          [
+            [],
+            3.0,
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            true
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [],
+            0.0,
+            1,
+            true
+          ],
+          [
+            [],
+            0.0,
+            1,
+            true
+          ]
+        ]
+      }
+    },
+    {
+      "name": "tracked-seed/(1,)/seed",
+      "expression": "sum_alias_report((1,), 'backward', 'seed', (), True)",
+      "expected": {
+        "before": [
+          [
+            [
+              1
+            ],
+            [
+              3.0
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            true
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              1
+            ],
+            [
+              3.0
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            true
+          ]
+        ]
+      }
+    },
+    {
+      "name": "tracked-seed/(1,)/active",
+      "expression": "sum_alias_report((1,), 'backward', 'active', (), True)",
+      "expected": {
+        "before": [
+          [
+            [
+              1
+            ],
+            [
+              3.0
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            true
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              1
+            ],
+            [
+              0.0
+            ],
+            2,
+            true
+          ],
+          [
+            [],
+            3.0,
+            0,
+            true
+          ]
+        ]
+      }
+    },
+    {
+      "name": "tracked-seed/(0,)/seed",
+      "expression": "sum_alias_report((0,), 'backward', 'seed', (), True)",
+      "expected": {
+        "before": [
+          [
+            [
+              0
+            ],
+            [],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            true
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              0
+            ],
+            [],
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            true
+          ]
+        ]
+      }
+    },
+    {
+      "name": "tracked-seed/(0,)/active",
+      "expression": "sum_alias_report((0,), 'backward', 'active', (), True)",
+      "expected": {
+        "before": [
+          [
+            [
+              0
+            ],
+            [],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            true
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              0
+            ],
+            [],
+            2,
+            true
+          ],
+          [
+            [],
+            3.0,
+            0,
+            true
+          ]
+        ]
+      }
+    },
+    {
+      "name": "tracked-seed/(2,)/seed",
+      "expression": "sum_alias_report((2,), 'backward', 'seed', (), True)",
+      "expected": {
+        "before": [
+          [
+            [
+              2
+            ],
+            [
+              3.0,
+              3.0
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            true
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              2
+            ],
+            [
+              3.0,
+              3.0
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            4.0,
+            1,
+            true
+          ]
+        ]
+      }
+    },
+    {
+      "name": "tracked-seed/(2,)/active",
+      "expression": "sum_alias_report((2,), 'backward', 'active', (), True)",
+      "expected": {
+        "before": [
+          [
+            [
+              2
+            ],
+            [
+              3.0,
+              3.0
+            ],
+            1,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            true
+          ]
+        ],
+        "identity": [
+          [
+            true,
+            false
+          ]
+        ],
+        "error": null,
+        "after": [
+          [
+            [
+              2
+            ],
+            [
+              0.0,
+              0.0
+            ],
+            2,
+            true
+          ],
+          [
+            [],
+            3.0,
+            0,
+            true
+          ]
+        ]
+      }
+    },
+    {
+      "name": "promotion/(0,)/(1, 0)",
+      "expression": "sum_empty_promotion((0,), (1, 0))",
+      "expected": {
+        "before": [
+          [
+            [
+              0
+            ],
+            [],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "after": [
+          [
+            [
+              0
+            ],
+            [],
+            1,
+            true
+          ],
+          [
+            [],
+            3.0,
+            1,
+            false
+          ],
+          [
+            [
+              0
+            ],
+            [],
+            0,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "promotion/(2, 0)/(0,)",
+      "expression": "sum_empty_promotion((2, 0), (0,))",
+      "expected": {
+        "before": [
+          [
+            [
+              2,
+              0
+            ],
+            [
+              [],
+              []
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "after": [
+          [
+            [
+              2,
+              0
+            ],
+            [
+              [],
+              []
+            ],
+            1,
+            true
+          ],
+          [
+            [],
+            3.0,
+            1,
+            false
+          ],
+          [
+            [
+              2,
+              0
+            ],
+            [
+              [],
+              []
+            ],
+            0,
+            false
+          ]
+        ]
+      }
+    },
+    {
+      "name": "promotion/(2, 0)/(1, 0)",
+      "expression": "sum_empty_promotion((2, 0), (1, 0))",
+      "expected": {
+        "before": [
+          [
+            [
+              2,
+              0
+            ],
+            [
+              [],
+              []
+            ],
+            0,
+            false
+          ],
+          [
+            [],
+            3.0,
+            0,
+            false
+          ]
+        ],
+        "after": [
+          [
+            [
+              2,
+              0
+            ],
+            [
+              [],
+              []
+            ],
+            1,
+            true
+          ],
+          [
+            [],
+            3.0,
+            1,
+            false
+          ],
+          [
+            [
+              2,
+              0
+            ],
+            [
+              [],
+              []
+            ],
+            0,
+            false
+          ]
+        ]
+      }
+    }
+  ],
   "gradientProvenanceSource": "\ndef filled(shape, value):\n    if not shape:\n        return value\n    return [filled(shape[1:], value) for _ in range(shape[0])]\n\n\ndef copy_owner_case(shape, mode, method):\n    n = 1\n    for size in shape:\n        n *= size\n    flat = (n,)\n    def make(dims, value, tracked=False):\n        return torch.tensor(filled(dims,value),dtype=torch.float32,requires_grad=tracked)\n    base = None if mode == 'promote' else make(flat,2,True)\n    x = make(flat,4) if base is None else base+base\n    view = x.view(shape)\n    source = make(shape,5,True)\n    seed = make(shape,3)\n    if mode == 'no-grad':\n        with torch.no_grad():\n            view.copy_(source)\n    else:\n        view.copy_(source)\n    if method == 'functional':\n        targets = [x] if mode == 'no-grad' else [x,source,source]\n        results = list(torch.autograd.grad(view,targets,seed))\n    else:\n        view.backward(seed)\n        results = [value for value in [None if base is None else base.grad, source.grad] if value is not None]\n    initial = {'tracking':[x.requires_grad,view.requires_grad], 'sourceSlotPresent':source.grad is not None, 'shapes':[list(g.shape) for g in results], 'versions':[probe_version(g) for g in results]+[probe_version(seed)], 'identity':[[a is b for b in [*results,seed,source]] for a in results], 'values':[g.tolist() for g in results]}\n    selected = results[-1]\n    with torch.no_grad():\n        selected.copy_(make(tuple(selected.shape),0))\n    after = {'values':[g.tolist() for g in results], 'seed':seed.tolist(), 'versions':[probe_version(g) for g in results]+[probe_version(seed)]}\n    if method == 'backward':\n        owner = source if mode != 'no-grad' else base\n        assert owner is not None\n        old = owner.grad\n        owner.backward(seed if mode != 'no-grad' else seed.view(flat))\n        after['sameSlotAfterAccumulation'] = old is owner.grad\n        after['accumulated'] = owner.grad.tolist()\n        after['accumulatedVersion'] = probe_version(owner.grad)\n    return {'initial':initial,'after':after}\n\ndef view_result_case(shape, dirty):\n    n=1\n    for size in shape: n*=size\n    def filled(dims,value):\n        if not dims: return value\n        return [filled(dims[1:],value) for _ in range(dims[0])]\n    def make(dims,value,tracked=False):\n        return torch.tensor(filled(dims,value),dtype=torch.float32,requires_grad=tracked)\n    flat=(n,)\n    leaf=make(flat,2,True)\n    x=leaf+leaf\n    view=x.view(shape)\n    if dirty:\n        with torch.no_grad(): view.copy_(make(shape,5))\n    original_seed=make(shape,3)\n    gradient=torch.autograd.grad(view,x,original_seed)[0]\n    source=make(flat,7,True)\n    seed=make(flat,4)\n    try:\n        gradient.copy_(source)\n    except Exception as error:\n        return {'phase':'copy','error':type(error).__name__,'tracking':gradient.requires_grad,'version':probe_version(gradient)}\n    try:\n        result=torch.autograd.grad(gradient,source,seed)[0]\n    except Exception as error:\n        return {'phase':'grad','error':type(error).__name__,'tracking':gradient.requires_grad,'version':probe_version(gradient)}\n    with torch.no_grad(): result.copy_(make(flat,0))\n    return {'phase':'returned','tracking':gradient.requires_grad,'version':probe_version(gradient),'identitySeed':result is seed,'result':result.tolist(),'seed':seed.tolist()}\n",
   "gradientProvenanceCases": [
     {

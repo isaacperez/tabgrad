@@ -12,7 +12,7 @@ import { pythonGradientProgressChecks } from "../../browser/helpers/gradient-pro
 import { pythonBackwardChecks } from "../../browser/helpers/backward-cases.mjs";
 import { pythonBackwardLifetimeChecks } from "../../browser/helpers/backward-lifetime.mjs";
 
-import { pythonGradientProvenanceChecks, pythonSharedGradientIdentityChecks, pythonFunctionalIdentityChecks } from "../../browser/helpers/functional-gradient-cases.mjs";
+import { pythonSumGradientAliasChecks, pythonGradientProvenanceChecks, pythonSharedGradientIdentityChecks, pythonFunctionalIdentityChecks } from "../../browser/helpers/functional-gradient-cases.mjs";
 
 let interpreterPromise;
 
@@ -2817,5 +2817,19 @@ else:
   } finally {
     context.mock.restoreAll(); await binding.close();
     interpreter.runPython("[globals().pop(name, None) for name in ('torch','gc','x','y','original','seed','source','root','producer','payload','a','b')]; None");
+  }
+});
+
+
+test("Python sum gradients preserve pinned aliases, views and incoming acquisition", { timeout: 20_000 }, async () => {
+  const oracle = JSON.parse(await readFile(new URL("../../fixtures/python-tensor-oracle.json", import.meta.url), "utf8"));
+  const { attachPython } = await import("../../../dist/python.js");
+  const { getTestTensorVersion } = await import("../../../dist/testing.js");
+  const interpreter = await getInterpreter(), binding = await attachPython(interpreter);
+  interpreter.globals.set("inspect_sgd_version", getTestTensorVersion);
+  try { await binding.runPythonAsync(pythonSumGradientAliasChecks(oracle)); }
+  finally {
+    await binding.close();
+    interpreter.runPython("[globals().pop(name, None) for name in ('torch','json','gc','sum_filled','sum_make','sum_sample','sum_error','sum_alias_report','sum_seed_report','sum_empty_promotion','probe_version','check_sum_gradient_aliases','inspect_sgd_version')]; None");
   }
 });

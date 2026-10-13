@@ -1373,6 +1373,9 @@ export class RuntimeSession {
       const identity = requireTensorState(seed).identity;
       this.#bindIncomingIdentity(identity, explicitSeed.identity);
       identity.acquisitionFamily = explicitSeed.family;
+      identity.acquisitionProjection = explicitSeed.identity.projectScalar;
+      identity.incomingDense = explicitSeed.identity.incomingDense;
+      identity.incomingZeroStride = explicitSeed.identity.incomingZeroStride;
     }
     this.#attachTensorControls(seed, [result.value.outcomes, explicitSeed?.value.outcomes ?? []]);
     try {
@@ -1479,6 +1482,10 @@ export class RuntimeSession {
     const base = preserveView ? source.base : null;
     if (base !== null) this.#retainIdentity(base);
     const identity = new TensorIdentity(family, source.value, null, false, base, preserveView && source.specialView, false);
+    identity.projectScalar = acquire ? source.acquisitionProjection ?? source.projectScalar : source.projectScalar;
+    identity.acquisitionProjection = source.acquisitionProjection;
+    identity.incomingDense = source.incomingDense;
+    identity.incomingZeroStride = source.incomingZeroStride;
     if (acquire || preserveView) this.#setIdentityControls(identity, source.value.outcomes);
     this.#identities.add(identity);
     return this.#expose(identity);
@@ -1501,9 +1508,10 @@ export class RuntimeSession {
         this.#bindIncomingIdentity(identity, source);
         identity.incomingDense = source.incomingDense;
         identity.acquisitionFamily = source.acquisitionFamily;
+        identity.acquisitionProjection = source.acquisitionProjection;
         return result;
       },
-      expand: (value: Tensor, shape: readonly number[]) => this.#expand(value, shape),
+      expand: (value: Tensor, shape: readonly number[]) => this.#expandIncoming(value, shape),
       zeros: (shape: readonly number[]) => this.#zeros(shape, device),
       close: (value: Tensor) => value.close(),
       inherit: (value: Tensor, source: Tensor) => this.#attachTensorControls(value, [requireTensorState(source).value.outcomes]),
@@ -1696,11 +1704,11 @@ export class RuntimeSession {
 
   #borrowValue(value: TensorValue, shape: readonly number[] = value.shape): Tensor {
     const captured = new TensorValue({ ...value, shape }, null, value.storage);
-    captured.storage.references += 1;
-    captured.outcomes = captureWriterOutcomes([value.outcomes]);
-    retainWriterOutcomes(captured.outcomes);
-    this.#values.add(captured);
-    this.#valueReferences += 1;
+    captured.references = 0;
+    // The common fresh-owner path filters completed controls before retaining.
+    // No user callback or suspension occurs between capture and ownership.
+    captured.outcomes = value.outcomes;
+    this.#retainValue(captured);
     return this.#createHandle(captured);
   }
 
@@ -1722,12 +1730,18 @@ export class RuntimeSession {
     if (this.#mutationFailure !== undefined) {
       throw new TabgradError("MUTATION_FAILED", "A failed write prevents further updates in this session.", {}, this.#mutationFailure.error);
     }
+    if (destination.identity.projectScalar !== undefined && tensorElementCount(destination.shape) > 1
+      && !(source.identity.projectScalar !== undefined && source.family === destination.family && equalTensorShapes(destination.shape, source.shape))) {
+      throw new TabgradError("OVERLAPPING_COPY", "Copy destination has overlapping elements referring to a single memory location.");
+    }
     if (!equalTensorShapes(destination.shape, source.shape)) {
       throw new TabgradError("SHAPE_MISMATCH", "Copy requires equal tensor shapes.");
     }
     const previous = destination.family.current;
-    const captured = source.value;
-    const prerequisites = captureWriterOutcomes([previous.outcomes, destination.identity.controls, captured.outcomes]);
+    const versionOnly = destination.identity.projectScalar !== undefined;
+    const sourceValue = source.value;
+    const captured = versionOnly && tensorElementCount(destination.shape) > 1 ? previous : sourceValue;
+    const prerequisites = captureWriterOutcomes([previous.outcomes, destination.identity.controls, sourceValue.outcomes]);
     this.#checkUpdateCapacity(9 + prerequisites.length * 2);
     if (this.#pendingCopies >= this.#updateLimits.pendingCopies || destination.family.version >= Number.MAX_SAFE_INTEGER) {
       throw new TabgradError("RESOURCE_EXHAUSTED", "Persistent copy admission exceeds its pending-count or version capacity.");
@@ -1736,9 +1750,9 @@ export class RuntimeSession {
     const base = this.#familyBase(destination.identity);
     const previousHistory = base.entry;
     const history = this.#recording && (destination.requiresGrad || source.requiresGrad)
-      ? this.#history.record(previous.shape, destination.isView ? COPY_SLICES_DERIVATIVE : COPY_DERIVATIVE, [previousHistory, source.history], [previous, captured], [outcome])
+      ? this.#history.record(base.shape, destination.isView ? COPY_SLICES_DERIVATIVE : COPY_DERIVATIVE, [previousHistory, source.history], [previous, captured], [outcome])
       : previousHistory;
-    const next = new TensorValue({ ...previous, shape: previous.shape }, null, captured.storage);
+    const next = new TensorValue({ ...previous, shape: previous.shape }, null, versionOnly ? previous.storage : captured.storage);
     next.storage.references += 1;
     next.versionCounter = destination.family.versionCounter;
     next.version = destination.family.version + 1;
@@ -1756,6 +1770,9 @@ export class RuntimeSession {
       base.requiresGrad = destination.requiresGrad || source.requiresGrad;
       this.#moveRetention(base, previousHistory, history);
     }
+    const oldProjectionCache = destination.family.projectionCache;
+    destination.family.projectionCache = undefined;
+    destination.family.projectionMetadata = undefined;
     destination.family.current = next;
     destination.family.version = next.version;
     this.#setIdentityControls(destination.identity, []);
@@ -1770,6 +1787,9 @@ export class RuntimeSession {
       () => this.#retireCopyEffect(captured, prerequisites, "Copy effect retirement failed."));
     if (history !== previousHistory && previousHistory !== null) {
       try { this.#history.release(previousHistory); } catch (error) { (failures ??= []).push(error); }
+    }
+    if (oldProjectionCache !== undefined) {
+      try { this.#releaseValue(oldProjectionCache); } catch (error) { (failures ??= []).push(error); }
     }
     try { this.#releaseValue(previous); } catch (error) { (failures ??= []).push(error); }
     throwCleanupFailures(failures, "Committed copy predecessor retirement failed.");
@@ -1866,6 +1886,50 @@ export class RuntimeSession {
     return this.#recordOperation(admitted, history);
   }
 
+  #expandIncoming(source: Tensor, shape: readonly number[]): Tensor {
+    const state = requireTensorState(source);
+    const count = tensorElementCount(shape);
+    if (count === 1) {
+      const result = this.noGrad(() => source.view(shape));
+      requireTensorState(result).identity.incomingDense = shape.length === 0;
+      requireTensorState(result).identity.incomingZeroStride = shape.length !== 0;
+      return result;
+    }
+    const family = state.identity.acquisitionFamily ?? state.family;
+    this.#checkCapturedAdmission([state.value], shape, 4);
+    // Metadata-only projection; ordinary execution still consumes dense values.
+    const metadata = new TensorValue({ ...state.value, shape }, null, state.value.storage);
+    metadata.references = 0;
+    family.identities += 1;
+    this.#retainIdentity(state.identity);
+    const identity = new TensorIdentity(family, metadata, null, false, state.identity, true, false);
+    identity.incomingDense = false;
+    identity.incomingZeroStride = true;
+    identity.projectScalar = owner => this.#scalarProjection(owner);
+    this.#setIdentityControls(identity, state.value.outcomes);
+    this.#identities.add(identity);
+    return this.#expose(identity);
+  }
+
+  #scalarProjection(identity: TensorIdentity): TensorValue {
+    const family = identity.family, current = family.current;
+    const count = tensorElementCount(identity.shape);
+    let origin = family.projectionMetadata?.deref();
+    if (origin === undefined || origin.projectionSource?.deref() !== current || tensorElementCount(origin.shape) !== count
+      || (origin.storage.references === 0 && origin.producer === null)) {
+      origin = new TensorValue({ ...current, shape: [count] }, new OperationRecord(EXPAND_OPERATION, [current]));
+      origin.references = 0;
+      origin.storage.references = 0;
+      origin.projectionFamily = new WeakRef(family);
+      origin.projectionSource = new WeakRef(current);
+      origin.versionCounter = family.versionCounter;
+      origin.version = family.version;
+      origin.outcomes = current.outcomes;
+      family.projectionMetadata = new WeakRef(origin);
+    }
+    return origin;
+  }
+
   #expand(source: Tensor, shape: readonly number[]): Tensor {
     const value = requireTensorState(source).value;
     if (tensorElementCount(value.shape) !== 1) {
@@ -1921,8 +1985,13 @@ export class RuntimeSession {
     const identity = new TensorIdentity(source.family, value, history, requiresGrad,
       source.identity, !this.#recording || source.specialView, false);
     this.#setIdentityControls(identity, source.identity.controls);
-    identity.incomingDense = source.identity.incomingDense;
+    identity.projectScalar = source.identity.projectScalar;
+    identity.incomingZeroStride = source.identity.incomingZeroStride
+      && metadata.shape.length !== 0
+      && !(tensorElementCount(source.shape) === 0 && !equalTensorShapes(source.shape, metadata.shape));
+    identity.incomingDense = source.identity.incomingZeroStride ? !identity.incomingZeroStride : source.identity.incomingDense;
     identity.acquisitionFamily = source.identity.acquisitionFamily;
+    identity.acquisitionProjection = source.identity.acquisitionProjection;
     this.#identities.add(identity);
     return this.#expose(identity);
   }
@@ -2225,12 +2294,18 @@ export class RuntimeSession {
         releaseWriterOutcomes(current.controls);
         current.controls = [];
         current.family.identities -= 1;
+        if (current.projectScalar !== undefined) current.family.projectionIdentities -= 1;
         // Retire children in the order their owning releases were scheduled,
         // before this identity's final numerical pin. Keep constant stack depth.
         const children = this.#retirementQueue.splice(pendingOffset);
-        if (current.family.identities === 0) {
-          this.#retirementQueue.push(current.family.current);
+        if (current.projectScalar !== undefined && current.family.projectionIdentities === 0) {
+          current.family.projectionMetadata = undefined;
+          if (current.family.projectionCache !== undefined) {
+            this.#retirementQueue.push(current.family.projectionCache);
+            current.family.projectionCache = undefined;
+          }
         }
+        if (current.family.identities === 0) this.#retirementQueue.push(current.family.current);
         for (let index = children.length - 1; index >= 0; index -= 1) this.#retirementQueue.push(children[index]!);
       }
     } finally { this.#retiring = false; }
@@ -2238,6 +2313,7 @@ export class RuntimeSession {
   }
 
   #retainIdentity(identity: TensorIdentity): void {
+    if (identity.references === 0 && identity.projectScalar !== undefined) identity.family.projectionIdentities += 1;
     identity.references += 1;
     identity.incomingIdentity.owners += 1;
     this.#identityReferences += 1;
@@ -2314,6 +2390,13 @@ export class RuntimeSession {
   }
 
   #retainValue(value: TensorValue): void {
+    const origin = value.storage.value;
+    if (value.storage.references === 0 && origin.projectionFamily !== undefined) {
+      if (origin.producer === null) throw new TabgradError("BACKEND_STATUS_ERROR", "An unowned scalar projection lost its producer.");
+      for (const input of origin.producer.inputs) this.#retainValue(input);
+      this.#operationRecords += 1;
+      this.#liveBackingBytes += tensorElementCount(origin.shape) * 4;
+    }
     if (value.references === 0) {
       // A fresh owner needs unresolved/failed controls, not completed writes.
       // Existing owners keep the exact snapshot paired with their release.
@@ -2386,18 +2469,39 @@ export class RuntimeSession {
     throwCleanupFailures(failures, "Completed tensor dependency cleanup failed.");
   }
 
-  *#materialize(value: TensorValue, formed: FormedProgram<TensorValue>, backend: ExecutionBackend): Generator<ExecutionStep, void, unknown> {
-    const existing = this.#materializations.get(value);
-    if (existing?.kind === "resident") {
-      return;
+  #cacheProjectionInputs(formed: FormedProgram<TensorValue>): void {
+    const seen = new Set<TensorValue>();
+    for (const value of formed.valuesBySlot.values()) {
+      const origin = value.storage.value;
+      if (seen.has(origin)) continue;
+      seen.add(origin);
+      const family = origin.projectionFamily?.deref();
+      if (family === undefined || family.projectionIdentities === 0 || origin.projectionSource?.deref() !== family.current
+        || family.projectionCache === origin) continue;
+      // Cache ownership is optional and uses the ordinary budget.
+      if (this.#updateOwnerCount() + 1 + captureWriterOutcomes([origin.outcomes]).length > this.#updateLimits.owners) continue;
+      this.#retainValue(origin);
+      const previous = family.projectionCache;
+      family.projectionCache = origin;
+      if (previous !== undefined) this.#releaseValue(previous);
     }
+  }
+
+  *#materialize(value: TensorValue, formed: FormedProgram<TensorValue>, backend: ExecutionBackend): Generator<ExecutionStep, void, unknown> {
     try {
+      this.#cacheProjectionInputs(formed);
+      const existing = this.#materializations.get(value);
+      if (existing?.kind === "resident") return;
       // Preparation can suspend. Capture current external owners only at this
       // synchronous admission boundary, not in immutable program formation.
       const retainedSlots = new Array<boolean>(formed.program.values.length);
       for (const [slot, selectedValue] of formed.valuesBySlot) {
         if (formed.program.values[slot]!.storageSlot === slot) {
-          retainedSlots[slot] = selectedValue.storage.references > formed.program.storageUseCounts[slot]!;
+          const origin = selectedValue.storage.value;
+          const family = origin.projectionFamily?.deref();
+          const canCaptureProjection = family !== undefined && family.projectionIdentities > 0
+            && family.projectionMetadata?.deref() === origin && origin.projectionSource?.deref() === family.current;
+          retainedSlots[slot] = canCaptureProjection || selectedValue.storage.references > formed.program.storageUseCounts[slot]!;
         }
       }
       const allocations = yield* awaitBackendResult(backend.execute(formed.program, formed.bindings, retainedSlots));

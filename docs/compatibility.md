@@ -185,12 +185,19 @@ The maintained `gradientIdentityCases` additionally record 135 identity,
 shape, initial-value and tracking observations across scalar, empty, vector
 and matrix shapes, distinct/repeated targets, seeds, ordinary views, retained
 slots, copy/branched paths, equal products and separate calls, including no-grad
-seed-view guards. Non-expansion
-mutation observations match the pinned oracle; six observed sum-expansion
-mutations differ. Expansion alias/version/acquisition equivalence remains
-incomplete and is tracked in
-[#279](https://github.com/isaacperez/tabgrad/issues/279), without rejecting those
-calls. The 24 `gradientProvenanceCases` record whole-view copy source/base
+seed-view guards. Recorded subsequent mutation observations compare with the
+pinned oracle, including total-sum
+aliases. The additional 133 `sumGradientAliasCases` independently vary scalar,
+singleton, empty and larger shapes; functional/backward reception; seed, result,
+self and same-family writes; active guards; immutable captures and saved versions;
+rank-zero/empty view paths; incoming-seed acquisition; tracked backward seeds
+and acquired-empty promotion. Sampled private versions use host test instrumentation.
+Direct scalar/SIMD tests additionally cover explicit trailing empty axes,
+optional cache omission, late captures, final projection/association/view
+retirement and cleanup failures before/after physical release. This qualifies
+the bounded [sum-gradient alias domain](architecture/sum-gradient-aliases.md),
+not arbitrary strides, higher-order gradients or universal native errors.
+The 24 `gradientProvenanceCases` record whole-view copy source/base
 contributions and modified/unchanged view result classes, including shapes,
 sampled versions, mutation groups, acquisition and active-copy guards.
 Their unchanged source is shared by actual Python CPU and managed GPU tests.
