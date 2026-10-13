@@ -74,7 +74,7 @@ function constantBody(value) {
 export function fixtureModule({
   abiVersion = 1,
   arenaBase = 1_048_576,
-  capabilities = 31,
+  capabilities = 63,
   kernelBehavior = "success",
   memoryImportName = "memory",
   omitKernelExport = false,
@@ -82,15 +82,17 @@ export function fixtureModule({
   omitMulExport = false,
   omitExpandExport = false,
   omitAlphaAddExport = false,
+  omitMatmulExport = false,
   failureCall,
 } = {}) {
   const i32 = 0x7f;
   const types = section(1, [
-    0x04,
+    0x05,
     ...functionType([], [i32]),
     ...functionType([i32, i32, i32, i32], [i32]),
     ...functionType([i32, i32, i32], [i32]),
     ...functionType([i32, i32, i32, i32, i32], [i32]),
+    ...functionType([i32, i32, i32, i32, i32, i32, i32], [i32]),
   ]);
   const imports = section(2, [
     0x01,
@@ -101,7 +103,7 @@ export function fixtureModule({
     ...unsignedLeb128(32),
     ...unsignedLeb128(1024),
   ]);
-  const functions = section(3, [0x08, 0x00, 0x00, 0x00, 0x01, 0x02, 0x01, 0x02, 0x03]);
+  const functions = section(3, [0x09, 0x00, 0x00, 0x00, 0x01, 0x02, 0x01, 0x02, 0x03, 0x04]);
   const exportedFunctions = [
     ["tabgrad_abi_version", 0],
     ["tabgrad_capabilities", 1],
@@ -111,6 +113,7 @@ export function fixtureModule({
     ...(omitMulExport ? [] : [["tabgrad_mul_f32", 5]]),
     ...(omitExpandExport ? [] : [["tabgrad_expand_f32", 6]]),
     ...(omitAlphaAddExport ? [] : [["tabgrad_add_alpha_f32", 7]]),
+    ...(omitMatmulExport ? [] : [["tabgrad_matmul_f32", 8]]),
   ];
   const exports = section(7, [
     ...unsignedLeb128(exportedFunctions.length),
@@ -131,7 +134,7 @@ export function fixtureModule({
   const mulBody = [0x00, ...(failureCall === undefined
     ? kernelInstructions : scalarFaultKernel(kernelBehavior, failureCall, "mul"))];
   const code = section(10, [
-    0x08,
+    0x09,
     ...constantBody(abiVersion),
     ...constantBody(capabilities),
     ...constantBody(arenaBase),
@@ -143,6 +146,8 @@ export function fixtureModule({
     ...mulBody,
     ...unsignedLeb128(sumBody.length),
     ...sumBody,
+    ...unsignedLeb128(mulBody.length),
+    ...mulBody,
     ...unsignedLeb128(mulBody.length),
     ...mulBody,
   ]);

@@ -20,6 +20,7 @@ export interface FormationValue<Value> {
     readonly inputs: readonly Value[];
     readonly provenance: ProgramProvenance;
     readonly alphaBits?: number | undefined;
+    readonly matrixFlags?: number | undefined;
   } | null;
 }
 
@@ -114,6 +115,7 @@ export function formExecutableProgram<Value extends FormationValue<Value>>(
       computations.push({
         kind: producer.definition.loweredKind,
         ...(producer.alphaBits === undefined ? {} : { alphaBits: producer.alphaBits }),
+        ...(producer.matrixFlags === undefined ? {} : { matrixFlags: producer.matrixFlags }),
         inputs: producer.inputs.map((input) => slots.get(input)!),
         output: slot,
         provenance: producer.provenance,

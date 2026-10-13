@@ -21,7 +21,7 @@ interface BackendContext {
 export class WebAssemblyCpuBackend implements ExecutionBackend {
   readonly synchronousObservation = true;
   readonly capabilities: BackendCapabilities = Object.freeze({
-    device: "cpu", computations: Object.freeze(["add-f32", "add-alpha-f32", "mul-f32", "sum-f32", "expand-f32"] as const),
+    device: "cpu", computations: Object.freeze(["add-f32", "add-alpha-f32", "mul-f32", "sum-f32", "expand-f32", "matmul-f32"] as const),
     gradients: true, maximumTensorBytes: MAXIMUM_ADDRESS,
   });
   readonly #artifactLoader: CpuArtifactLoader;
@@ -147,6 +147,17 @@ export class WebAssemblyCpuBackend implements ExecutionBackend {
         try {
           this.#kernelCalls += 1;
           switch (computation.kind) {
+            case "matmul-f32": {
+              const left = program.values[computation.inputs[0]!]!.shape;
+              const right = program.values[computation.inputs[1]!]!.shape;
+              const flags = computation.matrixFlags!;
+              // Empty output has no physical indices; preserve large unused axes.
+              status = length === 0 ? 0 : context.exports.tabgrad_matmul_f32(
+                inputs[0]!.offset, inputs[1]!.offset, output.offset,
+                left[flags & 1 ? 1 : 0]!, left[flags & 1 ? 0 : 1]!, right[flags & 2 ? 0 : 1]!, flags,
+              );
+              break;
+            }
             case "add-alpha-f32":
               status = context.exports.tabgrad_add_alpha_f32(
                 inputs[0]!.offset, inputs[1]!.offset, output.offset, length, computation.alphaBits!,

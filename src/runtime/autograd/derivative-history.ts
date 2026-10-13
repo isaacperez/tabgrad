@@ -70,6 +70,7 @@ export interface DerivativeOperations<Value, Gradient> {
   borrow(value: Value): Gradient;
   add(left: Gradient, right: Gradient): Gradient;
   mul(left: Gradient, right: Gradient): Gradient;
+  matmul(left: Gradient, right: Gradient, transpose: "left" | "right"): Gradient;
   view(value: Gradient, shape: readonly number[]): Gradient;
   pass?(value: Gradient, shape: readonly number[]): Gradient;
   inherit?(value: Gradient, source: Gradient): void;

@@ -30,6 +30,19 @@ export const MUL_DERIVATIVE: DerivativeRecipe = Object.freeze({
   },
 });
 
+/** Ordinary VJPs use captured orientations, with no transposed payload owner. */
+export const MATMUL_DERIVATIVE: DerivativeRecipe = Object.freeze({
+  savedOperands: (position: number) => [1 - position],
+  apply<Value, Gradient>(incoming: Gradient, saved: readonly Value[], _shape: readonly number[],
+    operations: DerivativeOperations<Value, Gradient>, position: number): Gradient {
+    if (saved.length !== 1) throw new TabgradError("CONSUMED_HISTORY", "Matrix multiplication requires its saved operand.");
+    const operand = operations.borrow(saved[0]!);
+    try {
+      return position === 0 ? operations.matmul(incoming, operand, "right") : operations.matmul(operand, incoming, "left");
+    } finally { operations.close(operand); }
+  },
+});
+
 export const SUM_DERIVATIVE: DerivativeRecipe = Object.freeze({
   savedOperands: () => [],
   apply<Value, Gradient>(incoming: Gradient, _saved: readonly Value[], shape: readonly number[],

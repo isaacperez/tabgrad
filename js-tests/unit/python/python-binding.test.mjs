@@ -10,6 +10,7 @@ import { float32FromBits } from "../../fixtures/sum-oracle.mjs";
 import { pythonGradientProgressChecks } from "../../browser/helpers/gradient-progress-cases.mjs";
 import { pythonBackwardChecks } from "../../browser/helpers/backward-cases.mjs";
 import { pythonBackwardLifetimeChecks } from "../../browser/helpers/backward-lifetime.mjs";
+import { pythonMatrixChecks } from "../../browser/helpers/python-matrix-cases.mjs";
 
 let interpreterPromise;
 
@@ -28,6 +29,17 @@ function getInterpreter() {
   interpreterPromise ??= loadPyodide();
   return interpreterPromise;
 }
+
+test("packaged Python matrix calls and histories match the native maintained cases", { timeout: 20_000 }, async () => {
+  const oracle = JSON.parse(await readFile(new URL("../../fixtures/python-tensor-oracle.json", import.meta.url), "utf8"));
+  const { attachPython } = await import("../../../dist/python.js");
+  const interpreter = await getInterpreter(), binding = await attachPython(interpreter);
+  try { await binding.runPythonAsync(pythonMatrixChecks(oracle)); }
+  finally {
+    await binding.close();
+    interpreter.runPython("[globals().pop(name, None) for name in ('torch','json','gc','check_matrix_fixture')]; None");
+  }
+});
 
 for (const custom of [false, true]) {
   test(`attachment resolves ${custom ? "custom" : "default"} Python manifest and relative sources`, async (context) => {

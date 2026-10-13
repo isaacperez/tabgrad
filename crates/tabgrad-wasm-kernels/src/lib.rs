@@ -6,6 +6,8 @@ mod abi;
 mod addition;
 mod coefficient_addition;
 mod expansion;
+mod fused_multiply_add;
+mod matrix_product;
 mod multiplication;
 mod reduction;
 

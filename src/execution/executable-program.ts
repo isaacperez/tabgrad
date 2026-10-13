@@ -1,4 +1,5 @@
 import type { TensorDevice } from "./backend.js";
+import { assertMatrixFlags, matrixGeometry } from "./matrix-geometry.js";
 
 export type ProgramSlot = number;
 
@@ -20,9 +21,11 @@ export interface ProgramValue {
 }
 
 export interface LoweredComputation {
-  readonly kind: "add-f32" | "add-alpha-f32" | "mul-f32" | "sum-f32" | "expand-f32";
+  readonly kind: "add-f32" | "add-alpha-f32" | "mul-f32" | "sum-f32" | "expand-f32" | "matmul-f32";
   /** Captured binary32 coefficient; present only for add-alpha-f32. */
   readonly alphaBits?: number;
+  /** Required for matmul-f32, absent for all other computations. */
+  readonly matrixFlags?: number;
   /** Ordered operand occurrences, including repeats; arity belongs to the operation. */
   readonly inputs: readonly ProgramSlot[];
   readonly output: ProgramSlot;
@@ -41,7 +44,7 @@ export function assertComputationCoefficient(kind: LoweredComputation["kind"], a
 }
 
 export class ExecutableProgram {
-  readonly formatVersion = 6;
+  readonly formatVersion = 7;
   readonly domain: "webassembly-cpu" | "webgpu";
   readonly values: readonly ProgramValue[];
   readonly computations: readonly LoweredComputation[];
@@ -68,8 +71,22 @@ export class ExecutableProgram {
       computations.map((computation) => {
         const captured = { ...computation };
         assertComputationCoefficient(captured.kind, captured.alphaBits);
+        assertMatrixFlags(captured.kind, captured.matrixFlags);
         captured.inputs = Object.freeze([...captured.inputs]);
         captured.provenance = Object.freeze({ ...captured.provenance });
+        if (captured.kind === "matmul-f32") {
+          const left = this.values[captured.inputs[0]!];
+          const right = this.values[captured.inputs[1]!];
+          const output = this.values[captured.output];
+          if (captured.inputs.length !== 2 || left === undefined || right === undefined || output === undefined) {
+            throw new TypeError("Matrix multiplication requires two existing inputs and an output.");
+          }
+          const geometry = matrixGeometry(left.shape, right.shape, captured.matrixFlags!);
+          if (output.shape.length !== 2 || output.shape[0] !== geometry.rows || output.shape[1] !== geometry.columns
+            || left.device !== right.device || left.device !== output.device) {
+            throw new TypeError("Matrix output shape and device must match its captured inputs.");
+          }
+        }
         for (const input of captured.inputs) {
           inputUseCounts[input]! += 1;
           storageUseCounts[values[input]!.storageSlot]! += 1;
