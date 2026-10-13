@@ -98,7 +98,8 @@ export function encodeGpuFailure(error: unknown): Uint8Array {
 export function decodeGpuFailure(bytes: Uint8Array): TabgradError {
   try {
     if (bytes.byteLength <= 0 || bytes.byteLength > GPU_DIAGNOSTIC_BYTES) throw new Error("Invalid diagnostic length.");
-    const record: unknown = JSON.parse(new TextDecoder().decode(bytes));
+    // Snapshot the bounded range: browser TextDecoder rejects shared buffers.
+    const record: unknown = JSON.parse(new TextDecoder().decode(bytes.slice()));
     if (!isRecord(record) || typeof record.code !== "string" || typeof record.message !== "string" || !isRecord(record.details)) {
       throw new Error("Invalid diagnostic fields.");
     }

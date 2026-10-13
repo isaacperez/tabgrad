@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8"><title>Shared GPU failure diagnostics</title></head>
+  <body>
+    <script type="module">
+      import { TabgradError } from "/shared/errors.js";
+      import { GPU_CONTROL_LENGTH } from "/backends/webgpu/webgpu-connection.js";
+      import { GPU_DIAGNOSTIC_BYTES, encodeGpuFailure, decodeGpuFailure } from "/backends/webgpu/webgpu-failure-diagnostic.js";
+      import { SharedGpuCompletion, publishSharedGpuFailure, publishSharedGpuDrain } from "/backends/webgpu/webgpu-shared-completion.js";
+      const token = new URLSearchParams(location.search).get("token");
+      function check(condition, message) { if (!condition) throw new Error(message); }
+      function failure(shared) {
+        try { shared.read(); } catch (error) { return error; }
+        throw new Error("Expected a shared failure.");
+      }
+      async function send(endpoint, value) {
+        const response = await fetch(`${endpoint}?token=${encodeURIComponent(token)}`, {
+          method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(value),
+        });
+        if (!response.ok) throw new Error(`Reporting failed: ${response.status}`);
+      }
+      try {
+        await send("/__phase", { phase: "application-started" });
+        check(crossOriginIsolated, "Shared diagnostic coverage requires isolation.");
+        await send("/__phase", { phase: "assets-loaded" });
+        await send("/__phase", { phase: "runtime-started" });
+        for (const large of [false, true]) {
+          const control = new Int32Array(new SharedArrayBuffer(GPU_CONTROL_LENGTH * 4));
+          let retired = 0;
+          const shared = new SharedGpuCompletion(control, 0, () => { throw new Error("Failure decoded as success."); }, () => { retired += 1; });
+          const cause = new Error(large ? "界".repeat(3000) : "controlled native cause");
+          cause.name = "GPUValidationError";
+          const original = new TabgradError("BACKEND_STATUS_ERROR", "controlled execution failure", { phase: "execution", programValueSlot: 7 }, cause);
+          publishSharedGpuFailure(shared.buffer, control, original);
+          const error = failure(shared);
+          check(error.code === original.code && error.message === original.message, "Published failure message was replaced.");
+          check(error.details.phase === "execution" && error.details.programValueSlot === 7, "Failure locators were lost.");
+          check(error.cause?.name === cause.name && error.cause !== cause, "Immediate diagnostic cause was lost or retained live.");
+          check(large ? error.cause.message.length > 0 && error.cause.message.length < cause.message.length : error.cause.message === cause.message, "Cause text was lost.");
+          check(error.details.diagnosticTruncated === large, "Truncation marker changed.");
+          check(!shared.isDrained() && retired === 0, "Failure incorrectly claims physical drain.");
+          check(failure(shared) === error, "Repeated observations changed the cached error.");
+          publishSharedGpuDrain(shared.buffer, control); shared.refresh();
+          await shared.ticket.drained;
+          shared.refresh();
+          check(retired === 1 && failure(shared) === error, "Drain changed the error or repeated retirement.");
+        }
+        const bytes = encodeGpuFailure(new TabgradError("INVALID_SHAPE", "offset diagnostic", { phase: "binding" }));
+        const backing = new SharedArrayBuffer(bytes.length + 22);
+        const all = new Uint8Array(backing); all.fill(88);
+        const range = new Uint8Array(backing, 11, bytes.length); range.set(bytes);
+        for (const input of [range, range.slice()]) {
+          const error = decodeGpuFailure(input);
+          check(error.code === "INVALID_SHAPE" && error.message === "offset diagnostic" && error.details.phase === "binding", "Decoder did not preserve the exact input range.");
+        }
+        for (const input of [new Uint8Array(), new Uint8Array(GPU_DIAGNOSTIC_BYTES + 1), new TextEncoder().encode("{}"), new TextEncoder().encode("malformed")]) {
+          const error = decodeGpuFailure(input);
+          check(error.code === "BACKEND_STATUS_ERROR" && error.message === "Invalid GPU failure diagnostic.", "Malformed diagnostic fallback changed.");
+        }
+        for (const length of [0, -1, GPU_DIAGNOSTIC_BYTES + 1]) {
+          const control = new Int32Array(new SharedArrayBuffer(GPU_CONTROL_LENGTH * 4));
+          const shared = new SharedGpuCompletion(control, 0, () => null, () => undefined);
+          publishSharedGpuFailure(shared.buffer, control, new Error("controlled failure"));
+          Atomics.store(new Int32Array(shared.buffer), 2, length);
+          const error = failure(shared);
+          check(error.message === "Invalid shared GPU failure length." && !shared.isDrained(), "Shared diagnostic bounds or drain changed.");
+          publishSharedGpuDrain(shared.buffer, control); shared.refresh();
+        }
+        await send("/__result", { ok: true });
+      } catch (error) {
+        await send("/__result", { ok: false, error: { name: error.name, message: error.message } });
+      }
+    </script>
+  </body>
+</html>
