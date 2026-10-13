@@ -51,4 +51,18 @@ export const COPY_DERIVATIVE: DerivativeRecipe = Object.freeze({
 export const COPY_SLICES_DERIVATIVE: DerivativeRecipe = Object.freeze({
   ...COPY_DERIVATIVE,
   consumesHistory: true,
+  apply<Value, Gradient>(incoming: Gradient, _saved: readonly Value[], shape: readonly number[],
+    operations: DerivativeOperations<Value, Gradient>, position: number): Gradient {
+    return position === 0 ? operations.zeros(shape) : operations.clone(incoming, shape);
+  },
+});
+
+
+/** Re-resolving a modified view creates the native rebased base contribution. */
+export const REBASED_VIEW_DERIVATIVE: DerivativeRecipe = Object.freeze({
+  savedOperands: () => [],
+  apply<Value, Gradient>(incoming: Gradient, _saved: readonly Value[], shape: readonly number[],
+    operations: DerivativeOperations<Value, Gradient>): Gradient {
+    return operations.rebase(incoming, shape);
+  },
 });

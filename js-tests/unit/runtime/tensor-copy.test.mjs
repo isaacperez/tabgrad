@@ -730,3 +730,98 @@ test('preparation failures terminally gate copy snapshots and payload-free sum d
     assert.equal(session.diagnostics().kernelCalls, 0);
   } finally { await session.close(); }
 });
+
+// Pinned CopySlices/as_strided observations accepted in #277.
+for (const shape of [[1, 2], [2, 1], [2, 0]]) {
+  test(`CopySlices source contribution owns its shape and version-zero clone (${shape})`, async () => {
+    const session = createTestRuntimeSession({ manifestUrl: new URL("manifest.json", distributionUrl), forceVariant: "scalar" });
+    const length = shape.reduce((n, size) => n * size, 1), handles = [];
+    const own = value => { handles.push(value); return value; };
+    try {
+      const leaf = own(session.tensor(new Float32Array(length).fill(2), { requiresGrad: true }));
+      const base = own(leaf.add(leaf)), view = own(base.view(shape));
+      const source = own(session.tensor(new Float32Array(length).fill(5), { shape, requiresGrad: true }));
+      const seed = own(session.tensor(new Float32Array(length).fill(3), { shape }));
+      view.copy_(source);
+      const [baseGradient, sourceGradient, repeated] = session.grad(view, [base, source, source], seed).map(own);
+      assert.deepEqual(baseGradient.shape, [length]);
+      assert.deepEqual(sourceGradient.shape, shape);
+      assert.equal(getTestTensorVersion(sourceGradient), 0);
+      assert.notEqual(sourceGradient, repeated);
+      const zeros = own(session.tensor(new Float32Array(length), { shape }));
+      session.noGrad(() => sourceGradient.copy_(zeros));
+      assert.deepEqual([...await repeated.toArray()], new Array(length).fill(0));
+      assert.deepEqual([...await seed.toArray()], new Array(length).fill(3), "source clone is independent of incoming seed");
+      assert.equal(getTestTensorVersion(seed), 0);
+      assert.equal(getTestTensorVersion(baseGradient), 1);
+      assert.equal(sourceGradient.grad, null); assert.equal(repeated.grad, null);
+    } finally { for (const handle of handles.reverse()) handle.close(); await session.close(); }
+    for (const value of Object.values(getTestRuntimeOwnership(session))) assert.equal(value, 0);
+  });
+
+  for (const dirty of [false, true]) {
+    test(`gradient view provenance controls active copy (${shape}, dirty=${dirty})`, async () => {
+      const session = createTestRuntimeSession({ manifestUrl: new URL("manifest.json", distributionUrl), forceVariant: "scalar" });
+      const length = shape.reduce((n, size) => n * size, 1), handles = [];
+      const own = value => { handles.push(value); return value; };
+      try {
+        const leaf = own(session.tensor(new Float32Array(length).fill(2), { requiresGrad: true }));
+        const base = own(leaf.add(leaf)), view = own(base.view(shape));
+        const seed = own(session.tensor(new Float32Array(length).fill(3), { shape }));
+        if (dirty) session.noGrad(() => view.copy_(own(session.tensor(new Float32Array(length).fill(5), { shape }))));
+        const [gradient] = session.grad(view, [base], seed).map(own);
+        assert.equal(getTestTensorVersion(gradient), dirty ? 1 : 0);
+        const source = own(session.tensor(new Float32Array(length).fill(7), { requiresGrad: true }));
+        if (!dirty || length !== 0) {
+          assert.throws(() => gradient.copy_(source), { code: "INPLACE_VIEW" });
+          assert.equal(gradient.requiresGrad, false);
+        } else {
+          gradient.copy_(source);
+          const incoming = own(session.tensor([], { shape: [length] }));
+          const [result] = session.grad(gradient, [source], incoming).map(own);
+          assert.deepEqual(result.shape, [length]);
+        }
+      } finally { for (const handle of handles.reverse()) handle.close(); await session.close(); }
+      for (const value of Object.values(getTestRuntimeOwnership(session))) assert.equal(value, 0);
+    });
+  }
+}
+
+for (const faults of [1, 2]) {
+  test(`rebased derivative retirement attempts cleanup and preserves causes (${faults})`, async context => {
+    const { Tensor } = await import("../../../dist/index.js");
+    const session = createTestRuntimeSession({ manifestUrl: new URL("manifest.json", distributionUrl), forceVariant: "scalar" });
+    const handles = [], own = value => { handles.push(value); return value; }, failures = [];
+    const close = Tensor.prototype.close;
+    let injected = 0;
+    try {
+      const leaf = own(session.tensor([2,3], { requiresGrad: true })), base = own(leaf.add(leaf));
+      const view = own(base.view([1,2])), source = own(session.tensor([5,7], { shape: [1,2] }));
+      session.noGrad(() => view.copy_(source));
+      const seed = own(session.tensor([1,2], { shape: [1,2] }));
+      const before = session.diagnostics().liveTensorHandles;
+      const replacement = context.mock.method(Tensor.prototype, "close", function () {
+        const matches = !handles.includes(this) && this.shape.length === 1 && this.shape[0] === 2;
+        const result = close.call(this);
+        if (matches && injected < faults) {
+          const failure = new Error("rebased retirement " + injected++); failures.push(failure); throw failure;
+        }
+        return result;
+      });
+      let caught;
+      try { session.grad(view, [base], seed); } catch (error) { caught = error; }
+      replacement.mock.restore();
+      const pending = [caught], seen = new Set();
+      while (pending.length !== 0) {
+        const error = pending.pop();
+        if (error == null || seen.has(error)) continue;
+        seen.add(error);
+        if (error.cause !== undefined) pending.push(error.cause);
+        if (Array.isArray(error.errors)) pending.push(...error.errors);
+      }
+      assert.equal(injected, faults); assert.ok(failures.every(error => seen.has(error)));
+      assert.equal(session.diagnostics().liveTensorHandles, before);
+    } finally { context.mock.restoreAll(); for (const handle of handles.reverse()) handle.close(); await session.close(); }
+    for (const value of Object.values(getTestRuntimeOwnership(session))) assert.equal(value, 0);
+  });
+}

@@ -20,7 +20,7 @@ import type { ExecutionBackend, ResidentAllocation, TensorDevice } from "../exec
 import { WebGpuBackend, type WebGpuDiagnostics, type WebGpuExecutionBackend } from "../backends/webgpu/webgpu-backend.js";
 export type { TensorDevice } from "../execution/backend.js";
 import { DerivativeHistory, type DerivativeNode, type DerivativePlan, type DerivativeRecipe } from "./autograd/derivative-history.js";
-import { COPY_DERIVATIVE, COPY_SLICES_DERIVATIVE, IDENTITY_DERIVATIVE, PASS_DERIVATIVE, MUL_DERIVATIVE, SUM_DERIVATIVE } from "./autograd/derivative-recipes.js";
+import { COPY_DERIVATIVE, COPY_SLICES_DERIVATIVE, REBASED_VIEW_DERIVATIVE, IDENTITY_DERIVATIVE, PASS_DERIVATIVE, MUL_DERIVATIVE, SUM_DERIVATIVE } from "./autograd/derivative-recipes.js";
 import { copyTensorShape, equalTensorShapes, inferViewShape, tensorElementCount } from "./tensor-shape.js";
 import { createSGD, type SGD, type SGDOptions, type SGDParameterGroup } from "./sgd.js";
 import type { OptimizerCapture, OptimizerLease, OptimizerParameterCapture } from "./optimizer-lease.js";
@@ -299,6 +299,8 @@ interface RuntimeSemanticOwnership {
 interface RuntimeSessionAccess {
   readonly registerOptimizer: (groups: readonly (readonly Tensor[])[]) => OptimizerLease;
   readonly gradient: (state: TensorState) => Tensor | null;
+  readonly ownGradient: (state: TensorState) => Tensor | null;
+  readonly completeGradient: (state: TensorState) => void;
   readonly assignGradient: (state: TensorState, value: unknown) => void;
   readonly backward: (state: TensorState, gradient: unknown, options: unknown) => void;
   readonly recordingMode: () => boolean;
@@ -799,6 +801,12 @@ export class RuntimeSession {
     RUNTIME_SESSION_ACCESS.set(this, Object.freeze({
       registerOptimizer: (groups: readonly (readonly Tensor[])[]) => this.#registerOptimizer(groups),
       gradient: (state: TensorState) => state.identity.gradient === null ? null : this.#expose(state.identity.gradient),
+      ownGradient: (state: TensorState) => {
+        const identity = state.identity.gradient;
+        if (identity === null) return null;
+        const canonical = identity.canonical?.deref();
+        return this.#expose(identity, canonical === undefined || requireTensorState(canonical).closed);
+      },
       assignGradient: (state: TensorState, value: unknown) => this.#assignGradient(state, value),
       backward: (state: TensorState, gradient: unknown, options: unknown) => this.#backward(state, gradient, options),
       recordingMode: () => { this.#assertOpen(); return this.#recording; },
@@ -817,6 +825,7 @@ export class RuntimeSession {
       view: (source: TensorState, shape: unknown) => this.#view(source, shape),
       observe: (state: TensorState) => this.#observe(state),
       assertOpen: () => this.#assertOpen(),
+      completeGradient: (state: TensorState) => this.#completeGradient(state),
       releaseHandle: (state: TensorState) => this.#releaseHandle(state),
       finalizeHandle: (state: TensorState) => {
         try { this.#releaseHandle(state); }
@@ -1219,7 +1228,8 @@ export class RuntimeSession {
         result.value.device);
     }
     const seed = explicitSeed === undefined
-      ? this.tensor([1], { shape: result.value.shape, device: result.value.device }) : this.#borrowValue(explicitSeed.value);
+      ? this.tensor([1], { shape: result.value.shape, device: result.value.device }) : this.#detachedAlias(explicitSeed.identity);
+    if (explicitSeed !== undefined) this.#bindIncomingIdentity(requireTensorState(seed).identity, explicitSeed.identity);
     this.#attachTensorControls(seed, [result.value.outcomes, explicitSeed?.value.outcomes ?? []]);
     try {
       const gradients = this.#history.execute(plan, seed, this.#derivativeOperations(result.value.device),
@@ -1463,11 +1473,13 @@ export class RuntimeSession {
       ? node.leafOwner.requiresGrad ? node.leafOwner : undefined : this.#retainedEntries.get(node)?.deref();
   }
 
-  #detachedAlias(source: TensorIdentity, acquire = false): Tensor {
+  #detachedAlias(source: TensorIdentity, acquire = false, preserveView = false): Tensor {
     const family = acquire ? source.acquisitionFamily ?? source.family : source.family;
     family.identities += 1;
-    const identity = new TensorIdentity(family, source.value, null, false, null, false, false);
-    if (acquire) this.#setIdentityControls(identity, source.value.outcomes);
+    const base = preserveView ? source.base : null;
+    if (base !== null) this.#retainIdentity(base);
+    const identity = new TensorIdentity(family, source.value, null, false, base, preserveView && source.specialView, false);
+    if (acquire || preserveView) this.#setIdentityControls(identity, source.value.outcomes);
     this.#identities.add(identity);
     return this.#expose(identity);
   }
@@ -1475,12 +1487,16 @@ export class RuntimeSession {
   #derivativeOperations(device: TensorDevice = "cpu") {
     return {
       borrow: (value: TensorValue) => this.#borrowValue(value),
+      clone: (value: Tensor, shape: readonly number[]) => this.#cloneDerivative(value, shape),
+      rebase: (value: Tensor, shape: readonly number[]) => this.#rebaseDerivative(value, shape),
       add: (left: Tensor, right: Tensor) => this.#combineIncoming(left, right),
       mul: (left: Tensor, right: Tensor) => this.noGrad(() => left.mul(right)),
       view: (value: Tensor, shape: readonly number[]) => this.noGrad(() => value.view(shape)),
-      pass: (value: Tensor, _shape: readonly number[]) => {
-        const source = requireTensorState(value).identity;
-        const result = this.#detachedAlias(source);
+      pass: (value: Tensor, shape: readonly number[]) => {
+        const state = requireTensorState(value);
+        if (!equalTensorShapes(state.shape, shape)) return this.noGrad(() => value.view(shape));
+        const source = state.identity;
+        const result = this.#detachedAlias(source, false, true);
         const identity = requireTensorState(result).identity;
         this.#bindIncomingIdentity(identity, source);
         identity.incomingDense = source.incomingDense;
@@ -1499,6 +1515,32 @@ export class RuntimeSession {
     const scalar = this.tensor([0], { shape: [], device });
     try { return this.#expand(scalar, shape); }
     finally { scalar.close(); }
+  }
+
+  #cloneDerivative(value: Tensor, shape: readonly number[], version: 0 | 1 = 0): Tensor {
+    const result = this.#borrowValue(requireTensorState(value).value, shape);
+    const identity = requireTensorState(result).identity;
+    identity.family.version = version;
+    identity.family.current.version = version;
+    return result;
+  }
+
+  #rebaseDerivative(value: Tensor, shape: readonly number[]): Tensor {
+    const count = tensorElementCount(shape);
+    // Empty native rebasing is plain; nonempty rebasing is a no-grad view.
+    const cloned = this.#cloneDerivative(value, count === 0 ? shape : [count], 1);
+    if (count === 0) return cloned;
+    let result: Tensor | undefined, failures: unknown[] | undefined;
+    try { result = this.noGrad(() => cloned.view(shape)); }
+    catch (error) { failures = [error]; }
+    try { cloned.close(); }
+    catch (error) { (failures ??= []).push(error); }
+    if (failures !== undefined && result !== undefined) {
+      try { result.close(); }
+      catch (error) { failures.push(error); }
+    }
+    throwCleanupFailures(failures, "Rebased derivative construction or cleanup failed.");
+    return result!;
   }
 
   #bindIncomingIdentity(identity: TensorIdentity, source: TensorIdentity): void {
@@ -1633,7 +1675,7 @@ export class RuntimeSession {
     if (state.historyVersion === state.family.version) return state.viewHistory;
     const previous = state.viewHistory;
     state.viewHistory = state.requiresGrad
-      ? this.#history.record(state.shape, IDENTITY_DERIVATIVE, [this.#familyBase(state.identity).entry], [state.value])
+      ? this.#history.record(state.shape, REBASED_VIEW_DERIVATIVE, [this.#familyBase(state.identity).entry], [state.value])
       : null;
     state.historyVersion = state.family.version;
     this.#moveRetention(state.identity, previous, state.viewHistory);
@@ -1652,8 +1694,8 @@ export class RuntimeSession {
     }
   }
 
-  #borrowValue(value: TensorValue): Tensor {
-    const captured = new TensorValue(value, null, value.storage);
+  #borrowValue(value: TensorValue, shape: readonly number[] = value.shape): Tensor {
+    const captured = new TensorValue({ ...value, shape }, null, value.storage);
     captured.storage.references += 1;
     captured.outcomes = captureWriterOutcomes([value.outcomes]);
     retainWriterOutcomes(captured.outcomes);
@@ -1906,6 +1948,36 @@ export class RuntimeSession {
     return this.#enqueue(this.#observation(captured), () => this.#releaseValue(captured)).asPromise();
   }
 
+  #completeGradient(state: TensorState): void {
+    this.#assertOpen();
+    const captured = state.value.outcomes;
+    this.#checkUpdateCapacity(captured.length);
+    const retained: WriterOutcome[] = [];
+    let failures: unknown[] | undefined;
+    try {
+      for (const outcome of captured) {
+        const references = outcome.references;
+        try { outcome.ledger.retain(outcome); }
+        finally {
+          // A fallible dispatch can throw after taking its ordinary reference.
+          if (outcome.references > references) retained.push(outcome);
+        }
+      }
+      while (this.#requestHead !== undefined && this.#requestHead.advanceSynchronously()) {}
+      if (this.#requestHead !== undefined) {
+        throw new TabgradError("SYNCHRONOUS_OBSERVATION_UNAVAILABLE",
+          "Gradient dependencies require synchronous managed progress.");
+      }
+      const failure = failedWriterOutcome(captured);
+      if (failure !== undefined) { this.#deliverFailure(failure); throw failure.error; }
+    } catch (error) { failures = [error]; }
+    for (const outcome of retained) {
+      try { outcome.ledger.release(outcome); }
+      catch (error) { (failures ??= []).push(error); }
+    }
+    throwCleanupFailures(failures, "Gradient dependencies or cleanup failed.");
+  }
+
   #observeSynchronously(state: TensorState): Float32Array {
     this.#assertOpen();
     const host = this.#materializations.get(state.value)?.kind === "host";
@@ -2098,15 +2170,15 @@ export class RuntimeSession {
     return this.#expose(identity);
   }
 
-  #expose(identity: TensorIdentity): Tensor {
-    const existing = identity.canonical?.deref();
+  #expose(identity: TensorIdentity, canonical = true): Tensor {
+    const existing = canonical ? identity.canonical?.deref() : undefined;
     if (existing !== undefined && !requireTensorState(existing).closed) return existing;
     const state = new TensorState(this, identity, (state) => this.#resolveHistory(state));
     this.#retainIdentity(identity);
     identity.exposures += 1;
     this.#states.add(state);
     const handle = createTensorHandle(state);
-    identity.canonical = new WeakRef(handle);
+    if (canonical) identity.canonical = new WeakRef(handle);
     return handle;
   }
 
@@ -2653,4 +2725,45 @@ function hasCanonicalRuntimeDispatch(session: RuntimeSession): boolean {
       || actual.get !== expected.get || actual.set !== expected.set) return false;
   }
   return true;
+}
+
+
+/** @internal Incoming equivalence is independent of storage and JS occurrence identity. */
+export function getTensorIncomingIdentity(handle: Tensor): object {
+  const state = requireTensorState(handle);
+  assertTensorOpen(state);
+  return state.identity.incomingIdentity;
+}
+
+/** @internal Canonical frontend lookup may contain a host-closed exposure. */
+export function isTensorExposureOpen(handle: Tensor): boolean {
+  return !requireTensorState(handle).closed;
+}
+
+
+/** @internal Python conversion retires only its own gradient-property lease. */
+export function acquireGradientExposure(handle: Tensor): Tensor | null {
+  const state = requireTensorState(handle);
+  assertTensorOpen(state);
+  return runtimeSessionAccess(state.session).ownGradient(state);
+}
+
+
+/** @internal Reusing another exposure must not discard its additional causal error. */
+export function gradientExposureNeedsCompletion(result: Tensor, canonical: Tensor): boolean {
+  const state = requireTensorState(result), existing = requireTensorState(canonical);
+  assertTensorOpen(state); assertTensorOpen(existing);
+  if (state.session !== existing.session) throw new TabgradError("DIFFERENT_SESSION", "Gradient exposures must share their session.");
+  const incoming = state.value.outcomes;
+  if (incoming.length === 0) return false;
+  const present = new Set(existing.value.outcomes);
+  return incoming.some(outcome => outcome.state.kind !== "success" && !present.has(outcome));
+}
+
+/** @internal Complete compact causal controls without demanding gradient payload. */
+export function completeGradientExposure(session: RuntimeSession, handle: Tensor): void {
+  const state = requireTensorState(handle);
+  assertTensorOpen(state);
+  if (state.session !== session) throw new TabgradError("DIFFERENT_SESSION", "Gradient completion requires its owning session.");
+  runtimeSessionAccess(session).completeGradient(state);
 }

@@ -181,9 +181,23 @@ implicit-seed and consumed-history error categories. Real Pyodide consumes that
 same source and expected result data. The generator uses one intra-operation
 and one inter-operation thread; no NumPy or native runtime is distributed.
 
-The identity controls cover repeated targets, distinct view targets and reusable
-calls; they do not establish general identity equivalence across distinct
-targets or explicit seeds. Packaged physical GPU fixtures reuse all fifteen
+The maintained `gradientIdentityCases` additionally record 125 identity,
+shape, initial-value and tracking observations across scalar, empty, vector
+and matrix shapes, distinct/repeated targets, seeds, ordinary views, retained
+slots, copy/branched paths, equal products and separate calls. Non-expansion
+mutation observations match the pinned oracle; six observed sum-expansion
+mutations differ. Expansion alias/version/acquisition equivalence remains
+incomplete and is tracked in
+[#279](https://github.com/isaacperez/tabgrad/issues/279), without rejecting those
+calls. The 24 `gradientProvenanceCases` record whole-view copy source/base
+contributions and modified/unchanged view result classes, including shapes,
+sampled versions, mutation groups, acquisition and active-copy guards.
+Their unchanged source is shared by actual Python CPU and managed GPU tests.
+Structural tests separately protect JavaScript slots/leases, Python own
+property leases, canonical liveness, compact capacity and cleanup, and
+additional writer completion without gradient readback. These observations
+qualify the stated first-order domain; they are not general native object or
+layout equivalence. Packaged physical GPU fixtures reuse all fifteen
 functional value cases through direct JavaScript adaptations and managed
 Python's unchanged native source with
 explicit device selection. Managed Python also reuses the five error cases and

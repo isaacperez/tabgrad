@@ -57,14 +57,31 @@ torch.autograd.grad(outputs, inputs, grad_outputs=None,
 a nonempty tensor sequence. Every requested input and the output must track,
 and every input must contribute to that output. Inputs may be leaves or
 intermediate results. Repeated inputs return repeated entries in the same
-order. Within one Python call, repeated requests for the same tensor return the
-same Python result object. Distinct whole-storage views remain distinct targets.
-Gradient calls are normalized independently, without a cross-call cache. This
-presentation does not deduplicate input validation or derivative traversal.
-Surplus runtime occurrence handles are retired, and wrapper-conversion failure
-attempts every remaining retirement while retaining independent failures. The
-result is always a tuple of ordinary tensors with the corresponding input
-shapes, dtype and device.
+order. Python preserves the incoming result identity: for an ordinary
+matching-shape `grad(x+y, (x,y), seed)`, both results are that same seed object.
+Repeated requests repeat the corresponding object. A true view can return a
+different object that aliases the same numbers, while independent products
+remain distinct even when their values agree. Separate calls are normalized
+independently; a reused seed preserves its existing identity. Weak canonical
+lookup does not keep earlier results alive.
+
+Each requested occurrence still receives runtime validation and traversal.
+Surplus own leases are retired, and conversion failure attempts every remaining
+retirement while retaining independent causes. Before reusing an existing
+object, Python completes any additional pending/failed writer obligations that
+would otherwise be lost. This can wait or fail at `grad()` before returning;
+it does not read gradient payload or attach the failure to a separately valid
+seed. Common progress can invoke callbacks, so conversion rechecks the live
+canonical object and any replacement lease. The result is always a tuple of
+ordinary tensors with the corresponding input shapes, dtype and device.
+The [identity contract](../architecture/functional-gradient-identity.md)
+explains these separate ownership relationships.
+
+Scalar expansion from `sum` currently preserves the examined result identity
+classes and initial values, but its mutation aliases, overlap rejection and
+leaf acquisition are not fully equivalent to native PyTorch. These calls
+remain accepted; the distinct gap is tracked in
+[#279](https://github.com/isaacperez/tabgrad/issues/279).
 
 `grad_outputs` may be a tensor, `None`, or a one-element sequence containing
 either. `None` supplies a unit seed only when the output has exactly one element,

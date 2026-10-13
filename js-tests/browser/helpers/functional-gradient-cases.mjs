@@ -119,7 +119,8 @@ check_native_gpu_error()
 gc.collect()
 assert session.diagnostics().liveDerivativeNodes == 0
 `);
-  return `import torch, json, gc\nsession = torch._runtime_session\n${[...valueCases, ...errorCases].join("\n")}\n${pythonFunctionalIdentityChecks(oracle, device)}`;
+  return `import torch, json, gc\nsession = torch._runtime_session\n${[...valueCases, ...errorCases].join("\n")}\n${pythonFunctionalIdentityChecks(oracle, device)}
+${pythonGradientProvenanceChecks(oracle, device)}`;
 }
 
 /** Expansion is a storage copy; exact words, including NaN payload, must survive. */
@@ -153,7 +154,7 @@ ${pythonTensorDeviceSource(fixture.source, device).trimEnd().split("\n").map(lin
 check_functional_identity()
 gc.collect()
 `).join("\n");
-  return checks + pythonTensorDeviceSource(pythonIdentityCohorts, device);
+  return checks + pythonTensorDeviceSource(pythonIdentityCohorts, device) + pythonSharedGradientIdentityChecks(oracle, device);
 }
 
 
@@ -177,3 +178,49 @@ for count, size, repetitions in ([(count,2,4) for count in (1,2,17,257)]
         assert d.liveTensorHandles == 0 and d.liveTensorValues == 0
         assert d.liveDerivativeNodes == 0 and d.liveSavedValues == 0
 `;
+
+
+/** Incoming equivalence and mutation are distinct observations; sum aliases remain #279. */
+export function pythonSharedGradientIdentityChecks(oracle, device = "cpu") {
+  return `import torch, json, gc
+${pythonTensorDeviceSource(oracle.gradientIdentitySource, device)}
+def check_shared_gradient_identity():
+    cases = json.loads(${JSON.stringify(JSON.stringify(oracle.gradientIdentityCases))})
+    for case in cases:
+        actual = identity_report(tuple(case['shape']), case['kind'], case['repetitions'])
+        expected = case['expected']
+        # Native expanded-sum mutation observations are retained in the fixture;
+        # #280 qualifies identity, shape and initial values, not #279's alias gap.
+        if case['kind'] == 'sum':
+            for field in ('identity', 'shape', 'values', 'tracking'):
+                assert actual[field] == expected[field], (case, field, actual)
+        else:
+            assert actual == expected, (case, actual)
+        gc.collect()
+        d = torch._runtime_session.diagnostics()
+        assert d.liveTensorHandles == 0 and d.liveTensorValues == 0
+        assert d.liveDerivativeNodes == 0 and d.liveSavedValues == 0
+check_shared_gradient_identity()
+`;
+}
+
+
+/** The caller supplies existing host test instrumentation inspect_sgd_version. */
+export function pythonGradientProvenanceChecks(oracle, device = "cpu") {
+  return `import torch, json, gc
+def probe_version(value):
+    return inspect_sgd_version(value._handle)
+${pythonTensorDeviceSource(oracle.gradientProvenanceSource, device)}
+def check_gradient_provenance():
+    for case in json.loads(${JSON.stringify(JSON.stringify(oracle.gradientProvenanceCases))}):
+        shape = tuple(case['shape'])
+        actual = (copy_owner_case(shape, case['mode'], case['method']) if case['kind'] == 'copy'
+                  else view_result_case(shape, case['dirty']))
+        assert actual == case['expected'], (case, actual)
+        gc.collect()
+        d = torch._runtime_session.diagnostics()
+        assert d.liveTensorHandles == 0 and d.liveTensorValues == 0
+        assert d.liveDerivativeNodes == 0 and d.liveSavedValues == 0
+check_gradient_provenance()
+`;
+}

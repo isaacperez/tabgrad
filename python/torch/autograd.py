@@ -95,19 +95,18 @@ def grad(
         if failure.js_error.code == "UNUSED_INPUT":
             raise RuntimeError(str(error)) from error
         _raise_gradient_failure(error)
-    return _wrap_gradients(handles, requested)
+    return _wrap_gradients(handles)
 
 
 def _wrap_gradients(
-    handles: Sequence[_bridge.RuntimeTensor], requested: tuple[Tensor, ...]
+    handles: Sequence[_bridge.RuntimeTensor],
 ) -> tuple[Tensor, ...]:
-    """Present repeated targets once; occurrence handles retain runtime ownership."""
+    """Present equivalent incoming results once, retaining every occurrence lease."""
     wrappers: dict[int, Tensor] = {}
     results: list[Tensor] = []
     try:
-        for index, handle in enumerate(handles):
-            # Captured inputs remain alive; id does not invoke Tensor hash/equality.
-            key = id(requested[index])
+        for handle in handles:
+            key = _bridge.exposureKey(handle)
             result = wrappers.get(key)
             if result is None:
                 result = Tensor._from_handle(handle)  # pyright: ignore[reportPrivateUsage]

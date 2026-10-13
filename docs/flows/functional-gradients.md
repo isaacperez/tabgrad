@@ -57,8 +57,17 @@ operations that a frontend could admit, plus internal scalar expansion on the
 same device. Implicit seeds use that device; explicit seeds must match it.
 WebGPU execution uses its ordinary pipeline, submission and drain owner.
 
-On return, the gradient tensors own their pending execution dependencies and
-no longer need the multiplication's saved pins. Observing `dx` may execute
+Python first coalesces equivalent incoming result occurrences into live
+wrappers. When reuse would discard additional writer obligations, it completes
+those controls through the common queue before returning the wrapper, without
+demanding gradient data. That conditional phase can wait or report a writer
+failure, and callbacks can change which exposure remains open. Own conversion
+leases preserve independently held JavaScript handles. The
+[identity contract](../architecture/functional-gradient-identity.md) owns those
+rules.
+
+On return, the gradient tensors own their remaining pending execution
+dependencies and no longer need the multiplication's saved pins. Observing `dx` may execute
 shared work that `dy` can reuse; closing a returned handle only retires that
 handle. Dropping every result before observation releases the derivative work
 without running it. Python wrapper finalizers and explicit JavaScript close
