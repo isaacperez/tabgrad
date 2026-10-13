@@ -93,7 +93,7 @@ try {
       });
       process.stdout.write(`PASS ${browser.name} Python worker (${jspi} JSPI profile, no isolation)\n`);
     }
-    const isolatedServer = await startBrowserServer(["python/python-worker.html"], {
+    const isolatedServer = await startBrowserServer(["python/python-worker.html", "webgpu/shared-failure.html"], {
       crossOriginIsolation: true, assets: ["python/python-worker.mjs", "helpers/cpu-profile.mjs", "helpers/python-no-grad-cases.mjs", ...copyAssets], readAsset: readCopyAsset,
     });
     try {
@@ -103,6 +103,11 @@ try {
         validateResult(result) { assertPythonWorkerResult(result, "disabled", true); },
       });
       process.stdout.write(`PASS ${browser.name} host admission and close while Python worker is parked\n`);
+      await runBrowserPage({
+        server: isolatedServer, browser, executable, page: "webgpu/shared-failure.html", parameters: {}, version,
+        validateResult(result) { assert.equal(result.ok, true, JSON.stringify(result.error)); },
+      });
+      process.stdout.write(`PASS ${browser.name} shared GPU failure diagnostics\n`);
     } finally { await isolatedServer.close(); }
     for (const cpuVariant of ["scalar", "simd128"]) {
       const variantServer = await startBrowserServer(["python/python-worker.html"], {
