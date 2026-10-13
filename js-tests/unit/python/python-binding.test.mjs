@@ -2830,6 +2830,6 @@ test("Python sum gradients preserve pinned aliases, views and incoming acquisiti
   try { await binding.runPythonAsync(pythonSumGradientAliasChecks(oracle)); }
   finally {
     await binding.close();
-    interpreter.runPython("[globals().pop(name, None) for name in ('torch','json','gc','sum_filled','sum_make','sum_sample','sum_error','sum_alias_report','sum_seed_report','sum_empty_promotion','probe_version','check_sum_gradient_aliases','inspect_sgd_version')]; None");
+    interpreter.runPython("[globals().pop(name, None) for name in ('torch','json','gc','sum_filled','sum_make','sum_sample','sum_error','sum_alias_report','sum_seed_report','sum_empty_promotion','sum_reset_report','sum_reset_partial','probe_version','check_sum_gradient_aliases','inspect_sgd_version')]; None");
   }
 });

@@ -5,6 +5,29 @@ import { createConnectedRuntimeSession } from "../../../dist/runtime/runtime.js"
 import { getTestRuntimeOwnership, getTestTensorVersion } from "../../../dist/testing.js";
 import { executionDevice, deferred } from "./helpers/webgpu-device.mjs";
 
+test("SGD zero fill publishes a new shared scalar and drains its GPU effect", async () => {
+  const acquired = executionDevice(), session = createConnectedRuntimeSession(new WebGpuBackend(acquired));
+  const owned = [];
+  try {
+    const seed = session.tensor([3], { shape: [], device: "webgpu" });
+    const parameter = session.tensor([2, 3], { requiresGrad: true, device: "webgpu" });
+    const loss = parameter.sum(), [gradient] = session.grad(loss, [parameter], seed);
+    owned.push(seed, parameter, loss, gradient);
+    parameter.grad = gradient;
+    const optimizer = session.sgd([parameter], { lr: .1 });
+    try { optimizer.zeroGrad(false); assert.equal(getTestTensorVersion(seed), 1); }
+    finally { optimizer.close(); }
+    // The device double qualifies publication/drain, not numerical words.
+    assert.equal((await gradient.toArray()).length, 2);
+  } finally {
+    for (const value of owned.reverse()) value.close();
+    await session.close();
+  }
+  assert.ok(acquired.buffers.every(buffer => buffer.destroyed));
+  assert.equal(session.diagnostics().webgpu.ownedBufferBytes, 0);
+  for (const value of Object.values(getTestRuntimeOwnership(session))) assert.equal(value, 0);
+});
+
 for (const length of [0, 2, 65]) {
   test(`a live sum alias permits a later capture while GPU execution is pending (${length})`, async () => {
     const gate = deferred(), started = deferred();

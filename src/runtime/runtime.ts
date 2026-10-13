@@ -1078,13 +1078,18 @@ export class RuntimeSession {
       this.#history.release(history);
     } else if (!identity.trueLeaf) identity.entry = null;
     identity.requiresGrad = false;
-    const scalar = this.tensor([0], { device: identity.family.current.device });
+    const scalarFill = identity.projectScalar !== undefined && tensorElementCount(identity.shape) > 1;
+    const scalar = this.tensor([0], { device: identity.family.current.device,
+      ...(scalarFill ? { shape: identity.family.current.shape } : {}) });
     let zeros: Tensor | undefined;
     let failures: unknown[] | undefined;
     try {
-      zeros = this.#expand(scalar, identity.shape);
+      if (!scalarFill) zeros = this.#expand(scalar, identity.shape);
       const previous = this.#enterNoGrad();
-      try { this.#copy(state, zeros); }
+      try {
+        if (scalarFill) this.#write(state, scalar, "scalar-fill");
+        else this.#copy(state, zeros);
+      }
       finally { this.#recording = previous; }
     } catch (error) { (failures ??= []).push(error); }
     try { zeros?.close(); } catch (error) { (failures ??= []).push(error); }
@@ -1713,6 +1718,10 @@ export class RuntimeSession {
   }
 
   #copy(destination: TensorState, sourceHandle: unknown): void {
+    this.#write(destination, sourceHandle, "copy");
+  }
+
+  #write(destination: TensorState, sourceHandle: unknown, kind: "copy" | "scalar-fill"): void {
     assertTensorOpen(destination);
     const source = requireTensorState(sourceHandle);
     assertTensorOpen(source);
@@ -1730,15 +1739,16 @@ export class RuntimeSession {
     if (this.#mutationFailure !== undefined) {
       throw new TabgradError("MUTATION_FAILED", "A failed write prevents further updates in this session.", {}, this.#mutationFailure.error);
     }
-    if (destination.identity.projectScalar !== undefined && tensorElementCount(destination.shape) > 1
+    if (kind === "copy" && destination.identity.projectScalar !== undefined && tensorElementCount(destination.shape) > 1
       && !(source.identity.projectScalar !== undefined && source.family === destination.family && equalTensorShapes(destination.shape, source.shape))) {
       throw new TabgradError("OVERLAPPING_COPY", "Copy destination has overlapping elements referring to a single memory location.");
     }
-    if (!equalTensorShapes(destination.shape, source.shape)) {
+    const receivingShape = kind === "scalar-fill" ? destination.family.current.shape : destination.shape;
+    if (!equalTensorShapes(receivingShape, source.shape)) {
       throw new TabgradError("SHAPE_MISMATCH", "Copy requires equal tensor shapes.");
     }
     const previous = destination.family.current;
-    const versionOnly = destination.identity.projectScalar !== undefined;
+    const versionOnly = kind === "copy" && destination.identity.projectScalar !== undefined;
     const sourceValue = source.value;
     const captured = versionOnly && tensorElementCount(destination.shape) > 1 ? previous : sourceValue;
     const prerequisites = captureWriterOutcomes([previous.outcomes, destination.identity.controls, sourceValue.outcomes]);

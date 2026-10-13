@@ -33,6 +33,109 @@ function sumGradient(session, seed, shape) {
 }
 
 for (const forceVariant of ["scalar", "simd128"]) {
+  test(`SGD scalar fill owns mandatory failure after public handles close (${forceVariant})`, async () => {
+    const cause = new Error("controlled scalar reset publication failure");
+    let publications = 0;
+    const session = createTestRuntimeSession({ manifestUrl: new URL("manifest.json", distributionUrl), forceVariant,
+      beforeCopyPublication() { publications += 1; throw cause; } });
+    const seed = session.tensor([3], { shape: [] }), gradient = sumGradient(session, seed, [2]);
+    const parameter = session.tensor([2, 3]), second = session.tensor([4, 5]);
+    parameter.grad = gradient; second.grad = gradient;
+    const optimizer = session.sgd([parameter, second]);
+    assert.throws(() => optimizer.zeroGrad(false), error => error.code === "MUTATION_FAILED" && hasCause(error, cause));
+    assert.equal(getTestTensorVersion(seed), 1, "the second reset observes the first synchronous writer failure");
+    optimizer.close(); parameter.close(); second.close(); gradient.close(); seed.close();
+    await assert.rejects(completeRuntimeSession(session), error => hasCause(error, cause));
+    assert.equal(publications, 1);
+    await session.close(); assertRetired(session);
+  });
+  for (const phase of ["before", "after"]) {
+    test(`SGD alias reset preserves publication when cache cleanup fails ${phase} (${forceVariant})`, async (context) => {
+      const session = createTestRuntimeSession({ manifestUrl: new URL("manifest.json", distributionUrl), forceVariant });
+      const seed = session.tensor([3], { shape: [] }), gradient = sumGradient(session, seed, [65]);
+      const parameter = session.tensor(new Float32Array(65)); parameter.grad = gradient;
+      const optimizer = session.sgd([parameter]);
+      await gradient.toArray();
+      const cause = new Error("controlled reset cache retirement failure");
+      const release = WebAssemblyCpuBackend.prototype.release;
+      let armed = true;
+      const mock = context.mock.method(WebAssemblyCpuBackend.prototype, "release", function (...args) {
+        if (armed) { armed = false; if (phase === "after") release.apply(this, args); throw cause; }
+        return release.apply(this, args);
+      });
+      try {
+        assert.throws(() => optimizer.zeroGrad(false), error => hasCause(error, cause));
+        assert.equal(getTestTensorVersion(seed), 1);
+      } finally { armed = false; mock.mock.restore(); }
+      assert.deepEqual([...await seed.toArray()], [0]);
+      assert.deepEqual([...await gradient.toArray()], Array(65).fill(0));
+      optimizer.close(); gradient.close(); seed.close(); parameter.close();
+      await session.close(); assertRetired(session);
+    });
+  }
+
+  test(`SGD alias reset preserves pending-count admission (${forceVariant})`, async () => {
+    const session = createTestRuntimeSession({ manifestUrl: new URL("manifest.json", distributionUrl), forceVariant,
+      updateLimits: { pendingCopies: 0 } });
+    const seed = session.tensor([3], { shape: [] }), gradient = sumGradient(session, seed, [2]);
+    const parameter = session.tensor([2, 3]); parameter.grad = gradient;
+    const optimizer = session.sgd([parameter]);
+    try {
+      assert.throws(() => optimizer.zeroGrad(false), { code: "RESOURCE_EXHAUSTED" });
+      assert.equal(getTestTensorVersion(seed), 0);
+      assert.deepEqual([...await gradient.toArray()], [3, 3]);
+    } finally { optimizer.close(); parameter.close(); gradient.close(); seed.close(); await session.close(); }
+    assertRetired(session);
+  });
+
+  for (const physicalShape of [[], [1, 1]]) for (const length of [0, 65]) {
+    test(`SGD reset preserves empty payload and positive zero (${forceVariant}, ${physicalShape}, ${length})`, async () => {
+      const session = createTestRuntimeSession({ manifestUrl: new URL("manifest.json", distributionUrl), forceVariant });
+      try {
+        for (const word of [0x80000000, 0x7fc12345]) {
+          const parameter = session.tensor(new Float32Array(length), { requiresGrad: true });
+          const seed = session.tensor(new Float32Array(new Uint32Array([word]).buffer), { shape: physicalShape });
+          const sum = parameter.sum(), loss = sum.view(physicalShape), [gradient] = session.grad(loss, [parameter], seed);
+          const stored = new Uint32Array((await seed.toArray()).buffer)[0];
+          parameter.grad = gradient;
+          const optimizer = session.sgd([parameter]);
+          optimizer.zeroGrad(false);
+          assert.equal(getTestTensorVersion(seed), 1);
+          assert.equal(new Uint32Array((await seed.toArray()).buffer)[0], length === 0 ? stored : 0);
+          assert.ok(new Uint32Array((await gradient.toArray()).buffer).every(value => value === 0));
+          optimizer.close();
+          for (const value of [parameter, seed, sum, loss, gradient]) value.close();
+        }
+      } finally { await session.close(); }
+      assertRetired(session);
+    });
+  }
+  for (const shape of [[], [1], [0], [2, 0], [2], [65]]) {
+    test(`numeric SGD reset fills shared sum aliases (${forceVariant}, ${shape})`, async () => {
+      const session = createTestRuntimeSession({ manifestUrl: new URL("manifest.json", distributionUrl), forceVariant });
+      try {
+        const count = shape.reduce((n, size) => n * size, 1);
+        const parameter = session.tensor(new Float32Array(count), { shape, requiresGrad: true });
+        const seed = session.tensor([3], { shape: [] }), gradient = sumGradient(session, seed, shape);
+        const captured = gradient.mul(gradient);
+        await gradient.toArray(); // Reset must invalidate an already materialized expansion.
+        parameter.grad = gradient;
+        const optimizer = session.sgd([parameter], { lr: .1 });
+        optimizer.zeroGrad(false);
+        const exposed = parameter.grad;
+        assert.equal(getTestTensorVersion(exposed), 1);
+        assert.equal(getTestTensorVersion(seed), 1);
+        assert.deepEqual([...await captured.toArray()], Array(count).fill(9));
+        assert.deepEqual([...await gradient.toArray()], Array(count).fill(0));
+        assert.deepEqual([...await seed.toArray()], [count === 0 ? 3 : 0]);
+        const independent = session.tensor(new Float32Array(count), { shape });
+        if (count > 1) assert.throws(() => gradient.copy_(independent), { code: "OVERLAPPING_COPY" });
+        optimizer.close();
+        for (const value of [parameter, seed, gradient, captured, exposed, independent]) value.close();
+        await completeRuntimeSession(session); assertRetired(session);
+      } finally { await session.close(); }
+    });
+  }
   for (const shape of [[], [1], [1, 1], [0], [0, 2], [1, 0, 2], [2], [65]]) {
     test(`sum aliases preserve immutable captures and shared versions (${forceVariant}, ${shape})`, async () => {
       const session = createTestRuntimeSession({ manifestUrl: new URL("manifest.json", distributionUrl), forceVariant });
