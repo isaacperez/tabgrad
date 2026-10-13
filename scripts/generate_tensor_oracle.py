@@ -13,8 +13,20 @@ from pathlib import Path
 from typing import Protocol, cast
 
 from backward_oracle import backward_cases
+from gradient_identity_oracle import (
+    COMMON as GRADIENT_IDENTITY_SOURCE,
+)
+from gradient_identity_oracle import (
+    PROVENANCE as GRADIENT_PROVENANCE_SOURCE,
+)
+from gradient_identity_oracle import (
+    gradient_identity_cases,
+    gradient_provenance_cases,
+)
 from matmul_oracle import matmul_cases
 from sgd_oracle import sgd_cases
+from sum_gradient_alias_oracle import COMMON as SUM_ALIAS_SOURCE
+from sum_gradient_alias_oracle import sum_gradient_alias_cases
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "js-tests/fixtures/python-tensor-oracle.json"
@@ -153,6 +165,20 @@ METADATA_CASES = (
 GRAD_SETUP = "x = torch.tensor([2., 3.], dtype=torch.float32, requires_grad=True)\n"
 GRAD_CASES = (
     (
+        "repeated-empty",
+        "x = torch.tensor([], dtype=torch.float32, requires_grad=True)\nresults = torch.autograd.grad((x*x).sum(), (x,x))",
+    ),
+    (
+        "distinct-view-identities",
+        GRAD_SETUP
+        + "v = x.view(1,2)\nresults = torch.autograd.grad((v+v).sum(), (v,x))",
+    ),
+    (
+        "reusable-call-identities",
+        GRAD_SETUP
+        + "loss = (x+x).sum()\nresults = torch.autograd.grad(loss,(x,x)) + torch.autograd.grad(loss,(x,x))",
+    ),
+    (
         "branches-repeated-inputs",
         GRAD_SETUP
         + "y = torch.tensor([5., 7.], dtype=torch.float32, requires_grad=True)\nloss = (x * y + x * x).sum()\nresults = torch.autograd.grad(loss, (x, y, x))",
@@ -240,7 +266,17 @@ def gradient_cases(oracle: _OracleModule) -> list[dict[str, object]]:
             "[[list(value.shape), value.tolist(), value.requires_grad] for value in results]",
             namespace,
         )
-        cases.append({"name": name, "source": source, "expected": expected})
+        identities: object = eval(
+            "[[left is right for right in results] for left in results]", namespace
+        )
+        cases.append(
+            {
+                "name": name,
+                "source": source,
+                "expected": expected,
+                "resultIdentities": identities,
+            }
+        )
     return cases
 
 
@@ -1272,6 +1308,12 @@ def generate() -> str:
                 "sumComparison": "Exact simple cases; conditioning-aware absolute bounds for finite reassociation; explicit backend-dependent intermediate-overflow classifications. See docs/reference/tensor-sum.md.",
                 "sumCases": sum_cases(oracle),
                 "gradientCases": gradient_cases(oracle),
+                "gradientIdentitySource": GRADIENT_IDENTITY_SOURCE,
+                "gradientIdentityCases": gradient_identity_cases(oracle),
+                "sumGradientAliasSource": SUM_ALIAS_SOURCE,
+                "sumGradientAliasCases": sum_gradient_alias_cases(oracle),
+                "gradientProvenanceSource": GRADIENT_PROVENANCE_SOURCE,
+                "gradientProvenanceCases": gradient_provenance_cases(oracle),
                 "gradientErrors": gradient_errors(oracle),
                 "gradientProgressCases": gradient_progress_cases(oracle),
                 "backwardCases": backward_cases(oracle),

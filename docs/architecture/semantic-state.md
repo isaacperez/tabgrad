@@ -33,6 +33,9 @@ and version state while their tracking, history and gradient associations differ
 The [gradient-state contract](cpu-gradient-state.md) specializes those
 distinctions, canonical exposure and cycle responsibility without prescribing
 one implemented class for each semantic record.
+[Gradient result identity](functional-gradient-identity.md) further separates
+incoming equivalence from numerical aliases and independently owned public
+occurrences at the Python presentation boundary.
 
 ```mermaid
 flowchart LR

@@ -97,7 +97,7 @@ test("invalid GPU gradient seeds and ordered request access leave valid history 
 });
 
 test("GPU scalar expansion has unary independent output bindings and empty/tail launches", async (context) => {
-  for (const length of [0, 1, 63, 64, 65, 127, 128, 129]) {
+  for (const length of [0, 63, 64, 65, 127, 128, 129]) {
     const acquired = executionDevice(), session = await openSession(context, acquired);
     try {
       const x = session.tensor(new Float32Array(length), { device: "webgpu", requiresGrad: true });
@@ -112,7 +112,7 @@ test("GPU scalar expansion has unary independent output bindings and empty/tail 
         assert.notEqual(entries[0].resource.buffer, entries[1].resource.buffer);
       }
       assert.equal(session.diagnostics().webgpu.uploadBytes, 4);
-      const later = session.tensor([2], { device: "webgpu", requiresGrad: true });
+      const later = session.tensor([2, 3], { device: "webgpu", requiresGrad: true });
       const loss = later.sum(), [second] = session.grad(loss, [later]);
       await second.toArray();
       assert.equal(acquired.shaderSources.length, 1);
@@ -178,7 +178,7 @@ for (const phase of ["encoding", "submission", "readback"]) {
       : phase === "readback" ? { mapError: cause } : {});
     if (phase === "submission") acquired.queue.submit = () => { throw cause; };
     const session = await openSession(context, acquired);
-    const x = session.tensor([2], { device: "webgpu", requiresGrad: true });
+    const x = session.tensor([2, 3], { device: "webgpu", requiresGrad: true });
     const sum = x.sum(), [gradient] = session.grad(sum, [x]);
     await assert.rejects(gradient.toArray(), (error) => error.cause === cause);
     gradient.close(); sum.close(); x.close(); await session.close();

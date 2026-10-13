@@ -3,7 +3,8 @@ import { after, before, mock, test } from "node:test";
 import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { loadPyodide } from "pyodide";
-import { RuntimeSession } from "../../../dist/index.js";
+import { RuntimeSession, Tensor } from "../../../dist/index.js";
+import { PythonRuntimeBridge } from "../../../dist/frontends/python/python-runtime-bridge.js";
 import { getTestExecutionFailureContext } from "../../../dist/testing.js";
 import { assertSumFixture } from "../../fixtures/sum-oracle.mjs";
 import { float32FromBits } from "../../fixtures/sum-oracle.mjs";
@@ -11,6 +12,8 @@ import { pythonGradientProgressChecks } from "../../browser/helpers/gradient-pro
 import { pythonBackwardChecks } from "../../browser/helpers/backward-cases.mjs";
 import { pythonBackwardLifetimeChecks } from "../../browser/helpers/backward-lifetime.mjs";
 import { pythonMatrixChecks } from "../../browser/helpers/python-matrix-cases.mjs";
+
+import { pythonSumGradientAliasChecks, pythonGradientProvenanceChecks, pythonSharedGradientIdentityChecks, pythonFunctionalIdentityChecks } from "../../browser/helpers/functional-gradient-cases.mjs";
 
 let interpreterPromise;
 
@@ -2534,4 +2537,311 @@ test('actual Python finalization routes fallible release to session cleanup', { 
   const { checkPythonFinalizationFault } = await import('../../browser/helpers/backward-lifetime.mjs');
   const interpreter = await getInterpreter(); const binding = await attachPython(interpreter);
   await checkPythonFinalizationFault(binding, WebAssemblyCpuBackend);
+});
+
+
+test("Python functional result identity matches native repeated targets", { timeout: 20_000 }, async () => {
+  const oracle = JSON.parse(await readFile(new URL("../../fixtures/python-tensor-oracle.json", import.meta.url), "utf8"));
+  const { attachPython } = await import("../../../dist/python.js");
+  const interpreter = await getInterpreter(), binding = await attachPython(interpreter);
+  try { await binding.runPythonAsync(pythonFunctionalIdentityChecks(oracle)); }
+  finally { await binding.close(); interpreter.runPython("[globals().pop(name, None) for name in ('torch','json','gc','check_functional_identity')]; None"); }
+});
+
+
+test("Python repeated gradient conversion retires every occurrence after independent close failures", { timeout: 20_000 }, async context => {
+  const { attachPython } = await import("../../../dist/python.js");
+  const interpreter = await getInterpreter(), binding = await attachPython(interpreter);
+  let enabled = false, closes = 0;
+  const original = Tensor.prototype.close;
+  const admit = PythonRuntimeBridge.prototype.grad;
+  context.mock.method(PythonRuntimeBridge.prototype, "grad", function (...args) {
+    const handles = admit.apply(this, args); enabled = true; return handles;
+  });
+  context.mock.method(Tensor.prototype, "close", function () {
+    const result = original.call(this);
+    if (enabled && ++closes <= 2) throw new Error("controlled occurrence close failure " + closes);
+    return result;
+  });
+  interpreter.registerJsModule("_identity_failure", { deactivate: () => { enabled = false; }, count: () => closes });
+  try {
+    await binding.runPythonAsync(`
+import torch, gc, _identity_failure
+def check_occurrence_cleanup():
+    x = torch.tensor([2.,3.], dtype=torch.float32, requires_grad=True)
+    loss = (x*x).sum()
+    failed = False
+    try:
+        result = torch.autograd.grad(loss, (x,x,x))
+    except BaseExceptionGroup as error:
+        failed = True
+        assert len(error.exceptions) >= 2
+        assert 'controlled occurrence close failure 1' in str(error.exceptions[0])
+    finally:
+        _identity_failure.deactivate()
+    assert failed, 'unused repeated handles were not retired during conversion'
+    assert _identity_failure.count() >= 4, 'later handles were not independently retired'
+check_occurrence_cleanup()
+gc.collect()
+d = torch._runtime_session.diagnostics()
+assert d.liveTensorHandles == 0 and d.liveTensorValues == 0 and d.liveSavedValues == 0
+`);
+  } finally { enabled = false; await binding.close(); interpreter.unregisterJsModule("_identity_failure");
+    interpreter.runPython("[globals().pop(name, None) for name in ('torch','gc','_identity_failure','check_occurrence_cleanup','d')]; None"); }
+});
+
+
+test("Python repeated gradient wrapper construction failure closes converted and remaining handles", { timeout: 20_000 }, async () => {
+  const { attachPython } = await import("../../../dist/python.js");
+  const interpreter = await getInterpreter(), binding = await attachPython(interpreter);
+  try { await binding.runPythonAsync(`
+import torch, gc
+from pyodide.ffi import JsException
+def check_identity_constructor(position):
+    x = torch.tensor([2.,3.], dtype=torch.float32, requires_grad=True)
+    y = torch.tensor([5.,7.], dtype=torch.float32, requires_grad=True)
+    loss = (x*y).sum()
+    previous = torch.finalize
+    converted = []
+    def failing_finalizer(value, *args, **kwargs):
+        converted.append(value)
+        if len(converted) == position: raise LookupError('wrapper constructor sentinel')
+        return previous(value, *args, **kwargs)
+    torch.finalize = failing_finalizer
+    try:
+        try: torch.autograd.grad(loss, (x,x,y))
+        except LookupError as error: assert str(error) == 'wrapper constructor sentinel'
+        else: raise AssertionError('construction failure was hidden')
+    finally: torch.finalize = previous
+    for value in converted:
+        try: value.shape
+        except JsException as error: assert error.js_error.code == 'CLOSED_TENSOR'
+        else: raise AssertionError('partially converted handle remains open')
+for position in (1,2):
+    check_identity_constructor(position)
+    gc.collect()
+    d = torch._runtime_session.diagnostics()
+    assert d.liveTensorHandles == 0 and d.liveTensorValues == 0 and d.liveSavedValues == 0
+`); } finally { await binding.close();
+    interpreter.runPython("[globals().pop(name, None) for name in ('torch','gc','JsException','check_identity_constructor','position','d')]; None"); }
+});
+
+
+test("Python shared gradient identity preserves native distinct targets, seeds and mutation groups", { timeout: 20_000 }, async () => {
+  const oracle = JSON.parse(await readFile(new URL("../../fixtures/python-tensor-oracle.json", import.meta.url), "utf8"));
+  const { attachPython } = await import("../../../dist/python.js");
+  const interpreter = await getInterpreter(), binding = await attachPython(interpreter);
+  try { await binding.runPythonAsync(pythonSharedGradientIdentityChecks(oracle)); }
+  finally { await binding.close(); interpreter.runPython("[globals().pop(name, None) for name in ('torch','json','gc','check_shared_gradient_identity','identity_report','filled')]; None"); }
+});
+
+test("Python cold grad conversion owns a lease and cannot retire a caller exposure", { timeout: 20_000 }, async () => {
+  const { attachPython } = await import("../../../dist/python.js");
+  const interpreter = await getInterpreter(), binding = await attachPython(interpreter);
+  const host = [];
+  try {
+    await binding.runPythonAsync("import torch, gc\np = torch.tensor([2.,3.], dtype=torch.float32, requires_grad=True)");
+    const session = interpreter.runPython("torch._runtime_session"), p = interpreter.runPython("p._handle");
+    const output = p.mul(p), seed = session.tensor([1,2]); host.push(output, seed);
+    const results = session.grad(output, [p,p], seed); host.push(...results);
+    p.grad = results[0];
+    await binding.runPythonAsync(`
+previous_finalizer = torch.finalize
+def failing_finalizer(*args, **kwargs):
+    raise LookupError('cold grad constructor sentinel')
+torch.finalize = failing_finalizer
+try:
+    try: p.grad
+    except LookupError as error: assert str(error) == 'cold grad constructor sentinel'
+    else: raise AssertionError('constructor failure was lost')
+finally:
+    torch.finalize = previous_finalizer
+`);
+    assert.deepEqual(results[0].shape, [2], "conversion did not own the caller's canonical handle");
+    assert.deepEqual(results[1].shape, [2]); assert.deepEqual(seed.shape, [2]);
+    assert.equal(p.grad, results[0], "JavaScript property canonical exposure is preserved");
+    await binding.runPythonAsync("p.grad = None\ndel p\ngc.collect()");
+  } finally {
+    for (const handle of host.reverse()) handle.close();
+    await binding.close();
+    interpreter.runPython("[globals().pop(name, None) for name in ('torch','gc','p','previous_finalizer','failing_finalizer')]; None");
+  }
+});
+
+for (const outcome of ["failure", "close-canonical"]) {
+  test(`Python gradient reuse resolves additional writers and rechecks exposure (${outcome})`, { timeout: 20_000 }, async context => {
+    const { attachPython } = await import("../../../dist/python.js");
+    const { WebAssemblyCpuBackend } = await import("../../../dist/backends/cpu/cpu-backend.js");
+    const interpreter = await getInterpreter(), binding = await attachPython(interpreter);
+    const fault = new Error("gradient writer sentinel"); let executions = 0;
+    const execute = WebAssemblyCpuBackend.prototype.execute;
+    const { ExecutionTicket } = await import("../../../dist/execution/execution-ticket.js");
+    interpreter.registerJsModule("_gradient_writer", { isFault: error => {
+      const pending = [error], seen = new Set();
+      while (pending.length !== 0) {
+        const current = pending.pop();
+        if (current === fault) return true;
+        if (current == null || seen.has(current)) continue;
+        seen.add(current);
+        if (current.cause !== undefined) pending.push(current.cause);
+        if (Array.isArray(current.errors)) pending.push(...current.errors);
+      }
+      return false;
+    } });
+    try {
+      await binding.runPythonAsync(`
+import torch, gc
+from _gradient_writer import isFault
+x = torch.tensor([2.,3.], dtype=torch.float32, requires_grad=True)
+y = torch.tensor([4.,5.], dtype=torch.float32, requires_grad=True)
+seed = torch.tensor([7.,9.], dtype=torch.float32)
+root = x+y
+input = torch.tensor([10.,20.], dtype=torch.float32)
+source = input+input
+`);
+      const session = interpreter.runPython("torch._runtime_session"), seed = interpreter.runPython("seed._handle");
+      const before = session.diagnostics().wasmToHostCopies;
+      const replacement = context.mock.method(WebAssemblyCpuBackend.prototype, "execute", function (...args) {
+        executions += 1;
+        if (outcome === "failure") throw fault;
+        const result = execute.apply(this, args);
+        return new ExecutionTicket(() => Promise.resolve(result).then(value => { seed.close(); return value; }),
+          Promise.resolve(), { read() { seed.close(); return result; }, isDrained: () => true });
+      });
+      await binding.runPythonAsync(`
+with torch.no_grad(): root.copy_(source)
+try:
+    gradients = torch.autograd.grad(root, (x,y), seed)
+except Exception as error:
+    assert ${outcome === "failure" ? "True" : "False"}
+    assert isFault(error.js_error)
+    assert seed.tolist() == [7.,9.]
+else:
+    assert ${outcome === "close-canonical" ? "True" : "False"}, 'writer failure was lost by returning seed'
+    assert gradients[0] is gradients[1]
+    assert gradients[0] is not seed
+    assert gradients[0].shape == (2,)
+`);
+      replacement.mock.restore();
+      assert.equal(executions, 1, "only the prerequisite numerical source executes");
+      assert.equal(session.diagnostics().wasmToHostCopies, before, "coalescing completion did not read gradient payload");
+      await binding.runPythonAsync("del x,y,seed,root,input,source\nglobals().pop('gradients',None)\ngc.collect()");
+      assert.equal(session.diagnostics().liveTensorHandles, 0);
+    } finally {
+      context.mock.restoreAll(); await binding.close(); interpreter.unregisterJsModule("_gradient_writer");
+      interpreter.runPython("[globals().pop(name, None) for name in ('torch','gc','isFault','gradients','x','y','seed','root','input','source')]; None");
+    }
+  });
+}
+
+
+test("Python gradient copy/view provenance matches pinned native values, versions and acquisition", { timeout: 20_000 }, async () => {
+  const oracle = JSON.parse(await readFile(new URL("../../fixtures/python-tensor-oracle.json", import.meta.url), "utf8"));
+  const { attachPython } = await import("../../../dist/python.js");
+  const { getTestTensorVersion } = await import("../../../dist/testing.js");
+  const interpreter = await getInterpreter(), binding = await attachPython(interpreter);
+  interpreter.globals.set("inspect_sgd_version", getTestTensorVersion);
+  try { await binding.runPythonAsync(pythonGradientProvenanceChecks(oracle)); }
+  finally {
+    await binding.close(); interpreter.globals.delete("inspect_sgd_version");
+    interpreter.runPython("[globals().pop(name, None) for name in ('torch','json','gc','probe_version','filled','copy_owner_case','view_result_case','check_gradient_provenance')]; None");
+  }
+});
+
+test("Python canonical completion cannot publish a wrapper closed by session progress", { timeout: 20_000 }, async context => {
+  const { attachPython } = await import("../../../dist/python.js");
+  const { WebAssemblyCpuBackend } = await import("../../../dist/backends/cpu/cpu-backend.js");
+  const { ExecutionTicket } = await import("../../../dist/execution/execution-ticket.js");
+  const interpreter = await getInterpreter(), binding = await attachPython(interpreter);
+  let closing;
+  try {
+    await binding.runPythonAsync(`
+import torch
+x = torch.tensor([2.,3.], dtype=torch.float32, requires_grad=True)
+y = torch.tensor([4.,5.], dtype=torch.float32, requires_grad=True)
+seed = torch.tensor([7.,9.], dtype=torch.float32)
+root = x+y
+input = torch.tensor([10.,20.], dtype=torch.float32)
+source = input+input
+`);
+    const session = interpreter.runPython("torch._runtime_session");
+    const execute = WebAssemblyCpuBackend.prototype.execute;
+    context.mock.method(WebAssemblyCpuBackend.prototype, "execute", function (...args) {
+      const result = execute.apply(this, args);
+      const finish = () => { closing ??= session.close(); return result; };
+      return new ExecutionTicket(() => Promise.resolve().then(finish), Promise.resolve(),
+        { read: finish, isDrained: () => true });
+    });
+    await binding.runPythonAsync(`
+with torch.no_grad(): root.copy_(source)
+try:
+    torch.autograd.grad(root, (x,), seed)
+except Exception as error:
+    assert error.js_error.code == 'CLOSED_TENSOR'
+else:
+    raise AssertionError('closed occurrence was published as a Python wrapper')
+`);
+    await closing;
+  } finally {
+    context.mock.restoreAll(); await closing; await binding.close();
+    interpreter.runPython("[globals().pop(name, None) for name in ('torch','x','y','seed','root','input','source')]; None");
+  }
+});
+
+test("Python callback replacement preserves a no-grad seed view's mutation guard", { timeout: 20_000 }, async context => {
+  const { attachPython } = await import("../../../dist/python.js");
+  const { WebAssemblyCpuBackend } = await import("../../../dist/backends/cpu/cpu-backend.js");
+  const { ExecutionTicket } = await import("../../../dist/execution/execution-ticket.js");
+  const interpreter = await getInterpreter(), binding = await attachPython(interpreter);
+  try {
+    await binding.runPythonAsync(`
+import torch, gc
+x = torch.tensor([2.,3.], dtype=torch.float32, requires_grad=True)
+y = torch.tensor([4.,5.], dtype=torch.float32, requires_grad=True)
+original = torch.tensor([7.,9.], dtype=torch.float32)
+with torch.no_grad(): seed = original.view((2,))
+source = torch.tensor([1.,2.], dtype=torch.float32, requires_grad=True)
+root = x+y
+producer = torch.tensor([10.,20.], dtype=torch.float32)
+payload = producer+producer
+`);
+    const session = interpreter.runPython("torch._runtime_session"), seed = interpreter.runPython("seed._handle");
+    const execute = WebAssemblyCpuBackend.prototype.execute;
+    const replacement = context.mock.method(WebAssemblyCpuBackend.prototype, "execute", function (...args) {
+      const result = execute.apply(this, args);
+      return new ExecutionTicket(() => Promise.resolve(result).then(value => { seed.close(); return value; }),
+        Promise.resolve(), { read() { seed.close(); return result; }, isDrained: () => true });
+    });
+    await binding.runPythonAsync(`
+with torch.no_grad(): root.copy_(payload)
+a,b = torch.autograd.grad(root, (x,y), seed)
+assert a is b and a is not seed
+try:
+    a.copy_(source)
+except RuntimeError:
+    pass
+else:
+    raise AssertionError('replacement lost the no-grad seed view copy guard')
+`);
+    replacement.mock.restore();
+    await binding.runPythonAsync("del x,y,original,seed,source,root,producer,payload,a,b\ngc.collect()");
+    assert.equal(session.diagnostics().liveTensorHandles, 0);
+  } finally {
+    context.mock.restoreAll(); await binding.close();
+    interpreter.runPython("[globals().pop(name, None) for name in ('torch','gc','x','y','original','seed','source','root','producer','payload','a','b')]; None");
+  }
+});
+
+
+test("Python sum gradients preserve pinned aliases, views and incoming acquisition", { timeout: 20_000 }, async () => {
+  const oracle = JSON.parse(await readFile(new URL("../../fixtures/python-tensor-oracle.json", import.meta.url), "utf8"));
+  const { attachPython } = await import("../../../dist/python.js");
+  const { getTestTensorVersion } = await import("../../../dist/testing.js");
+  const interpreter = await getInterpreter(), binding = await attachPython(interpreter);
+  interpreter.globals.set("inspect_sgd_version", getTestTensorVersion);
+  try { await binding.runPythonAsync(pythonSumGradientAliasChecks(oracle)); }
+  finally {
+    await binding.close();
+    interpreter.runPython("[globals().pop(name, None) for name in ('torch','json','gc','sum_filled','sum_make','sum_sample','sum_error','sum_alias_report','sum_seed_report','sum_empty_promotion','sum_reset_report','sum_reset_partial','probe_version','check_sum_gradient_aliases','inspect_sgd_version')]; None");
+  }
 });

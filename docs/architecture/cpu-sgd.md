@@ -132,6 +132,14 @@ Repeating the same gradient through two parameter slots performs two resets
 and version transitions. Missing gradients are not fabricated and reset does
 not create optimizer state.
 
+Zero fill is distinct from independent-source copy admission. A larger sum
+gradient can repeat one scalar over overlapping logical elements: reset writes
+positive zero once to that scalar family, while ordinary `copy_` still rejects
+an independent source. An empty projection has no elements to fill; it retains
+the scalar payload and advances the shared version. Both paths use ordinary
+persistent publication, causal prerequisites and cache retirement. Previously
+captured calculations retain their old values.
+
 Aliases see the numerical zero write while retaining their own tracking and
 history metadata, including native rebasing. A saved tensor detached in place
 subsequently raises the native detached-save error category, not merely a

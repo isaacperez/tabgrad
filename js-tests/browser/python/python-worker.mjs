@@ -1,6 +1,7 @@
 // Application-owned worker bootstrap used by the real-artifact integration check.
 import { attachPython, servePythonWorker } from "/python.js";
 import { selectCpuProfile } from "/helpers/cpu-profile.mjs";
+import { pythonSumGradientAliasChecks, pythonGradientProvenanceChecks, pythonFunctionalIdentityChecks } from "/helpers/functional-gradient-cases.mjs";
 import { pythonBackwardChecks } from "/helpers/backward-cases.mjs";
 import { pythonSGDChecks } from "/helpers/sgd-cases.mjs";
 import { getTestTensorVersion, getTestRuntimeOwnership, getTestRuntimeSemanticOwnership } from "/testing.js";
@@ -75,6 +76,9 @@ else:
     raise AssertionError('A stale wrapper acquired the new managed context')
 `);
       const backwardOracle = await (await fetch('/helpers/python-copy-oracle.json')).json();
+      await replacement.runPythonAsync(pythonFunctionalIdentityChecks(backwardOracle));
+      await replacement.runPythonAsync(pythonGradientProvenanceChecks(backwardOracle));
+      await replacement.runPythonAsync(pythonSumGradientAliasChecks(backwardOracle));
       await replacement.runPythonAsync(pythonBackwardChecks(backwardOracle));
       await replacement.runPythonAsync(pythonSGDChecks(backwardOracle));
       await replacement.runPythonAsync(pythonSGDHostChecks);

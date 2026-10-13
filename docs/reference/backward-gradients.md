@@ -71,6 +71,12 @@ booleans. Unknown options and malformed handles reject; enabled modes report
 runtime as Python. Repeated reads return the same open handle. Closing an
 exposure retires that lease; a later slot read can reacquire an independently
 closeable exposure. Weak canonical lookup does not keep unused tensors alive.
+Python conversion of a property read owns a fresh lease, independently of a
+JavaScript caller's canonical handle. Reusing an equivalent Python object
+retires only that fresh lease. Any otherwise-lost causal obligations are
+completed before reuse, with conditional waiting/earlier failure and no gradient
+payload readback under the
+[identity contract](../architecture/functional-gradient-identity.md).
 
 Leaf accumulation updates the existing gradient identity and numerical alias
 family without recording new history. Clearing leaves old exposures and aliases
@@ -87,6 +93,12 @@ The condition depends on incoming tensor identity ownership and dense layout,
 not merely numerical storage or operation name. View-derived seeds can share
 the caller's numerical family; direct caller-held seeds, expanded sum seeds and
 contributions with other incoming consumers can require independent clones.
+For total-sum incoming gradients, a scalar, an expanded singleton and an empty
+reshape can have different receiving classes. Rank-zero views can restore a
+dense class; qualifying empty reshapes can allow acquisition of a scalar-derived
+alias. These distinctions remain semantic even after dense execution. The
+[sum-gradient contract](../architecture/sum-gradient-aliases.md) owns their
+examined conditions; they do not expose general strides.
 Cloning preserves captured float32 bits, including signed zero and exceptional
 values. Ordinary first-order gradients are untracked; assigned tracked gradients
 retain their existing history.

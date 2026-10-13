@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const copyAssets = ["helpers/python-copy-cases.mjs", "helpers/python-copy-oracle.json", "helpers/gradient-progress-cases.mjs", "helpers/backward-cases.mjs", "helpers/python-tensor-device.mjs", "helpers/backward-lifetime.mjs", "helpers/sgd-cases.mjs", "helpers/sgd-lifetime.mjs"];
+const copyAssets = ["helpers/functional-gradient-cases.mjs", "helpers/python-copy-cases.mjs", "helpers/python-copy-oracle.json", "helpers/gradient-progress-cases.mjs", "helpers/backward-cases.mjs", "helpers/python-tensor-device.mjs", "helpers/backward-lifetime.mjs", "helpers/sgd-cases.mjs", "helpers/sgd-lifetime.mjs"];
 function readCopyAsset(path, ...arguments_) {
   return String(path).endsWith("/helpers/python-copy-oracle.json")
     ? readFile(new URL("../js-tests/fixtures/python-tensor-oracle.json", import.meta.url), ...arguments_)
@@ -93,7 +93,7 @@ try {
       });
       process.stdout.write(`PASS ${browser.name} Python worker (${jspi} JSPI profile, no isolation)\n`);
     }
-    const isolatedServer = await startBrowserServer(["python/python-worker.html"], {
+    const isolatedServer = await startBrowserServer(["python/python-worker.html", "webgpu/shared-failure.html"], {
       crossOriginIsolation: true, assets: ["python/python-worker.mjs", "helpers/cpu-profile.mjs", "helpers/python-no-grad-cases.mjs", ...copyAssets], readAsset: readCopyAsset,
     });
     try {
@@ -103,6 +103,11 @@ try {
         validateResult(result) { assertPythonWorkerResult(result, "disabled", true); },
       });
       process.stdout.write(`PASS ${browser.name} host admission and close while Python worker is parked\n`);
+      await runBrowserPage({
+        server: isolatedServer, browser, executable, page: "webgpu/shared-failure.html", parameters: {}, version,
+        validateResult(result) { assert.equal(result.ok, true, JSON.stringify(result.error)); },
+      });
+      process.stdout.write(`PASS ${browser.name} shared GPU failure diagnostics\n`);
     } finally { await isolatedServer.close(); }
     for (const cpuVariant of ["scalar", "simd128"]) {
       const variantServer = await startBrowserServer(["python/python-worker.html"], {

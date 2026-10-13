@@ -172,16 +172,47 @@ Tabgrad's large-empty-shape representability policy is not attributed to PyTorch
 The [functional gradient reference](reference/functional-gradients.md) defines
 creation-time tracking and one-output first-order `torch.autograd.grad` through
 addition, multiplication, total sum and contiguous views. Native PyTorch 2.14.0
-`gradientCases` record exact small-number values, shapes and result tracking for
-branches, repeated inputs, leaves/intermediates, nonunit seeds, interior sums,
+`gradientCases` record exact small-number values, shapes, result tracking and
+within-call identity matrices for branches, repeated inputs, leaves/intermediates,
+nonunit seeds, interior sums,
 empty dimensions, hidden computed operands and reusable payload-free history.
 `gradientErrors` record selected nontracking, disconnected-input, seed-shape,
 implicit-seed and consumed-history error categories. Real Pyodide consumes that
 same source and expected result data. The generator uses one intra-operation
 and one inter-operation thread; no NumPy or native runtime is distributed.
 
-Packaged physical GPU fixtures reuse all twelve functional value cases through
-direct JavaScript adaptations and managed Python's unchanged native source with
+The maintained `gradientIdentityCases` additionally record 135 identity,
+shape, initial-value and tracking observations across scalar, empty, vector
+and matrix shapes, distinct/repeated targets, seeds, ordinary views, retained
+slots, copy/branched paths, equal products and separate calls, including no-grad
+seed-view guards. Recorded subsequent mutation observations compare with the
+pinned oracle, including total-sum
+aliases. The additional 170 `sumGradientAliasCases` independently vary scalar,
+singleton, empty and larger shapes; functional/backward reception; seed, result,
+self and same-family writes; active guards; immutable captures and saved versions;
+rank-zero/empty view paths; incoming-seed acquisition; tracked backward seeds
+and acquired-empty promotion. Numeric-reset cases additionally compare assigned
+gradients, receiving views, tracked backward seeds, repeated shared associations,
+immutable prior calculations and progress before a later guarded failure. Empty
+reset preserves the seed payload while advancing its shared version; larger
+reset fills the shared scalar without weakening ordinary copy overlap rejection.
+Sampled private versions use host test instrumentation.
+Direct scalar/SIMD tests additionally cover explicit trailing empty axes,
+optional cache omission, late captures, final projection/association/view
+retirement and cleanup failures before/after physical release. This qualifies
+the bounded [sum-gradient alias domain](architecture/sum-gradient-aliases.md),
+not arbitrary strides, higher-order gradients or universal native errors.
+The 24 `gradientProvenanceCases` record whole-view copy source/base
+contributions and modified/unchanged view result classes, including shapes,
+sampled versions, mutation groups, acquisition and active-copy guards.
+Their unchanged source is shared by actual Python CPU and managed GPU tests.
+Structural tests separately protect JavaScript slots/leases, Python own
+property leases, canonical liveness, compact capacity and cleanup, and
+additional writer completion without gradient readback. These observations
+qualify the stated first-order domain; they are not general native object or
+layout equivalence. Packaged physical GPU fixtures reuse all fifteen
+functional value cases through direct JavaScript adaptations and managed
+Python's unchanged native source with
 explicit device selection. Managed Python also reuses the five error cases and
 the recording/special-view corpus, with JSPI absent. Separate GPU controls
 qualify stored-bit scalar expansion, capability/state exclusions, causal

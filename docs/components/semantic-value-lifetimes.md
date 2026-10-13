@@ -62,6 +62,30 @@ materialization it has; execution can also reclaim private scratch before
 publishing survivors, as described in [CPU invocation storage](cpu-invocation-storage.md).
 The final result does not retain the completed upstream chain.
 
+## Scalar-derived gradient projections
+
+The runtime's incoming expansion owner creates a logical `TensorIdentity`
+projection sharing the scalar `TensorFamily`; one-element results use ordinary
+views. Empty/larger identities resolve their current numerical value through
+`RuntimeSession` into an immutable dense expansion origin. Incoming zero-stride
+and acquisition metadata remain independent of that physical value.
+
+The family holds weak reusable eligibility metadata and at most one optional
+ordinary value pin. Captures hold only weak family/source references and the
+shared version counter, so an old captured expansion cannot retain the family's
+latest mutable graph. The runtime activates the producer's input references
+when the previously unowned origin gains numerical ownership. Backend
+materialization admits/replaces the optional pin using the normal owner budget.
+Final retained projection retirement clears metadata and releases that pin;
+view bases and gradient associations count as retained semantic identities.
+
+Invocation admission retains an eligible expansion output for a possible later
+capture while execution is pending, even when the optional pin is omitted.
+Cache eviction belongs to materialization/retirement and their cleanup handlers;
+merely taking a numerical capture cannot perform fallible backend eviction.
+The [primary scalar-alias contract](../architecture/sum-gradient-aliases.md)
+explains the observable relationships and accepted last-size retention cost.
+
 ## Releasing an owner must release its references
 
 Dependency release first detaches the producer and then releases each input

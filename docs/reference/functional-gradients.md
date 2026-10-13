@@ -57,8 +57,36 @@ torch.autograd.grad(outputs, inputs, grad_outputs=None,
 a nonempty tensor sequence. Every requested input and the output must track,
 and every input must contribute to that output. Inputs may be leaves or
 intermediate results. Repeated inputs return repeated entries in the same
-order. The result is always a tuple of ordinary tensors with the corresponding
-input shapes, dtype and device.
+order. Python preserves the incoming result identity: for an ordinary
+matching-shape `grad(x+y, (x,y), seed)`, both results are that same seed object.
+Repeated requests repeat the corresponding object. A true view can return a
+different object that aliases the same numbers, while independent products
+remain distinct even when their values agree. Separate calls are normalized
+independently; a reused seed preserves its existing identity. Weak canonical
+lookup does not keep earlier results alive.
+
+Each requested occurrence still receives runtime validation and traversal.
+Surplus own leases are retired, and conversion failure attempts every remaining
+retirement while retaining independent causes. Before reusing an existing
+object, Python completes any additional pending/failed writer obligations that
+would otherwise be lost. This can wait or fail at `grad()` before returning;
+it does not read gradient payload or attach the failure to a separately valid
+seed. Common progress can invoke callbacks, so conversion rechecks the live
+canonical object and any replacement lease. The result is always a tuple of
+ordinary tensors with the corresponding input shapes, dtype and device.
+The [identity contract](../architecture/functional-gradient-identity.md)
+explains these separate ownership relationships.
+
+Total-sum functional gradients share the incoming scalar's numerical family
+and version. Scalar and singleton results use ordinary aliases; empty and larger
+results keep a logical scalar projection. Seed writes affect fresh result reads,
+while previously admitted calculations keep their captured values. Larger
+independent-family result copies reject overlapping destinations; self-copy
+and examined equal-shape same-family copies remain valid. Empty copies can
+advance the shared version without changing the scalar's payload.
+[Copy](tensor-copy.md) owns mutation guards and errors; the
+[scalar-alias contract](../architecture/sum-gradient-aliases.md) explains
+receiving views, conditional acquisition and bounded expansion retention.
 
 `grad_outputs` may be a tensor, `None`, or a one-element sequence containing
 either. `None` supplies a unit seed only when the output has exactly one element,
@@ -149,6 +177,7 @@ without consuming independently owned derivative history.
 | `UNSUPPORTED_GRADIENT` | Explicit seed tracks gradients | `RuntimeError` |
 | `SHAPE_MISMATCH` | Seed and output shapes differ | `RuntimeError` |
 | `UNSUPPORTED_DEVICE` | Seed and output devices differ | Existing device-error contract |
+| `OVERLAPPING_COPY` | Independent-family copy into a larger repeated-scalar gradient | `RuntimeError` |
 | `SAVED_VERSION_MISMATCH`, `INPLACE_VIEW` | Changed numeric save or dirty special-view derivative entry | `RuntimeError` |
 | `SAVED_DETACHED` | Saved tensor detached in place, including by numeric SGD gradient reset | `RuntimeError` |
 | `CONSUMED_HISTORY` | Selected derivative needs already consumed saved values | `RuntimeError` |
@@ -161,9 +190,13 @@ occur on ordinary observation and retain normal runtime failure context.
 ## Numerical and execution boundary
 
 Local derivative rules admit ordinary multiplication and addition, metadata
-views and one internal scalar expansion. Expansion copies the stored scalar's
-binary32 bits into a fresh contiguous output, including an empty output,
-through the selected backend. The GPU shader uses unsigned storage copies,
+views and one internal scalar expansion. A one-element sum gradient uses an
+ordinary scalar alias. Empty and larger logical projections materialize the
+captured scalar's binary32 bits into a contiguous execution value through the
+selected backend. One optional last-size value can be reused while projected
+identities remain owned; scalar writes and final projection retirement invalidate
+that reuse. A surviving empty view can retain a previous larger expansion.
+The GPU shader uses unsigned storage copies,
 preserving signed zeros, subnormals, infinities and stored NaN payloads without
 arithmetic or per-element host seeds. Ordinary factory conversion still applies
 before a scalar is stored. It is not a public broadcast operation. The CPU raw export

@@ -95,13 +95,38 @@ def grad(
         if failure.js_error.code == "UNUSED_INPUT":
             raise RuntimeError(str(error)) from error
         _raise_gradient_failure(error)
+    return _wrap_gradients(handles)
+
+
+def _wrap_gradients(
+    handles: Sequence[_bridge.RuntimeTensor],
+) -> tuple[Tensor, ...]:
+    """Present equivalent incoming results once, retaining every occurrence lease."""
+    wrappers: dict[int, Tensor] = {}
+    results: list[Tensor] = []
     try:
-        # Wrappers own the handles; conversion never observes numerical values.
-        return tuple(Tensor._from_handle(handle) for handle in handles)  # pyright: ignore[reportPrivateUsage]
-    except BaseException:
         for handle in handles:
-            handle.close()
-        raise
+            key = _bridge.exposureKey(handle)
+            result = wrappers.get(key)
+            if result is None:
+                result = Tensor._from_handle(handle)  # pyright: ignore[reportPrivateUsage]
+                wrappers[key] = result
+            else:
+                handle.close()
+            results.append(result)
+        return tuple(results)
+    except BaseException as error:
+        failures: list[BaseException] = [error]
+        for handle in handles:
+            try:
+                handle.close()
+            except BaseException as cleanup_error:
+                failures.append(cleanup_error)
+        if len(failures) == 1:
+            raise
+        raise BaseExceptionGroup(
+            "Functional gradient conversion and retirement failed.", failures
+        ) from None
 
 
 __all__ = ["grad"]

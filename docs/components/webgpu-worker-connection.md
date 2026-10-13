@@ -293,6 +293,10 @@ locators such as backend, phase and program slot, and the immediate native
 cause's name and message. The consumer reconstructs a diagnostic cause rather
 than retaining the original exception identity. It does not transfer a live
 exception, nested cause graph, arbitrary object fields, complete program or remote stack.
+The consumer snapshots the validated diagnostic byte range into owned memory
+before UTF-8 decoding, since browser decoders reject shared-buffer views. This
+failure-path copy is bounded by the existing 4096-byte region; it copies no tensor
+payload and does not publish result or drain state.
 Truncation is explicit. The semantic runtime can attach its own invocation
 context to the received diagnostic. Applications must not infer cross-realm
 exception identity from that information.

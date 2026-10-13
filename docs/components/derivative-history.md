@@ -93,8 +93,15 @@ Traversal asks each bound recipe to produce one contribution for each
 needed input edge. Contributions meet through ordinary pure addition. Every
 temporary and returned tensor is nontracking. Temporary handles retire when
 their traversal use ends; admitted numerical producers keep the values needed
-for later execution. Repeated requested inputs receive independently owned
-result views, so closing one cannot invalidate another.
+for later execution. Requested inputs receive independently owned
+result occurrences, so closing one cannot invalidate another. Matching-shape
+passes retain incoming equivalence and view provenance; shape restoration
+creates a real view. Whole-view copy's source contribution owns a dense
+version-zero clone in its source shape. Resolving a modified ordinary view
+creates a version-one base contribution: nonempty results are no-grad views,
+empty results are plain. These choices are governed by the
+[gradient result identity contract](../architecture/functional-gradient-identity.md);
+the runtime supplies the clone/rebase operations through ordinary value owners.
 
 After its successful construction, each traversed multiplication releases all its
 saved pins and marks its saved state consumed. The new pending derivative

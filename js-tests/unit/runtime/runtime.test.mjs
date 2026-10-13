@@ -345,7 +345,8 @@ for (const variant of ["scalar", "simd128"]) {
         assert.deepEqual(gradient.shape, shape);
         x.close(); loss.close();
         assert.deepEqual([...await gradient.toArray()], data.map(() => 3));
-        assert.ok(programs.at(-1).computations.some((item) => item.kind === "expand-f32"));
+        const expanded = programs.at(-1).computations.some((item) => item.kind === "expand-f32");
+        assert.equal(expanded, shape.reduce((count, size) => count * size, 1) !== 1);
         gradient.close();
         assertNoLiveState(session);
         assert.equal(session.diagnostics().liveSavedValues, 0);

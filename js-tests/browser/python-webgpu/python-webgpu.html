@@ -132,7 +132,7 @@ def check_functional_subset():
         except RuntimeError: pass
         else: raise AssertionError(keyword)
     gradient, repeated = torch.autograd.grad(loss, (x, x))
-    assert gradient is not repeated and not gradient.requires_grad and gradient.device == gpu
+    assert gradient is repeated and not gradient.requires_grad and gradient.device == gpu
     assert gradient.tolist() == [4., 6.] and repeated.tolist() == [4., 6.]
     assert x.grad is None
 check_functional_subset()
