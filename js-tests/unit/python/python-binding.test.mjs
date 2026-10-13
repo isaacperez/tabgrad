@@ -3,13 +3,16 @@ import { after, before, mock, test } from "node:test";
 import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { loadPyodide } from "pyodide";
-import { RuntimeSession } from "../../../dist/index.js";
+import { RuntimeSession, Tensor } from "../../../dist/index.js";
+import { PythonRuntimeBridge } from "../../../dist/frontends/python/python-runtime-bridge.js";
 import { getTestExecutionFailureContext } from "../../../dist/testing.js";
 import { assertSumFixture } from "../../fixtures/sum-oracle.mjs";
 import { float32FromBits } from "../../fixtures/sum-oracle.mjs";
 import { pythonGradientProgressChecks } from "../../browser/helpers/gradient-progress-cases.mjs";
 import { pythonBackwardChecks } from "../../browser/helpers/backward-cases.mjs";
 import { pythonBackwardLifetimeChecks } from "../../browser/helpers/backward-lifetime.mjs";
+
+import { pythonFunctionalIdentityChecks } from "../../browser/helpers/functional-gradient-cases.mjs";
 
 let interpreterPromise;
 
@@ -2522,4 +2525,91 @@ test('actual Python finalization routes fallible release to session cleanup', { 
   const { checkPythonFinalizationFault } = await import('../../browser/helpers/backward-lifetime.mjs');
   const interpreter = await getInterpreter(); const binding = await attachPython(interpreter);
   await checkPythonFinalizationFault(binding, WebAssemblyCpuBackend);
+});
+
+
+test("Python functional result identity matches native repeated targets", { timeout: 20_000 }, async () => {
+  const oracle = JSON.parse(await readFile(new URL("../../fixtures/python-tensor-oracle.json", import.meta.url), "utf8"));
+  const { attachPython } = await import("../../../dist/python.js");
+  const interpreter = await getInterpreter(), binding = await attachPython(interpreter);
+  try { await binding.runPythonAsync(pythonFunctionalIdentityChecks(oracle)); }
+  finally { await binding.close(); interpreter.runPython("[globals().pop(name, None) for name in ('torch','json','gc','check_functional_identity')]; None"); }
+});
+
+
+test("Python repeated gradient conversion retires every occurrence after independent close failures", { timeout: 20_000 }, async context => {
+  const { attachPython } = await import("../../../dist/python.js");
+  const interpreter = await getInterpreter(), binding = await attachPython(interpreter);
+  let enabled = false, closes = 0;
+  const original = Tensor.prototype.close;
+  const admit = PythonRuntimeBridge.prototype.grad;
+  context.mock.method(PythonRuntimeBridge.prototype, "grad", function (...args) {
+    const handles = admit.apply(this, args); enabled = true; return handles;
+  });
+  context.mock.method(Tensor.prototype, "close", function () {
+    const result = original.call(this);
+    if (enabled && ++closes <= 2) throw new Error("controlled occurrence close failure " + closes);
+    return result;
+  });
+  interpreter.registerJsModule("_identity_failure", { deactivate: () => { enabled = false; }, count: () => closes });
+  try {
+    await binding.runPythonAsync(`
+import torch, gc, _identity_failure
+def check_occurrence_cleanup():
+    x = torch.tensor([2.,3.], dtype=torch.float32, requires_grad=True)
+    loss = (x*x).sum()
+    failed = False
+    try:
+        result = torch.autograd.grad(loss, (x,x,x))
+    except BaseExceptionGroup as error:
+        failed = True
+        assert len(error.exceptions) >= 2
+        assert 'controlled occurrence close failure 1' in str(error.exceptions[0])
+    finally:
+        _identity_failure.deactivate()
+    assert failed, 'unused repeated handles were not retired during conversion'
+    assert _identity_failure.count() >= 4, 'later handles were not independently retired'
+check_occurrence_cleanup()
+gc.collect()
+d = torch._runtime_session.diagnostics()
+assert d.liveTensorHandles == 0 and d.liveTensorValues == 0 and d.liveSavedValues == 0
+`);
+  } finally { enabled = false; await binding.close(); interpreter.unregisterJsModule("_identity_failure");
+    interpreter.runPython("[globals().pop(name, None) for name in ('torch','gc','_identity_failure','check_occurrence_cleanup','d')]; None"); }
+});
+
+
+test("Python repeated gradient wrapper construction failure closes converted and remaining handles", { timeout: 20_000 }, async () => {
+  const { attachPython } = await import("../../../dist/python.js");
+  const interpreter = await getInterpreter(), binding = await attachPython(interpreter);
+  try { await binding.runPythonAsync(`
+import torch, gc
+from pyodide.ffi import JsException
+def check_identity_constructor(position):
+    x = torch.tensor([2.,3.], dtype=torch.float32, requires_grad=True)
+    y = torch.tensor([5.,7.], dtype=torch.float32, requires_grad=True)
+    loss = (x*y).sum()
+    previous = torch.finalize
+    converted = []
+    def failing_finalizer(value, *args, **kwargs):
+        converted.append(value)
+        if len(converted) == position: raise LookupError('wrapper constructor sentinel')
+        return previous(value, *args, **kwargs)
+    torch.finalize = failing_finalizer
+    try:
+        try: torch.autograd.grad(loss, (x,x,y))
+        except LookupError as error: assert str(error) == 'wrapper constructor sentinel'
+        else: raise AssertionError('construction failure was hidden')
+    finally: torch.finalize = previous
+    for value in converted:
+        try: value.shape
+        except JsException as error: assert error.js_error.code == 'CLOSED_TENSOR'
+        else: raise AssertionError('partially converted handle remains open')
+for position in (1,2):
+    check_identity_constructor(position)
+    gc.collect()
+    d = torch._runtime_session.diagnostics()
+    assert d.liveTensorHandles == 0 and d.liveTensorValues == 0 and d.liveSavedValues == 0
+`); } finally { await binding.close();
+    interpreter.runPython("[globals().pop(name, None) for name in ('torch','gc','JsException','check_identity_constructor','position','d')]; None"); }
 });

@@ -57,8 +57,14 @@ torch.autograd.grad(outputs, inputs, grad_outputs=None,
 a nonempty tensor sequence. Every requested input and the output must track,
 and every input must contribute to that output. Inputs may be leaves or
 intermediate results. Repeated inputs return repeated entries in the same
-order. The result is always a tuple of ordinary tensors with the corresponding
-input shapes, dtype and device.
+order. Within one Python call, repeated requests for the same tensor return the
+same Python result object. Distinct whole-storage views remain distinct targets.
+Gradient calls are normalized independently, without a cross-call cache. This
+presentation does not deduplicate input validation or derivative traversal.
+Surplus runtime occurrence handles are retired, and wrapper-conversion failure
+attempts every remaining retirement while retaining independent failures. The
+result is always a tuple of ordinary tensors with the corresponding input
+shapes, dtype and device.
 
 `grad_outputs` may be a tensor, `None`, or a one-element sequence containing
 either. `None` supplies a unit seed only when the output has exactly one element,

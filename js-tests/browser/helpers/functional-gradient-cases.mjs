@@ -1,3 +1,5 @@
+import { pythonTensorDeviceSource } from "./python-tensor-device.mjs";
+
 function check(condition, message) { if (!condition) throw new Error(message); }
 function flatten(value) { return Array.isArray(value) ? value.flat(Infinity) : [value]; }
 
@@ -11,6 +13,17 @@ export async function checkFunctionalGradients(session, oracle, device) {
     try {
       let results;
       switch (fixture.name) {
+        case "repeated-empty": {
+          const x = tensor([]), loss = own(own(x.mul(x)).sum()); results = grad(loss, [x,x]); break;
+        }
+        case "distinct-view-identities": {
+          const x = tensor([2,3]), v = own(x.view([1,2])), loss = own(own(v.add(v)).sum());
+          results = grad(loss, [v,x]); break;
+        }
+        case "reusable-call-identities": {
+          const x = tensor([2,3]), loss = own(own(x.add(x)).sum());
+          results = [...grad(loss,[x,x]), ...grad(loss,[x,x])]; break;
+        }
         case "branches-repeated-inputs": {
           const x = tensor([2, 3]), y = tensor([5, 7]);
           results = grad(own(own(own(x.mul(y)).add(own(x.mul(x)))).sum()), [x, y, x]); break;
@@ -106,7 +119,7 @@ check_native_gpu_error()
 gc.collect()
 assert session.diagnostics().liveDerivativeNodes == 0
 `);
-  return `import torch, json, gc\nsession = torch._runtime_session\n${[...valueCases, ...errorCases].join("\n")}`;
+  return `import torch, json, gc\nsession = torch._runtime_session\n${[...valueCases, ...errorCases].join("\n")}\n${pythonFunctionalIdentityChecks(oracle, device)}`;
 }
 
 /** Expansion is a storage copy; exact words, including NaN payload, must survive. */
@@ -129,3 +142,38 @@ export async function checkGpuExpansion(session) {
     }
   }
 }
+
+/** Python repeats a result object for repeated logical targets within one call. */
+export function pythonFunctionalIdentityChecks(oracle, device = "cpu") {
+  const checks = oracle.gradientCases.filter(fixture => fixture.resultIdentities).map(fixture => `
+import torch, json, gc
+def check_functional_identity():
+${pythonTensorDeviceSource(fixture.source, device).trimEnd().split("\n").map(line => `    ${line}`).join("\n")}
+    assert [[left is right for right in results] for left in results] == json.loads(${JSON.stringify(JSON.stringify(fixture.resultIdentities))}), ${JSON.stringify(fixture.name)}
+check_functional_identity()
+gc.collect()
+`).join("\n");
+  return checks + pythonTensorDeviceSource(pythonIdentityCohorts, device);
+}
+
+
+const pythonIdentityCohorts = `
+def check_identity_occurrence(count, size):
+    x = torch.tensor([2.] * size, dtype=torch.float32, requires_grad=True)
+    results = torch.autograd.grad((x*x).sum(), tuple(x for _ in range(count)))
+    assert len(results) == count and all(value is results[0] for value in results)
+    assert len(set(results)) == 1 and len(dict.fromkeys(results)) == 1
+    assert results[0].tolist() == [4.] * size
+    alias = results[0].view(size)
+    alias.copy_(torch.tensor([0.] * size, dtype=torch.float32))
+    assert results[-1].tolist() == [0.] * size
+for count, size, repetitions in ([(count,2,4) for count in (1,2,17,257)]
+        + [(17,2,repetitions) for repetitions in (1,8,32)]
+        + [(17,size,4) for size in (0,2,4096)]):
+    for _ in range(repetitions):
+        check_identity_occurrence(count, size)
+        gc.collect()
+        d = torch._runtime_session.diagnostics()
+        assert d.liveTensorHandles == 0 and d.liveTensorValues == 0
+        assert d.liveDerivativeNodes == 0 and d.liveSavedValues == 0
+`;

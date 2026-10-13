@@ -3401,6 +3401,147 @@
   ],
   "gradientCases": [
     {
+      "name": "repeated-empty",
+      "source": "x = torch.tensor([], dtype=torch.float32, requires_grad=True)\nresults = torch.autograd.grad((x*x).sum(), (x,x))",
+      "expected": [
+        [
+          [
+            0
+          ],
+          [],
+          false
+        ],
+        [
+          [
+            0
+          ],
+          [],
+          false
+        ]
+      ],
+      "resultIdentities": [
+        [
+          true,
+          true
+        ],
+        [
+          true,
+          true
+        ]
+      ]
+    },
+    {
+      "name": "distinct-view-identities",
+      "source": "x = torch.tensor([2., 3.], dtype=torch.float32, requires_grad=True)\nv = x.view(1,2)\nresults = torch.autograd.grad((v+v).sum(), (v,x))",
+      "expected": [
+        [
+          [
+            1,
+            2
+          ],
+          [
+            [
+              2.0,
+              2.0
+            ]
+          ],
+          false
+        ],
+        [
+          [
+            2
+          ],
+          [
+            2.0,
+            2.0
+          ],
+          false
+        ]
+      ],
+      "resultIdentities": [
+        [
+          true,
+          false
+        ],
+        [
+          false,
+          true
+        ]
+      ]
+    },
+    {
+      "name": "reusable-call-identities",
+      "source": "x = torch.tensor([2., 3.], dtype=torch.float32, requires_grad=True)\nloss = (x+x).sum()\nresults = torch.autograd.grad(loss,(x,x)) + torch.autograd.grad(loss,(x,x))",
+      "expected": [
+        [
+          [
+            2
+          ],
+          [
+            2.0,
+            2.0
+          ],
+          false
+        ],
+        [
+          [
+            2
+          ],
+          [
+            2.0,
+            2.0
+          ],
+          false
+        ],
+        [
+          [
+            2
+          ],
+          [
+            2.0,
+            2.0
+          ],
+          false
+        ],
+        [
+          [
+            2
+          ],
+          [
+            2.0,
+            2.0
+          ],
+          false
+        ]
+      ],
+      "resultIdentities": [
+        [
+          true,
+          true,
+          false,
+          false
+        ],
+        [
+          true,
+          true,
+          false,
+          false
+        ],
+        [
+          false,
+          false,
+          true,
+          true
+        ],
+        [
+          false,
+          false,
+          true,
+          true
+        ]
+      ]
+    },
+    {
       "name": "branches-repeated-inputs",
       "source": "x = torch.tensor([2., 3.], dtype=torch.float32, requires_grad=True)\ny = torch.tensor([5., 7.], dtype=torch.float32, requires_grad=True)\nloss = (x * y + x * x).sum()\nresults = torch.autograd.grad(loss, (x, y, x))",
       "expected": [
@@ -3434,6 +3575,23 @@
           ],
           false
         ]
+      ],
+      "resultIdentities": [
+        [
+          true,
+          false,
+          true
+        ],
+        [
+          false,
+          true,
+          false
+        ],
+        [
+          true,
+          false,
+          true
+        ]
       ]
     },
     {
@@ -3454,6 +3612,16 @@
           [],
           5.0,
           false
+        ]
+      ],
+      "resultIdentities": [
+        [
+          true,
+          false
+        ],
+        [
+          false,
+          true
         ]
       ]
     },
@@ -3481,6 +3649,16 @@
           ],
           false
         ]
+      ],
+      "resultIdentities": [
+        [
+          true,
+          false
+        ],
+        [
+          false,
+          true
+        ]
       ]
     },
     {
@@ -3497,6 +3675,11 @@
           ],
           false
         ]
+      ],
+      "resultIdentities": [
+        [
+          true
+        ]
       ]
     },
     {
@@ -3512,6 +3695,11 @@
             49.0
           ],
           false
+        ]
+      ],
+      "resultIdentities": [
+        [
+          true
         ]
       ]
     },
@@ -3530,6 +3718,11 @@
           ],
           false
         ]
+      ],
+      "resultIdentities": [
+        [
+          true
+        ]
       ]
     },
     {
@@ -3540,6 +3733,11 @@
           [],
           6.0,
           false
+        ]
+      ],
+      "resultIdentities": [
+        [
+          true
         ]
       ]
     },
@@ -3561,6 +3759,11 @@
             ]
           ],
           false
+        ]
+      ],
+      "resultIdentities": [
+        [
+          true
         ]
       ]
     },
@@ -3588,6 +3791,16 @@
           ],
           false
         ]
+      ],
+      "resultIdentities": [
+        [
+          true,
+          false
+        ],
+        [
+          false,
+          true
+        ]
       ]
     },
     {
@@ -3614,6 +3827,16 @@
           ],
           false
         ]
+      ],
+      "resultIdentities": [
+        [
+          true,
+          false
+        ],
+        [
+          false,
+          true
+        ]
       ]
     },
     {
@@ -3630,6 +3853,11 @@
           ],
           false
         ]
+      ],
+      "resultIdentities": [
+        [
+          true
+        ]
       ]
     },
     {
@@ -3642,6 +3870,11 @@
           ],
           [],
           false
+        ]
+      ],
+      "resultIdentities": [
+        [
+          true
         ]
       ]
     }
