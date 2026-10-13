@@ -431,6 +431,7 @@ def _raise_gradient_failure(error: JsException) -> NoReturn:
         "SAVED_VERSION_MISMATCH",
         "SAVED_DETACHED",
         "INPLACE_VIEW",
+        "OVERLAPPING_COPY",
         "UNSUPPORTED_GRADIENT",
         "UNSUPPORTED_DEVICE",
     }:

@@ -4,7 +4,8 @@ Use `destination.copy_(other, non_blocking=False)` in Python or
 `destination.copy_(source)` in JavaScript to replace an existing tensor's
 numbers while preserving its public identity and whole-storage aliases.
 This reference covers same-session, same-device, exactly equal-shape contiguous CPU or WebGPU
-float32 tensors, including scalar and empty shapes. The
+float32 tensors, including scalar and empty shapes, and the internal
+[sum-gradient scalar aliases](functional-gradients.md). The
 [accepted architecture](../architecture/cpu-tensor-updates.md) owns the design;
 [compatibility evidence](../compatibility.md#python-tensor-evidence) bounds the
 PyTorch claim.
@@ -24,6 +25,16 @@ nonfinite values. Later source updates do not change the copied destination.
 Every accepted call advances the alias family's version once, including
 self-copy, identical values and empty tensors. Version counters are private;
 this interface does not expose native `_version`, `is_leaf` or `grad_fn`.
+
+A functional sum gradient can share a scalar numerical family while repeating
+its value in a larger logical shape. Copying an independent source into that
+larger destination rejects with `OVERLAPPING_COPY` (`RuntimeError` in Python),
+after active gradient/view guards and before shape validation. Exact self-copy
+and the examined equal-shape same-family copy remain accepted. Scalar/singleton
+writes update the seed; empty and larger self/same-family copies advance the
+shared version without replacing the scalar payload. Source controls and
+mandatory effects still apply. This is an internal derivative alias contract,
+not support for arbitrary public strides or broadcasting.
 
 Broadcasting, scalar-number sources, conversion, cross-session copy, arbitrary
 strides/offsets and cross-device transfer are excluded. These include calls that native

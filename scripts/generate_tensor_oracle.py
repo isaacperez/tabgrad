@@ -24,6 +24,8 @@ from gradient_identity_oracle import (
     gradient_provenance_cases,
 )
 from sgd_oracle import sgd_cases
+from sum_gradient_alias_oracle import COMMON as SUM_ALIAS_SOURCE
+from sum_gradient_alias_oracle import sum_gradient_alias_cases
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "js-tests/fixtures/python-tensor-oracle.json"
@@ -1307,6 +1309,8 @@ def generate() -> str:
                 "gradientCases": gradient_cases(oracle),
                 "gradientIdentitySource": GRADIENT_IDENTITY_SOURCE,
                 "gradientIdentityCases": gradient_identity_cases(oracle),
+                "sumGradientAliasSource": SUM_ALIAS_SOURCE,
+                "sumGradientAliasCases": sum_gradient_alias_cases(oracle),
                 "gradientProvenanceSource": GRADIENT_PROVENANCE_SOURCE,
                 "gradientProvenanceCases": gradient_provenance_cases(oracle),
                 "gradientErrors": gradient_errors(oracle),
