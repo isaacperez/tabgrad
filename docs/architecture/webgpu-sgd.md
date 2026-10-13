@@ -132,8 +132,13 @@ phases, synchronous capture expiry and retirement, closure returns, recording
 restoration, registered-exposure checks and earlier progress remain common.
 Do not reconstruct those responsibilities inside the GPU backend.
 
-Numeric reset creates positive zero on the selected gradient device through
-the existing stored-scalar expansion and copy path. Preserve metadata
+Numeric reset creates positive zero on the selected gradient device. An
+ordinary dense gradient uses stored-scalar expansion; a larger scalar-derived
+sum alias fills its shared scalar without admitting an overlapping copy.
+Both use the common persistent-write owner, effects and device-local execution.
+An empty projection preserves the scalar payload and advances its version,
+as specified by [numeric reset](cpu-sgd.md#gradient-reset-changes-associations-or-metadata).
+Preserve metadata
 detachment before the write, caller-mode provenance guards, gradient identity,
 aliases, versions and saved-state errors. Association clearing remains
 different from numerical reset. Existing semantic identity and frontend

@@ -187,11 +187,16 @@ and matrix shapes, distinct/repeated targets, seeds, ordinary views, retained
 slots, copy/branched paths, equal products and separate calls, including no-grad
 seed-view guards. Recorded subsequent mutation observations compare with the
 pinned oracle, including total-sum
-aliases. The additional 133 `sumGradientAliasCases` independently vary scalar,
+aliases. The additional 170 `sumGradientAliasCases` independently vary scalar,
 singleton, empty and larger shapes; functional/backward reception; seed, result,
 self and same-family writes; active guards; immutable captures and saved versions;
 rank-zero/empty view paths; incoming-seed acquisition; tracked backward seeds
-and acquired-empty promotion. Sampled private versions use host test instrumentation.
+and acquired-empty promotion. Numeric-reset cases additionally compare assigned
+gradients, receiving views, tracked backward seeds, repeated shared associations,
+immutable prior calculations and progress before a later guarded failure. Empty
+reset preserves the seed payload while advancing its shared version; larger
+reset fills the shared scalar without weakening ordinary copy overlap rejection.
+Sampled private versions use host test instrumentation.
 Direct scalar/SIMD tests additionally cover explicit trailing empty axes,
 optional cache omission, late captures, final projection/association/view
 retirement and cleanup failures before/after physical release. This qualifies

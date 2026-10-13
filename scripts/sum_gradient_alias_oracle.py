@@ -114,6 +114,58 @@ def sum_empty_promotion(shape, dimensions):
     derived = torch.autograd.grad(gradient.sum(), source)[0]
     report['after'] = sum_sample([gradient, seed, derived])
     return report
+
+
+def sum_reset_report(shape, receiving_view, tracked_seed, occurrences):
+    x = sum_make(shape, 2, True)
+    seed = sum_make((), 3, tracked_seed)
+    if tracked_seed:
+        x.sum().backward(seed, inputs=[x])
+        gradient = x.grad
+    else:
+        gradient = torch.autograd.grad(x.sum(), x, seed)[0]
+    if receiving_view:
+        gradient = gradient.view(shape)
+    prior = gradient * gradient
+    parameters = [x] + [sum_make(shape, 2, True) for _ in range(occurrences - 1)]
+    for parameter in parameters:
+        parameter.grad = gradient
+    optimizer = torch.optim.SGD(parameters, lr=.1)
+    report = {'before': sum_sample([gradient, seed]), 'error': None}
+    try:
+        optimizer.zero_grad(set_to_none=False)
+    except Exception as error:
+        report['error'] = sum_error(error)
+    report['after'] = sum_sample([gradient, seed])
+    report['identity'] = [parameter.grad is gradient for parameter in parameters]
+    report['prior'] = prior.tolist()
+    report['copyError'] = None
+    try:
+        with torch.no_grad():
+            gradient.copy_(sum_make(shape, 0))
+    except Exception as error:
+        report['copyError'] = sum_error(error)
+    report['afterCopy'] = sum_sample([gradient, seed])
+    return report
+
+
+def sum_reset_partial():
+    first = sum_make((2,), 2, True)
+    second = sum_make((2,), 2, True)
+    seed = sum_make((), 3)
+    gradient = torch.autograd.grad(first.sum(), first, seed)[0]
+    guarded = (second * second).view((2,))
+    first.grad = gradient
+    second.grad = guarded
+    optimizer = torch.optim.SGD([first, second], lr=.1)
+    report = {'error': None}
+    try:
+        optimizer.zero_grad(set_to_none=False)
+    except Exception as error:
+        report['error'] = sum_error(error)
+    report['after'] = sum_sample([gradient, seed, guarded])
+    report['identity'] = [first.grad is gradient, second.grad is guarded]
+    return report
 """
 
 
@@ -174,6 +226,23 @@ def sum_gradient_alias_cases(oracle: object) -> list[dict[str, object]]:
                 "expression": f"sum_empty_promotion({shape!r}, {dimensions!r})",
             }
         )
+    for shape in [(), (1,), (1, 1), (0,), (2, 0), (2,), (1, 2), (65,)]:
+        for receiving_view in (False, True):
+            for tracked_seed in (False, True):
+                cases.append(
+                    {
+                        "name": f"reset/{shape}/{receiving_view}/{tracked_seed}",
+                        "expression": f"sum_reset_report({shape!r}, {receiving_view}, {tracked_seed}, 1)",
+                    }
+                )
+    for shape in [(), (0,), (2,), (65,)]:
+        cases.append(
+            {
+                "name": f"reset-repeated/{shape}",
+                "expression": f"sum_reset_report({shape!r}, False, False, 2)",
+            }
+        )
+    cases.append({"name": "reset-partial", "expression": "sum_reset_partial()"})
     namespace: dict[str, object] = {"torch": oracle}
     exec(COMMON + "\ndef probe_version(value):\n    return value._version\n", namespace)
     for case in cases:
