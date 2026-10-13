@@ -96,6 +96,7 @@ ARCHITECTURE_DOCUMENTS = {
     "docs/architecture/cpu-tensor-updates.md",
     "docs/architecture/execution-lifecycle.md",
     "docs/architecture/frontends-runtime-backends.md",
+    "docs/architecture/functional-gradient-identity.md",
     "docs/architecture/glossary.md",
     "docs/architecture/internal-representations.md",
     "docs/architecture/memory-and-performance.md",

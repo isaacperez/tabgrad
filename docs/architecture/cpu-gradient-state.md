@@ -250,7 +250,11 @@ owns semantic identity independently. Finalization retires only the wrapper's
 lease. Canonical lookup must not become a strong root retaining unexposed
 identities forever. Explicit Tabgrad close and later wrapper reacquisition are
 host extensions absent from native tensors; ordinary idempotence and cleanup
-error delivery still apply.
+error delivery still apply. The
+[gradient result identity contract](functional-gradient-identity.md#python-canonicalization-owns-an-exposure)
+defines Python conversion's own lease and conditional completion of additional
+writer obligations before reusing an existing wrapper; direct JavaScript
+canonical getter ownership remains separate.
 
 ## Cycles and bounded ownership
 
