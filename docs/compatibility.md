@@ -172,16 +172,20 @@ Tabgrad's large-empty-shape representability policy is not attributed to PyTorch
 The [functional gradient reference](reference/functional-gradients.md) defines
 creation-time tracking and one-output first-order `torch.autograd.grad` through
 addition, multiplication, total sum and contiguous views. Native PyTorch 2.14.0
-`gradientCases` record exact small-number values, shapes and result tracking for
-branches, repeated inputs, leaves/intermediates, nonunit seeds, interior sums,
+`gradientCases` record exact small-number values, shapes, result tracking and
+within-call identity matrices for branches, repeated inputs, leaves/intermediates,
+nonunit seeds, interior sums,
 empty dimensions, hidden computed operands and reusable payload-free history.
 `gradientErrors` record selected nontracking, disconnected-input, seed-shape,
 implicit-seed and consumed-history error categories. Real Pyodide consumes that
 same source and expected result data. The generator uses one intra-operation
 and one inter-operation thread; no NumPy or native runtime is distributed.
 
-Packaged physical GPU fixtures reuse all twelve functional value cases through
-direct JavaScript adaptations and managed Python's unchanged native source with
+The identity controls cover repeated targets, distinct view targets and reusable
+calls; they do not establish general identity equivalence across distinct
+targets or explicit seeds. Packaged physical GPU fixtures reuse all fifteen
+functional value cases through direct JavaScript adaptations and managed
+Python's unchanged native source with
 explicit device selection. Managed Python also reuses the five error cases and
 the recording/special-view corpus, with JSPI absent. Separate GPU controls
 qualify stored-bit scalar expansion, capability/state exclusions, causal
