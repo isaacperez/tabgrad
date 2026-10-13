@@ -76,7 +76,7 @@ applies native detach/disable-tracking metadata, then writes positive zero.
 Tracked views can reject before writing. Views created in `no_grad` retain
 caller-mode-sensitive guards. Earlier reset progress survives later failure;
 aliases retain their own tracking and history.
-For a sum gradient that repeats one scalar, reset also zeros the shared seed;
+For a sum gradient that shares its incoming scalar, reset also zeros that seed;
 an empty gradient preserves its seed's value while advancing the shared version.
 Independent-source `copy_` into a larger overlapping gradient still rejects.
 
