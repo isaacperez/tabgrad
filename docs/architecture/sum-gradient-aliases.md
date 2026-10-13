@@ -80,7 +80,7 @@ uses capture the updated scalar. Saved-history checks still observe the shared
 mutation version through their ordinary owner.
 
 A larger repeated-scalar destination has overlapping logical elements. A copy
-from a distinct source must preserve native overlap rejection and its ordering
+from an independent family must preserve native overlap rejection and its ordering
 relative to other guards. Exact self-copy and the examined equal-shape,
 same-family exceptions cannot be rejected merely because the destination has
 that layout. Valid empty and self copies can advance a version without changing
