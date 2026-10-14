@@ -217,7 +217,10 @@ retained nonleaves can receive contributions, including at input cutoffs; the
 Same-device [`copy_`](tensor-copy.md) supports functional copy derivatives and
 no-grad parameter updates. [Backward](backward-gradients.md) owns explicit
 accumulation, canonical gradient slots, assignment and clearing on both devices.
-GPU SGD remains unsupported.
+Basic [SGD](sgd.md) consumes assigned gradients on CPU or an enabled WebGPU
+device, with same-device resets and updates. Its supported options and
+[GPU qualification](../compatibility.md#gpu-sgd-evidence) remain bounded by
+that reference.
 Higher-order graphs, JVP, public broadcasting, axis reduction and
 broader dtype/device/layout remain excluded. These exclusions do not change
 ordinary nontracking computation or introduce a backend fallback.
