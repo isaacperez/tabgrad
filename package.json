@@ -2,15 +2,42 @@
   "name": "@tabgrad/tabgrad",
   "version": "0.0.0",
   "private": true,
+  "description": "An independent browser-native tensor runtime with direct JavaScript and optional Python interfaces.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/isaacperez/tabgrad.git"
+  },
   "type": "module",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    }
+    },
+    "./python": {
+      "types": "./dist/python.d.ts",
+      "import": "./dist/python.js"
+    },
+    "./webgpu-worker": "./dist/webgpu-worker.js",
+    "./assets/manifest.json": "./dist/manifest.json",
+    "./assets/wasm/*": "./dist/wasm/*",
+    "./assets/python/*": "./dist/python/*"
   },
   "files": [
-    "dist/"
+    "dist/index.js",
+    "dist/index.d.ts",
+    "dist/python.js",
+    "dist/python.d.ts",
+    "dist/webgpu-worker.js",
+    "dist/webgpu-worker.d.ts",
+    "dist/backends/",
+    "dist/execution/",
+    "dist/frontends/",
+    "dist/runtime/",
+    "dist/shared/",
+    "dist/manifest.json",
+    "dist/wasm/",
+    "dist/python/"
   ],
   "packageManager": "npm@11.1.0",
   "engines": {
@@ -21,6 +48,7 @@
     "build:wasm": "node scripts/build-wasm.mjs",
     "build:javascript": "tsc --project tsconfig.json",
     "build": "npm run clean && npm run build:wasm && npm run build:javascript && node scripts/write-wasm-manifest.mjs && node scripts/build-python.mjs",
+    "package": "node scripts/package-distribution.mjs",
     "check:javascript": "tsc --project tsconfig.json --noEmit",
     "check:python": "node scripts/check-python.mjs",
     "check:rust": "node scripts/check-rust.mjs",
@@ -28,7 +56,9 @@
     "test:unit": "node --test --test-concurrency=2 \"js-tests/unit/**/*.test.mjs\"",
     "test:node": "npm run build && npm run test:unit",
     "test:browser": "node scripts/run-browser-tests.mjs",
-    "test:browser:from-source": "npm run build && npm run test:browser",
+    "test:browser:from-source": "npm run build && npm run test:browser && npm run test:package:browser",
+    "test:package:browser": "node scripts/run-package-browser-tests.mjs",
+    "test:package:webgpu": "node scripts/run-package-browser-tests.mjs --gpu",
     "test:webgpu": "node scripts/run-webgpu-tests.mjs",
     "test:webgpu:from-source": "npm run build && npm run test:webgpu",
     "test:python:webgpu": "node scripts/run-python-webgpu-tests.mjs",

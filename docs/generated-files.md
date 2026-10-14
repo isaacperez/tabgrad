@@ -112,6 +112,16 @@ the Python manifest's location explicitly. The
 [installation component](components/python-package-installation.md) explains
 how source validation and interpreter mutation remain separate.
 
+### Inspected browser package candidate
+
+- **Paths:** `build/browser-package/package/`, its tarball and `candidate.json`, or the caller's new disposable output directory.
+- **Sources:** the clean current commit's build inputs above, `package.json` public entries/content selection, `LICENSE`, and `docs/reference/browser-package.md` for package-facing documentation.
+- **Generator and command:** `npm run package`, using `scripts/package-distribution.mjs`, npm 11.1.0 and the prepared pinned build tools. npm selects and packs files with scripts disabled and offline operation.
+- **Inputs:** one identified clean revision, its unchanged source name/version/private flag and selected files. README links are pinned to that revision. The inventory records exact byte lengths and SHA-256 hashes; it is not a signed provenance claim.
+- **Commit policy:** ignored disposable output, never committed. `package/dist/` is the directly served static payload and contains the same runtime bytes installed from its tarball.
+- **Verification:** discovered Node distribution tests inspect entries, external declarations, content and asset failures; `test:package:browser` exercises the actual candidate in external applications, while `test:package:webgpu` requires the named physical environment. Release publication requires its separate checks and authority.
+- **License and cleanup:** selected Tabgrad files retain Apache-2.0; Pyodide is not included. Remove only the owned candidate directory. Failed preparation removes its own new output and never removes an existing one.
+
 ### Local Pyodide type sources
 
 `scripts/prepare_pyodide_types.py`, called by `npm run check:python`, copies

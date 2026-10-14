@@ -26,6 +26,9 @@ acquisition, device selection, operation limits, lifecycle and GPU diagnostics.
 Use [Python host attachment and worker connection](python-host.md) for the
 application's loading, entry, connection and cleanup contracts.
 
+Use [Browser package installation](browser-package.md) for inspected tarballs,
+public entries, matched static files and the executable JavaScript example.
+
 Use [Python tensor creation, metadata, addition and observation](python-tensors.md) for the
 bounded Python call forms, metadata objects, errors and ownership obligations.
 

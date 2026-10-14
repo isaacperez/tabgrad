@@ -214,6 +214,10 @@ failure with unknown physical completion, not a successful close.
 
 ## Select a manifest location
 
+The [package installation reference](reference/browser-package.md) describes
+public package entries and how an application serves the complete matching
+static tree. Package aliases and browser module URLs have different roles.
+
 By default, `createRuntimeSession()` resolves `manifest.json` relative to the
 imported Tabgrad module. An application that hosts assets elsewhere can provide
 an absolute or module-relative URL:

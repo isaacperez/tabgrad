@@ -9,6 +9,10 @@ Versioning.
 
 ### Added
 
+- Inspected offline browser-package preparation, public JavaScript/Python/worker
+  and resource entries, and qualification in external CPU/GPU applications.
+  Package publication remains a separately authorized release operation (#298).
+
 - Basic CPU `torch.optim.SGD` and direct `session.sgd`, including ordered groups,
   closures, gradient reset and shared runtime ownership. See the
   [SGD reference](docs/reference/sgd.md) for numerical guarantees and exclusions.
