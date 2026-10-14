@@ -46473,6 +46473,2186 @@
       }
     }
   ],
+  "matmulCases": [
+    {
+      "name": "binding:torch.matmul(a,b)",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.,3.],[4.,5.,6.]])\nb = tensor([[7.,8.],[9.,10.],[11.,12.]])\nseed = tensor([[1.,2.],[3.,4.]])\nreport = attempt(lambda: torch.matmul(a,b))\n",
+      "expected": {
+        "tensor": {
+          "shape": [
+            2,
+            2
+          ],
+          "values": [
+            [
+              58.0,
+              64.0
+            ],
+            [
+              139.0,
+              154.0
+            ]
+          ],
+          "tracking": false
+        },
+        "same_a": false,
+        "same_b": false,
+        "warnings": []
+      }
+    },
+    {
+      "name": "binding:torch.matmul(a,other=b)",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.,3.],[4.,5.,6.]])\nb = tensor([[7.,8.],[9.,10.],[11.,12.]])\nseed = tensor([[1.,2.],[3.,4.]])\nreport = attempt(lambda: torch.matmul(a,other=b))\n",
+      "expected": {
+        "tensor": {
+          "shape": [
+            2,
+            2
+          ],
+          "values": [
+            [
+              58.0,
+              64.0
+            ],
+            [
+              139.0,
+              154.0
+            ]
+          ],
+          "tracking": false
+        },
+        "same_a": false,
+        "same_b": false,
+        "warnings": []
+      }
+    },
+    {
+      "name": "binding:torch.matmul(input=a,other=b)",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.,3.],[4.,5.,6.]])\nb = tensor([[7.,8.],[9.,10.],[11.,12.]])\nseed = tensor([[1.,2.],[3.,4.]])\nreport = attempt(lambda: torch.matmul(input=a,other=b))\n",
+      "expected": {
+        "tensor": {
+          "shape": [
+            2,
+            2
+          ],
+          "values": [
+            [
+              58.0,
+              64.0
+            ],
+            [
+              139.0,
+              154.0
+            ]
+          ],
+          "tracking": false
+        },
+        "same_a": false,
+        "same_b": false,
+        "warnings": []
+      }
+    },
+    {
+      "name": "binding:torch.matmul(a,b,out=None)",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.,3.],[4.,5.,6.]])\nb = tensor([[7.,8.],[9.,10.],[11.,12.]])\nseed = tensor([[1.,2.],[3.,4.]])\nreport = attempt(lambda: torch.matmul(a,b,out=None))\n",
+      "expected": {
+        "tensor": {
+          "shape": [
+            2,
+            2
+          ],
+          "values": [
+            [
+              58.0,
+              64.0
+            ],
+            [
+              139.0,
+              154.0
+            ]
+          ],
+          "tracking": false
+        },
+        "same_a": false,
+        "same_b": false,
+        "warnings": []
+      }
+    },
+    {
+      "name": "binding:a.matmul(b)",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.,3.],[4.,5.,6.]])\nb = tensor([[7.,8.],[9.,10.],[11.,12.]])\nseed = tensor([[1.,2.],[3.,4.]])\nreport = attempt(lambda: a.matmul(b))\n",
+      "expected": {
+        "tensor": {
+          "shape": [
+            2,
+            2
+          ],
+          "values": [
+            [
+              58.0,
+              64.0
+            ],
+            [
+              139.0,
+              154.0
+            ]
+          ],
+          "tracking": false
+        },
+        "same_a": false,
+        "same_b": false,
+        "warnings": []
+      }
+    },
+    {
+      "name": "binding:a.matmul(other=b)",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.,3.],[4.,5.,6.]])\nb = tensor([[7.,8.],[9.,10.],[11.,12.]])\nseed = tensor([[1.,2.],[3.,4.]])\nreport = attempt(lambda: a.matmul(other=b))\n",
+      "expected": {
+        "tensor": {
+          "shape": [
+            2,
+            2
+          ],
+          "values": [
+            [
+              58.0,
+              64.0
+            ],
+            [
+              139.0,
+              154.0
+            ]
+          ],
+          "tracking": false
+        },
+        "same_a": false,
+        "same_b": false,
+        "warnings": []
+      }
+    },
+    {
+      "name": "binding:a @ b",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.,3.],[4.,5.,6.]])\nb = tensor([[7.,8.],[9.,10.],[11.,12.]])\nseed = tensor([[1.,2.],[3.,4.]])\nreport = attempt(lambda: a @ b)\n",
+      "expected": {
+        "tensor": {
+          "shape": [
+            2,
+            2
+          ],
+          "values": [
+            [
+              58.0,
+              64.0
+            ],
+            [
+              139.0,
+              154.0
+            ]
+          ],
+          "tracking": false
+        },
+        "same_a": false,
+        "same_b": false,
+        "warnings": []
+      }
+    },
+    {
+      "name": "binding:a.__matmul__(other=b)",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.,3.],[4.,5.,6.]])\nb = tensor([[7.,8.],[9.,10.],[11.,12.]])\nseed = tensor([[1.,2.],[3.,4.]])\nreport = attempt(lambda: a.__matmul__(other=b))\n",
+      "expected": {
+        "tensor": {
+          "shape": [
+            2,
+            2
+          ],
+          "values": [
+            [
+              58.0,
+              64.0
+            ],
+            [
+              139.0,
+              154.0
+            ]
+          ],
+          "tracking": false
+        },
+        "same_a": false,
+        "same_b": false,
+        "warnings": []
+      }
+    },
+    {
+      "name": "binding:torch.Tensor.matmul(a,b)",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.,3.],[4.,5.,6.]])\nb = tensor([[7.,8.],[9.,10.],[11.,12.]])\nseed = tensor([[1.,2.],[3.,4.]])\nreport = attempt(lambda: torch.Tensor.matmul(a,b))\n",
+      "expected": {
+        "tensor": {
+          "shape": [
+            2,
+            2
+          ],
+          "values": [
+            [
+              58.0,
+              64.0
+            ],
+            [
+              139.0,
+              154.0
+            ]
+          ],
+          "tracking": false
+        },
+        "same_a": false,
+        "same_b": false,
+        "warnings": []
+      }
+    },
+    {
+      "name": "binding:torch.Tensor.__matmul__(a,b)",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.,3.],[4.,5.,6.]])\nb = tensor([[7.,8.],[9.,10.],[11.,12.]])\nseed = tensor([[1.,2.],[3.,4.]])\nreport = attempt(lambda: torch.Tensor.__matmul__(a,b))\n",
+      "expected": {
+        "tensor": {
+          "shape": [
+            2,
+            2
+          ],
+          "values": [
+            [
+              58.0,
+              64.0
+            ],
+            [
+              139.0,
+              154.0
+            ]
+          ],
+          "tracking": false
+        },
+        "same_a": false,
+        "same_b": false,
+        "warnings": []
+      }
+    },
+    {
+      "name": "binding:b.__rmatmul__(a)",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.,3.],[4.,5.,6.]])\nb = tensor([[7.,8.],[9.,10.],[11.,12.]])\nseed = tensor([[1.,2.],[3.,4.]])\nreport = attempt(lambda: b.__rmatmul__(a))\n",
+      "expected": {
+        "tensor": {
+          "shape": [
+            2,
+            2
+          ],
+          "values": [
+            [
+              58.0,
+              64.0
+            ],
+            [
+              139.0,
+              154.0
+            ]
+          ],
+          "tracking": false
+        },
+        "same_a": false,
+        "same_b": false,
+        "warnings": []
+      }
+    },
+    {
+      "name": "binding:a.__rmatmul__(other=b)",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.,3.],[4.,5.,6.]])\nb = tensor([[7.,8.],[9.,10.],[11.,12.]])\nseed = tensor([[1.,2.],[3.,4.]])\nreport = attempt(lambda: a.__rmatmul__(other=b))\n",
+      "expected": {
+        "tensor": {
+          "shape": [
+            3,
+            3
+          ],
+          "values": [
+            [
+              39.0,
+              54.0,
+              69.0
+            ],
+            [
+              49.0,
+              68.0,
+              87.0
+            ],
+            [
+              59.0,
+              82.0,
+              105.0
+            ]
+          ],
+          "tracking": false
+        },
+        "same_a": false,
+        "same_b": false,
+        "warnings": []
+      }
+    },
+    {
+      "name": "binding:torch.matmul()",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.,3.],[4.,5.,6.]])\nb = tensor([[7.,8.],[9.,10.],[11.,12.]])\nseed = tensor([[1.,2.],[3.,4.]])\nreport = attempt(lambda: torch.matmul())\n",
+      "expected": {
+        "error": "TypeError",
+        "warnings": []
+      }
+    },
+    {
+      "name": "binding:torch.matmul(a)",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.,3.],[4.,5.,6.]])\nb = tensor([[7.,8.],[9.,10.],[11.,12.]])\nseed = tensor([[1.,2.],[3.,4.]])\nreport = attempt(lambda: torch.matmul(a))\n",
+      "expected": {
+        "error": "TypeError",
+        "warnings": []
+      }
+    },
+    {
+      "name": "binding:torch.matmul(a,b,a)",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.,3.],[4.,5.,6.]])\nb = tensor([[7.,8.],[9.,10.],[11.,12.]])\nseed = tensor([[1.,2.],[3.,4.]])\nreport = attempt(lambda: torch.matmul(a,b,a))\n",
+      "expected": {
+        "error": "TypeError",
+        "warnings": []
+      }
+    },
+    {
+      "name": "binding:torch.matmul(a,b,alpha=1)",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.,3.],[4.,5.,6.]])\nb = tensor([[7.,8.],[9.,10.],[11.,12.]])\nseed = tensor([[1.,2.],[3.,4.]])\nreport = attempt(lambda: torch.matmul(a,b,alpha=1))\n",
+      "expected": {
+        "error": "TypeError",
+        "warnings": []
+      }
+    },
+    {
+      "name": "binding:torch.matmul(a,b,other=b)",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.,3.],[4.,5.,6.]])\nb = tensor([[7.,8.],[9.,10.],[11.,12.]])\nseed = tensor([[1.,2.],[3.,4.]])\nreport = attempt(lambda: torch.matmul(a,b,other=b))\n",
+      "expected": {
+        "error": "TypeError",
+        "warnings": []
+      }
+    },
+    {
+      "name": "binding:torch.matmul(a,b,input=a)",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.,3.],[4.,5.,6.]])\nb = tensor([[7.,8.],[9.,10.],[11.,12.]])\nseed = tensor([[1.,2.],[3.,4.]])\nreport = attempt(lambda: torch.matmul(a,b,input=a))\n",
+      "expected": {
+        "error": "TypeError",
+        "warnings": []
+      }
+    },
+    {
+      "name": "binding:torch.matmul(a,1)",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.,3.],[4.,5.,6.]])\nb = tensor([[7.,8.],[9.,10.],[11.,12.]])\nseed = tensor([[1.,2.],[3.,4.]])\nreport = attempt(lambda: torch.matmul(a,1))\n",
+      "expected": {
+        "error": "TypeError",
+        "warnings": []
+      }
+    },
+    {
+      "name": "binding:torch.matmul(1,b)",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.,3.],[4.,5.,6.]])\nb = tensor([[7.,8.],[9.,10.],[11.,12.]])\nseed = tensor([[1.,2.],[3.,4.]])\nreport = attempt(lambda: torch.matmul(1,b))\n",
+      "expected": {
+        "error": "TypeError",
+        "warnings": []
+      }
+    },
+    {
+      "name": "binding:torch.matmul(a,b,out=1)",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.,3.],[4.,5.,6.]])\nb = tensor([[7.,8.],[9.,10.],[11.,12.]])\nseed = tensor([[1.,2.],[3.,4.]])\nreport = attempt(lambda: torch.matmul(a,b,out=1))\n",
+      "expected": {
+        "error": "TypeError",
+        "warnings": []
+      }
+    },
+    {
+      "name": "binding:a.matmul()",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.,3.],[4.,5.,6.]])\nb = tensor([[7.,8.],[9.,10.],[11.,12.]])\nseed = tensor([[1.,2.],[3.,4.]])\nreport = attempt(lambda: a.matmul())\n",
+      "expected": {
+        "error": "TypeError",
+        "warnings": []
+      }
+    },
+    {
+      "name": "binding:a.matmul(b,out=None)",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.,3.],[4.,5.,6.]])\nb = tensor([[7.,8.],[9.,10.],[11.,12.]])\nseed = tensor([[1.,2.],[3.,4.]])\nreport = attempt(lambda: a.matmul(b,out=None))\n",
+      "expected": {
+        "error": "TypeError",
+        "warnings": []
+      }
+    },
+    {
+      "name": "binding:a.matmul(tensor2=b)",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.,3.],[4.,5.,6.]])\nb = tensor([[7.,8.],[9.,10.],[11.,12.]])\nseed = tensor([[1.,2.],[3.,4.]])\nreport = attempt(lambda: a.matmul(tensor2=b))\n",
+      "expected": {
+        "error": "TypeError",
+        "warnings": []
+      }
+    },
+    {
+      "name": "binding:a.matmul(b,b)",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.,3.],[4.,5.,6.]])\nb = tensor([[7.,8.],[9.,10.],[11.,12.]])\nseed = tensor([[1.,2.],[3.,4.]])\nreport = attempt(lambda: a.matmul(b,b))\n",
+      "expected": {
+        "error": "TypeError",
+        "warnings": []
+      }
+    },
+    {
+      "name": "binding:a.matmul(b,other=b)",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.,3.],[4.,5.,6.]])\nb = tensor([[7.,8.],[9.,10.],[11.,12.]])\nseed = tensor([[1.,2.],[3.,4.]])\nreport = attempt(lambda: a.matmul(b,other=b))\n",
+      "expected": {
+        "error": "TypeError",
+        "warnings": []
+      }
+    },
+    {
+      "name": "binding:torch.Tensor.matmul(None,b)",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.,3.],[4.,5.,6.]])\nb = tensor([[7.,8.],[9.,10.],[11.,12.]])\nseed = tensor([[1.,2.],[3.,4.]])\nreport = attempt(lambda: torch.Tensor.matmul(None,b))\n",
+      "expected": {
+        "error": "TypeError",
+        "warnings": []
+      }
+    },
+    {
+      "name": "binding:a.__matmul__(1)",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.,3.],[4.,5.,6.]])\nb = tensor([[7.,8.],[9.,10.],[11.,12.]])\nseed = tensor([[1.,2.],[3.,4.]])\nreport = attempt(lambda: a.__matmul__(1))\n",
+      "expected": {
+        "not_implemented": true,
+        "warnings": []
+      }
+    },
+    {
+      "name": "binding:a.__rmatmul__(1)",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.,3.],[4.,5.,6.]])\nb = tensor([[7.,8.],[9.,10.],[11.,12.]])\nseed = tensor([[1.,2.],[3.,4.]])\nreport = attempt(lambda: a.__rmatmul__(1))\n",
+      "expected": {
+        "not_implemented": true,
+        "warnings": []
+      }
+    },
+    {
+      "name": "binding:a @ 1",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.,3.],[4.,5.,6.]])\nb = tensor([[7.,8.],[9.,10.],[11.,12.]])\nseed = tensor([[1.,2.],[3.,4.]])\nreport = attempt(lambda: a @ 1)\n",
+      "expected": {
+        "error": "TypeError",
+        "warnings": []
+      }
+    },
+    {
+      "name": "binding:1 @ a",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.,3.],[4.,5.,6.]])\nb = tensor([[7.,8.],[9.,10.],[11.,12.]])\nseed = tensor([[1.,2.],[3.,4.]])\nreport = attempt(lambda: 1 @ a)\n",
+      "expected": {
+        "error": "TypeError",
+        "warnings": []
+      }
+    },
+    {
+      "name": "binding:a.__matmul__(b,out=None)",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.,3.],[4.,5.,6.]])\nb = tensor([[7.,8.],[9.,10.],[11.,12.]])\nseed = tensor([[1.,2.],[3.,4.]])\nreport = attempt(lambda: a.__matmul__(b,out=None))\n",
+      "expected": {
+        "not_implemented": true,
+        "warnings": []
+      }
+    },
+    {
+      "name": "binding:a.__rmatmul__(b,out=None)",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.,3.],[4.,5.,6.]])\nb = tensor([[7.,8.],[9.,10.],[11.,12.]])\nseed = tensor([[1.,2.],[3.,4.]])\nreport = attempt(lambda: a.__rmatmul__(b,out=None))\n",
+      "expected": {
+        "not_implemented": true,
+        "warnings": []
+      }
+    },
+    {
+      "name": "binding:a.__matmul__()",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.,3.],[4.,5.,6.]])\nb = tensor([[7.,8.],[9.,10.],[11.,12.]])\nseed = tensor([[1.,2.],[3.,4.]])\nreport = attempt(lambda: a.__matmul__())\n",
+      "expected": {
+        "not_implemented": true,
+        "warnings": []
+      }
+    },
+    {
+      "name": "binding:a.__matmul__(b,b)",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.,3.],[4.,5.,6.]])\nb = tensor([[7.,8.],[9.,10.],[11.,12.]])\nseed = tensor([[1.,2.],[3.,4.]])\nreport = attempt(lambda: a.__matmul__(b,b))\n",
+      "expected": {
+        "not_implemented": true,
+        "warnings": []
+      }
+    },
+    {
+      "name": "binding:a.__matmul__(b,other=b)",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.,3.],[4.,5.,6.]])\nb = tensor([[7.,8.],[9.,10.],[11.,12.]])\nseed = tensor([[1.,2.],[3.,4.]])\nreport = attempt(lambda: a.__matmul__(b,other=b))\n",
+      "expected": {
+        "not_implemented": true,
+        "warnings": []
+      }
+    },
+    {
+      "name": "operator-assignment",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.,3.],[4.,5.,6.]])\nb = tensor([[7.,8.],[9.,10.],[11.,12.]])\nseed = tensor([[1.,2.],[3.,4.]])\n\nold = a\na @= b\nreport = {'result': state(a), 'old': state(old), 'same': a is old}\n",
+      "expected": {
+        "result": {
+          "shape": [
+            2,
+            2
+          ],
+          "values": [
+            [
+              58.0,
+              64.0
+            ],
+            [
+              139.0,
+              154.0
+            ]
+          ],
+          "tracking": false
+        },
+        "old": {
+          "shape": [
+            2,
+            3
+          ],
+          "values": [
+            [
+              1.0,
+              2.0,
+              3.0
+            ],
+            [
+              4.0,
+              5.0,
+              6.0
+            ]
+          ],
+          "tracking": false
+        },
+        "same": false
+      }
+    },
+    {
+      "name": "output-geometry-overflow",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([]).view(2147483647, 0)\nb = tensor([]).view(0, 2147483647)\nreport = attempt(lambda: a @ b)\n",
+      "expected": {
+        "error": "RuntimeError",
+        "warnings": []
+      }
+    },
+    {
+      "name": "result-dtype-device-identity",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.,3.],[4.,5.,6.]])\nb = tensor([[7.,8.],[9.,10.],[11.,12.]])\nseed = tensor([[1.,2.],[3.,4.]])\n\ny = a @ b\nreport = {'dtype': y.dtype is a.dtype is b.dtype,\n          'device': y.device == a.device == b.device,\n          'distinct': y is not a and y is not b}\n",
+      "expected": {
+        "dtype": true,
+        "device": true,
+        "distinct": true
+      }
+    },
+    {
+      "name": "implicit-seed:0",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([2.] * 0, True).view(0,1)\nb = tensor([[3.]], True)\ny = a @ b\nreport = {'first': attempt(lambda: torch.autograd.grad(y, (a,b))[0]),\n          'retry': attempt(lambda: torch.autograd.grad(y, (a,b), grad_outputs=tensor([1.] * 0).view(0,1))[0])}\n",
+      "expected": {
+        "first": {
+          "error": "RuntimeError",
+          "warnings": []
+        },
+        "retry": {
+          "tensor": {
+            "shape": [
+              0,
+              1
+            ],
+            "values": [],
+            "tracking": false
+          },
+          "same_a": false,
+          "same_b": false,
+          "warnings": []
+        }
+      }
+    },
+    {
+      "name": "implicit-seed:1",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([2.] * 1, True).view(1,1)\nb = tensor([[3.]], True)\ny = a @ b\nreport = {'first': attempt(lambda: torch.autograd.grad(y, (a,b))[0]),\n          'retry': attempt(lambda: torch.autograd.grad(y, (a,b), grad_outputs=tensor([1.] * 1).view(1,1))[0])}\n",
+      "expected": {
+        "first": {
+          "tensor": {
+            "shape": [
+              1,
+              1
+            ],
+            "values": [
+              [
+                3.0
+              ]
+            ],
+            "tracking": false
+          },
+          "same_a": false,
+          "same_b": false,
+          "warnings": []
+        },
+        "retry": {
+          "error": "RuntimeError",
+          "warnings": []
+        }
+      }
+    },
+    {
+      "name": "implicit-seed:2",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([2.] * 2, True).view(2,1)\nb = tensor([[3.]], True)\ny = a @ b\nreport = {'first': attempt(lambda: torch.autograd.grad(y, (a,b))[0]),\n          'retry': attempt(lambda: torch.autograd.grad(y, (a,b), grad_outputs=tensor([1.] * 2).view(2,1))[0])}\n",
+      "expected": {
+        "first": {
+          "error": "RuntimeError",
+          "warnings": []
+        },
+        "retry": {
+          "tensor": {
+            "shape": [
+              2,
+              1
+            ],
+            "values": [
+              [
+                3.0
+              ],
+              [
+                3.0
+              ]
+            ],
+            "tracking": false
+          },
+          "same_a": false,
+          "same_b": false,
+          "warnings": []
+        }
+      }
+    },
+    {
+      "name": "geometry:0/3/2",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([1.] * 0, True).view(0,3)\nb = tensor([2.] * 6, True).view(3,2)\ny = a @ b\nseed = tensor([1.] * 0).view(0,2)\nga, gb = torch.autograd.grad(y, (a,b), grad_outputs=seed)\nreport = {'output': state(y), 'gradients': [state(ga), state(gb)]}\n",
+      "expected": {
+        "output": {
+          "shape": [
+            0,
+            2
+          ],
+          "values": [],
+          "tracking": true
+        },
+        "gradients": [
+          {
+            "shape": [
+              0,
+              3
+            ],
+            "values": [],
+            "tracking": false
+          },
+          {
+            "shape": [
+              3,
+              2
+            ],
+            "values": [
+              [
+                0.0,
+                0.0
+              ],
+              [
+                0.0,
+                0.0
+              ],
+              [
+                0.0,
+                0.0
+              ]
+            ],
+            "tracking": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "geometry:2/0/4",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([1.] * 0, True).view(2,0)\nb = tensor([2.] * 0, True).view(0,4)\ny = a @ b\nseed = tensor([1.] * 8).view(2,4)\nga, gb = torch.autograd.grad(y, (a,b), grad_outputs=seed)\nreport = {'output': state(y), 'gradients': [state(ga), state(gb)]}\n",
+      "expected": {
+        "output": {
+          "shape": [
+            2,
+            4
+          ],
+          "values": [
+            [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ]
+          ],
+          "tracking": true
+        },
+        "gradients": [
+          {
+            "shape": [
+              2,
+              0
+            ],
+            "values": [
+              [],
+              []
+            ],
+            "tracking": false
+          },
+          {
+            "shape": [
+              0,
+              4
+            ],
+            "values": [],
+            "tracking": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "geometry:2/3/0",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([1.] * 6, True).view(2,3)\nb = tensor([2.] * 0, True).view(3,0)\ny = a @ b\nseed = tensor([1.] * 0).view(2,0)\nga, gb = torch.autograd.grad(y, (a,b), grad_outputs=seed)\nreport = {'output': state(y), 'gradients': [state(ga), state(gb)]}\n",
+      "expected": {
+        "output": {
+          "shape": [
+            2,
+            0
+          ],
+          "values": [
+            [],
+            []
+          ],
+          "tracking": true
+        },
+        "gradients": [
+          {
+            "shape": [
+              2,
+              3
+            ],
+            "values": [
+              [
+                0.0,
+                0.0,
+                0.0
+              ],
+              [
+                0.0,
+                0.0,
+                0.0
+              ]
+            ],
+            "tracking": false
+          },
+          {
+            "shape": [
+              3,
+              0
+            ],
+            "values": [
+              [],
+              [],
+              []
+            ],
+            "tracking": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "geometry:0/0/4",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([1.] * 0, True).view(0,0)\nb = tensor([2.] * 0, True).view(0,4)\ny = a @ b\nseed = tensor([1.] * 0).view(0,4)\nga, gb = torch.autograd.grad(y, (a,b), grad_outputs=seed)\nreport = {'output': state(y), 'gradients': [state(ga), state(gb)]}\n",
+      "expected": {
+        "output": {
+          "shape": [
+            0,
+            4
+          ],
+          "values": [],
+          "tracking": true
+        },
+        "gradients": [
+          {
+            "shape": [
+              0,
+              0
+            ],
+            "values": [],
+            "tracking": false
+          },
+          {
+            "shape": [
+              0,
+              4
+            ],
+            "values": [],
+            "tracking": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "geometry:3/0/0",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([1.] * 0, True).view(3,0)\nb = tensor([2.] * 0, True).view(0,0)\ny = a @ b\nseed = tensor([1.] * 0).view(3,0)\nga, gb = torch.autograd.grad(y, (a,b), grad_outputs=seed)\nreport = {'output': state(y), 'gradients': [state(ga), state(gb)]}\n",
+      "expected": {
+        "output": {
+          "shape": [
+            3,
+            0
+          ],
+          "values": [
+            [],
+            [],
+            []
+          ],
+          "tracking": true
+        },
+        "gradients": [
+          {
+            "shape": [
+              3,
+              0
+            ],
+            "values": [
+              [],
+              [],
+              []
+            ],
+            "tracking": false
+          },
+          {
+            "shape": [
+              0,
+              0
+            ],
+            "values": [],
+            "tracking": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "geometry:0/2/0",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([1.] * 0, True).view(0,2)\nb = tensor([2.] * 0, True).view(2,0)\ny = a @ b\nseed = tensor([1.] * 0).view(0,0)\nga, gb = torch.autograd.grad(y, (a,b), grad_outputs=seed)\nreport = {'output': state(y), 'gradients': [state(ga), state(gb)]}\n",
+      "expected": {
+        "output": {
+          "shape": [
+            0,
+            0
+          ],
+          "values": [],
+          "tracking": true
+        },
+        "gradients": [
+          {
+            "shape": [
+              0,
+              2
+            ],
+            "values": [],
+            "tracking": false
+          },
+          {
+            "shape": [
+              2,
+              0
+            ],
+            "values": [
+              [],
+              []
+            ],
+            "tracking": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "geometry:0/0/0",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([1.] * 0, True).view(0,0)\nb = tensor([2.] * 0, True).view(0,0)\ny = a @ b\nseed = tensor([1.] * 0).view(0,0)\nga, gb = torch.autograd.grad(y, (a,b), grad_outputs=seed)\nreport = {'output': state(y), 'gradients': [state(ga), state(gb)]}\n",
+      "expected": {
+        "output": {
+          "shape": [
+            0,
+            0
+          ],
+          "values": [],
+          "tracking": true
+        },
+        "gradients": [
+          {
+            "shape": [
+              0,
+              0
+            ],
+            "values": [],
+            "tracking": false
+          },
+          {
+            "shape": [
+              0,
+              0
+            ],
+            "values": [],
+            "tracking": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "geometry:1/1/1",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([1.] * 1, True).view(1,1)\nb = tensor([2.] * 1, True).view(1,1)\ny = a @ b\nseed = tensor([1.] * 1).view(1,1)\nga, gb = torch.autograd.grad(y, (a,b), grad_outputs=seed)\nreport = {'output': state(y), 'gradients': [state(ga), state(gb)]}\n",
+      "expected": {
+        "output": {
+          "shape": [
+            1,
+            1
+          ],
+          "values": [
+            [
+              2.0
+            ]
+          ],
+          "tracking": true
+        },
+        "gradients": [
+          {
+            "shape": [
+              1,
+              1
+            ],
+            "values": [
+              [
+                2.0
+              ]
+            ],
+            "tracking": false
+          },
+          {
+            "shape": [
+              1,
+              1
+            ],
+            "values": [
+              [
+                1.0
+              ]
+            ],
+            "tracking": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "geometry:3/2/5",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([1.] * 6, True).view(3,2)\nb = tensor([2.] * 10, True).view(2,5)\ny = a @ b\nseed = tensor([1.] * 15).view(3,5)\nga, gb = torch.autograd.grad(y, (a,b), grad_outputs=seed)\nreport = {'output': state(y), 'gradients': [state(ga), state(gb)]}\n",
+      "expected": {
+        "output": {
+          "shape": [
+            3,
+            5
+          ],
+          "values": [
+            [
+              4.0,
+              4.0,
+              4.0,
+              4.0,
+              4.0
+            ],
+            [
+              4.0,
+              4.0,
+              4.0,
+              4.0,
+              4.0
+            ],
+            [
+              4.0,
+              4.0,
+              4.0,
+              4.0,
+              4.0
+            ]
+          ],
+          "tracking": true
+        },
+        "gradients": [
+          {
+            "shape": [
+              3,
+              2
+            ],
+            "values": [
+              [
+                10.0,
+                10.0
+              ],
+              [
+                10.0,
+                10.0
+              ],
+              [
+                10.0,
+                10.0
+              ]
+            ],
+            "tracking": false
+          },
+          {
+            "shape": [
+              2,
+              5
+            ],
+            "values": [
+              [
+                3.0,
+                3.0,
+                3.0,
+                3.0,
+                3.0
+              ],
+              [
+                3.0,
+                3.0,
+                3.0,
+                3.0,
+                3.0
+              ]
+            ],
+            "tracking": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "shape:tensor(2.)/b",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.,3.],[4.,5.,6.]])\nb = tensor([[7.,8.],[9.,10.],[11.,12.]])\nseed = tensor([[1.,2.],[3.,4.]])\nreport = attempt(lambda: tensor(2.) @ b)\n",
+      "expected": {
+        "error": "RuntimeError",
+        "warnings": []
+      }
+    },
+    {
+      "name": "shape:a/tensor(2.)",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.,3.],[4.,5.,6.]])\nb = tensor([[7.,8.],[9.,10.],[11.,12.]])\nseed = tensor([[1.,2.],[3.,4.]])\nreport = attempt(lambda: a @ tensor(2.))\n",
+      "expected": {
+        "error": "RuntimeError",
+        "warnings": []
+      }
+    },
+    {
+      "name": "shape:a/tensor([[1.,2.],[3.,4.]])",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.,3.],[4.,5.,6.]])\nb = tensor([[7.,8.],[9.,10.],[11.,12.]])\nseed = tensor([[1.,2.],[3.,4.]])\nreport = attempt(lambda: a @ tensor([[1.,2.],[3.,4.]]))\n",
+      "expected": {
+        "error": "RuntimeError",
+        "warnings": []
+      }
+    },
+    {
+      "name": "shape:tensor([]).view(0,3)/tensor([]).view(4,0)",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.,3.],[4.,5.,6.]])\nb = tensor([[7.,8.],[9.,10.],[11.,12.]])\nseed = tensor([[1.,2.],[3.,4.]])\nreport = attempt(lambda: tensor([]).view(0,3) @ tensor([]).view(4,0))\n",
+      "expected": {
+        "error": "RuntimeError",
+        "warnings": []
+      }
+    },
+    {
+      "name": "save:0/a/False",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.,3.],[4.,5.,6.]], True)\nb = tensor([[7.,8.],[9.,10.],[11.,12.]], False)\ny = a @ b\nseed = tensor([[1.,2.],[3.,4.]])\nwith torch.no_grad(): a.copy_(a)\ntarget = a if 0 == 0 else b\nreport = attempt(lambda: torch.autograd.grad(y, (target,), grad_outputs=seed)[0])\n",
+      "expected": {
+        "tensor": {
+          "shape": [
+            2,
+            3
+          ],
+          "values": [
+            [
+              23.0,
+              29.0,
+              35.0
+            ],
+            [
+              53.0,
+              67.0,
+              81.0
+            ]
+          ],
+          "tracking": false
+        },
+        "same_a": false,
+        "same_b": false,
+        "warnings": []
+      }
+    },
+    {
+      "name": "save:0/a/True",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.,3.],[4.,5.,6.]], True)\nb = tensor([[7.,8.],[9.,10.],[11.,12.]], True)\ny = a @ b\nseed = tensor([[1.,2.],[3.,4.]])\nwith torch.no_grad(): a.copy_(a)\ntarget = a if 0 == 0 else b\nreport = attempt(lambda: torch.autograd.grad(y, (target,), grad_outputs=seed)[0])\n",
+      "expected": {
+        "error": "RuntimeError",
+        "warnings": []
+      }
+    },
+    {
+      "name": "save:0/b/False",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.,3.],[4.,5.,6.]], True)\nb = tensor([[7.,8.],[9.,10.],[11.,12.]], False)\ny = a @ b\nseed = tensor([[1.,2.],[3.,4.]])\nwith torch.no_grad(): b.copy_(b)\ntarget = a if 0 == 0 else b\nreport = attempt(lambda: torch.autograd.grad(y, (target,), grad_outputs=seed)[0])\n",
+      "expected": {
+        "error": "RuntimeError",
+        "warnings": []
+      }
+    },
+    {
+      "name": "save:0/b/True",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.,3.],[4.,5.,6.]], True)\nb = tensor([[7.,8.],[9.,10.],[11.,12.]], True)\ny = a @ b\nseed = tensor([[1.,2.],[3.,4.]])\nwith torch.no_grad(): b.copy_(b)\ntarget = a if 0 == 0 else b\nreport = attempt(lambda: torch.autograd.grad(y, (target,), grad_outputs=seed)[0])\n",
+      "expected": {
+        "error": "RuntimeError",
+        "warnings": []
+      }
+    },
+    {
+      "name": "save:0/y/False",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.,3.],[4.,5.,6.]], True)\nb = tensor([[7.,8.],[9.,10.],[11.,12.]], False)\ny = a @ b\nseed = tensor([[1.,2.],[3.,4.]])\nwith torch.no_grad(): y.copy_(y)\ntarget = a if 0 == 0 else b\nreport = attempt(lambda: torch.autograd.grad(y, (target,), grad_outputs=seed)[0])\n",
+      "expected": {
+        "tensor": {
+          "shape": [
+            2,
+            3
+          ],
+          "values": [
+            [
+              23.0,
+              29.0,
+              35.0
+            ],
+            [
+              53.0,
+              67.0,
+              81.0
+            ]
+          ],
+          "tracking": false
+        },
+        "same_a": false,
+        "same_b": false,
+        "warnings": []
+      }
+    },
+    {
+      "name": "save:0/y/True",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.,3.],[4.,5.,6.]], True)\nb = tensor([[7.,8.],[9.,10.],[11.,12.]], True)\ny = a @ b\nseed = tensor([[1.,2.],[3.,4.]])\nwith torch.no_grad(): y.copy_(y)\ntarget = a if 0 == 0 else b\nreport = attempt(lambda: torch.autograd.grad(y, (target,), grad_outputs=seed)[0])\n",
+      "expected": {
+        "tensor": {
+          "shape": [
+            2,
+            3
+          ],
+          "values": [
+            [
+              23.0,
+              29.0,
+              35.0
+            ],
+            [
+              53.0,
+              67.0,
+              81.0
+            ]
+          ],
+          "tracking": false
+        },
+        "same_a": false,
+        "same_b": false,
+        "warnings": []
+      }
+    },
+    {
+      "name": "save:1/a/False",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.,3.],[4.,5.,6.]], False)\nb = tensor([[7.,8.],[9.,10.],[11.,12.]], True)\ny = a @ b\nseed = tensor([[1.,2.],[3.,4.]])\nwith torch.no_grad(): a.copy_(a)\ntarget = a if 1 == 0 else b\nreport = attempt(lambda: torch.autograd.grad(y, (target,), grad_outputs=seed)[0])\n",
+      "expected": {
+        "error": "RuntimeError",
+        "warnings": []
+      }
+    },
+    {
+      "name": "save:1/a/True",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.,3.],[4.,5.,6.]], True)\nb = tensor([[7.,8.],[9.,10.],[11.,12.]], True)\ny = a @ b\nseed = tensor([[1.,2.],[3.,4.]])\nwith torch.no_grad(): a.copy_(a)\ntarget = a if 1 == 0 else b\nreport = attempt(lambda: torch.autograd.grad(y, (target,), grad_outputs=seed)[0])\n",
+      "expected": {
+        "error": "RuntimeError",
+        "warnings": []
+      }
+    },
+    {
+      "name": "save:1/b/False",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.,3.],[4.,5.,6.]], False)\nb = tensor([[7.,8.],[9.,10.],[11.,12.]], True)\ny = a @ b\nseed = tensor([[1.,2.],[3.,4.]])\nwith torch.no_grad(): b.copy_(b)\ntarget = a if 1 == 0 else b\nreport = attempt(lambda: torch.autograd.grad(y, (target,), grad_outputs=seed)[0])\n",
+      "expected": {
+        "tensor": {
+          "shape": [
+            3,
+            2
+          ],
+          "values": [
+            [
+              13.0,
+              18.0
+            ],
+            [
+              17.0,
+              24.0
+            ],
+            [
+              21.0,
+              30.0
+            ]
+          ],
+          "tracking": false
+        },
+        "same_a": false,
+        "same_b": false,
+        "warnings": []
+      }
+    },
+    {
+      "name": "save:1/b/True",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.,3.],[4.,5.,6.]], True)\nb = tensor([[7.,8.],[9.,10.],[11.,12.]], True)\ny = a @ b\nseed = tensor([[1.,2.],[3.,4.]])\nwith torch.no_grad(): b.copy_(b)\ntarget = a if 1 == 0 else b\nreport = attempt(lambda: torch.autograd.grad(y, (target,), grad_outputs=seed)[0])\n",
+      "expected": {
+        "error": "RuntimeError",
+        "warnings": []
+      }
+    },
+    {
+      "name": "save:1/y/False",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.,3.],[4.,5.,6.]], False)\nb = tensor([[7.,8.],[9.,10.],[11.,12.]], True)\ny = a @ b\nseed = tensor([[1.,2.],[3.,4.]])\nwith torch.no_grad(): y.copy_(y)\ntarget = a if 1 == 0 else b\nreport = attempt(lambda: torch.autograd.grad(y, (target,), grad_outputs=seed)[0])\n",
+      "expected": {
+        "tensor": {
+          "shape": [
+            3,
+            2
+          ],
+          "values": [
+            [
+              13.0,
+              18.0
+            ],
+            [
+              17.0,
+              24.0
+            ],
+            [
+              21.0,
+              30.0
+            ]
+          ],
+          "tracking": false
+        },
+        "same_a": false,
+        "same_b": false,
+        "warnings": []
+      }
+    },
+    {
+      "name": "save:1/y/True",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.,3.],[4.,5.,6.]], True)\nb = tensor([[7.,8.],[9.,10.],[11.,12.]], True)\ny = a @ b\nseed = tensor([[1.,2.],[3.,4.]])\nwith torch.no_grad(): y.copy_(y)\ntarget = a if 1 == 0 else b\nreport = attempt(lambda: torch.autograd.grad(y, (target,), grad_outputs=seed)[0])\n",
+      "expected": {
+        "tensor": {
+          "shape": [
+            3,
+            2
+          ],
+          "values": [
+            [
+              13.0,
+              18.0
+            ],
+            [
+              17.0,
+              24.0
+            ],
+            [
+              21.0,
+              30.0
+            ]
+          ],
+          "tracking": false
+        },
+        "same_a": false,
+        "same_b": false,
+        "warnings": []
+      }
+    },
+    {
+      "name": "no-grad-view:False/none",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.],[3.,4.]], True)\nb = tensor([[5.,6.],[7.,8.]], False)\nwith torch.no_grad(): v = a.view(2,2)\ny = v @ b\npass\ncall = attempt(lambda: y.sum().backward())\nreport = {'call': call, 'tracking': y.requires_grad, 'a': state(a.grad), 'b': state(b.grad)}\n",
+      "expected": {
+        "call": {
+          "none": true,
+          "warnings": []
+        },
+        "tracking": true,
+        "a": null,
+        "b": null
+      }
+    },
+    {
+      "name": "no-grad-view:False/a",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.],[3.,4.]], True)\nb = tensor([[5.,6.],[7.,8.]], False)\nwith torch.no_grad(): v = a.view(2,2)\ny = v @ b\nwith torch.no_grad(): a.copy_(a)\ncall = attempt(lambda: y.sum().backward())\nreport = {'call': call, 'tracking': y.requires_grad, 'a': state(a.grad), 'b': state(b.grad)}\n",
+      "expected": {
+        "call": {
+          "none": true,
+          "warnings": []
+        },
+        "tracking": true,
+        "a": null,
+        "b": null
+      }
+    },
+    {
+      "name": "no-grad-view:False/b",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.],[3.,4.]], True)\nb = tensor([[5.,6.],[7.,8.]], False)\nwith torch.no_grad(): v = a.view(2,2)\ny = v @ b\nwith torch.no_grad(): b.copy_(b)\ncall = attempt(lambda: y.sum().backward())\nreport = {'call': call, 'tracking': y.requires_grad, 'a': state(a.grad), 'b': state(b.grad)}\n",
+      "expected": {
+        "call": {
+          "none": true,
+          "warnings": []
+        },
+        "tracking": true,
+        "a": null,
+        "b": null
+      }
+    },
+    {
+      "name": "no-grad-view:True/none",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.],[3.,4.]], True)\nb = tensor([[5.,6.],[7.,8.]], True)\nwith torch.no_grad(): v = a.view(2,2)\ny = v @ b\npass\ncall = attempt(lambda: y.sum().backward())\nreport = {'call': call, 'tracking': y.requires_grad, 'a': state(a.grad), 'b': state(b.grad)}\n",
+      "expected": {
+        "call": {
+          "none": true,
+          "warnings": []
+        },
+        "tracking": true,
+        "a": null,
+        "b": {
+          "shape": [
+            2,
+            2
+          ],
+          "values": [
+            [
+              4.0,
+              4.0
+            ],
+            [
+              6.0,
+              6.0
+            ]
+          ],
+          "tracking": false
+        }
+      }
+    },
+    {
+      "name": "no-grad-view:True/a",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.],[3.,4.]], True)\nb = tensor([[5.,6.],[7.,8.]], True)\nwith torch.no_grad(): v = a.view(2,2)\ny = v @ b\nwith torch.no_grad(): a.copy_(a)\ncall = attempt(lambda: y.sum().backward())\nreport = {'call': call, 'tracking': y.requires_grad, 'a': state(a.grad), 'b': state(b.grad)}\n",
+      "expected": {
+        "call": {
+          "error": "RuntimeError",
+          "warnings": []
+        },
+        "tracking": true,
+        "a": null,
+        "b": null
+      }
+    },
+    {
+      "name": "no-grad-view:True/b",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.],[3.,4.]], True)\nb = tensor([[5.,6.],[7.,8.]], True)\nwith torch.no_grad(): v = a.view(2,2)\ny = v @ b\nwith torch.no_grad(): b.copy_(b)\ncall = attempt(lambda: y.sum().backward())\nreport = {'call': call, 'tracking': y.requires_grad, 'a': state(a.grad), 'b': state(b.grad)}\n",
+      "expected": {
+        "call": {
+          "none": true,
+          "warnings": []
+        },
+        "tracking": true,
+        "a": null,
+        "b": {
+          "shape": [
+            2,
+            2
+          ],
+          "values": [
+            [
+              4.0,
+              4.0
+            ],
+            [
+              6.0,
+              6.0
+            ]
+          ],
+          "tracking": false
+        }
+      }
+    },
+    {
+      "name": "repeated-target-and-operands",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.],[3.,4.]], True)\nb = a\nseed = tensor([[1.,2.],[3.,4.]])\ny = a @ a\nga, gb = torch.autograd.grad(y, (a,a), grad_outputs=seed)\nreport = {'same': ga is gb, 'gradient': state(ga), 'leaf_none': a.grad is None}\n",
+      "expected": {
+        "same": true,
+        "gradient": {
+          "shape": [
+            2,
+            2
+          ],
+          "values": [
+            [
+              15.0,
+              25.0
+            ],
+            [
+              25.0,
+              45.0
+            ]
+          ],
+          "tracking": false
+        },
+        "leaf_none": true
+      }
+    },
+    {
+      "name": "persistent-accumulation-reset",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.],[3.,4.]], True)\nb = tensor([[5.,6.],[7.,8.]])\n(a @ b).sum().backward()\ng = a.grad\nfirst = state(g)\n(a @ b).sum().backward()\nsecond = state(g)\nsame = a.grad is g\noptimizer = torch.optim.SGD([a], lr=0.125)\noptimizer.zero_grad(set_to_none=False)\nreset_same = a.grad is g\nzero = state(g)\n(a @ b).sum().backward()\nreport = {'first': first, 'second': second, 'same': same, 'reset_same': reset_same, 'zero': zero, 'after': state(g)}\n",
+      "expected": {
+        "first": {
+          "shape": [
+            2,
+            2
+          ],
+          "values": [
+            [
+              11.0,
+              15.0
+            ],
+            [
+              11.0,
+              15.0
+            ]
+          ],
+          "tracking": false
+        },
+        "second": {
+          "shape": [
+            2,
+            2
+          ],
+          "values": [
+            [
+              22.0,
+              30.0
+            ],
+            [
+              22.0,
+              30.0
+            ]
+          ],
+          "tracking": false
+        },
+        "same": true,
+        "reset_same": true,
+        "zero": {
+          "shape": [
+            2,
+            2
+          ],
+          "values": [
+            [
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0
+            ]
+          ],
+          "tracking": false
+        },
+        "after": {
+          "shape": [
+            2,
+            2
+          ],
+          "values": [
+            [
+              11.0,
+              15.0
+            ],
+            [
+              11.0,
+              15.0
+            ]
+          ],
+          "tracking": false
+        }
+      }
+    },
+    {
+      "name": "per-node-partial-progress",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[2.]], True); b = tensor([[3.]], True)\ngood_a = tensor([[5.]], True); good_b = tensor([[7.]], True)\nbad = a @ b\nwith torch.no_grad(): a.copy_(a)\ngood = good_a @ good_b\nroot = bad.sum() + good.sum()\nfirst = attempt(lambda: root.backward())\nreport = {'first': first, 'a': state(a.grad), 'b': state(b.grad), 'good_a': state(good_a.grad), 'good_b': state(good_b.grad),\n          'retry': attempt(lambda: root.backward())}\n",
+      "expected": {
+        "first": {
+          "error": "RuntimeError",
+          "warnings": []
+        },
+        "a": null,
+        "b": null,
+        "good_a": {
+          "shape": [
+            1,
+            1
+          ],
+          "values": [
+            [
+              7.0
+            ]
+          ],
+          "tracking": false
+        },
+        "good_b": {
+          "shape": [
+            1,
+            1
+          ],
+          "values": [
+            [
+              5.0
+            ]
+          ],
+          "tracking": false
+        },
+        "retry": {
+          "error": "RuntimeError",
+          "warnings": []
+        }
+      }
+    },
+    {
+      "name": "linear-training:2/3/2",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\nx = tensor([0.25] * 6).view(2,3)\nw = tensor([[0.125] * 2 for _ in range(3)], True)\noptimizer = torch.optim.SGD([w], lr=0.125)\nsteps = []\nfor repetition in range(3):\n    optimizer.zero_grad(set_to_none=False)\n    prediction = x @ w\n    loss = (prediction * prediction).sum()\n    loss.backward()\n    optimizer.step()\n    steps.append({'weights': state(w), 'gradient': state(w.grad)})\nreport = {'steps': steps}\n",
+      "expected": {
+        "steps": [
+          {
+            "weights": {
+              "shape": [
+                3,
+                2
+              ],
+              "values": [
+                [
+                  0.11328125,
+                  0.11328125
+                ],
+                [
+                  0.11328125,
+                  0.11328125
+                ],
+                [
+                  0.11328125,
+                  0.11328125
+                ]
+              ],
+              "tracking": true
+            },
+            "gradient": {
+              "shape": [
+                3,
+                2
+              ],
+              "values": [
+                [
+                  0.09375,
+                  0.09375
+                ],
+                [
+                  0.09375,
+                  0.09375
+                ],
+                [
+                  0.09375,
+                  0.09375
+                ]
+              ],
+              "tracking": false
+            }
+          },
+          {
+            "weights": {
+              "shape": [
+                3,
+                2
+              ],
+              "values": [
+                [
+                  0.1026611328125,
+                  0.1026611328125
+                ],
+                [
+                  0.1026611328125,
+                  0.1026611328125
+                ],
+                [
+                  0.1026611328125,
+                  0.1026611328125
+                ]
+              ],
+              "tracking": true
+            },
+            "gradient": {
+              "shape": [
+                3,
+                2
+              ],
+              "values": [
+                [
+                  0.0849609375,
+                  0.0849609375
+                ],
+                [
+                  0.0849609375,
+                  0.0849609375
+                ],
+                [
+                  0.0849609375,
+                  0.0849609375
+                ]
+              ],
+              "tracking": false
+            }
+          },
+          {
+            "weights": {
+              "shape": [
+                3,
+                2
+              ],
+              "values": [
+                [
+                  0.09303665161132812,
+                  0.09303665161132812
+                ],
+                [
+                  0.09303665161132812,
+                  0.09303665161132812
+                ],
+                [
+                  0.09303665161132812,
+                  0.09303665161132812
+                ]
+              ],
+              "tracking": true
+            },
+            "gradient": {
+              "shape": [
+                3,
+                2
+              ],
+              "values": [
+                [
+                  0.076995849609375,
+                  0.076995849609375
+                ],
+                [
+                  0.076995849609375,
+                  0.076995849609375
+                ],
+                [
+                  0.076995849609375,
+                  0.076995849609375
+                ]
+              ],
+              "tracking": false
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "linear-training:0/3/2",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\nx = tensor([0.25] * 0).view(0,3)\nw = tensor([[0.125] * 2 for _ in range(3)], True)\noptimizer = torch.optim.SGD([w], lr=0.125)\nsteps = []\nfor repetition in range(3):\n    optimizer.zero_grad(set_to_none=False)\n    prediction = x @ w\n    loss = (prediction * prediction).sum()\n    loss.backward()\n    optimizer.step()\n    steps.append({'weights': state(w), 'gradient': state(w.grad)})\nreport = {'steps': steps}\n",
+      "expected": {
+        "steps": [
+          {
+            "weights": {
+              "shape": [
+                3,
+                2
+              ],
+              "values": [
+                [
+                  0.125,
+                  0.125
+                ],
+                [
+                  0.125,
+                  0.125
+                ],
+                [
+                  0.125,
+                  0.125
+                ]
+              ],
+              "tracking": true
+            },
+            "gradient": {
+              "shape": [
+                3,
+                2
+              ],
+              "values": [
+                [
+                  0.0,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.0
+                ]
+              ],
+              "tracking": false
+            }
+          },
+          {
+            "weights": {
+              "shape": [
+                3,
+                2
+              ],
+              "values": [
+                [
+                  0.125,
+                  0.125
+                ],
+                [
+                  0.125,
+                  0.125
+                ],
+                [
+                  0.125,
+                  0.125
+                ]
+              ],
+              "tracking": true
+            },
+            "gradient": {
+              "shape": [
+                3,
+                2
+              ],
+              "values": [
+                [
+                  0.0,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.0
+                ]
+              ],
+              "tracking": false
+            }
+          },
+          {
+            "weights": {
+              "shape": [
+                3,
+                2
+              ],
+              "values": [
+                [
+                  0.125,
+                  0.125
+                ],
+                [
+                  0.125,
+                  0.125
+                ],
+                [
+                  0.125,
+                  0.125
+                ]
+              ],
+              "tracking": true
+            },
+            "gradient": {
+              "shape": [
+                3,
+                2
+              ],
+              "values": [
+                [
+                  0.0,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.0
+                ]
+              ],
+              "tracking": false
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "linear-training:17/3/2",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\nx = tensor([0.25] * 51).view(17,3)\nw = tensor([[0.125] * 2 for _ in range(3)], True)\noptimizer = torch.optim.SGD([w], lr=0.125)\nsteps = []\nfor repetition in range(3):\n    optimizer.zero_grad(set_to_none=False)\n    prediction = x @ w\n    loss = (prediction * prediction).sum()\n    loss.backward()\n    optimizer.step()\n    steps.append({'weights': state(w), 'gradient': state(w.grad)})\nreport = {'steps': steps}\n",
+      "expected": {
+        "steps": [
+          {
+            "weights": {
+              "shape": [
+                3,
+                2
+              ],
+              "values": [
+                [
+                  0.025390625,
+                  0.025390625
+                ],
+                [
+                  0.025390625,
+                  0.025390625
+                ],
+                [
+                  0.025390625,
+                  0.025390625
+                ]
+              ],
+              "tracking": true
+            },
+            "gradient": {
+              "shape": [
+                3,
+                2
+              ],
+              "values": [
+                [
+                  0.796875,
+                  0.796875
+                ],
+                [
+                  0.796875,
+                  0.796875
+                ],
+                [
+                  0.796875,
+                  0.796875
+                ]
+              ],
+              "tracking": false
+            }
+          },
+          {
+            "weights": {
+              "shape": [
+                3,
+                2
+              ],
+              "values": [
+                [
+                  0.005157470703125,
+                  0.005157470703125
+                ],
+                [
+                  0.005157470703125,
+                  0.005157470703125
+                ],
+                [
+                  0.005157470703125,
+                  0.005157470703125
+                ]
+              ],
+              "tracking": true
+            },
+            "gradient": {
+              "shape": [
+                3,
+                2
+              ],
+              "values": [
+                [
+                  0.161865234375,
+                  0.161865234375
+                ],
+                [
+                  0.161865234375,
+                  0.161865234375
+                ],
+                [
+                  0.161865234375,
+                  0.161865234375
+                ]
+              ],
+              "tracking": false
+            }
+          },
+          {
+            "weights": {
+              "shape": [
+                3,
+                2
+              ],
+              "values": [
+                [
+                  0.0010476112365722656,
+                  0.0010476112365722656
+                ],
+                [
+                  0.0010476112365722656,
+                  0.0010476112365722656
+                ],
+                [
+                  0.0010476112365722656,
+                  0.0010476112365722656
+                ]
+              ],
+              "tracking": true
+            },
+            "gradient": {
+              "shape": [
+                3,
+                2
+              ],
+              "values": [
+                [
+                  0.032878875732421875,
+                  0.032878875732421875
+                ],
+                [
+                  0.032878875732421875,
+                  0.032878875732421875
+                ],
+                [
+                  0.032878875732421875,
+                  0.032878875732421875
+                ]
+              ],
+              "tracking": false
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "linear-training:2/3/5",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\nx = tensor([0.25] * 6).view(2,3)\nw = tensor([[0.125] * 5 for _ in range(3)], True)\noptimizer = torch.optim.SGD([w], lr=0.125)\nsteps = []\nfor repetition in range(3):\n    optimizer.zero_grad(set_to_none=False)\n    prediction = x @ w\n    loss = (prediction * prediction).sum()\n    loss.backward()\n    optimizer.step()\n    steps.append({'weights': state(w), 'gradient': state(w.grad)})\nreport = {'steps': steps}\n",
+      "expected": {
+        "steps": [
+          {
+            "weights": {
+              "shape": [
+                3,
+                5
+              ],
+              "values": [
+                [
+                  0.11328125,
+                  0.11328125,
+                  0.11328125,
+                  0.11328125,
+                  0.11328125
+                ],
+                [
+                  0.11328125,
+                  0.11328125,
+                  0.11328125,
+                  0.11328125,
+                  0.11328125
+                ],
+                [
+                  0.11328125,
+                  0.11328125,
+                  0.11328125,
+                  0.11328125,
+                  0.11328125
+                ]
+              ],
+              "tracking": true
+            },
+            "gradient": {
+              "shape": [
+                3,
+                5
+              ],
+              "values": [
+                [
+                  0.09375,
+                  0.09375,
+                  0.09375,
+                  0.09375,
+                  0.09375
+                ],
+                [
+                  0.09375,
+                  0.09375,
+                  0.09375,
+                  0.09375,
+                  0.09375
+                ],
+                [
+                  0.09375,
+                  0.09375,
+                  0.09375,
+                  0.09375,
+                  0.09375
+                ]
+              ],
+              "tracking": false
+            }
+          },
+          {
+            "weights": {
+              "shape": [
+                3,
+                5
+              ],
+              "values": [
+                [
+                  0.1026611328125,
+                  0.1026611328125,
+                  0.1026611328125,
+                  0.1026611328125,
+                  0.1026611328125
+                ],
+                [
+                  0.1026611328125,
+                  0.1026611328125,
+                  0.1026611328125,
+                  0.1026611328125,
+                  0.1026611328125
+                ],
+                [
+                  0.1026611328125,
+                  0.1026611328125,
+                  0.1026611328125,
+                  0.1026611328125,
+                  0.1026611328125
+                ]
+              ],
+              "tracking": true
+            },
+            "gradient": {
+              "shape": [
+                3,
+                5
+              ],
+              "values": [
+                [
+                  0.0849609375,
+                  0.0849609375,
+                  0.0849609375,
+                  0.0849609375,
+                  0.0849609375
+                ],
+                [
+                  0.0849609375,
+                  0.0849609375,
+                  0.0849609375,
+                  0.0849609375,
+                  0.0849609375
+                ],
+                [
+                  0.0849609375,
+                  0.0849609375,
+                  0.0849609375,
+                  0.0849609375,
+                  0.0849609375
+                ]
+              ],
+              "tracking": false
+            }
+          },
+          {
+            "weights": {
+              "shape": [
+                3,
+                5
+              ],
+              "values": [
+                [
+                  0.09303665161132812,
+                  0.09303665161132812,
+                  0.09303665161132812,
+                  0.09303665161132812,
+                  0.09303665161132812
+                ],
+                [
+                  0.09303665161132812,
+                  0.09303665161132812,
+                  0.09303665161132812,
+                  0.09303665161132812,
+                  0.09303665161132812
+                ],
+                [
+                  0.09303665161132812,
+                  0.09303665161132812,
+                  0.09303665161132812,
+                  0.09303665161132812,
+                  0.09303665161132812
+                ]
+              ],
+              "tracking": true
+            },
+            "gradient": {
+              "shape": [
+                3,
+                5
+              ],
+              "values": [
+                [
+                  0.076995849609375,
+                  0.076995849609375,
+                  0.076995849609375,
+                  0.076995849609375,
+                  0.076995849609375
+                ],
+                [
+                  0.076995849609375,
+                  0.076995849609375,
+                  0.076995849609375,
+                  0.076995849609375,
+                  0.076995849609375
+                ],
+                [
+                  0.076995849609375,
+                  0.076995849609375,
+                  0.076995849609375,
+                  0.076995849609375,
+                  0.076995849609375
+                ]
+              ],
+              "tracking": false
+            }
+          }
+        ]
+      }
+    }
+  ],
   "copyCases": [
     {
       "name": "stale-child-bypasses-parent-new-child-binds-parent",

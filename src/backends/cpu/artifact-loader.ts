@@ -7,7 +7,8 @@ const CAPABILITY_SUM_FLOAT32 = 2;
 const CAPABILITY_MUL_FLOAT32 = 4;
 const CAPABILITY_EXPAND_FLOAT32 = 8;
 const CAPABILITY_ADD_ALPHA_FLOAT32 = 16;
-const REQUIRED_CAPABILITIES = CAPABILITY_ADD_FLOAT32 | CAPABILITY_SUM_FLOAT32 | CAPABILITY_MUL_FLOAT32 | CAPABILITY_EXPAND_FLOAT32 | CAPABILITY_ADD_ALPHA_FLOAT32;
+const CAPABILITY_MATMUL_FLOAT32 = 32;
+const REQUIRED_CAPABILITIES = CAPABILITY_ADD_FLOAT32 | CAPABILITY_SUM_FLOAT32 | CAPABILITY_MUL_FLOAT32 | CAPABILITY_EXPAND_FLOAT32 | CAPABILITY_ADD_ALPHA_FLOAT32 | CAPABILITY_MATMUL_FLOAT32;
 
 type BackendPreparationPhase =
   | "manifest-fetch"
@@ -62,6 +63,7 @@ export interface KernelExports extends WebAssembly.Exports {
   readonly tabgrad_expand_f32: (inputOffset: number, outputOffset: number, length: number) => number;
   readonly tabgrad_mul_f32: (leftOffset: number, rightOffset: number, outputOffset: number, length: number) => number;
   readonly tabgrad_add_alpha_f32: (leftOffset: number, rightOffset: number, outputOffset: number, length: number, alphaBits: number) => number;
+  readonly tabgrad_matmul_f32: (leftOffset: number, rightOffset: number, outputOffset: number, rows: number, contraction: number, columns: number, flags: number) => number;
 }
 
 interface PreparedCpuArtifact {
@@ -322,17 +324,18 @@ export class CpuArtifactLoader {
     const memory = value.memory as Record<string, unknown> | undefined;
     const variants = value.variants;
     return value.schemaVersion === 1
-      && value.moduleVersion === 5
+      && value.moduleVersion === 6
       && value.abiVersion === ABI_VERSION
       && value.addressWidth === 32
       && value.sharedMemory === false
       && Array.isArray(value.capabilities)
-      && value.capabilities.length === 5
+      && value.capabilities.length === 6
       && value.capabilities[0] === "add-f32"
       && value.capabilities[1] === "sum-f32"
       && value.capabilities[2] === "mul-f32"
       && value.capabilities[3] === "expand-f32"
       && value.capabilities[4] === "add-alpha-f32"
+      && value.capabilities[5] === "matmul-f32"
       && Array.isArray(value.imports)
       && value.imports.length === 1
       && this.#isMemoryImport(value.imports[0])
@@ -412,6 +415,7 @@ export class CpuArtifactLoader {
       "tabgrad_mul_f32",
       "tabgrad_expand_f32",
       "tabgrad_add_alpha_f32",
+      "tabgrad_matmul_f32",
     ]) {
       if (typeof exports[name] !== "function") {
         throw new TabgradError(

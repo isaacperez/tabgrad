@@ -59,13 +59,14 @@ try {
 import torch, gc
 session = torch._runtime_session
 def caught_revocation():
-    x = torch.tensor([float(index % 32) for index in range(65536)], dtype=torch.float32, device='webgpu', requires_grad=${operation === "grad" ? "True" : "False"})
+    x = torch.tensor([float(index % 32) for index in range(65536)], dtype=torch.float32, device='webgpu', requires_grad=${operation === "grad" || operation === "matmul-grad" ? "True" : "False"})
+${operation.startsWith("matmul") ? "    x = x.view(256,256)" : ""}
 ${operation.startsWith("sgd-") ? `    gradient = torch.tensor([1.] * 65536, dtype=torch.float32, device='webgpu')
     x.grad = gradient
     optimizer = torch.optim.SGD([x], lr=0.125)
     ${operation === "sgd-reset" ? "optimizer.zero_grad(False)" : "optimizer.step()"}
     y = ${operation === "sgd-reset" ? "gradient" : "x"}`
-  : `    y = ${operation === "grad" ? "torch.autograd.grad((x * x).sum(), x)[0]" : operation === "sum" ? "x.sum()" : operation === "mul" ? "x * x" : "x + x"}`}
+  : `    y = ${operation === "matmul-grad" ? "torch.autograd.grad((x @ x).sum(), x)[0]" : operation === "matmul" ? "x @ x" : operation === "grad" ? "torch.autograd.grad((x * x).sum(), x)[0]" : operation === "sum" ? "x.sum()" : operation === "mul" ? "x * x" : "x + x"}`}
     try:
         y.tolist()
     except Exception as error:

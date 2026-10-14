@@ -1,7 +1,7 @@
 # Functional first-order gradients
 
 This reference defines differentiation through contiguous CPU or WebGPU float32 addition,
-multiplication, total sum and shape-only views. It is for Python and JavaScript
+multiplication, [2D matrix products](tensor-matmul.md), total sum and shape-only views. It is for Python and JavaScript
 users who need gradients of one output with respect to named inputs. The result
 is a vector-Jacobian product: an incoming tensor weights the output elements,
 and the returned tensors describe that weighted output's sensitivity to each

@@ -289,6 +289,30 @@ class Tensor:
             return NotImplemented
         return left.mul(other)
 
+    def matmul(self, other: object) -> Tensor:
+        """Admit a same-device contiguous 2D float32 matrix product."""
+        return _matrix_product(
+            _require_matmul_input(self), _require_matmul_input(other)
+        )
+
+    def __matmul__(
+        self, *args: object, **kwargs: object
+    ) -> Tensor | NotImplementedType:
+        left = _require_matmul_input(self)
+        other = _matmul_operator_operand(args, kwargs)
+        if not isinstance(other, Tensor):
+            return NotImplemented
+        return _matrix_product(left, _require_matmul_input(other))
+
+    def __rmatmul__(
+        self, *args: object, **kwargs: object
+    ) -> Tensor | NotImplementedType:
+        right = _require_matmul_input(self)
+        other = _matmul_operator_operand(args, kwargs)
+        if not isinstance(other, Tensor):
+            return NotImplemented
+        return _matrix_product(_require_matmul_input(other), right)
+
     def copy_(self: object, other: object, non_blocking: object = False) -> Tensor:
         """Replace this tensor's current value while preserving its identity.
 
@@ -577,6 +601,50 @@ def mul(input: object, other: object, *, out: object = None) -> Tensor:
     return left.mul(other)
 
 
+def matmul(input: object, other: object, *, out: object = None) -> Tensor:
+    """Multiply two matrices out of place; only out=None is supported."""
+    left = _require_matmul_input(input)
+    right = _require_matmul_input(other)
+    if out is not None:
+        if not isinstance(out, Tensor):
+            raise TypeError("matmul out must be a tensor or None.")
+        raise RuntimeError("Tabgrad matrix multiplication requires out=None.")
+    return _matrix_product(left, right)
+
+
+def _require_matmul_input(value: object) -> Tensor:
+    if not isinstance(value, Tensor) or not hasattr(value, "_handle"):
+        raise TypeError("Tabgrad matrix multiplication requires two tensors.")
+    return value
+
+
+def _matmul_operator_operand(
+    args: tuple[object, ...], kwargs: dict[str, object]
+) -> object:
+    """Native direct dunders decline malformed arguments for reflected dispatch."""
+    if len(args) == 1 and not kwargs:
+        return args[0]
+    if not args and kwargs.keys() == {"other"}:
+        return kwargs["other"]
+    return NotImplemented
+
+
+def _matrix_product(left: Tensor, right: Tensor) -> Tensor:
+    try:
+        # Functional, method and operator forms share this opaque bridge transfer.
+        return Tensor._from_handle(left._handle.matmul(right._handle))  # pyright: ignore[reportPrivateUsage]
+    except JsException as error:
+        _raise_view_history_failure(error)
+        failure = cast("_bridge.RuntimeException", error)
+        if failure.js_error.code in ("SHAPE_MISMATCH", "INVALID_SHAPE"):
+            raise RuntimeError(
+                "Matrix multiplication requires compatible 2D shapes."
+            ) from error
+        if failure.js_error.code == "RESOURCE_EXHAUSTED":
+            raise RuntimeError(str(error)) from error
+        raise
+
+
 def _require_mul_input(value: object) -> Tensor:
     """Reject malformed wrappers before reaching the checked runtime handle."""
     if not isinstance(value, Tensor) or not hasattr(value, "_handle"):
@@ -602,6 +670,7 @@ __all__ = [
     "device",
     "dtype",
     "float32",
+    "matmul",
     "mul",
     "no_grad",
     "optim",

@@ -20,7 +20,8 @@ import type { ExecutionBackend, ResidentAllocation, TensorDevice } from "../exec
 import { WebGpuBackend, type WebGpuDiagnostics, type WebGpuExecutionBackend } from "../backends/webgpu/webgpu-backend.js";
 export type { TensorDevice } from "../execution/backend.js";
 import { DerivativeHistory, type DerivativeNode, type DerivativePlan, type DerivativeRecipe } from "./autograd/derivative-history.js";
-import { COPY_DERIVATIVE, COPY_SLICES_DERIVATIVE, REBASED_VIEW_DERIVATIVE, IDENTITY_DERIVATIVE, PASS_DERIVATIVE, MUL_DERIVATIVE, SUM_DERIVATIVE } from "./autograd/derivative-recipes.js";
+import { COPY_DERIVATIVE, COPY_SLICES_DERIVATIVE, REBASED_VIEW_DERIVATIVE, IDENTITY_DERIVATIVE, PASS_DERIVATIVE, MUL_DERIVATIVE, MATMUL_DERIVATIVE, SUM_DERIVATIVE } from "./autograd/derivative-recipes.js";
+import { matrixGeometry } from "../execution/matrix-geometry.js";
 import { copyTensorShape, equalTensorShapes, inferViewShape, tensorElementCount } from "./tensor-shape.js";
 import { createSGD, type SGD, type SGDOptions, type SGDParameterGroup } from "./sgd.js";
 import type { OptimizerCapture, OptimizerLease, OptimizerParameterCapture } from "./optimizer-lease.js";
@@ -309,7 +310,7 @@ interface RuntimeSessionAccess {
   readonly prepare: () => Promise<void>;
   readonly complete: () => Promise<void>;
   readonly observeSynchronously: (state: TensorState) => Float32Array;
-  readonly binary: (definition: EqualShapeBinaryOperationDefinition, left: TensorState, rightHandle: unknown) => Tensor;
+  readonly binary: (definition: BinaryOperationDefinition, left: TensorState, rightHandle: unknown) => Tensor;
   readonly ownership: () => RuntimeOwnership;
   readonly semanticOwnership: () => RuntimeSemanticOwnership;
   readonly copy: (destination: TensorState, source: unknown) => void;
@@ -516,6 +517,13 @@ export class Tensor {
     return runtimeSessionAccess(state.session).binary(MUL_OPERATION, state, right);
   }
 
+  /** Multiply two contiguous float32 matrices, retaining deferred ordinary work. */
+  matmul(right: Tensor): Tensor {
+    const state = requireTensorState(this);
+    if (arguments.length !== 1) throw new TypeError("Tensor.matmul() requires exactly one tensor argument.");
+    return runtimeSessionAccess(state.session).binary(MATMUL_OPERATION, state, right);
+  }
+
   /** Reduce every input element to one rank-zero tensor without observing it. */
   sum(): Tensor {
     const state = requireTensorState(this);
@@ -561,15 +569,16 @@ export interface BackwardOptions {
   readonly createGraph?: boolean;
 }
 
-class EqualShapeBinaryOperationDefinition implements NumericalOperationDefinition {
+class BinaryOperationDefinition implements NumericalOperationDefinition {
   readonly pure = true;
 
   constructor(
-    readonly name: "add" | "mul",
-    readonly provenanceSource: "Tensor.add" | "Tensor.mul",
-    readonly loweredKind: "add-f32" | "mul-f32",
-    readonly description: "addition" | "multiplication",
+    readonly name: "add" | "mul" | "matmul",
+    readonly provenanceSource: "Tensor.add" | "Tensor.mul" | "Tensor.matmul",
+    readonly loweredKind: "add-f32" | "mul-f32" | "matmul-f32",
+    readonly description: "addition" | "multiplication" | "matrix multiplication",
     readonly derivative: DerivativeRecipe,
+    readonly matrixFlags?: number,
   ) {}
 
   admit(
@@ -642,7 +651,21 @@ class EqualShapeBinaryOperationDefinition implements NumericalOperationDefinitio
         },
       );
     }
-    if (!equalTensorShapes(leftValue.shape, rightValue.shape)) {
+    let outputShape = leftValue.shape;
+    if (this.matrixFlags !== undefined) {
+      if (leftValue.shape.length !== 2 || rightValue.shape.length !== 2) {
+        throw new TabgradError("INVALID_SHAPE", "Matrix multiplication supports only two-dimensional inputs.", {
+          operation: this.name, contract: "two-dimensional-inputs", leftShape: leftValue.shape, rightShape: rightValue.shape,
+        });
+      }
+      if (leftValue.shape[this.matrixFlags & 1 ? 0 : 1] !== rightValue.shape[this.matrixFlags & 2 ? 1 : 0]) {
+        throw new TabgradError("SHAPE_MISMATCH", "Matrix contraction dimensions must match.", {
+          operation: this.name, contract: "matrix-contraction", leftShape: leftValue.shape, rightShape: rightValue.shape,
+        });
+      }
+      const geometry = matrixGeometry(leftValue.shape, rightValue.shape, this.matrixFlags);
+      outputShape = Object.freeze([geometry.rows, geometry.columns]);
+    } else if (!equalTensorShapes(leftValue.shape, rightValue.shape)) {
       throw new TabgradError(
         "SHAPE_MISMATCH",
         `Float32 ${this.description} requires equal shapes.`,
@@ -660,9 +683,9 @@ class EqualShapeBinaryOperationDefinition implements NumericalOperationDefinitio
       rightValue,
     ];
     return Object.freeze({
-      record: new OperationRecord(this, inputs),
+      record: new OperationRecord(this, inputs, undefined, this.matrixFlags),
       outputMetadata: Object.freeze({
-        shape: leftValue.shape,
+        shape: outputShape,
         dtype: leftValue.dtype,
         device: leftValue.device,
         layout: leftValue.layout,
@@ -671,11 +694,20 @@ class EqualShapeBinaryOperationDefinition implements NumericalOperationDefinitio
   }
 }
 
-const ADD_OPERATION = Object.freeze(new EqualShapeBinaryOperationDefinition(
+const ADD_OPERATION = Object.freeze(new BinaryOperationDefinition(
   "add", "Tensor.add", "add-f32", "addition", PASS_DERIVATIVE,
 ));
-const MUL_OPERATION = Object.freeze(new EqualShapeBinaryOperationDefinition(
+const MUL_OPERATION = Object.freeze(new BinaryOperationDefinition(
   "mul", "Tensor.mul", "mul-f32", "multiplication", MUL_DERIVATIVE,
+));
+const MATMUL_OPERATION = Object.freeze(new BinaryOperationDefinition(
+  "matmul", "Tensor.matmul", "matmul-f32", "matrix multiplication", MATMUL_DERIVATIVE, 0,
+));
+const MATMUL_LEFT_TRANSPOSED_OPERATION = Object.freeze(new BinaryOperationDefinition(
+  "matmul", "Tensor.matmul", "matmul-f32", "matrix multiplication", MATMUL_DERIVATIVE, 1,
+));
+const MATMUL_RIGHT_TRANSPOSED_OPERATION = Object.freeze(new BinaryOperationDefinition(
+  "matmul", "Tensor.matmul", "matmul-f32", "matrix multiplication", MATMUL_DERIVATIVE, 2,
 ));
 
 class SumOperationDefinition implements NumericalOperationDefinition {
@@ -815,7 +847,7 @@ export class RuntimeSession {
       prepare: () => this.#prepare(),
       complete: () => this.#complete(),
       observeSynchronously: (state: TensorState) => this.#observeSynchronously(state),
-      binary: (definition: EqualShapeBinaryOperationDefinition, left: TensorState, rightHandle: unknown) => (
+      binary: (definition: BinaryOperationDefinition, left: TensorState, rightHandle: unknown) => (
         this.#binary(definition, left, rightHandle)
       ),
       ownership: () => this.#ownership(),
@@ -1503,6 +1535,10 @@ export class RuntimeSession {
       rebase: (value: Tensor, shape: readonly number[]) => this.#rebaseDerivative(value, shape),
       add: (left: Tensor, right: Tensor) => this.#combineIncoming(left, right),
       mul: (left: Tensor, right: Tensor) => this.noGrad(() => left.mul(right)),
+      matmul: (left: Tensor, right: Tensor, transpose: "left" | "right") => this.noGrad(() => this.#binary(
+        transpose === "left" ? MATMUL_LEFT_TRANSPOSED_OPERATION : MATMUL_RIGHT_TRANSPOSED_OPERATION,
+        requireTensorState(left), right,
+      )),
       view: (value: Tensor, shape: readonly number[]) => this.noGrad(() => value.view(shape)),
       pass: (value: Tensor, shape: readonly number[]) => {
         const state = requireTensorState(value);
@@ -1955,10 +1991,20 @@ export class RuntimeSession {
     return result;
   }
 
-  #binary(definition: EqualShapeBinaryOperationDefinition, left: TensorState, rightHandle: unknown): Tensor {
+  #binary(definition: BinaryOperationDefinition, left: TensorState, rightHandle: unknown): Tensor {
     this.#assertOpen();
     const admitted = definition.admit(this, left, rightHandle);
     this.#requireComputation(admitted.record.inputs[0]!, definition);
+    if (definition.matrixFlags !== undefined) {
+      const backend = this.#backendFor(admitted.outputMetadata.device, definition.name);
+      const bytes = tensorElementCount(admitted.outputMetadata.shape) * Float32Array.BYTES_PER_ELEMENT;
+      if (!Number.isSafeInteger(bytes) || bytes > backend.capabilities.maximumTensorBytes) {
+        throw new TabgradError("RESOURCE_EXHAUSTED", "Matrix output exceeds the selected device's tensor limit.", {
+          operation: definition.name, device: admitted.outputMetadata.device, byteLength: bytes,
+          maximumTensorBytes: backend.capabilities.maximumTensorBytes,
+        });
+      }
+    }
     const right = requireTensorState(rightHandle);
     this.#checkCapturedAdmission(admitted.record.inputs, admitted.outputMetadata.shape);
     const history = !this.#recording || (!left.requiresGrad && !right.requiresGrad) ? null

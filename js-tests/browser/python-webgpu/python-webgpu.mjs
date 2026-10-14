@@ -10,6 +10,7 @@ import { pythonGradientProgressChecks } from "/helpers/gradient-progress-cases.m
 import { pythonBackwardChecks, pythonBackwardDeviceSource } from "/helpers/backward-cases.mjs";
 import { pythonBackwardLifetimeChecks } from "/helpers/backward-lifetime.mjs";
 import { pythonSGDChecks } from "/helpers/sgd-cases.mjs";
+import { pythonMatrixChecks, pythonMatrixNumericalChecks } from "/helpers/python-matrix-cases.mjs";
 import { pythonSGDHostChecks } from "/helpers/sgd-lifetime.mjs";
 import { pythonTensorDeviceSource } from "/helpers/python-tensor-device.mjs";
 import { getTestTensorVersion } from "/testing.js";
@@ -67,6 +68,7 @@ addEventListener("message", async ({ data }) => {
         report: session => postMessage({ kind: "sgd-checkpoint", snapshot: gpuSGDCheckpoint(session) }),
       });
       interpreter.registerJsModule("_test_grad", { source: pythonFunctionalGradientChecks(oracle, "webgpu") });
+      interpreter.registerJsModule("_test_matrix", { source: pythonMatrixChecks(oracle, "webgpu") + pythonMatrixNumericalChecks("webgpu") });
       interpreter.registerJsModule("_test_copy", { source: pythonCopyFixtureChecks(oracle, "webgpu") + pythonGradientProgressChecks(oracle, "webgpu") });
       interpreter.registerJsModule("_test_backward", {
         source: pythonBackwardDeviceSource(pythonBackwardChecks(oracle) + pythonBackwardLifetimeChecks, "webgpu"),
@@ -95,6 +97,7 @@ addEventListener("message", async ({ data }) => {
     interpreter.unregisterJsModule("_test_gpu_observers");
     if (data.numericalCorpus) {
       interpreter.unregisterJsModule("_test_grad");
+      interpreter.unregisterJsModule("_test_matrix");
       interpreter.unregisterJsModule("_test_copy");
       interpreter.unregisterJsModule("_test_backward");
       interpreter.unregisterJsModule("_test_sgd");

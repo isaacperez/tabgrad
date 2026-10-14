@@ -558,3 +558,45 @@ cycles retire transient history, captures, controls and counted buffers.
 Results are separate from physical drain and from private device memory.
 These bounded observations do not qualify every GPU/compiler, private VRAM/RSS,
 isolated kernel timing, broader optimizers or full model training.
+
+## Two-dimensional matrix-product evidence
+
+The [matrix reference](reference/tensor-matmul.md) defines dense contiguous
+same-device 2D float32 calls and first-order derivatives. The 80 native
+`matmulCases` from the pinned PyTorch 2.14 oracle record functional/method/direct
+and reflected operator forms, metadata and identity, rank/contraction failures,
+empty geometry, implicit seed rejection without consumption, saved versions,
+special no-grad views, repeated operands/targets, persistent accumulation/reset,
+partial progress/retry and repeated linear-model SGD steps. Packaged Pyodide
+consumes their source and categorical expectations, with an explicit device
+extension for the same-device GPU consumers.
+
+A separate BigInt arithmetic oracle checks the accepted sequential-FMA meaning,
+including underflow, signed zero, overflow, NaN classification and contrary
+native associations. Raw scalar/SIMD and physical direct GPU controls cover
+376 packets, all four internal orientations, contraction/column/workgroup tails
+and complete result lengths. Ordinary public forward and both VJPs additionally
+compare 35,342 stored words across 97 cases, including a dense `65×129×65` product and zero-contraction
+nonempty gradients. Managed Python runs those same exact numerical controls.
+This is bounded sampled conformance, not exhaustive binary32 arithmetic.
+Native fixtures with exactly comparable values do not replace the declared
+conditional finite bound or exceptional differences in
+[the numerical decision](architecture/float32-matrix-product.md).
+
+Runtime/worker controls protect single capture, private packet rejection,
+independent output geometry and raw ranges, capability/profile negotiation,
+producer provenance, status/trap rollback, preparation/encoding failures,
+queued writes, physical drain and unpublished derivative cleanup. Resident
+training and pending-demand cohorts vary M/K/N, repetitions, retained aliases
+and concurrent demands independently; fixed-owner drain checkpoints and final
+retirement distinguish retained user values from completed execution growth.
+They do not measure RSS, physical VRAM, model throughput or other hardware.
+
+The recorded GPU observations concern Chrome 155 and Apple metal-3 nonfallback;
+CPU scalar/SIMD and browser Python have their own consumer checks. They do not
+qualify arbitrary adapters or a release's complete PyTorch support matrix.
+The preexisting Python `view(MAX_SAFE_INTEGER, 0)` transport discrepancy is
+tracked separately in [#291](https://github.com/isaacperez/tabgrad/issues/291);
+the matrix-capacity control uses independently admitted dimensions and does not
+qualify that extreme Python view. Safe large empty metadata in direct JavaScript
+must not be mistaken for that Python qualification.

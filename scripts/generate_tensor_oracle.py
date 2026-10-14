@@ -23,6 +23,7 @@ from gradient_identity_oracle import (
     gradient_identity_cases,
     gradient_provenance_cases,
 )
+from matmul_oracle import matmul_cases
 from sgd_oracle import sgd_cases
 from sum_gradient_alias_oracle import COMMON as SUM_ALIAS_SOURCE
 from sum_gradient_alias_oracle import sum_gradient_alias_cases
@@ -1317,6 +1318,7 @@ def generate() -> str:
                 "gradientProgressCases": gradient_progress_cases(oracle),
                 "backwardCases": backward_cases(oracle),
                 "sgdCases": sgd_cases(oracle),
+                "matmulCases": matmul_cases(oracle),
                 "copyCases": copy_cases(oracle),
                 "noGradCases": no_grad_cases(oracle),
                 "noGradViewCases": no_grad_view_cases(oracle),

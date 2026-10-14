@@ -8,6 +8,8 @@ const CAPABILITY_SUM_F32: u32 = 2;
 const CAPABILITY_MUL_F32: u32 = 4;
 const CAPABILITY_EXPAND_F32: u32 = 8;
 const CAPABILITY_ADD_ALPHA_F32: u32 = 16;
+const CAPABILITY_MATMUL_F32: u32 = 32;
+pub(crate) const STATUS_INVALID_GEOMETRY: u32 = 4;
 pub(crate) const FLOAT_ALIGNMENT: u32 = align_of::<f32>() as u32;
 
 unsafe extern "C" {
@@ -45,6 +47,7 @@ pub extern "C" fn tabgrad_capabilities() -> u32 {
         | CAPABILITY_MUL_F32
         | CAPABILITY_EXPAND_F32
         | CAPABILITY_ADD_ALPHA_F32
+        | CAPABILITY_MATMUL_F32
 }
 
 #[unsafe(no_mangle)]
