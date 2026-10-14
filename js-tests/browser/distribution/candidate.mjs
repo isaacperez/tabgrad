@@ -37,7 +37,7 @@ async function prerequisiteFailure() {
   } catch (error) {
     check(mode === "origin" ? error.name === "SecurityError" : error.code === "UNSUPPORTED_DEVICE",
       "GPU hosting failed for an unexpected reason.");
-    return { rejected: true, code: error.code ?? error.name };
+    return { rejected: true, code: mode === "origin" ? error.name : error.code };
   }
   throw new Error("Unsupported GPU hosting reported success.");
 }

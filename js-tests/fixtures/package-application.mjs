@@ -12,6 +12,7 @@ export function runPackageProcess(command, arguments_, cwd) {
   const result = spawnSync(command, arguments_, { cwd, encoding: "utf8" });
   if (result.error) throw result.error;
   assert.equal(result.status, 0, `${command} failed:\n${result.stdout}\n${result.stderr}`);
+  if (result.stderr !== "") process.stderr.write(result.stderr);
   return result.stdout;
 }
 

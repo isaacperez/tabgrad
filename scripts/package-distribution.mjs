@@ -10,6 +10,7 @@ function run(command, arguments_, cwd) {
   const result = spawnSync(command, arguments_, { cwd, encoding: "utf8" });
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`${command} failed:\n${result.stdout}\n${result.stderr}`);
+  if (result.stderr !== "") process.stderr.write(result.stderr);
   return result.stdout;
 }
 
@@ -48,7 +49,7 @@ async function inventory(directory, files) {
 }
 
 /**
- * Build and inspect a private offline candidate from the current clean commit.
+ * Build and inspect an offline candidate from the current clean commit.
  * The retained package/dist directory is the matching static payload. No
  * registry operation, install, account lookup or package lifecycle is run.
  * A newly created output is owned here and removed if preparation fails;
@@ -65,7 +66,7 @@ async function prepareCandidate(output) {
   await mkdir(dirname(output), { recursive: true });
   await mkdir(output);
   try {
-    run("npm", ["run", "build", "--ignore-scripts"], repository);
+    process.stderr.write(run("npm", ["run", "build", "--ignore-scripts"], repository));
     const cache = join(output, ".npm-cache");
     const packOptions = ["--offline", "--ignore-scripts", "--json", "--cache", cache];
     const selection = packRecord(run("npm", ["pack", "--dry-run", ...packOptions], repository));
