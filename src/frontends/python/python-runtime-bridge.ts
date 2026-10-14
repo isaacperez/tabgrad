@@ -123,6 +123,14 @@ export class PythonRuntimeBridge {
       inputs === null ? undefined : { inputs });
   }
 
+  view(handle: Tensor, shape: readonly (number | bigint)[]): Tensor {
+    // Pyodide may transport built-in Python integers as bigint even inside
+    // the safe-number domain. Normalize representation, not shape admission:
+    // the shared runtime still owns lifecycle, integer-range and count checks.
+    const dimensions = shape.map(dimension => typeof dimension === "bigint" ? Number(dimension) : dimension);
+    return handle.view(dimensions);
+  }
+
   tensorFromBuffer(buffer: PythonBuffer, shape?: readonly number[], requiresGrad = false, device: TensorDevice = "cpu"): Tensor {
     const view = buffer.getBuffer("f32");
     try {

@@ -26,6 +26,8 @@ unambiguous. For example, six elements can become `(2, 3)` or `(-1, 3)`.
 One element can become a scalar; zero elements cannot.
 
 An explicit zero preserves an empty shape, including dimensions after the zero.
+The safe-integer endpoint is inclusive: an empty Python tensor can be viewed as
+`(9007199254740991, 0)` or `(0, 9007199254740991)` without allocating numerical data.
 For empty input, `(-1, 2)` becomes `(0, 2)`, but `(0, -1)` is ambiguous and is
 rejected. Two inferred dimensions, dimensions below `-1`, incompatible counts
 and dimensions outside the runtime's safe-integer range are also rejected.

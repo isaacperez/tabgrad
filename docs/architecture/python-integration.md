@@ -360,12 +360,14 @@ bytecode settings, and cleanup restricted to exact owned modules, registrations,
 files, paths and finders. Host replacements survive; retained old modules stay
 tied to their old closed session.
 
-The private bridge uses protocol 5 with matching builder, loader and
+The private bridge uses protocol 6 with matching builder, loader and
 documentation; schema 1 and Pyodide 314.0.6 remain independent compatibility
-dimensions. Protocol 4 and 5
+dimensions. Protocol 5 and 6
 artifacts must reject each other before Python executes. Migration and rollback
 operate on matching distributions, without a mixed-protocol fallback.
-The package-source map remains unchanged; protocol 5 also requires the private
+The package-source map remains unchanged; protocol 6 includes the private view
+entry that normalizes transported built-in integer representations before the
+shared runtime's lifecycle and shape checks. It also requires the private
 SGD synchronous capture and per-group reset interfaces. Python owns dictionary
 access immediately before each group's reset; the runtime owns current-gradient
 selection, admission and reset transitions. Python retains its own callback

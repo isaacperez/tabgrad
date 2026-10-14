@@ -168,6 +168,16 @@ does not prove storage sharing. Browser fixtures exercise views through both
 the managed Python and direct JavaScript paths. These bounded cases exclude
 dtype reinterpretation and non-contiguous access;
 Tabgrad's large-empty-shape representability policy is not attributed to PyTorch.
+The separate native `emptyViewMetadataCases` cover 24 empty metadata controls:
+2^31, 2^32, 2^53−2 and the inclusive safe-integer endpoint 2^53−1, each with both
+zero-dimension orders and positional/tuple/list calls. Packaged Python and managed
+worker consumers compare exact shape/device metadata and zero element count;
+they check admission without numerical work and release the original wrapper
+before observing a flat empty view. They never construct the enormous nested
+outer list. Separate rejection controls preserve frontend types, runtime
+lifecycle-before-shape errors, unsafe/arbitrarily large integers, inference
+failures and owner counters. Values outside the safe-integer domain remain a
+Tabgrad exclusion even when the native oracle admits them.
 
 The [functional gradient reference](reference/functional-gradients.md) defines
 creation-time tracking and one-output first-order `torch.autograd.grad` through
@@ -595,8 +605,7 @@ They do not measure RSS, physical VRAM, model throughput or other hardware.
 The recorded GPU observations concern Chrome 155 and Apple metal-3 nonfallback;
 CPU scalar/SIMD and browser Python have their own consumer checks. They do not
 qualify arbitrary adapters or a release's complete PyTorch support matrix.
-The preexisting Python `view(MAX_SAFE_INTEGER, 0)` transport discrepancy is
-tracked separately in [#291](https://github.com/isaacperez/tabgrad/issues/291);
-the matrix-capacity control uses independently admitted dimensions and does not
-qualify that extreme Python view. Safe large empty metadata in direct JavaScript
-must not be mistaken for that Python qualification.
+The matrix-capacity control used independently admitted dimensions and did not
+qualify the extreme Python `view(MAX_SAFE_INTEGER, 0)`. Its empty-view metadata
+qualification is recorded separately above; that correction does not establish
+extreme matrix composition or replace the matrix-capacity evidence.

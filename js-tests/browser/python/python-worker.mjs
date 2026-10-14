@@ -5,6 +5,7 @@ import { pythonSumGradientAliasChecks, pythonGradientProvenanceChecks, pythonFun
 import { pythonBackwardChecks } from "/helpers/backward-cases.mjs";
 import { pythonSGDChecks } from "/helpers/sgd-cases.mjs";
 import { pythonMatrixChecks, pythonMatrixNumericalChecks } from "/helpers/python-matrix-cases.mjs";
+import { pythonViewMetadataChecks, pythonViewBoundaryChecks } from "/helpers/python-view-cases.mjs";
 import { getTestTensorVersion, getTestRuntimeOwnership, getTestRuntimeSemanticOwnership } from "/testing.js";
 import { pythonSGDHostChecks, checkPythonSGDFixedOwners, checkPythonSGDTeardown } from "/helpers/sgd-lifetime.mjs";
 import { pythonBackwardLifetimeChecks, checkPythonBackwardFaults, checkPythonBackwardAliasFault, checkPythonFinalizationFault } from "/helpers/backward-lifetime.mjs";
@@ -77,6 +78,8 @@ else:
     raise AssertionError('A stale wrapper acquired the new managed context')
 `);
       const backwardOracle = await (await fetch('/helpers/python-copy-oracle.json')).json();
+      await replacement.runPythonAsync(pythonViewMetadataChecks(backwardOracle));
+      await replacement.runPythonAsync(pythonViewBoundaryChecks());
       await replacement.runPythonAsync(pythonMatrixChecks(backwardOracle));
       await replacement.runPythonAsync(pythonMatrixNumericalChecks());
       await replacement.runPythonAsync(pythonFunctionalIdentityChecks(backwardOracle));

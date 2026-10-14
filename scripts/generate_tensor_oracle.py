@@ -1223,6 +1223,34 @@ def sum_cases(oracle: _OracleModule) -> list[dict[str, object]]:
     return cases
 
 
+def empty_view_metadata_cases(oracle: _OracleModule) -> list[dict[str, object]]:
+    """Observe empty views at integer boundaries without a huge nested output."""
+    cases: list[dict[str, object]] = []
+    for dimension in (2**31, 2**32, 2**53 - 2, 2**53 - 1):
+        for shape in ((dimension, 0), (0, dimension)):
+            positional = ", ".join(str(value) for value in shape)
+            for form, argument in (
+                ("positional", positional),
+                ("tuple", repr(shape)),
+                ("list", repr(list(shape))),
+            ):
+                source = (
+                    "base = torch.tensor([], dtype=torch.float32)\n"
+                    f"result = base.view({argument})\n"
+                )
+                namespace: dict[str, object] = {"torch": oracle}
+                exec(source, namespace)
+                cases.append(
+                    {
+                        "name": f"{shape}-{form}",
+                        "source": source,
+                        "metadata": eval(METADATA, namespace),
+                        "numel": eval("result.numel()", namespace),
+                    }
+                )
+    return cases
+
+
 def generate() -> str:
     # Optional development dependency: the pinned module is imported only when
     # generating fixtures, never by CI consumers or the browser. This protocol
@@ -1325,6 +1353,7 @@ def generate() -> str:
                 "cases": cases,
                 "rankCases": rank_cases,
                 "viewCases": view_cases,
+                "emptyViewMetadataCases": empty_view_metadata_cases(oracle),
                 "errors": errors,
                 "metadataCases": [
                     {"expression": expression, "value": eval(expression, namespace)}
