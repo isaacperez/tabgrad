@@ -16,9 +16,11 @@ public plugin interface or another semantic engine.
 ## What crosses the boundary
 
 The runtime consults immutable backend capabilities during operation admission.
-These describe computation kinds, tracking/functional gradient support and
-maximum tensor extent. Persistent gradient state and updates remain in the
-common runtime's separate CPU domain; a functional capability does not admit them.
+These describe computation kinds, tracking and first-order gradient support,
+and maximum tensor extent. Persistent gradient state and update ordering
+belong to the common runtime on CPU and WebGPU; their numerical work stays on
+the selected device. The [backward](../reference/backward-gradients.md) and
+[basic SGD](../reference/sgd.md) references define their support and limits.
 Preparation validates the same computation domain; it does not reinterpret
 an unsupported operation or select a fallback implementation.
 
