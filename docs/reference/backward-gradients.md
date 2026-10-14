@@ -148,6 +148,7 @@ pending work, rather than completed call count. Internal tests count these
 occurrences; public diagnostics retain their established shape. Logical counters
 establish no timing or total process-memory guarantee.
 
-GPU optimizers, public retention hooks, higher-order graphs, JVP,
+Basic [SGD](sgd.md) consumes these gradients on CPU or enabled WebGPU.
+Broader optimizers and modes, public retention hooks, higher-order graphs, JVP,
 broader dtypes/layouts, cross-device transfers and general broadcasting
 remain outside this boundary.
