@@ -353,6 +353,9 @@ checks do not depend on shell activation or an unprepared global interpreter.
 | Check maintained Python types | `npm run check:python` | Prepared Node/npm environment and `.venv`; validates the isolated Python 3.11/PyYAML environment, exposes installed Pyodide type sources, then runs locked Pyright with `pyrightconfig.json`; does not execute browser Python modules or install packages |
 | Expose installed Pyodide type sources | `.venv/bin/python -I scripts/prepare_pyodide_types.py` | Reads the locked Pyodide standard-library archive and writes only its upstream Python modules under ignored `node_modules/pyodide/python-types/`; no download, installation or import of browser modules; included in `check:python` |
 | Validate repository policies and structure | `.venv/bin/python scripts/check_repository.py` | The prepared repository tooling environment |
+| Prepare an inspected browser package candidate | `npm run package` | Clean identified source; prepared pinned Node/npm/TypeScript/Rust environment; rebuilds, stages selected files, writes an offline tarball and `candidate.json`; no install, lifecycle scripts, registry publication or account access |
+| Qualify the candidate in external browser applications | `npm run test:package:browser` | Prepared build and Chrome/Firefox (or `TABGRAD_BROWSER`); requires clean source; builds a disposable candidate, installs its tarball offline with scripts disabled, serves relocated files and copied pinned Pyodide, executes the packaged README example and Python CPU/hosting rejection controls; selected browser CI runs this after the existing browser suite |
+| Qualify managed GPU use of the external candidate | `npm run test:package:webgpu` | Same clean prepared environment, plus a real nonfallback WebGPU browser (Chrome by default); effective secure isolation, application-owned interpreter/physical workers, no JSPI; checks result/gradient, shared runtime identity, drain and cross-origin worker rejection; local hardware qualification, no interpreter/download/registry access |
 | Test the repository validator | `.venv/bin/python scripts/run_tests.py` | The prepared repository tooling environment |
 | Select CI execution applicability | `node scripts/validation-scope.mjs` | Prepared Node.js and Git; reads `TABGRAD_VALIDATION_EVENT`, `TABGRAD_VALIDATION_BASE` and `TABGRAD_VALIDATION_HEAD`; compares the checked-out candidate for PRs, otherwise selects full coverage; prints categorical JSON and appends flags to `GITHUB_OUTPUT` only when set; no build or installation |
 | Test CI applicability independently | `node --test --test-concurrency=2 js-tests/unit/tooling/validation-scope.test.mjs` | Prepared Node.js and Git; disposable local Git trees, no distribution or browser; always-on consistency evidence |
@@ -483,6 +486,26 @@ in the same repository change as its executable configuration and local
 verification evidence.
 
 ## Add or change a command
+
+`npm run package` defaults to ignored `build/browser-package/`. Supply another
+new output directory with `npm run package -- path/to/new-output`. Preparation
+never overwrites existing output. It rebuilds from the clean current commit,
+preserves the source name/version/private flag, and writes the matched static
+tree at `package/dist/`, one npm tarball and a SHA-256 file/archive inventory at
+`candidate.json`. It removes its owned partial output on failure. Remove only
+that candidate directory when finished. Use the
+[package reference](reference/browser-package.md) for artifact installation;
+choosing a public release version, publisher and destination remains governed
+by [releases](releases.md), separately from candidate preparation.
+
+Candidate browser checks use disposable directories outside the checkout.
+They copy only their registered application fixtures and locally prepared
+Pyodide files, consume the actual installed tarball, and serve every application
+module from that external tree. The existing browser harness still owns process,
+profile, loopback-server and diagnostic cleanup. Successful GPU output records
+the actual adapter/features/limits and requires joined normal drain; it is not
+a timing, memory-growth, model-scale or broader hardware claim. These commands
+remove their disposable application/candidate directories even after failure.
 
 Use one stable entry point for each purpose. Prefer package scripts or a small
 repository script over instructions that require contributors to assemble a

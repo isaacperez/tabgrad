@@ -192,6 +192,10 @@ server owns distribution/virtual-response routing, request counts and response
 gates; its Wasm encoder owns controlled raw-ABI modules. Test suites compose
 one server lifetime without embedding request policy or importing another test
 suite. Support modules register no cases and do not use the `.test.mjs` suffix.
+The package-application fixture owns offline tarball installation in disposable
+applications; the reusable public-consumer checks qualify entries, types and
+invalid-asset behavior for both distribution unit tests and actual candidates,
+without relying on checkout module resolution.
 
 `js-tests/browser/` is the serving root for maintained browser fixtures. Its
 `runtime/`, `python/`, `webgpu/` and `python-webgpu/` cohorts qualify runtime,
@@ -201,6 +205,14 @@ groups CPU, Python, WebGPU and managed Python/WebGPU workloads; their timing,
 adequacy and reporting policies are not qualification scenarios. `helpers/`
 owns support with actual cross-cohort consumers, such as controlled feature
 profiles, numerical assertions and diagnostic observation.
+
+`distribution/` holds public-entry application and interpreter fixtures. The
+package browser launcher copies them outside the checkout, installs an actual
+candidate, serves its matched files at a relocated prefix and checks the
+packaged documentation example. It reuses the browser harness's transport and
+process lifetime rather than creating another harness or a private runtime seam.
+Installed Python session diagnostics are supplemental test observations, not
+an application API or a private JavaScript module import.
 
 The runner and loopback server support live in `scripts/`. Launchers explicitly
 register each nested page and fixture asset relative to the browser serving
@@ -277,9 +289,12 @@ describes the resulting bytes. Edit those maintained inputs when changing
 their behavior, not the generated JavaScript, manifest or binary.
 
 A build output directory is not a release. The package's `files` field selects
-`dist/` for package content, while its `exports` field selects package entry
-points; those are different decisions. Publishing and release verification
-follow [the release policy](releases.md). The exact generated paths, sources,
+public root files and required internal/asset subtrees while omitting the
+standalone testing entry; `exports` separately selects supported package entry
+and resource aliases. `scripts/package-distribution.mjs` rebuilds from a clean
+identified commit, stages that selection and package-facing documentation, and
+records the tarball and matching static inventory. Publishing and release
+verification follow [the release policy](releases.md). The exact generated paths, sources,
 reproduction commands and commit policy belong to the
 [generated-file register](generated-files.md#browser-distribution).
 The [distribution design](architecture/browser-distribution.md) defines the
