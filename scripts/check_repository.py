@@ -88,6 +88,7 @@ ARCHITECTURE_DOCUMENTS = {
     "docs/architecture/autograd-and-training.md",
     "docs/architecture/backend-execution.md",
     "docs/architecture/bounded-lazy-execution.md",
+    "docs/architecture/browser-distribution.md",
     "docs/architecture/central-decision.md",
     "docs/architecture/computation-inspection.md",
     "docs/architecture/cpu-gradient-state.md",

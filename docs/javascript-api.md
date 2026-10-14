@@ -57,6 +57,10 @@ versions, captured reads, mandatory progress and failure.
 
 ## Browser delivery requires no developer toolchain
 
+The [distribution design](architecture/browser-distribution.md) explains why
+the module tree and matching assets stay together, how package and static
+delivery relate, and which integration assumptions need separate qualification.
+
 A web application serves the files emitted under `dist/` by the Tabgrad build.
 The application imports `index.js`; Tabgrad resolves `manifest.json` beside that
 module and loads one compatible WebAssembly module when observation first

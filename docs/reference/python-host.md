@@ -7,6 +7,9 @@ the application supplies pinned Pyodide 314.0.6. Importing Tabgrad's direct
 JavaScript root does not load Python integration or interpreter assets.
 For motivation, read the [integration architecture](../architecture/python-integration.md)
 and [worker connection](../components/python-worker-connection.md).
+The [distribution design](../architecture/browser-distribution.md) explains
+matched assets, module identity and hosting boundaries shared by the package
+and static integration.
 
 ## Attach in the interpreter worker
 

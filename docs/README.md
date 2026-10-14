@@ -70,6 +70,7 @@ link to its primary source, but they must not create a competing version.
 | Shape, rank, element count and contiguous-value meaning | [`concepts/tensor-shape.md`](concepts/tensor-shape.md) |
 | Collaboration through a managed Python session | [`flows/managed-python-session.md`](flows/managed-python-session.md) |
 | WebAssembly CPU kernel language, binary interface, modules, and memory ownership | [`architecture/webassembly-cpu-backend.md`](architecture/webassembly-cpu-backend.md) |
+| Browser distribution design, module identity, matched assets and packaging alternatives | [`architecture/browser-distribution.md`](architecture/browser-distribution.md) |
 | CPU intermediate reuse decision, semantic retention and physical last-use boundary | [`architecture/cpu-intermediate-reuse.md`](architecture/cpu-intermediate-reuse.md) |
 | Persistent same-device updates, alias versions, derivative fidelity and effect ownership | [`architecture/cpu-tensor-updates.md`](architecture/cpu-tensor-updates.md) |
 | Gradient result equivalence, frontend exposure and additional causal obligations | [`architecture/functional-gradient-identity.md`](architecture/functional-gradient-identity.md) |
