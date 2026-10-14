@@ -282,6 +282,9 @@ points; those are different decisions. Publishing and release verification
 follow [the release policy](releases.md). The exact generated paths, sources,
 reproduction commands and commit policy belong to the
 [generated-file register](generated-files.md#browser-distribution).
+The [distribution design](architecture/browser-distribution.md) defines the
+matched public artifact boundary, including the distinction between emitted
+development content and selected release content.
 
 ## Understand the files kept at the root
 

@@ -158,6 +158,9 @@ Read the documents in this order when learning the architecture:
 7. [WebAssembly CPU backend](webassembly-cpu-backend.md) develops the CPU branch:
    Rust-authored kernels, prebuilt scalar and vector modules, the private binary
    interface, memory ownership, and optional worker constraints.
+   [Versioned browser distribution](browser-distribution.md) explains the
+   matched module/asset set, optional Python boundary, hosting responsibilities
+   and alternatives for packaging those prebuilt files.
 8. [Requests, completion, and failure](execution-lifecycle.md) explains one
    invocation, asynchronous completion, cancellation, observation, transfer,
    and device loss.
