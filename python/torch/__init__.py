@@ -358,7 +358,7 @@ class Tensor:
         if any(type(dimension) is not int for dimension in dimensions):
             raise TypeError("view dimensions must be built-in integers.")
         try:
-            return Tensor._from_handle(self._handle.view(to_js(dimensions)))
+            return Tensor._from_handle(_bridge.view(self._handle, to_js(dimensions)))
         except JsException as error:
             _raise_view_history_failure(error)
             failure = cast("_bridge.RuntimeException", error)

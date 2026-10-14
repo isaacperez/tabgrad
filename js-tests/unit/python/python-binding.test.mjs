@@ -12,6 +12,7 @@ import { pythonGradientProgressChecks } from "../../browser/helpers/gradient-pro
 import { pythonBackwardChecks } from "../../browser/helpers/backward-cases.mjs";
 import { pythonBackwardLifetimeChecks } from "../../browser/helpers/backward-lifetime.mjs";
 import { pythonMatrixChecks, pythonMatrixNumericalChecks } from "../../browser/helpers/python-matrix-cases.mjs";
+import { pythonViewMetadataChecks, pythonViewBoundaryChecks } from "../../browser/helpers/python-view-cases.mjs";
 
 import { pythonSumGradientAliasChecks, pythonGradientProvenanceChecks, pythonSharedGradientIdentityChecks, pythonFunctionalIdentityChecks } from "../../browser/helpers/functional-gradient-cases.mjs";
 
@@ -979,6 +980,23 @@ for name, value in [('shape', (4,)), ('dtype', torch.float32), ('device', 'cpu')
       if (interpreter.globals.has(name)) interpreter.globals.delete(name);
     }
   }
+});
+
+test("packaged Python empty views preserve every safe integer boundary", { timeout: 20_000 }, async () => {
+  const { attachPython } = await import("../../../dist/python.js");
+  const interpreter = await getInterpreter();
+  const oracle = JSON.parse(await readFile(new URL("../../fixtures/python-tensor-oracle.json", import.meta.url), "utf8"));
+  const binding = await attachPython(interpreter);
+  try { await binding.runPythonAsync(pythonViewMetadataChecks(oracle)); }
+  finally { await binding.close(); }
+});
+
+test("packaged Python view rejection preserves types, range, order and owners", { timeout: 20_000 }, async () => {
+  const { attachPython } = await import("../../../dist/python.js");
+  const interpreter = await getInterpreter();
+  const binding = await attachPython(interpreter);
+  try { await binding.runPythonAsync(pythonViewBoundaryChecks()); }
+  finally { await binding.close(); }
 });
 
 test("Python view syntax, shape inference and observation match the pinned oracle", { timeout: 20_000 }, async () => {

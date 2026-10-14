@@ -54633,6 +54633,488 @@
       "values": []
     }
   ],
+  "emptyViewMetadataCases": [
+    {
+      "name": "(2147483648, 0)-positional",
+      "source": "base = torch.tensor([], dtype=torch.float32)\nresult = base.view(2147483648, 0)\n",
+      "metadata": [
+        [
+          2147483648,
+          0
+        ],
+        "torch.Size([2147483648, 0])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ],
+      "numel": 0
+    },
+    {
+      "name": "(2147483648, 0)-tuple",
+      "source": "base = torch.tensor([], dtype=torch.float32)\nresult = base.view((2147483648, 0))\n",
+      "metadata": [
+        [
+          2147483648,
+          0
+        ],
+        "torch.Size([2147483648, 0])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ],
+      "numel": 0
+    },
+    {
+      "name": "(2147483648, 0)-list",
+      "source": "base = torch.tensor([], dtype=torch.float32)\nresult = base.view([2147483648, 0])\n",
+      "metadata": [
+        [
+          2147483648,
+          0
+        ],
+        "torch.Size([2147483648, 0])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ],
+      "numel": 0
+    },
+    {
+      "name": "(0, 2147483648)-positional",
+      "source": "base = torch.tensor([], dtype=torch.float32)\nresult = base.view(0, 2147483648)\n",
+      "metadata": [
+        [
+          0,
+          2147483648
+        ],
+        "torch.Size([0, 2147483648])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ],
+      "numel": 0
+    },
+    {
+      "name": "(0, 2147483648)-tuple",
+      "source": "base = torch.tensor([], dtype=torch.float32)\nresult = base.view((0, 2147483648))\n",
+      "metadata": [
+        [
+          0,
+          2147483648
+        ],
+        "torch.Size([0, 2147483648])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ],
+      "numel": 0
+    },
+    {
+      "name": "(0, 2147483648)-list",
+      "source": "base = torch.tensor([], dtype=torch.float32)\nresult = base.view([0, 2147483648])\n",
+      "metadata": [
+        [
+          0,
+          2147483648
+        ],
+        "torch.Size([0, 2147483648])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ],
+      "numel": 0
+    },
+    {
+      "name": "(4294967296, 0)-positional",
+      "source": "base = torch.tensor([], dtype=torch.float32)\nresult = base.view(4294967296, 0)\n",
+      "metadata": [
+        [
+          4294967296,
+          0
+        ],
+        "torch.Size([4294967296, 0])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ],
+      "numel": 0
+    },
+    {
+      "name": "(4294967296, 0)-tuple",
+      "source": "base = torch.tensor([], dtype=torch.float32)\nresult = base.view((4294967296, 0))\n",
+      "metadata": [
+        [
+          4294967296,
+          0
+        ],
+        "torch.Size([4294967296, 0])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ],
+      "numel": 0
+    },
+    {
+      "name": "(4294967296, 0)-list",
+      "source": "base = torch.tensor([], dtype=torch.float32)\nresult = base.view([4294967296, 0])\n",
+      "metadata": [
+        [
+          4294967296,
+          0
+        ],
+        "torch.Size([4294967296, 0])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ],
+      "numel": 0
+    },
+    {
+      "name": "(0, 4294967296)-positional",
+      "source": "base = torch.tensor([], dtype=torch.float32)\nresult = base.view(0, 4294967296)\n",
+      "metadata": [
+        [
+          0,
+          4294967296
+        ],
+        "torch.Size([0, 4294967296])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ],
+      "numel": 0
+    },
+    {
+      "name": "(0, 4294967296)-tuple",
+      "source": "base = torch.tensor([], dtype=torch.float32)\nresult = base.view((0, 4294967296))\n",
+      "metadata": [
+        [
+          0,
+          4294967296
+        ],
+        "torch.Size([0, 4294967296])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ],
+      "numel": 0
+    },
+    {
+      "name": "(0, 4294967296)-list",
+      "source": "base = torch.tensor([], dtype=torch.float32)\nresult = base.view([0, 4294967296])\n",
+      "metadata": [
+        [
+          0,
+          4294967296
+        ],
+        "torch.Size([0, 4294967296])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ],
+      "numel": 0
+    },
+    {
+      "name": "(9007199254740990, 0)-positional",
+      "source": "base = torch.tensor([], dtype=torch.float32)\nresult = base.view(9007199254740990, 0)\n",
+      "metadata": [
+        [
+          9007199254740990,
+          0
+        ],
+        "torch.Size([9007199254740990, 0])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ],
+      "numel": 0
+    },
+    {
+      "name": "(9007199254740990, 0)-tuple",
+      "source": "base = torch.tensor([], dtype=torch.float32)\nresult = base.view((9007199254740990, 0))\n",
+      "metadata": [
+        [
+          9007199254740990,
+          0
+        ],
+        "torch.Size([9007199254740990, 0])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ],
+      "numel": 0
+    },
+    {
+      "name": "(9007199254740990, 0)-list",
+      "source": "base = torch.tensor([], dtype=torch.float32)\nresult = base.view([9007199254740990, 0])\n",
+      "metadata": [
+        [
+          9007199254740990,
+          0
+        ],
+        "torch.Size([9007199254740990, 0])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ],
+      "numel": 0
+    },
+    {
+      "name": "(0, 9007199254740990)-positional",
+      "source": "base = torch.tensor([], dtype=torch.float32)\nresult = base.view(0, 9007199254740990)\n",
+      "metadata": [
+        [
+          0,
+          9007199254740990
+        ],
+        "torch.Size([0, 9007199254740990])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ],
+      "numel": 0
+    },
+    {
+      "name": "(0, 9007199254740990)-tuple",
+      "source": "base = torch.tensor([], dtype=torch.float32)\nresult = base.view((0, 9007199254740990))\n",
+      "metadata": [
+        [
+          0,
+          9007199254740990
+        ],
+        "torch.Size([0, 9007199254740990])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ],
+      "numel": 0
+    },
+    {
+      "name": "(0, 9007199254740990)-list",
+      "source": "base = torch.tensor([], dtype=torch.float32)\nresult = base.view([0, 9007199254740990])\n",
+      "metadata": [
+        [
+          0,
+          9007199254740990
+        ],
+        "torch.Size([0, 9007199254740990])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ],
+      "numel": 0
+    },
+    {
+      "name": "(9007199254740991, 0)-positional",
+      "source": "base = torch.tensor([], dtype=torch.float32)\nresult = base.view(9007199254740991, 0)\n",
+      "metadata": [
+        [
+          9007199254740991,
+          0
+        ],
+        "torch.Size([9007199254740991, 0])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ],
+      "numel": 0
+    },
+    {
+      "name": "(9007199254740991, 0)-tuple",
+      "source": "base = torch.tensor([], dtype=torch.float32)\nresult = base.view((9007199254740991, 0))\n",
+      "metadata": [
+        [
+          9007199254740991,
+          0
+        ],
+        "torch.Size([9007199254740991, 0])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ],
+      "numel": 0
+    },
+    {
+      "name": "(9007199254740991, 0)-list",
+      "source": "base = torch.tensor([], dtype=torch.float32)\nresult = base.view([9007199254740991, 0])\n",
+      "metadata": [
+        [
+          9007199254740991,
+          0
+        ],
+        "torch.Size([9007199254740991, 0])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ],
+      "numel": 0
+    },
+    {
+      "name": "(0, 9007199254740991)-positional",
+      "source": "base = torch.tensor([], dtype=torch.float32)\nresult = base.view(0, 9007199254740991)\n",
+      "metadata": [
+        [
+          0,
+          9007199254740991
+        ],
+        "torch.Size([0, 9007199254740991])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ],
+      "numel": 0
+    },
+    {
+      "name": "(0, 9007199254740991)-tuple",
+      "source": "base = torch.tensor([], dtype=torch.float32)\nresult = base.view((0, 9007199254740991))\n",
+      "metadata": [
+        [
+          0,
+          9007199254740991
+        ],
+        "torch.Size([0, 9007199254740991])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ],
+      "numel": 0
+    },
+    {
+      "name": "(0, 9007199254740991)-list",
+      "source": "base = torch.tensor([], dtype=torch.float32)\nresult = base.view([0, 9007199254740991])\n",
+      "metadata": [
+        [
+          0,
+          9007199254740991
+        ],
+        "torch.Size([0, 9007199254740991])",
+        "Size",
+        "torch.float32",
+        true,
+        "device(type='cpu')",
+        "cpu",
+        "cpu",
+        null,
+        true
+      ],
+      "numel": 0
+    }
+  ],
   "errors": [
     {
       "expression": "torch.mul()",
