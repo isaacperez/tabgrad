@@ -145,7 +145,7 @@ export class WebAssemblyCpuBackend implements ExecutionBackend {
         allocations.set(computation.output, output);
         let status: number;
         try {
-          this.#kernelCalls += 1;
+          if (computation.kind !== "matmul-f32" || length !== 0) this.#kernelCalls += 1;
           switch (computation.kind) {
             case "matmul-f32": {
               const left = program.values[computation.inputs[0]!]!.shape;

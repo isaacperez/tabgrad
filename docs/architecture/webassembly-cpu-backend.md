@@ -254,8 +254,8 @@ and call-overhead requirements with simpler total maintenance.
 
 The first concrete raw ABI profile gives the general boundary above an exact,
 small instance. The generated JSON manifest has schema version 1 and module
-version 5. It declares ABI version 1, 32-bit addresses, non-shared memory, the
-`add-f32`, `sum-f32`, `mul-f32`, `expand-f32` and `add-alpha-f32` capabilities,
+version 6. It declares ABI version 1, 32-bit addresses, non-shared memory, the
+`add-f32`, `sum-f32`, `mul-f32`, `expand-f32`, `add-alpha-f32` and `matmul-f32` capabilities,
 one `env.memory` import, an initial 32-page memory, a
 maximum 1024-page memory, and 16-byte host-arena alignment. Each scalar or
 `simd128` variant records its relative path, byte length, required features, and
@@ -271,13 +271,14 @@ memory, instantiates the compiled module, and validates these exports:
 | Export | Signature | Meaning |
 | --- | --- | --- |
 | `tabgrad_abi_version` | `() -> u32` | Returns `1` for this ABI profile. |
-| `tabgrad_capabilities` | `() -> u32` | Returns required capability bits: `add-f32` is 1, `sum-f32` is 2, `mul-f32` is 4, `expand-f32` is 8 and `add-alpha-f32` is 16. |
+| `tabgrad_capabilities` | `() -> u32` | Returns required capability bits: `add-f32` is 1, `sum-f32` is 2, `mul-f32` is 4, `expand-f32` is 8, `add-alpha-f32` is 16 and `matmul-f32` is 32. |
 | `tabgrad_arena_base` | `() -> u32` | Returns the first byte available to the host allocator. |
 | `tabgrad_add_f32` | `(left_offset, right_offset, output_offset, length) -> u32` | Adds two contiguous `float32` input ranges into a distinct output range. |
 | `tabgrad_sum_f32` | `(input_offset, output_offset, input_length) -> u32` | Reduces a contiguous input range to a distinct scalar output. |
 | `tabgrad_mul_f32` | `(left_offset, right_offset, output_offset, length) -> u32` | Multiplies two contiguous `float32` input ranges into a distinct output range. |
 | `tabgrad_expand_f32` | `(input_offset, output_offset, output_length) -> u32` | Repeats one stored scalar into a distinct contiguous output range. |
 | `tabgrad_add_alpha_f32` | `(parameter_offset, gradient_offset, output_offset, length, alpha_bits) -> u32` | Writes coefficient-bearing float32 addition into a distinct output range. The coefficient is captured float32 bits, not a memory address. |
+| `tabgrad_matmul_f32` | `(left_offset, right_offset, output_offset, M, K, N, flags) -> u32` | Computes a sequential-FMA matrix product. Flags 0–3 transpose the effective left (bit 0) or right (bit 1) indexing without copying storage. |
 
 Both `kernels-scalar.wasm` and `kernels-simd128.wasm` implement the complete
 module capability profile. The module version identifies that profile; the
@@ -285,7 +286,8 @@ ABI version identifies the primitive calling convention. A stale module profile
 or missing required capability/export is rejected during preparation.
 Operation-specific numerical, empty-range and cost contracts belong in the
 [sum](../reference/tensor-sum.md) and
-[multiplication](../reference/tensor-multiplication.md) references; internal
+[multiplication](../reference/tensor-multiplication.md) and
+[matrix product](../reference/tensor-matmul.md) references; internal
 scalar expansion belongs to the [functional gradient reference](../reference/functional-gradients.md#numerical-and-execution-boundary).
 
 All offsets and lengths are WebAssembly `i32` values interpreted as unsigned
@@ -293,7 +295,8 @@ All offsets and lengths are WebAssembly `i32` values interpreted as unsigned
 defined by its signature within the imported memory, and non-overlap between
 the output and nonempty inputs. Input-to-input aliasing is legal. Status 0 means success; status 1 means
 misalignment, status 2 means an out-of-bounds range, and status 3 means output
-overlap. A nonzero status becomes a structured adapter error. A trap quarantines
+overlap. Matrix status 4 means invalid orientation flags; MK, KN and MN have
+independently checked products and ranges, including empty calls. A nonzero status becomes a structured adapter error. A trap quarantines
 the context because its physical state can no longer be assumed valid.
 
 The adapter labels preparation failures by the phase that owns them: manifest

@@ -11,7 +11,7 @@ import { float32FromBits } from "../../fixtures/sum-oracle.mjs";
 import { pythonGradientProgressChecks } from "../../browser/helpers/gradient-progress-cases.mjs";
 import { pythonBackwardChecks } from "../../browser/helpers/backward-cases.mjs";
 import { pythonBackwardLifetimeChecks } from "../../browser/helpers/backward-lifetime.mjs";
-import { pythonMatrixChecks } from "../../browser/helpers/python-matrix-cases.mjs";
+import { pythonMatrixChecks, pythonMatrixNumericalChecks } from "../../browser/helpers/python-matrix-cases.mjs";
 
 import { pythonSumGradientAliasChecks, pythonGradientProvenanceChecks, pythonSharedGradientIdentityChecks, pythonFunctionalIdentityChecks } from "../../browser/helpers/functional-gradient-cases.mjs";
 
@@ -41,6 +41,16 @@ test("packaged Python matrix calls and histories match the native maintained cas
   finally {
     await binding.close();
     interpreter.runPython("[globals().pop(name, None) for name in ('torch','json','gc','check_matrix_fixture')]; None");
+  }
+});
+
+test("packaged Python matrix forward and both VJPs preserve exact stored words", { timeout: 20_000 }, async () => {
+  const { attachPython } = await import("../../../dist/python.js");
+  const interpreter = await getInterpreter(), binding = await attachPython(interpreter);
+  try { await binding.runPythonAsync(pythonMatrixNumericalChecks()); }
+  finally {
+    await binding.close();
+    interpreter.runPython("[globals().pop(name, None) for name in ('torch','struct','json','gc','check_python_matrix_words')]; None");
   }
 });
 
@@ -2832,6 +2842,32 @@ else:
   }
 });
 
+
+test("Python matrix output exhaustion has a RuntimeError presentation", async () => {
+  const { attachPython } = await import("../../../dist/python.js");
+  const interpreter = await getInterpreter(), binding = await attachPython(interpreter);
+  try {
+    await binding.runPythonAsync(`
+import torch, gc
+def check_matrix_capacity():
+    for rows, columns in ((65536, 65536), (2147483647, 2147483647)):
+        empty = torch.tensor([], dtype=torch.float32)
+        a, b = empty.view(rows, 0), empty.view(0, columns)
+        try:
+            a @ b
+        except RuntimeError as error:
+            assert 'tensor limit' in str(error)
+        else:
+            raise AssertionError('Matrix output capacity was not rejected')
+        assert torch._runtime_session.diagnostics().kernelCalls == 0
+check_matrix_capacity()
+gc.collect()
+`);
+  } finally {
+    await binding.close();
+    interpreter.runPython("[globals().pop(name, None) for name in ('torch','gc','check_matrix_capacity')]; None");
+  }
+});
 
 test("Python sum gradients preserve pinned aliases, views and incoming acquisition", { timeout: 20_000 }, async () => {
   const oracle = JSON.parse(await readFile(new URL("../../fixtures/python-tensor-oracle.json", import.meta.url), "utf8"));

@@ -1,7 +1,9 @@
 import { WEBGPU_SIGNIFICAND_PRODUCT_SOURCE } from "./significand-product.js";
 
 /** Exact binary32 addend plus two factors, rounded once nearest/ties-even. */
-export const WEBGPU_FUSED_MULTIPLY_ADD_SOURCE = `${WEBGPU_SIGNIFICAND_PRODUCT_SOURCE}
+// Shader text is runtime data; carrying it as a literal type duplicates that
+// payload in every composed kernel declaration.
+export const WEBGPU_FUSED_MULTIPLY_ADD_SOURCE: string = `${WEBGPU_SIGNIFICAND_PRODUCT_SOURCE}
 // Magnitudes have a leading bit at 61. The exact product leaves 14/15 low
 // zeros and a parameter leaves 38. Alignment with discarded bits cannot cause
 // deep cancellation; jam retains the residual needed to break midpoint ties.

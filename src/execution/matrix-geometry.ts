@@ -36,6 +36,7 @@ export function matrixGeometry(left: readonly number[], right: readonly number[]
   const columns = right[flags & 2 ? 0 : 1]!;
   if (contraction !== rightContraction) throw new TypeError("Matrix contraction dimensions must match.");
   const outputElements = rows === 0 || columns === 0 ? 0 : rows * columns;
-  if (!Number.isSafeInteger(outputElements)) throw new TypeError("Matrix output exceeds safe integer arithmetic.");
+  // Public admission reports capacity exhaustion; reconstructed programs reject
+  // unsafe output metadata. Those callers own the distinct error contracts.
   return { rows, contraction, columns, outputElements };
 }

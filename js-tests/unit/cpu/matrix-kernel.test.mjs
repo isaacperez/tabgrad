@@ -13,7 +13,8 @@ for (const variant of ["scalar", "simd128"]) {
     assert.ok(instance.exports.tabgrad_capabilities() & 32);
     const base = instance.exports.tabgrad_arena_base() >>> 0;
     for (const c of matrixCases()) {
-      const b = base + 32768, out = base + 65536;
+      const aligned = bytes => Math.ceil((bytes + 16) / 16) * 16;
+      const b = base + aligned(c.left.byteLength), out = b + aligned(c.right.byteLength);
       new Uint32Array(memory.buffer, base, c.left.length).set(c.left);
       new Uint32Array(memory.buffer, b, c.right.length).set(c.right);
       const output = new Uint32Array(memory.buffer, out, c.expected.length + 4);

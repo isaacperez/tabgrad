@@ -11,6 +11,8 @@
       import { checkSGDCase, isDirectSGDCase } from "/helpers/sgd-cases.mjs";
       import { checkSGDHostGuards, checkSGDFaults, checkSGDFixedOwners } from "/helpers/sgd-lifetime.mjs";
       import { checkBackwardLifetime, checkBackwardFaults, checkBackwardCleanup } from "/helpers/backward-lifetime.mjs";
+      import { checkMatrixCases, checkMatrixTraining, checkMatrixPending } from "/helpers/matrix-cases.mjs";
+      import { completeRuntimeSession } from "/runtime/runtime.js";
       const parameters = new URLSearchParams(location.search);
       const token = parameters.get("token");
       const forceVariant = parameters.get("variant");
@@ -266,6 +268,11 @@
         await checkTotalSum(session);
         await checkMultiplication(session);
         await checkFunctionalGradients(session);
+        await checkMatrixCases(session);
+        await checkMatrixTraining(session, completeRuntimeSession, session => ({ ...getTestRuntimeOwnership(session),
+          ...Object.fromEntries(Object.entries(getTestRuntimeSemanticOwnership(session)).filter(([key]) => !key.startsWith('collector'))) }));
+        await checkMatrixPending(session, completeRuntimeSession, session => ({ ...getTestRuntimeOwnership(session),
+          ...Object.fromEntries(Object.entries(getTestRuntimeSemanticOwnership(session)).filter(([key]) => !key.startsWith('collector'))) }));
         for (const fixture of (await loadGradientProgressOracle()).gradientProgressCases) {
           await checkGradientProgress(session, fixture);
         }

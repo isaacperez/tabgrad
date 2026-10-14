@@ -14,6 +14,9 @@ warning categories, identity, reset and lifetime.
 `torch.optim.SGD` is described in the [SGD reference](sgd.md), including basic
 CPU and enabled GPU groups, closures, numeric reset and the explicit optimizer exclusions.
 
+For `torch.matmul`, `Tensor.matmul`, `@`, matrix geometry, both first-order
+gradients and numerical differences, use the [matrix product reference](tensor-matmul.md).
+
 The [wrapper component](../components/python-tensor-wrappers.md) explains the
 owners behind these calls. This page covers creation, metadata, addition
 admission and ordinary observation, not general PyTorch support. GPU use

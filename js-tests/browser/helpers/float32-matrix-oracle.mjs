@@ -50,6 +50,19 @@ export function matrixCases() {
     [[0x7f7fffff, 0x7f7fffff, 0xff7fffff, 0xff7fffff], [word(1), word(1), word(1), word(1)], 0x7f800000],
   ]) result.push({ name: `association-${result.length}`, shape: [1, left.length, 1], flags: 0,
     left: new Uint32Array(left), right: new Uint32Array(right), expected: new Uint32Array([expected]) });
+  // A combined dense shape crosses both row/column and contraction boundaries.
+  // Sixteen independent constant dots suffice; every output position is checked.
+  const [m, k, n] = [65, 129, 65];
+  const left = new Uint32Array(m * k), right = new Uint32Array(k * n);
+  for (let row = 0; row < m; row++) left.fill(word((row % 4 + 1) / 8), row * k, (row + 1) * k);
+  for (let t = 0; t < k; t++) for (let column = 0; column < n; column++) right[t * n + column] = word((column % 4 - 2) / 8);
+  const dots = Array.from({ length: 16 }, (_, index) => {
+    let value = 0;
+    for (let t = 0; t < k; t++) value = exactCoefficientAddition(value, word((Math.floor(index / 4) + 1) / 8), word((index % 4 - 2) / 8));
+    return value;
+  });
+  const expected = Uint32Array.from({ length: m * n }, (_, index) => dots[(Math.floor(index / n) % 4) * 4 + index % n % 4]);
+  result.push({ name: "dense-combined-65x129x65", shape: [m, k, n], flags: 0, left, right, expected });
   return result;
 }
 

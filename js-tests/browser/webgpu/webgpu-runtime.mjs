@@ -15,6 +15,10 @@ import { checkGpuSGDArithmetic, checkGpuSGDResources, checkGpuSGDMixedDevices } 
 import { checkSGDCase, isDirectSGDCase } from "../helpers/sgd-cases.mjs";
 import { checkSGDFixedOwners } from "../helpers/sgd-lifetime.mjs";
 import { getTestRuntimeOwnership } from "/testing.js";
+import { checkMatrixCases, checkMatrixTraining, checkMatrixPending, checkMatrixBackend } from "../helpers/matrix-cases.mjs";
+import { WebGpuBackend } from "/backends/webgpu/webgpu-backend.js";
+import { ExecutableProgram } from "/execution/executable-program.js";
+import { gpuSGDCheckpoint } from "../helpers/gpu-sgd-cases.mjs";
 
 const token = new URLSearchParams(location.search).get("token");
 async function send(endpoint, body) {
@@ -170,6 +174,9 @@ async function exercise(session) {
   total.close();
   await exerciseMultiplication(session);
   await exerciseTotalSum(session);
+  const matrixNumerics = await checkMatrixCases(session, "webgpu");
+  const matrixTraining = await checkMatrixTraining(session, completeRuntimeSession, gpuSGDCheckpoint, "webgpu");
+  const matrixPending = await checkMatrixPending(session, completeRuntimeSession, gpuSGDCheckpoint, "webgpu");
   const pairs = numericalPairs();
   for (const depth of [1, 8]) {
     let expected = pairs.left;
@@ -253,7 +260,7 @@ async function exercise(session) {
   const sgdResources = await checkGpuSGDResources(session);
   const sgdSavedControl = await checkSGDFixedOwners(session, 65, getTestRuntimeOwnership, getTestRuntimeSemanticOwnership, "webgpu", completeRuntimeSession);
   await completeRuntimeSession(session);
-  return { backwardResources, sgdArithmetic, sgdCases, sgdResources, sgdSavedControl };
+  return { backwardResources, sgdArithmetic, sgdCases, sgdResources, sgdSavedControl, matrixNumerics, matrixTraining, matrixPending };
 }
 
 let session;
@@ -262,15 +269,20 @@ try {
   await send("__phase", { phase: "assets-loaded" });
   session = await createWebGpuRuntimeSession();
   await send("__phase", { phase: "runtime-started" });
-  const { backwardResources, sgdArithmetic, sgdCases, sgdResources, sgdSavedControl } = await exercise(session);
+  const { backwardResources, sgdArithmetic, sgdCases, sgdResources, sgdSavedControl, matrixNumerics, matrixTraining, matrixPending } = await exercise(session);
   await session.close();
+  const adapter = await navigator.gpu.requestAdapter();
+  const backend = new WebGpuBackend(await adapter.requestDevice());
+  let matrixBackend;
+  try { matrixBackend = await checkMatrixBackend(backend, ExecutableProgram); }
+  finally { await backend.close(); }
   const diagnostics = session.diagnostics();
   check(diagnostics.webgpu.ownedBufferBytes === 0 && diagnostics.webgpu.pendingSubmissions === 0
     && diagnostics.webgpu.unknownCompletionBytes === 0, "GPU resources did not drain");
   check(diagnostics.liveTensorHandles === 0 && diagnostics.liveTensorValues === 0
     && diagnostics.liveMaterializationRecords === 0 && diagnostics.liveRequestLeases === 0, "Semantic resources did not retire");
   await send("__phase", { phase: "runtime-finished" });
-  await send("__result", { ok: true, diagnostics, backwardResources, sgdArithmetic, sgdCases, sgdResources, sgdSavedControl });
+  await send("__result", { ok: true, diagnostics, backwardResources, sgdArithmetic, sgdCases, sgdResources, sgdSavedControl, matrixNumerics, matrixTraining, matrixPending, matrixBackend });
 } catch (error) {
   await session?.close();
   await send("__result", { ok: false, error: { message: error.message, code: error.code, details: error.details } });

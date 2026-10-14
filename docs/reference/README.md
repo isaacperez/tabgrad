@@ -38,6 +38,9 @@ floating-point accumulation, empty inputs, numerical comparison and CPU limits.
 Use [Elementwise tensor multiplication](tensor-multiplication.md) for tensor
 product signatures, equal-shape inputs, numerical behavior and CPU limits.
 
+Use [Two-dimensional matrix products](tensor-matmul.md) for contraction geometry,
+sequential FMA, CPU/GPU calls, both first-order derivatives and exclusions.
+
 Use [Functional first-order gradients](functional-gradients.md) for tracked
 creation, seed and input forms, saved-history consumption, errors and limits.
 

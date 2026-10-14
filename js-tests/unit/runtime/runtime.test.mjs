@@ -2443,6 +2443,9 @@ test("executes a finite chain in dependency order and handles empty tensors", as
 for (const failureCase of [
   { name: "missing expansion export", code: "BACKEND_ABI_MISMATCH", moduleOptions: { omitExpandExport: true } },
   { name: "missing coefficient addition export", code: "BACKEND_ABI_MISMATCH", moduleOptions: { omitAlphaAddExport: true } },
+  { name: "missing matrix export", code: "BACKEND_ABI_MISMATCH", moduleOptions: { omitMatmulExport: true } },
+  { name: "missing matrix capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: 31 } },
+  { name: "stale pre-matrix module profile", code: "BACKEND_MANIFEST_INVALID", manifestTransform: manifest => ({ ...manifest, moduleVersion: 5 }) },
   { name: "missing coefficient addition capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: 15 } },
   { name: "missing expansion capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: 7 } },
   { name: "missing mul export", code: "BACKEND_ABI_MISMATCH", moduleOptions: { omitMulExport: true } },
@@ -2486,7 +2489,7 @@ for (const failureCase of [
   },
 ]) {
   test(`reports ${failureCase.name} as a structured failure`, async () => {
-    const manifestUrl = installFixture(failureCase.name.replaceAll(" ", "-"), failureCase.moduleOptions);
+    const manifestUrl = installFixture(failureCase.name.replaceAll(" ", "-"), failureCase.moduleOptions, failureCase.manifestTransform);
     const session = createTestRuntimeSession({ manifestUrl, forceVariant: "scalar" });
     const left = session.tensor([1]);
     const right = session.tensor([2]);

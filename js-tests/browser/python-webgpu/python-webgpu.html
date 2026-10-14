@@ -45,11 +45,13 @@
         await client.runPythonAsync(`
 import torch, gc
 import _test_grad
+import _test_matrix
 import _test_copy
 import _test_backward
 import _test_sgd
 from pyodide.code import eval_code_async
 await eval_code_async(str(_test_grad.source), globals=globals())
+await eval_code_async(str(_test_matrix.source), globals=globals())
 await eval_code_async(str(_test_copy.source), globals=globals())
 def check_gradient_device_errors():
     p = torch.tensor([2., 3.], dtype=torch.float32, device='webgpu', requires_grad=True)

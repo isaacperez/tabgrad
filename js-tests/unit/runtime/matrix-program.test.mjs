@@ -39,7 +39,8 @@ test("matrix geometry validates both logical orientations, arity and output inde
     assert.throws(() => matrixProgram(flags, [shapes[0], shapes[1], [4, 2]]), TypeError);
   }
   for (const shapes of [[[2], [2, 1], [1, 1]], [[2, 3], [2, 4], [2, 4]],
-    [[0, 3], [4, 2], [0, 2]], [[-1, 0], [0, 1], [-1, 1]], [[2, 3], [3, 4], [8]]]) {
+    [[0, 3], [4, 2], [0, 2]], [[-1, 0], [0, 1], [-1, 1]], [[2, 3], [3, 4], [8]],
+    [[Number.MAX_SAFE_INTEGER, 0], [0, 2], [Number.MAX_SAFE_INTEGER, 2]]]) {
     assert.throws(() => matrixProgram(0, shapes), TypeError);
   }
   for (const inputs of [[], [0], [0, 1, 0], [0, 99]]) assert.throws(() => matrixProgram(0, undefined, inputs), TypeError);
@@ -60,4 +61,54 @@ test("semantic matrix flags are checked before observable operand iteration", ()
   const record = new OperationRecord(definition, inputs, undefined, 2);
   assert.equal(iterations, 1);
   assert.equal(record.matrixFlags, 2);
+});
+
+test("matrix value capture reads each source metadata property once", () => {
+  for (const field of ["shape", "device", "storageSlot"]) {
+    const original = matrixProgram(), values = original.values.map(value => ({ ...value }));
+    const slot = field === "device" ? 2 : 0;
+    let reads = 0;
+    Object.defineProperty(values[slot], field, { enumerable: true, get() {
+      reads++;
+      if (field === "shape") return reads === 1 ? [2, 3] : [3, 2];
+      if (field === "device") return reads === 1 ? "webgpu" : "cpu";
+      return reads === 1 ? 0 : 99;
+    } });
+    const result = new ExecutableProgram(values, original.computations, 2);
+    assert.equal(reads, 1);
+    assert.equal(result.domain, "webgpu");
+  }
+});
+
+test("matrix operands and output preserve dtype, layout, slots and distinct storage", () => {
+  for (const shapes of [[[2, 3], [3, 4], [2, 4]], [[0, 3], [3, 4], [0, 4]]]) {
+    const original = matrixProgram(0, shapes);
+    for (const slot of [0, 1, 2]) for (const [field, value] of [["dtype", "float64"], ["layout", "strided"], ["device", "other"], ["slot", 99], ["storageSlot", 99]]) {
+      const values = original.values.map(value => ({ ...value })); values[slot][field] = value;
+      assert.throws(() => new ExecutableProgram(values, original.computations, 2), TypeError, `${slot}/${field}`);
+    }
+    for (const inputs of [["0", 1], [0.5, 1], [-1, 1]]) {
+      assert.throws(() => new ExecutableProgram(original.values, [{ ...original.computations[0], inputs }], 2), TypeError);
+    }
+    const values = original.values.map(value => ({ ...value }));
+    values[2].source = "alias"; values[2].storageSlot = 0;
+    assert.throws(() => new ExecutableProgram(values, original.computations, 2), TypeError);
+  }
+  const square = matrixProgram(0, [[2, 2], [2, 2], [2, 2]]);
+  assert.throws(() => new ExecutableProgram(square.values, [{ ...square.computations[0], output: 0 }], 0), TypeError);
+  const alias = square.values.map(value => ({ ...value }));
+  alias[1].source = "alias"; alias[1].storageSlot = 0;
+  assert.doesNotThrow(() => new ExecutableProgram(alias, square.computations, 2), "readable whole-storage input aliases stay valid");
+  alias[0].shape = [1];
+  assert.throws(() => new ExecutableProgram(alias, square.computations, 2), TypeError, "an alias cannot invent more readable storage");
+  const parent = matrixProgram(), values = parent.values.map(value => ({ ...value }));
+  values[0].source = "alias"; values[0].storageSlot = 3;
+  values.push({ ...values[1], slot: 3, storageSlot: 3, shape: [6] });
+  assert.doesNotThrow(() => new ExecutableProgram(values, parent.computations, 2));
+  values[3].source = "unknown";
+  assert.throws(() => new ExecutableProgram(values, parent.computations, 2), TypeError);
+  values[3].source = "binding";
+  values[3].shape = [1];
+  assert.throws(() => new ExecutableProgram(values, parent.computations, 2), TypeError,
+    "logical matrix shape must cover exactly its canonical storage");
 });

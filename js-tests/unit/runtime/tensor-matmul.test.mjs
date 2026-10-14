@@ -3,7 +3,11 @@ import { before, after, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { RuntimeFixtureServer } from "../../fixtures/runtime-fixture-server.mjs";
 import { createRuntimeSession, Tensor } from "../../../dist/index.js";
+import { inspectExecutionFailureContext } from "../../../dist/shared/errors.js";
 import { createTestRuntimeSession } from "../../../dist/testing.js";
+import { getTestRuntimeOwnership, getTestRuntimeSemanticOwnership } from "../../../dist/testing.js";
+import { completeRuntimeSession } from "../../../dist/runtime/runtime.js";
+import { checkMatrixCases, checkMatrixTraining, checkMatrixPending } from "../../browser/helpers/matrix-cases.mjs";
 
 const fixtures = new RuntimeFixtureServer(fileURLToPath(new URL("../../../dist", import.meta.url)));
 let manifestUrl;
@@ -11,6 +15,33 @@ before(async () => { manifestUrl = new URL("manifest.json", await fixtures.start
 after(() => fixtures.close());
 
 for (const variant of ["scalar", "simd128"]) {
+  test(`matrix numerical VJPs and repeated resident training (${variant})`, async () => {
+    const session = createTestRuntimeSession({ manifestUrl, forceVariant: variant });
+    const ownership = session => ({ ...getTestRuntimeOwnership(session),
+      ...Object.fromEntries(Object.entries(getTestRuntimeSemanticOwnership(session)).filter(([key]) => !key.startsWith("collector"))) });
+    try {
+      const results = await checkMatrixCases(session);
+      assert.ok(results.cases > 0 && results.comparedWords > 0);
+      await checkMatrixTraining(session, completeRuntimeSession, ownership);
+      await checkMatrixPending(session, completeRuntimeSession, ownership);
+    } finally { await session.close(); }
+    assert.equal(session.diagnostics().liveAllocationBytes, 0);
+  });
+  test(`empty matrix execution counts actual ABI calls (${variant})`, async () => {
+    const session = createTestRuntimeSession({ manifestUrl, forceVariant: variant });
+    try {
+      for (const [leftShape, rightShape] of [[[0, 3], [3, 2]], [[0, 0x100000001], [0x100000001, 0]]]) {
+        const a = session.tensor(new Float32Array(leftShape[0] * leftShape[1]), { shape: leftShape });
+        const b = session.tensor(new Float32Array(rightShape[0] * rightShape[1]), { shape: rightShape });
+        const y = a.matmul(b);
+        const before = session.diagnostics().kernelCalls;
+        assert.deepEqual([...await y.toArray()], []);
+        assert.equal(session.diagnostics().kernelCalls, before, "no raw matrix export is called for empty output");
+        for (const value of [a, b, y]) value.close();
+      }
+    } finally { await session.close(); }
+    assert.equal(session.diagnostics().liveAllocationBytes, 0);
+  });
   test(`ordinary matrix forward and both functional VJPs (${variant})`, async () => {
     const programs = [];
     const session = createTestRuntimeSession({ manifestUrl, forceVariant: variant, onProgramFormed: p => programs.push(p) });
@@ -35,6 +66,20 @@ for (const variant of ["scalar", "simd128"]) {
   });
 }
 
+test("matrix output capacity rejects unsafe products of valid empty inputs", async () => {
+  const session = createRuntimeSession();
+  try {
+    for (const dimension of [0x10000, Number.MAX_SAFE_INTEGER]) {
+      const a = session.tensor([], { shape: [dimension, 0] });
+      const b = session.tensor([], { shape: [0, dimension === Number.MAX_SAFE_INTEGER ? 2 : dimension] });
+      const before = session.diagnostics();
+      assert.throws(() => a.matmul(b), { code: "RESOURCE_EXHAUSTED" });
+      assert.deepEqual(session.diagnostics(), before, "capacity rejection must not publish or capture work");
+      a.close(); b.close();
+    }
+  } finally { await session.close(); }
+});
+
 test("matrix admission rejects malformed calls and contraction without executing or retaining work", async () => {
   const session = createRuntimeSession();
   const other = createRuntimeSession();
@@ -55,3 +100,28 @@ test("matrix admission rejects malformed calls and contraction without executing
     assert.equal(session.diagnostics().kernelCalls, 0);
   } finally { await session.close(); await other.close(); }
 });
+
+for (const kernelBehavior of ["status", "trap"]) {
+  test(`matrix ${kernelBehavior} preserves producer provenance, rollback and quarantine`, async () => {
+    const failingManifest = fixtures.installFixture(`matrix-${kernelBehavior}`, { kernelBehavior });
+    const session = createTestRuntimeSession({ manifestUrl: failingManifest, forceVariant: "scalar" });
+    const a = session.tensor([2], { shape: [1, 1] }), y = a.matmul(a), loss = y.sum();
+    try {
+      await assert.rejects(loss.toArray(), error => {
+        const context = inspectExecutionFailureContext(error);
+        assert.equal(context.operation, "matmul"); assert.equal(context.provenance.source, "Tensor.matmul");
+        assert.notEqual(context.programValueSlot, context.program.result);
+        assert.equal(error.code, kernelBehavior === "trap" ? "BACKEND_TRAP" : "BACKEND_STATUS_ERROR");
+        return true;
+      });
+      assert.equal(session.diagnostics().liveRequestLeases, 0);
+      assert.equal(session.diagnostics().liveAllocationBytes, 0);
+      if (kernelBehavior === "trap") {
+        const retry = a.matmul(a);
+        try { await assert.rejects(retry.toArray(), { code: "BACKEND_TRAP" }); }
+        finally { retry.close(); }
+      }
+    } finally { a.close(); y.close(); loss.close(); await session.close(); }
+    assert.equal(session.diagnostics().liveSavedValues, 0);
+  });
+}

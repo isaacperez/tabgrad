@@ -1,5 +1,5 @@
 import type { DerivativeOperations, DerivativeRecipe } from "./derivative-history.js";
-import { TabgradError } from "../../shared/errors.js";
+import { TabgradError, throwCleanupFailures } from "../../shared/errors.js";
 
 /** Addition and contiguous views both pass incoming values in the input shape. */
 export const IDENTITY_DERIVATIVE: DerivativeRecipe = Object.freeze({
@@ -37,9 +37,24 @@ export const MATMUL_DERIVATIVE: DerivativeRecipe = Object.freeze({
     operations: DerivativeOperations<Value, Gradient>, position: number): Gradient {
     if (saved.length !== 1) throw new TabgradError("CONSUMED_HISTORY", "Matrix multiplication requires its saved operand.");
     const operand = operations.borrow(saved[0]!);
+    let result!: Gradient;
+    let produced = false;
+    let failures: unknown[] | undefined;
     try {
-      return position === 0 ? operations.matmul(incoming, operand, "right") : operations.matmul(operand, incoming, "left");
-    } finally { operations.close(operand); }
+      result = position === 0 ? operations.matmul(incoming, operand, "right") : operations.matmul(operand, incoming, "left");
+      produced = true;
+    } catch (error) { failures = [error]; }
+    try { operations.close(operand); }
+    catch (error) { (failures ??= []).push(error); }
+    if (failures !== undefined) {
+      // History cannot own a result that this recipe never returned.
+      if (produced) {
+        try { operations.close(result); }
+        catch (error) { failures.push(error); }
+      }
+      throwCleanupFailures(failures, "Matrix derivative construction and cleanup failed.");
+    }
+    return result;
   },
 });
 

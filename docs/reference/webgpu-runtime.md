@@ -77,6 +77,12 @@ Admission requires the acquired device's sum workgroup and parameter-buffer
 limits before recording work. Kernels use input geometry, not the output's
 single element.
 
+GPU [`matmul`](tensor-matmul.md) contracts two same-device 2D matrices, including
+empty geometry. Both derivatives use the same integer sequential-FMA kernel
+with captured internal orientation; there is no host transpose or fallback.
+Output capacity is checked independently of inputs and each dispatch owns its
+immutable 16-byte geometry packet until physical completion.
+
 GPU `mul` accepts the same equal-shape operands and composes with addition,
 views and total sum. The [multiplication reference](tensor-multiplication.md)
 owns its call forms, exact stored-binary32 product rounding and exclusions.

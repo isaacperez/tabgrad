@@ -6,13 +6,15 @@ const profiles = [
   { page: "python-webgpu/python-webgpu.html" }, { page: "python-webgpu/python-webgpu-revocation.html" }, { page: "python-webgpu/python-webgpu-attachment.html" },
   { page: "python-webgpu/python-webgpu-revocation.html", operation: "sum" },
   { page: "python-webgpu/python-webgpu-revocation.html", operation: "mul" },
+  { page: "python-webgpu/python-webgpu-revocation.html", operation: "matmul" },
+  { page: "python-webgpu/python-webgpu-revocation.html", operation: "matmul-grad" },
   { page: "python-webgpu/python-webgpu-revocation.html", operation: "grad" },
   { page: "python-webgpu/python-webgpu-revocation.html", operation: "sgd-update" },
   { page: "python-webgpu/python-webgpu-revocation.html", operation: "sgd-reset" },
   ...["device-loss", "worker-loss", "interpreter-loss"].map((mode) => ({ page: "python-webgpu/python-webgpu-loss.html", mode })),
 ];
 const server = await startBrowserServer(profiles.map(({ page }) => page), { crossOriginIsolation: true,
-  assets: ["python-webgpu/python-webgpu.mjs", "python-webgpu/python-webgpu-revocation.mjs", "python-webgpu/python-webgpu-delayed.mjs", "python-webgpu/python-webgpu-attachment.mjs", "python-webgpu/python-webgpu-loss.mjs", "helpers/float32-addition-oracle.mjs", "helpers/float32-sum-oracle.mjs", "helpers/float32-multiplication-oracle.mjs", "helpers/functional-gradient-cases.mjs", "helpers/python-copy-cases.mjs", "helpers/gradient-progress-cases.mjs", "helpers/backward-cases.mjs", "helpers/python-tensor-device.mjs", "helpers/backward-lifetime.mjs", "helpers/sgd-cases.mjs", "helpers/sgd-lifetime.mjs", "helpers/gpu-sgd-cases.mjs", "helpers/float32-coefficient-oracle.mjs", "helpers/functional-gradient-oracle.json"],
+  assets: ["python-webgpu/python-webgpu.mjs", "python-webgpu/python-webgpu-revocation.mjs", "python-webgpu/python-webgpu-delayed.mjs", "python-webgpu/python-webgpu-attachment.mjs", "python-webgpu/python-webgpu-loss.mjs", "helpers/float32-addition-oracle.mjs", "helpers/float32-sum-oracle.mjs", "helpers/float32-multiplication-oracle.mjs", "helpers/functional-gradient-cases.mjs", "helpers/python-copy-cases.mjs", "helpers/gradient-progress-cases.mjs", "helpers/backward-cases.mjs", "helpers/python-tensor-device.mjs", "helpers/backward-lifetime.mjs", "helpers/sgd-cases.mjs", "helpers/sgd-lifetime.mjs", "helpers/gpu-sgd-cases.mjs", "helpers/float32-coefficient-oracle.mjs", "helpers/matrix-cases.mjs", "helpers/float32-matrix-oracle.mjs", "helpers/python-matrix-cases.mjs", "helpers/functional-gradient-oracle.json"],
   readAsset: (path) => readFile(String(path).endsWith("/helpers/functional-gradient-oracle.json")
     ? new URL("../js-tests/fixtures/python-tensor-oracle.json", import.meta.url) : path),
 });

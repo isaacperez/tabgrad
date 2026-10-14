@@ -47029,6 +47029,103 @@
       }
     },
     {
+      "name": "output-geometry-overflow",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([]).view(2147483647, 0)\nb = tensor([]).view(0, 2147483647)\nreport = attempt(lambda: a @ b)\n",
+      "expected": {
+        "error": "RuntimeError",
+        "warnings": []
+      }
+    },
+    {
+      "name": "result-dtype-device-identity",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([[1.,2.,3.],[4.,5.,6.]])\nb = tensor([[7.,8.],[9.,10.],[11.,12.]])\nseed = tensor([[1.,2.],[3.,4.]])\n\ny = a @ b\nreport = {'dtype': y.dtype is a.dtype is b.dtype,\n          'device': y.device == a.device == b.device,\n          'distinct': y is not a and y is not b}\n",
+      "expected": {
+        "dtype": true,
+        "device": true,
+        "distinct": true
+      }
+    },
+    {
+      "name": "implicit-seed:0",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([2.] * 0, True).view(0,1)\nb = tensor([[3.]], True)\ny = a @ b\nreport = {'first': attempt(lambda: torch.autograd.grad(y, (a,b))[0]),\n          'retry': attempt(lambda: torch.autograd.grad(y, (a,b), grad_outputs=tensor([1.] * 0).view(0,1))[0])}\n",
+      "expected": {
+        "first": {
+          "error": "RuntimeError",
+          "warnings": []
+        },
+        "retry": {
+          "tensor": {
+            "shape": [
+              0,
+              1
+            ],
+            "values": [],
+            "tracking": false
+          },
+          "same_a": false,
+          "same_b": false,
+          "warnings": []
+        }
+      }
+    },
+    {
+      "name": "implicit-seed:1",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([2.] * 1, True).view(1,1)\nb = tensor([[3.]], True)\ny = a @ b\nreport = {'first': attempt(lambda: torch.autograd.grad(y, (a,b))[0]),\n          'retry': attempt(lambda: torch.autograd.grad(y, (a,b), grad_outputs=tensor([1.] * 1).view(1,1))[0])}\n",
+      "expected": {
+        "first": {
+          "tensor": {
+            "shape": [
+              1,
+              1
+            ],
+            "values": [
+              [
+                3.0
+              ]
+            ],
+            "tracking": false
+          },
+          "same_a": false,
+          "same_b": false,
+          "warnings": []
+        },
+        "retry": {
+          "error": "RuntimeError",
+          "warnings": []
+        }
+      }
+    },
+    {
+      "name": "implicit-seed:2",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([2.] * 2, True).view(2,1)\nb = tensor([[3.]], True)\ny = a @ b\nreport = {'first': attempt(lambda: torch.autograd.grad(y, (a,b))[0]),\n          'retry': attempt(lambda: torch.autograd.grad(y, (a,b), grad_outputs=tensor([1.] * 2).view(2,1))[0])}\n",
+      "expected": {
+        "first": {
+          "error": "RuntimeError",
+          "warnings": []
+        },
+        "retry": {
+          "tensor": {
+            "shape": [
+              2,
+              1
+            ],
+            "values": [
+              [
+                3.0
+              ],
+              [
+                3.0
+              ]
+            ],
+            "tracking": false
+          },
+          "same_a": false,
+          "same_b": false,
+          "warnings": []
+        }
+      }
+    },
+    {
       "name": "geometry:0/3/2",
       "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\na = tensor([1.] * 0, True).view(0,3)\nb = tensor([2.] * 6, True).view(3,2)\ny = a @ b\nseed = tensor([1.] * 0).view(0,2)\nga, gb = torch.autograd.grad(y, (a,b), grad_outputs=seed)\nreport = {'output': state(y), 'gradients': [state(ga), state(gb)]}\n",
       "expected": {
@@ -47939,6 +48036,620 @@
           "error": "RuntimeError",
           "warnings": []
         }
+      }
+    },
+    {
+      "name": "linear-training:2/3/2",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\nx = tensor([0.25] * 6).view(2,3)\nw = tensor([[0.125] * 2 for _ in range(3)], True)\noptimizer = torch.optim.SGD([w], lr=0.125)\nsteps = []\nfor repetition in range(3):\n    optimizer.zero_grad(set_to_none=False)\n    prediction = x @ w\n    loss = (prediction * prediction).sum()\n    loss.backward()\n    optimizer.step()\n    steps.append({'weights': state(w), 'gradient': state(w.grad)})\nreport = {'steps': steps}\n",
+      "expected": {
+        "steps": [
+          {
+            "weights": {
+              "shape": [
+                3,
+                2
+              ],
+              "values": [
+                [
+                  0.11328125,
+                  0.11328125
+                ],
+                [
+                  0.11328125,
+                  0.11328125
+                ],
+                [
+                  0.11328125,
+                  0.11328125
+                ]
+              ],
+              "tracking": true
+            },
+            "gradient": {
+              "shape": [
+                3,
+                2
+              ],
+              "values": [
+                [
+                  0.09375,
+                  0.09375
+                ],
+                [
+                  0.09375,
+                  0.09375
+                ],
+                [
+                  0.09375,
+                  0.09375
+                ]
+              ],
+              "tracking": false
+            }
+          },
+          {
+            "weights": {
+              "shape": [
+                3,
+                2
+              ],
+              "values": [
+                [
+                  0.1026611328125,
+                  0.1026611328125
+                ],
+                [
+                  0.1026611328125,
+                  0.1026611328125
+                ],
+                [
+                  0.1026611328125,
+                  0.1026611328125
+                ]
+              ],
+              "tracking": true
+            },
+            "gradient": {
+              "shape": [
+                3,
+                2
+              ],
+              "values": [
+                [
+                  0.0849609375,
+                  0.0849609375
+                ],
+                [
+                  0.0849609375,
+                  0.0849609375
+                ],
+                [
+                  0.0849609375,
+                  0.0849609375
+                ]
+              ],
+              "tracking": false
+            }
+          },
+          {
+            "weights": {
+              "shape": [
+                3,
+                2
+              ],
+              "values": [
+                [
+                  0.09303665161132812,
+                  0.09303665161132812
+                ],
+                [
+                  0.09303665161132812,
+                  0.09303665161132812
+                ],
+                [
+                  0.09303665161132812,
+                  0.09303665161132812
+                ]
+              ],
+              "tracking": true
+            },
+            "gradient": {
+              "shape": [
+                3,
+                2
+              ],
+              "values": [
+                [
+                  0.076995849609375,
+                  0.076995849609375
+                ],
+                [
+                  0.076995849609375,
+                  0.076995849609375
+                ],
+                [
+                  0.076995849609375,
+                  0.076995849609375
+                ]
+              ],
+              "tracking": false
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "linear-training:0/3/2",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\nx = tensor([0.25] * 0).view(0,3)\nw = tensor([[0.125] * 2 for _ in range(3)], True)\noptimizer = torch.optim.SGD([w], lr=0.125)\nsteps = []\nfor repetition in range(3):\n    optimizer.zero_grad(set_to_none=False)\n    prediction = x @ w\n    loss = (prediction * prediction).sum()\n    loss.backward()\n    optimizer.step()\n    steps.append({'weights': state(w), 'gradient': state(w.grad)})\nreport = {'steps': steps}\n",
+      "expected": {
+        "steps": [
+          {
+            "weights": {
+              "shape": [
+                3,
+                2
+              ],
+              "values": [
+                [
+                  0.125,
+                  0.125
+                ],
+                [
+                  0.125,
+                  0.125
+                ],
+                [
+                  0.125,
+                  0.125
+                ]
+              ],
+              "tracking": true
+            },
+            "gradient": {
+              "shape": [
+                3,
+                2
+              ],
+              "values": [
+                [
+                  0.0,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.0
+                ]
+              ],
+              "tracking": false
+            }
+          },
+          {
+            "weights": {
+              "shape": [
+                3,
+                2
+              ],
+              "values": [
+                [
+                  0.125,
+                  0.125
+                ],
+                [
+                  0.125,
+                  0.125
+                ],
+                [
+                  0.125,
+                  0.125
+                ]
+              ],
+              "tracking": true
+            },
+            "gradient": {
+              "shape": [
+                3,
+                2
+              ],
+              "values": [
+                [
+                  0.0,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.0
+                ]
+              ],
+              "tracking": false
+            }
+          },
+          {
+            "weights": {
+              "shape": [
+                3,
+                2
+              ],
+              "values": [
+                [
+                  0.125,
+                  0.125
+                ],
+                [
+                  0.125,
+                  0.125
+                ],
+                [
+                  0.125,
+                  0.125
+                ]
+              ],
+              "tracking": true
+            },
+            "gradient": {
+              "shape": [
+                3,
+                2
+              ],
+              "values": [
+                [
+                  0.0,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.0
+                ]
+              ],
+              "tracking": false
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "linear-training:17/3/2",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\nx = tensor([0.25] * 51).view(17,3)\nw = tensor([[0.125] * 2 for _ in range(3)], True)\noptimizer = torch.optim.SGD([w], lr=0.125)\nsteps = []\nfor repetition in range(3):\n    optimizer.zero_grad(set_to_none=False)\n    prediction = x @ w\n    loss = (prediction * prediction).sum()\n    loss.backward()\n    optimizer.step()\n    steps.append({'weights': state(w), 'gradient': state(w.grad)})\nreport = {'steps': steps}\n",
+      "expected": {
+        "steps": [
+          {
+            "weights": {
+              "shape": [
+                3,
+                2
+              ],
+              "values": [
+                [
+                  0.025390625,
+                  0.025390625
+                ],
+                [
+                  0.025390625,
+                  0.025390625
+                ],
+                [
+                  0.025390625,
+                  0.025390625
+                ]
+              ],
+              "tracking": true
+            },
+            "gradient": {
+              "shape": [
+                3,
+                2
+              ],
+              "values": [
+                [
+                  0.796875,
+                  0.796875
+                ],
+                [
+                  0.796875,
+                  0.796875
+                ],
+                [
+                  0.796875,
+                  0.796875
+                ]
+              ],
+              "tracking": false
+            }
+          },
+          {
+            "weights": {
+              "shape": [
+                3,
+                2
+              ],
+              "values": [
+                [
+                  0.005157470703125,
+                  0.005157470703125
+                ],
+                [
+                  0.005157470703125,
+                  0.005157470703125
+                ],
+                [
+                  0.005157470703125,
+                  0.005157470703125
+                ]
+              ],
+              "tracking": true
+            },
+            "gradient": {
+              "shape": [
+                3,
+                2
+              ],
+              "values": [
+                [
+                  0.161865234375,
+                  0.161865234375
+                ],
+                [
+                  0.161865234375,
+                  0.161865234375
+                ],
+                [
+                  0.161865234375,
+                  0.161865234375
+                ]
+              ],
+              "tracking": false
+            }
+          },
+          {
+            "weights": {
+              "shape": [
+                3,
+                2
+              ],
+              "values": [
+                [
+                  0.0010476112365722656,
+                  0.0010476112365722656
+                ],
+                [
+                  0.0010476112365722656,
+                  0.0010476112365722656
+                ],
+                [
+                  0.0010476112365722656,
+                  0.0010476112365722656
+                ]
+              ],
+              "tracking": true
+            },
+            "gradient": {
+              "shape": [
+                3,
+                2
+              ],
+              "values": [
+                [
+                  0.032878875732421875,
+                  0.032878875732421875
+                ],
+                [
+                  0.032878875732421875,
+                  0.032878875732421875
+                ],
+                [
+                  0.032878875732421875,
+                  0.032878875732421875
+                ]
+              ],
+              "tracking": false
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "linear-training:2/3/5",
+      "source": "\nimport warnings\ndef tensor(data, tracked=False):\n    return torch.tensor(data, dtype=torch.float32, requires_grad=tracked)\ndef state(value):\n    return None if value is None else {'shape': list(value.shape), 'values': value.tolist(), 'tracking': value.requires_grad}\ndef attempt(call):\n    with warnings.catch_warnings(record=True) as seen:\n        warnings.simplefilter('always')\n        try:\n            result = call()\n            if result is NotImplemented: report = {'not_implemented': True}\n            elif isinstance(result, torch.Tensor): report = {'tensor': state(result), 'same_a': result is a, 'same_b': result is b}\n            else: report = {'none': result is None}\n        except Exception as error:\n            report = {'error': type(error).__name__}\n        report['warnings'] = [type(w.message).__name__ for w in seen]\n        return report\n\nx = tensor([0.25] * 6).view(2,3)\nw = tensor([[0.125] * 5 for _ in range(3)], True)\noptimizer = torch.optim.SGD([w], lr=0.125)\nsteps = []\nfor repetition in range(3):\n    optimizer.zero_grad(set_to_none=False)\n    prediction = x @ w\n    loss = (prediction * prediction).sum()\n    loss.backward()\n    optimizer.step()\n    steps.append({'weights': state(w), 'gradient': state(w.grad)})\nreport = {'steps': steps}\n",
+      "expected": {
+        "steps": [
+          {
+            "weights": {
+              "shape": [
+                3,
+                5
+              ],
+              "values": [
+                [
+                  0.11328125,
+                  0.11328125,
+                  0.11328125,
+                  0.11328125,
+                  0.11328125
+                ],
+                [
+                  0.11328125,
+                  0.11328125,
+                  0.11328125,
+                  0.11328125,
+                  0.11328125
+                ],
+                [
+                  0.11328125,
+                  0.11328125,
+                  0.11328125,
+                  0.11328125,
+                  0.11328125
+                ]
+              ],
+              "tracking": true
+            },
+            "gradient": {
+              "shape": [
+                3,
+                5
+              ],
+              "values": [
+                [
+                  0.09375,
+                  0.09375,
+                  0.09375,
+                  0.09375,
+                  0.09375
+                ],
+                [
+                  0.09375,
+                  0.09375,
+                  0.09375,
+                  0.09375,
+                  0.09375
+                ],
+                [
+                  0.09375,
+                  0.09375,
+                  0.09375,
+                  0.09375,
+                  0.09375
+                ]
+              ],
+              "tracking": false
+            }
+          },
+          {
+            "weights": {
+              "shape": [
+                3,
+                5
+              ],
+              "values": [
+                [
+                  0.1026611328125,
+                  0.1026611328125,
+                  0.1026611328125,
+                  0.1026611328125,
+                  0.1026611328125
+                ],
+                [
+                  0.1026611328125,
+                  0.1026611328125,
+                  0.1026611328125,
+                  0.1026611328125,
+                  0.1026611328125
+                ],
+                [
+                  0.1026611328125,
+                  0.1026611328125,
+                  0.1026611328125,
+                  0.1026611328125,
+                  0.1026611328125
+                ]
+              ],
+              "tracking": true
+            },
+            "gradient": {
+              "shape": [
+                3,
+                5
+              ],
+              "values": [
+                [
+                  0.0849609375,
+                  0.0849609375,
+                  0.0849609375,
+                  0.0849609375,
+                  0.0849609375
+                ],
+                [
+                  0.0849609375,
+                  0.0849609375,
+                  0.0849609375,
+                  0.0849609375,
+                  0.0849609375
+                ],
+                [
+                  0.0849609375,
+                  0.0849609375,
+                  0.0849609375,
+                  0.0849609375,
+                  0.0849609375
+                ]
+              ],
+              "tracking": false
+            }
+          },
+          {
+            "weights": {
+              "shape": [
+                3,
+                5
+              ],
+              "values": [
+                [
+                  0.09303665161132812,
+                  0.09303665161132812,
+                  0.09303665161132812,
+                  0.09303665161132812,
+                  0.09303665161132812
+                ],
+                [
+                  0.09303665161132812,
+                  0.09303665161132812,
+                  0.09303665161132812,
+                  0.09303665161132812,
+                  0.09303665161132812
+                ],
+                [
+                  0.09303665161132812,
+                  0.09303665161132812,
+                  0.09303665161132812,
+                  0.09303665161132812,
+                  0.09303665161132812
+                ]
+              ],
+              "tracking": true
+            },
+            "gradient": {
+              "shape": [
+                3,
+                5
+              ],
+              "values": [
+                [
+                  0.076995849609375,
+                  0.076995849609375,
+                  0.076995849609375,
+                  0.076995849609375,
+                  0.076995849609375
+                ],
+                [
+                  0.076995849609375,
+                  0.076995849609375,
+                  0.076995849609375,
+                  0.076995849609375,
+                  0.076995849609375
+                ],
+                [
+                  0.076995849609375,
+                  0.076995849609375,
+                  0.076995849609375,
+                  0.076995849609375,
+                  0.076995849609375
+                ]
+              ],
+              "tracking": false
+            }
+          }
+        ]
       }
     }
   ],

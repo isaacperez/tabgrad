@@ -1,7 +1,7 @@
 # Backward and persistent gradients
 
 This reference defines first-order backward and gradient associations for
-contiguous CPU or WebGPU float32 addition, multiplication, total sum, shape-only views
+contiguous CPU or WebGPU float32 addition, multiplication, [2D matrix products](tensor-matmul.md), total sum, shape-only views
 and supported copy history. The [gradient-state architecture](../architecture/cpu-gradient-state.md)
 owns identity, retention, progress and cycle responsibilities; the
 [compatibility record](../compatibility.md#cpu-backward-evidence) bounds native correspondence.

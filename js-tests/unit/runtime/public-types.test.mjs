@@ -62,6 +62,7 @@ test("the JavaScript package entry point exposes only the supported runtime surf
         "device",
         "dtype",
         "grad",
+        "matmul",
         "mul",
         "requiresGrad",
         "shape",
@@ -95,6 +96,7 @@ test("the public declarations do not expose runtime-to-backend plumbing", async 
   assert.match(declarations, /view\(shape: readonly number\[\]\): Tensor/);
   assert.match(declarations, /sum\(\): Tensor/);
   assert.match(declarations, /mul\(right: Tensor\): Tensor/);
+  assert.match(declarations, /matmul\(right: Tensor\): Tensor/);
   assert.match(declarations, /get requiresGrad\(\): boolean/);
   assert.match(declarations, /copy_\(source: Tensor\): this/);
   assert.match(declarations, /backward\(gradient\?: Tensor, options\?: BackwardOptions\): void/);
@@ -118,6 +120,8 @@ test("the public declarations do not expose runtime-to-backend plumbing", async 
     "finalizeTensorExposure",
     "TensorIdentity",
     "RuntimeSemanticOwnership",
+    "matrixFlags",
+    "MATMUL_OPERATION",
   ]) {
     assert.doesNotMatch(declarations, new RegExp(internalName.replace("(", "\\(")));
   }
@@ -141,10 +145,16 @@ test("the package entry point does not export executable or failure internals", 
   }
 });
 
-test("emitted declarations preserve scope result and typed backward contracts", () => {
+test("emitted declarations preserve scope result, backward and matrix contracts", () => {
   const filename = fileURLToPath(new URL("no-grad-consumer.ts", import.meta.url));
   const source = `
 import { RuntimeSession, Tensor, type BackwardOptions } from '../../../dist/index.js';
+declare const left: Tensor, right: Tensor;
+const matrix: Tensor = left.matmul(right);
+// @ts-expect-error Matrix inputs are handles rather than host payloads.
+left.matmul([1, 2]);
+// @ts-expect-error There is no public matrix orientation argument.
+left.matmul(right, 2);
 const session = new RuntimeSession();
 const sync: number = session.noGrad(() => 17);
 const asynchronous: Promise<number> = session.noGrad(async () => 23);

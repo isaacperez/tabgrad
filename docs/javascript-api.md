@@ -3,14 +3,14 @@
 This document is the user reference for calling the Tabgrad tensor runtime
 directly from JavaScript. It describes a deliberately narrow but complete
 execution path: contiguous `float32` tensors on CPU with
-out-of-place elementwise addition and multiplication, total sum and shape-only
+out-of-place elementwise addition and multiplication, 2D matrix products, total sum and shape-only
 shared-storage views, persistent equal-shape copy, functional first-order gradients
 and backward with persistent gradient associations. A narrow contract is useful here because it
 lets a reader see the complete lifecycle—admission, lazy recording, WebAssembly
 execution, observation, and release—without implying support for tensor
 features that have not been established by tests. An explicitly acquired
 [WebGPU session](reference/webgpu-runtime.md) also supports contiguous float32
-creation, addition, multiplication, total sum, views, functional first-order
+creation, addition, multiplication, 2D matrix products, total sum, views, functional first-order
 gradients and asynchronous observation through this same API.
 Its operation domain and physical limits are separate from CPU support.
 
@@ -25,6 +25,9 @@ Tabgrad does not define a separate numerical engine for each frontend.
 `Tensor.sum()` is documented in the [total sum reference](reference/tensor-sum.md).
 It takes no arguments and returns a deferred rank-zero tensor. That reference
 also explains empty input, floating-point accumulation and unsupported options.
+
+`Tensor.matmul(other)` is documented in the [2D matrix product reference](reference/tensor-matmul.md),
+including contraction, numerical association, empty inputs and both gradients.
 
 `Tensor.mul(right)` is documented in the
 [multiplication reference](reference/tensor-multiplication.md). It takes one

@@ -21,7 +21,7 @@ fn next_down(bits: u32) -> f32 {
 // Every finite binary32 product is exact in binary64. TwoSum recovers the
 // residual of its addition. That residual only changes the binary32 rounding
 // when the high part is exactly a midpoint; its sign then selects the neighbor.
-fn midpoint_correct(high: f64, low: f64) -> f32 {
+pub(crate) fn midpoint_correct(high: f64, low: f64) -> f32 {
     const OVERFLOW_TIE: f64 = 340282356779733661637539395458142568448.;
     if high == OVERFLOW_TIE && low < 0. {
         return f32::MAX;
@@ -60,35 +60,80 @@ pub(crate) fn fused_multiply_add(parameter: f32, gradient: f32, alpha: f32) -> f
 }
 
 #[cfg(target_feature = "simd128")]
+#[inline]
+pub(crate) fn compensated_product_add(
+    addend: core::arch::wasm32::v128,
+    left: core::arch::wasm32::v128,
+    right: core::arch::wasm32::v128,
+) -> (core::arch::wasm32::v128, core::arch::wasm32::v128) {
+    use core::arch::wasm32::*;
+    let product = f64x2_mul(left, right);
+    let high = f64x2_add(product, addend);
+    let z = f64x2_sub(high, product);
+    let low = f64x2_add(f64x2_sub(product, f64x2_sub(high, z)), f64x2_sub(addend, z));
+    (high, low)
+}
+
+#[cfg(target_feature = "simd128")]
 pub(crate) fn fused_multiply_add_four(
     addends: core::arch::wasm32::v128,
     left: core::arch::wasm32::v128,
     right: core::arch::wasm32::v128,
 ) -> core::arch::wasm32::v128 {
     use core::arch::wasm32::*;
-    let parameters = [f32x4_extract_lane::<0>(addends), f32x4_extract_lane::<1>(addends),
-        f32x4_extract_lane::<2>(addends), f32x4_extract_lane::<3>(addends)];
-    let gradients = [f32x4_extract_lane::<0>(left), f32x4_extract_lane::<1>(left),
-        f32x4_extract_lane::<2>(left), f32x4_extract_lane::<3>(left)];
-    let coefficients = [f32x4_extract_lane::<0>(right), f32x4_extract_lane::<1>(right),
-        f32x4_extract_lane::<2>(right), f32x4_extract_lane::<3>(right)];
+    let parameters = [
+        f32x4_extract_lane::<0>(addends),
+        f32x4_extract_lane::<1>(addends),
+        f32x4_extract_lane::<2>(addends),
+        f32x4_extract_lane::<3>(addends),
+    ];
+    let gradients = [
+        f32x4_extract_lane::<0>(left),
+        f32x4_extract_lane::<1>(left),
+        f32x4_extract_lane::<2>(left),
+        f32x4_extract_lane::<3>(left),
+    ];
+    let coefficients = [
+        f32x4_extract_lane::<0>(right),
+        f32x4_extract_lane::<1>(right),
+        f32x4_extract_lane::<2>(right),
+        f32x4_extract_lane::<3>(right),
+    ];
     let mut results = [0.; 4];
     for half in 0..2 {
-        let p = if half == 0 { addends } else { i32x4_shuffle::<2, 3, 2, 3>(addends, addends) };
-        let g = if half == 0 { left } else { i32x4_shuffle::<2, 3, 2, 3>(left, left) };
-        let a = if half == 0 { right } else { i32x4_shuffle::<2, 3, 2, 3>(right, right) };
+        let p = if half == 0 {
+            addends
+        } else {
+            i32x4_shuffle::<2, 3, 2, 3>(addends, addends)
+        };
+        let g = if half == 0 {
+            left
+        } else {
+            i32x4_shuffle::<2, 3, 2, 3>(left, left)
+        };
+        let a = if half == 0 {
+            right
+        } else {
+            i32x4_shuffle::<2, 3, 2, 3>(right, right)
+        };
         let addend = f64x2_promote_low_f32x4(p);
-        let product = f64x2_mul(f64x2_promote_low_f32x4(g), f64x2_promote_low_f32x4(a));
-        let high = f64x2_add(product, addend);
-        let z = f64x2_sub(high, product);
-        let low = f64x2_add(f64x2_sub(product, f64x2_sub(high, z)), f64x2_sub(addend, z));
+        let (high, low) = compensated_product_add(
+            addend,
+            f64x2_promote_low_f32x4(g),
+            f64x2_promote_low_f32x4(a),
+        );
         let highs = [f64x2_extract_lane::<0>(high), f64x2_extract_lane::<1>(high)];
         let lows = [f64x2_extract_lane::<0>(low), f64x2_extract_lane::<1>(low)];
         for lane in 0..2 {
             let index = half * 2 + lane;
-            results[index] = if !parameters[index].is_finite() || !gradients[index].is_finite() || !coefficients[index].is_finite() {
+            results[index] = if !parameters[index].is_finite()
+                || !gradients[index].is_finite()
+                || !coefficients[index].is_finite()
+            {
                 fused_multiply_add(parameters[index], gradients[index], coefficients[index])
-            } else { midpoint_correct(highs[lane], lows[lane]) };
+            } else {
+                midpoint_correct(highs[lane], lows[lane])
+            };
         }
     }
     f32x4(results[0], results[1], results[2], results[3])
