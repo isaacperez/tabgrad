@@ -12,7 +12,7 @@ export function pythonViewMetadataChecks(oracle, device = "cpu") {
   }));
   return `
 import torch, json, gc
-def check_empty_view_metadata():
+def check_empty_view_metadata() -> None:
     session = torch._runtime_session
     for case in json.loads(${JSON.stringify(JSON.stringify(cases))}):
         before = session.diagnostics()
@@ -49,25 +49,27 @@ export function pythonViewBoundaryChecks(device = "cpu") {
   return `
 import torch, gc
 from pyodide.ffi import JsException
-def check_view_boundaries():
-    events = []
-    class CustomInt(int):
-        def __float__(self):
-            events.append('float')
-            raise AssertionError('custom coercion')
-    class CustomList(list):
-        def __iter__(self):
-            events.append('iterate')
-            raise AssertionError('custom iteration')
-    class CustomTuple(tuple): pass
-    class CustomIndex:
-        def __index__(self):
-            events.append('index')
-            raise AssertionError('custom index')
+from typing import NoReturn as _ViewNoReturn
+_view_coercion_events: list[str] = []
+class _ViewCustomInt(int):
+    def __float__(self) -> _ViewNoReturn:
+        _view_coercion_events.append('float')
+        raise AssertionError('custom coercion')
+class _ViewCustomList(list):
+    def __iter__(self) -> _ViewNoReturn:
+        _view_coercion_events.append('iterate')
+        raise AssertionError('custom iteration')
+class _ViewCustomTuple(tuple): pass
+class _ViewCustomIndex:
+    def __index__(self) -> _ViewNoReturn:
+        _view_coercion_events.append('index')
+        raise AssertionError('custom index')
+def check_view_boundaries() -> None:
+    _view_coercion_events.clear()
     source = torch.tensor([], dtype=torch.float32, device=${JSON.stringify(device)})
     type_errors = ['source.view()', 'source.view(True)', 'source.view(0.0)',
-        'source.view(CustomInt(0))', 'source.view(CustomList([0]))',
-        'source.view(CustomTuple((0,)))', 'source.view(CustomIndex())',
+        'source.view(_ViewCustomInt(0))', 'source.view(_ViewCustomList([0]))',
+        'source.view(_ViewCustomTuple((0,)))', 'source.view(_ViewCustomIndex())',
         'source.view([0, 1.0])', 'source.view(shape=(0,))', 'source.view(torch.float32)']
     shape_errors = ['source.view(2**53, 0)', 'source.view(0, 2**53 + 1)',
         'source.view(10**1000, 0)', 'source.view(-10**1000, 0)',
@@ -91,7 +93,7 @@ def check_view_boundaries():
                 for field in ['kernelCalls', 'uploadBytes', 'readbackBytes',
                               'ownedBufferBytes', 'pendingSubmissions']:
                     assert getattr(after.webgpu, field) == getattr(before.webgpu, field)
-    assert events == []
+    assert _view_coercion_events == []
     source._handle.close()
     for expression in type_errors:
         try: eval(expression)
@@ -101,9 +103,10 @@ def check_view_boundaries():
         try: eval(expression)
         except JsException as error: assert error.js_error.code == 'CLOSED_TENSOR'
         else: raise AssertionError(expression)
-    assert events == []
+    assert _view_coercion_events == []
 check_view_boundaries()
-del check_view_boundaries
+del check_view_boundaries, _ViewCustomInt, _ViewCustomList, _ViewCustomTuple
+del _ViewCustomIndex, _ViewNoReturn, _view_coercion_events
 gc.collect()
 `;
 }
