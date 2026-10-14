@@ -3,6 +3,8 @@ import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import { matrixCases, assertMatrixWords } from "../../browser/helpers/float32-matrix-oracle.mjs";
 
+const alignedMatrixBufferSpan = bytes => Math.ceil((bytes + 16) / 16) * 16;
+
 for (const variant of ["scalar", "simd128"]) {
   test(`matrix raw kernel preserves sequential FMA in every orientation (${variant})`, async () => {
     const bytes = await readFile(new URL(`../../../dist/wasm/kernels-${variant}.wasm`, import.meta.url));
@@ -13,8 +15,7 @@ for (const variant of ["scalar", "simd128"]) {
     assert.ok(instance.exports.tabgrad_capabilities() & 32);
     const base = instance.exports.tabgrad_arena_base() >>> 0;
     for (const c of matrixCases()) {
-      const aligned = bytes => Math.ceil((bytes + 16) / 16) * 16;
-      const b = base + aligned(c.left.byteLength), out = b + aligned(c.right.byteLength);
+      const b = base + alignedMatrixBufferSpan(c.left.byteLength), out = b + alignedMatrixBufferSpan(c.right.byteLength);
       new Uint32Array(memory.buffer, base, c.left.length).set(c.left);
       new Uint32Array(memory.buffer, b, c.right.length).set(c.right);
       const output = new Uint32Array(memory.buffer, out, c.expected.length + 4);

@@ -32,21 +32,25 @@ export async function checkMatrixBackend(backend, Program) {
   return { cases, comparedWords, diagnostics: backend.diagnostics() };
 }
 
+function ownMatrixTensor(session, owned, data, shape, device, requiresGrad = false) {
+  const value = session.tensor(data, { shape, device, requiresGrad });
+  owned.push(value);
+  return value;
+}
+
 /** Public forward and both ordinary VJPs use the independent integer oracle. */
 export async function checkMatrixCases(session, device = "cpu") {
   let cases = 0, comparedWords = 0;
   for (const fixture of matrixCases().filter(fixture => fixture.flags === 0)) {
     const [m, k, n] = fixture.shape, owned = [];
-    const tensor = (data, shape, requiresGrad = false) => {
-      const value = session.tensor(data, { shape, device, requiresGrad }); owned.push(value); return value;
-    };
     try {
-      const a = tensor(floats(fixture.left), [m, k], true), b = tensor(floats(fixture.right), [k, n], true);
+      const a = ownMatrixTensor(session, owned, floats(fixture.left), [m, k], device, true);
+      const b = ownMatrixTensor(session, owned, floats(fixture.right), [k, n], device, true);
       const output = a.matmul(b); owned.push(output);
       check(output !== a && output !== b && output.device === device, `${fixture.name}: metadata/identity`);
       check(JSON.stringify(output.shape) === JSON.stringify([m, n]), `${fixture.name}: output shape`);
       assertMatrixWords(words(await output.toArray()), fixture.expected, assertions);
-      const seed = tensor(new Float32Array(m * n).fill(0.5), [m, n]);
+      const seed = ownMatrixTensor(session, owned, new Float32Array(m * n).fill(0.5), [m, n], device);
       const gradients = session.grad(output, [a, b], seed); owned.push(...gradients);
       const expected = [exactMatrixProduct(words(new Float32Array(m * n).fill(0.5)), fixture.right, [m, n, k], 2),
         exactMatrixProduct(fixture.left, words(new Float32Array(m * n).fill(0.5)), [k, m, n], 1)];
@@ -135,7 +139,8 @@ export async function checkMatrixPending(session, drain, inspectOwnership, devic
         const results = Array.from({ length: pending }, () => x.matmul(w));
         const views = results.map(value => value.view([m, n]));
         const reads = results.map(value => value.toArray());
-        const future = (() => { w.copy_(replacement); return x.matmul(w); })();
+        w.copy_(replacement);
+        const future = x.matmul(w);
         try {
           const values = await Promise.all(reads);
           for (const value of values) assertMatrixWords(words(value), oldExpected, assertions);

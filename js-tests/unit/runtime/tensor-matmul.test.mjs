@@ -14,16 +14,19 @@ let manifestUrl;
 before(async () => { manifestUrl = new URL("manifest.json", await fixtures.start()); });
 after(() => fixtures.close());
 
+function matrixOwnership(session) {
+  return { ...getTestRuntimeOwnership(session),
+    ...Object.fromEntries(Object.entries(getTestRuntimeSemanticOwnership(session)).filter(([key]) => !key.startsWith("collector"))) };
+}
+
 for (const variant of ["scalar", "simd128"]) {
   test(`matrix numerical VJPs and repeated resident training (${variant})`, async () => {
     const session = createTestRuntimeSession({ manifestUrl, forceVariant: variant });
-    const ownership = session => ({ ...getTestRuntimeOwnership(session),
-      ...Object.fromEntries(Object.entries(getTestRuntimeSemanticOwnership(session)).filter(([key]) => !key.startsWith("collector"))) });
     try {
       const results = await checkMatrixCases(session);
       assert.ok(results.cases > 0 && results.comparedWords > 0);
-      await checkMatrixTraining(session, completeRuntimeSession, ownership);
-      await checkMatrixPending(session, completeRuntimeSession, ownership);
+      await checkMatrixTraining(session, completeRuntimeSession, matrixOwnership);
+      await checkMatrixPending(session, completeRuntimeSession, matrixOwnership);
     } finally { await session.close(); }
     assert.equal(session.diagnostics().liveAllocationBytes, 0);
   });
