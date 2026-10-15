@@ -32,6 +32,9 @@ public entries, matched static files and the executable JavaScript example.
 Use [Qualifying a retained browser package](package-qualification.md) for the
 contributor command's admitted inputs, archive checks, profiles and JSON report.
 
+Use [Release record tooling](release-record.md) for enrolled Git history,
+bounded event data, exact intent/observation relationships and recorder commands.
+
 Use [Python tensor creation, metadata, addition and observation](python-tensors.md) for the
 bounded Python call forms, metadata objects, errors and ownership obligations.
 

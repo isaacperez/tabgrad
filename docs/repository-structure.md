@@ -301,6 +301,13 @@ The [distribution design](architecture/browser-distribution.md) defines the
 matched public artifact boundary, including the distinction between emitted
 development content and selected release content.
 
+`scripts/release-record-data.mjs` owns the bounded public event format and
+deterministic replay of release intent and observations. The separate
+`scripts/release-record.mjs` owns private configuration/evidence lookup, explicit
+Git transport, object creation and readback. These contributor tools never enter
+library builds or signing inputs; their [reference](reference/release-record.md)
+links to the release policy's separate operational trust requirements.
+
 `scripts/package-artifact.mjs` separately owns admitted archive/evidence and
 complete installed/static inventory checks; it neither builds nor launches a
 profile. The package-application fixture uses that owner for retained input,

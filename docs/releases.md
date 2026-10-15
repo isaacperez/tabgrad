@@ -259,6 +259,10 @@ admission; do not create an unprotected environment as a fallback.
 
 ### Record intent and observations durably
 
+The [release record reference](reference/release-record.md) defines the maintained
+data format and recorder/reader commands. Their local protocol controls do not
+replace the operational qualification required here.
+
 Use a dedicated protected Git control branch, outside library source, builds
 and signing inputs, for a small checkpoint and its commit history. A separate
 trusted recorder has early repository Contents-write authority and no npm
