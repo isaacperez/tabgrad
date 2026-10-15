@@ -320,6 +320,7 @@ const mode = ${JSON.stringify(mode)}, log = ${JSON.stringify(log)}, marker = ${J
 const realGit = ${JSON.stringify(realGit)};
 fs.appendFileSync(log, JSON.stringify({ args, input: input.toString() }) + "\\n");
 if (mode === "before" && args.includes("push")) process.exit(88);
+if (mode === "forbid") process.exit(77);
 if (mode === "object-fail" && args.includes("mktree")) process.exit(88);
 if (mode === "readback" && args.includes("ls-remote") && fs.existsSync(marker)) process.exit(89);
 if (mode === "race" && args.includes("push")) {
@@ -559,10 +560,25 @@ test("recorder environment has explicit HTTPS helper selection and no file-trans
   assert.equal(file.XDG_CONFIG_HOME, directory);
   assert.equal(file.CURL_HOME, directory);
   assert.throws(() => recorderEnvironment("https", directory, provided), { code: "AUTHENTICATION_REQUIRED" });
+  assert.throws(() => recorderEnvironment("https", directory, { ...provided, GIT_ASKPASS: "relative-helper" }),
+    { code: "AUTHENTICATION_REQUIRED" });
   const helper = resolve("synthetic-helper");
   const https = recorderEnvironment("https", directory, { ...provided, GIT_ASKPASS: helper });
   assert.equal(https.GIT_ASKPASS, helper);
   assert.equal(https.GITHUB_TOKEN, "public-synthetic-token");
   assert.equal(https.NPM_TOKEN, undefined);
   assert.equal(https.SSH_AUTH_SOCK, undefined);
+});
+
+for (const [name, protocol, location] of [
+  ["SSH", "ssh", "ssh://synthetic.invalid/synthetic.git"],
+  ["HTTPS username", "https", "https://synthetic-user@synthetic.invalid/synthetic.git"],
+  ["HTTPS password", "https", "https://synthetic-user:public-synthetic-value@synthetic.invalid/synthetic.git"],
+]) test(`entry rejects ${name} before any Git invocation`, async t => {
+  const f = await fixture(t);
+  const observer = await wrapper(f, "forbid");
+  f.config.protocol = protocol;
+  f.config.location = location;
+  await assert.rejects(invoke(f, "enroll", f.root, "absent", { gitExecutable: observer.executable }), { code: "CONFIG_INVALID" });
+  await assert.rejects(readFile(observer.log), { code: "ENOENT" });
 });
