@@ -9,11 +9,11 @@ import { PackageArtifactError, stagePackageArchive, verifyPackageDirectory } fro
 const repository = fileURLToPath(new URL("../..", import.meta.url));
 
 /** Run a bounded contributor process; preserve its useful failure output. */
-export function runPackageProcess(command, arguments_, cwd, { reportStderr = true } = {}) {
+export function runPackageProcess(command, arguments_, cwd, { reportStderr = true, environment = process.env, timeout, maxBuffer } = {}) {
   // npm enables Node's persistent compile cache unless explicitly disabled.
   // Qualification must not leave that cache outside its disposable owner.
   const result = spawnSync(command, arguments_, { cwd, encoding: "utf8",
-    env: { ...process.env, NODE_DISABLE_COMPILE_CACHE: "1" } });
+    env: { ...environment, NODE_DISABLE_COMPILE_CACHE: "1" }, timeout, maxBuffer, killSignal: "SIGKILL" });
   if (result.error) throw result.error;
   if (result.status !== 0) {
     const error = new Error(`${command} failed:\n${result.stdout}\n${result.stderr}`);
@@ -31,7 +31,7 @@ export function runPackageProcess(command, arguments_, cwd, { reportStderr = tru
  * exact copy, never npm pack. With no input, preserve source-policy tests.
  * The returned close() owns only the disposable application, copy and cache.
  */
-export async function createPackageApplication({ tarball: suppliedTarball, expected } = {}) {
+export async function createPackageApplication({ tarball: suppliedTarball, expected, processOptions } = {}) {
   const directory = await mkdtemp(join(tmpdir(), "tabgrad-package-"));
   let archive;
   try {
@@ -65,7 +65,7 @@ export async function createPackageApplication({ tarball: suppliedTarball, expec
       "install", tarball, "--offline", "--ignore-scripts", "--no-audit", "--no-fund",
       "--package-lock=false", "--save=false", "--global=false", "--bin-links=false",
       "--userconfig", configuration, "--globalconfig", globalConfiguration, "--cache", cache,
-    ], application, { reportStderr: suppliedTarball === undefined });
+    ], application, { ...processOptions, reportStderr: suppliedTarball === undefined });
     const packageDirectory = join(application, "node_modules", ...metadata.name.split("/"));
     if (evidence !== undefined) await verifyPackageDirectory(packageDirectory, evidence.files);
     return {

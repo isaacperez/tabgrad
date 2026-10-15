@@ -195,7 +195,9 @@ suite. Support modules register no cases and do not use the `.test.mjs` suffix.
 The package-application fixture owns offline tarball installation in disposable
 applications; the reusable public-consumer checks qualify entries, types and
 invalid-asset behavior for both distribution unit tests and actual candidates,
-without relying on checkout module resolution.
+without relying on checkout module resolution. The package-candidate support
+owns synthetic archives shared by retained/registry controls; the package-registry
+support owns disposable observable loopback responses and never forwards requests.
 
 `js-tests/browser/` is the serving root for maintained browser fixtures. Its
 `runtime/`, `python/`, `webgpu/` and `python-webgpu/` cohorts qualify runtime,
@@ -314,7 +316,12 @@ profile. The package-application fixture uses that owner for retained input,
 while the package browser driver composes installation, public-consumer
 checks, relocated application profiles and their structured report. The
 [qualification reference](reference/package-qualification.md) describes this
-non-publishing contributor interface.
+non-publishing contributor interface. `scripts/package-registry.mjs` owns explicit
+registry metadata, cache/lock installation and safe observations;
+`scripts/package-registry-transport.mjs` owns URL/origin admission, the metadata
+client proxy and raw bounded archive acquisition before npm sees package content.
+The qualified client/cache layout stays with this integration owner, outside
+library execution and producer authentication.
 
 ## Understand the files kept at the root
 
