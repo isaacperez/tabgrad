@@ -19,16 +19,34 @@ export class RuntimeFixtureServer {
   }
 
   async start() {
-    this.server = createServer(this.handleRequest.bind(this));
-    await new Promise((resolve) => this.server.listen(0, "127.0.0.1", resolve));
-    const address = this.server.address();
+    const server = createServer(this.handleRequest.bind(this));
+    this.server = server;
+    let onListening;
+    let onError;
+    try {
+      await new Promise((resolve, reject) => {
+        onListening = resolve;
+        onError = reject;
+        server.once("listening", onListening);
+        server.once("error", onError);
+        server.listen(0, "127.0.0.1");
+      });
+    } finally {
+      server.off("listening", onListening);
+      server.off("error", onError);
+    }
+    const address = server.address();
     this.distributionUrl = `http://127.0.0.1:${address.port}/`;
     return this.distributionUrl;
   }
 
   async close() {
+    if (this.server === undefined) return;
     await new Promise((resolve, reject) => {
-      this.server.close((error) => error ? reject(error) : resolve());
+      this.server.close((error) => {
+        if (error && error.code !== "ERR_SERVER_NOT_RUNNING") reject(error);
+        else resolve();
+      });
     });
   }
 
