@@ -7,6 +7,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { createPackageApplication, runPackageProcess } from "../js-tests/fixtures/package-application.mjs";
 import { checkPublicPackageEntries, checkPublicPackageTypes, checkPublicPackageCpuAssets } from "../js-tests/fixtures/package-consumer.mjs";
 import { PackageArtifactError, verifyPackageDirectory } from "./package-artifact.mjs";
+import { createRegistryPackageApplication } from "./package-registry.mjs";
 import { BrowserRunError, browserDefinitions, browserVersion, resolveBrowser, runBrowserPage, selectBrowserDefinitions, startBrowserServer } from "./browser-harness.mjs";
 
 const repository = fileURLToPath(new URL("..", import.meta.url));
@@ -19,12 +20,16 @@ export function parsePackageArguments(arguments_) {
   for (let index = 0; index < arguments_.length; index += 1) {
     const argument = arguments_[index];
     if (argument === "--gpu" && !options.gpu) options.gpu = true;
-    else if ((argument === "--tarball" || argument === "--expected")
+    else if ((argument === "--tarball" || argument === "--expected" || argument === "--registry-plan")
       && options[argument.slice(2)] === undefined && arguments_[index + 1] !== undefined
       && !arguments_[index + 1].startsWith("--")) options[argument.slice(2)] = resolve(arguments_[++index]);
-    else throw new PackageArtifactError("ARGUMENTS_INVALID", "Use optional --gpu and paired --tarball archive.tgz --expected candidate.json.");
+    else throw new PackageArtifactError("ARGUMENTS_INVALID", "Use optional --gpu and expected evidence with either --tarball or --registry-plan.");
   }
-  if ((options.tarball === undefined) !== (options.expected === undefined)) {
+  if (options["registry-plan"] !== undefined) {
+    if (options.tarball !== undefined || options.expected === undefined) {
+      throw new PackageArtifactError("ARGUMENTS_INVALID", "Registry qualification requires expected evidence and excludes a supplied archive.");
+    }
+  } else if ((options.tarball === undefined) !== (options.expected === undefined)) {
     throw new PackageArtifactError("ARGUMENTS_INVALID", "Supply both an archive and its admitted expected evidence.");
   }
   return options;
@@ -153,7 +158,8 @@ function failureObservation(error, phase) {
  * before success is reported; partial observations survive a later failure.
  */
 export async function qualifyPackage(options) {
-  const report = { schemaVersion: 1, input: options.tarball === undefined ? "source-candidate" : "supplied-archive",
+  const registry = options["registry-plan"] !== undefined;
+  const report = { schemaVersion: 1, input: registry ? "registry-version" : options.tarball === undefined ? "source-candidate" : "supplied-archive",
     status: "failed", requested: { gpu: options.gpu, browsers: [], profiles: options.gpu ? ["gpu", "origin"] : ["direct", "python", "prerequisite"] },
     environment: { node: process.version, platform: process.platform, release: release(), architecture: process.arch }, checks: [], profiles: [] };
   let directory, fixture;
@@ -165,7 +171,7 @@ export async function qualifyPackage(options) {
     directory = await mkdtemp(join(tmpdir(), "tabgrad-package-browser-"));
     let tarball = options.tarball;
     let evidenceBytes;
-    if (tarball === undefined) {
+    if (tarball === undefined && !registry) {
       const output = join(directory, "candidate");
       runPackageProcess(process.execPath, [join(repository, "scripts/package-distribution.mjs"), output], repository, { reportStderr: false });
       evidenceBytes = await readFile(join(output, "candidate.json"));
@@ -174,12 +180,25 @@ export async function qualifyPackage(options) {
     } else evidenceBytes = await readFile(options.expected);
     report.expectedEvidenceSha256 = createHash("sha256").update(evidenceBytes).digest("hex");
     phase = "admission-and-installation";
-    fixture = await createPackageApplication({ tarball, expected: parseExpectedEvidence(evidenceBytes) });
+    if (registry) {
+      const planBytes = await readFile(options["registry-plan"]);
+      report.registryPlanInputSha256 = createHash("sha256").update(planBytes).digest("hex");
+      fixture = await createRegistryPackageApplication({ registryPlan: parseExpectedEvidence(planBytes), expected: parseExpectedEvidence(evidenceBytes) });
+      report.registry = fixture.registry;
+      // Exercise the supported supplied-archive install too; browser assertions
+      // below run on the registry application and apply to equal full trees.
+      phase = "supplied-archive-installation";
+      const supplied = await createPackageApplication({ tarball: fixture.tarball, expected: fixture.evidence,
+        processOptions: fixture.installationProcessOptions });
+      phase = "supplied-archive-cleanup";
+      await supplied.close();
+      report.checks.push("supplied-archive-installation");
+    } else fixture = await createPackageApplication({ tarball, expected: parseExpectedEvidence(evidenceBytes) });
     const expected = fixture.evidence;
     report.candidate = { name: expected.name, version: expected.version, sourceRevision: expected.sourceRevision,
       private: expected.private, archive: { byteLength: expected.tarball.byteLength, sha256: expected.tarball.sha256,
         integrity: expected.tarball.integrity }, files: expected.files.length };
-    report.environment.npm = runPackageProcess("npm", ["--version"], fixture.application, { reportStderr: false }).trim();
+    report.environment.npm = fixture.registry?.npm ?? runPackageProcess("npm", ["--version"], fixture.application, { reportStderr: false }).trim();
     report.checks.push("archive-identity", "archive-structure", "metadata-and-source", "installed-inventory");
     phase = "public-entries";
     await checkPublicPackageEntries(fixture); report.checks.push(phase);
@@ -202,6 +221,7 @@ export async function qualifyPackage(options) {
     report.status = "passed";
   } catch (error) {
     report.failure = failureObservation(error, phase);
+    if (error.registry !== undefined) report.registry = error.registry;
     if (error instanceof PackageArtifactError && error.archive !== undefined) report.archive = error.archive;
     if (error?.cleanupError !== undefined) report.cleanupFailure = failureObservation(error.cleanupError, "application-cleanup");
   }

@@ -20,6 +20,11 @@ function digest(bytes, algorithm = "sha256", encoding = "hex") {
   return createHash(algorithm).update(bytes).digest(encoding);
 }
 
+/** Compressed-byte identity, shared by admission and the npm cache witness. */
+export function packageArchiveIdentity(bytes) {
+  return { byteLength: bytes.length, sha256: digest(bytes), integrity: `sha512-${digest(bytes, "sha512", "base64")}` };
+}
+
 function packagePath(path) {
   return typeof path === "string"
     && /^(?:dist\/[A-Za-z0-9_./-]+|LICENSE|README\.md|package\.json)$/.test(path)
@@ -141,7 +146,7 @@ function inspectPackageArchive(bytes, expected, archive) {
 export async function stagePackageArchive(suppliedTarball, input, ownedDirectory) {
   const expected = validatePackageEvidence(input);
   const bytes = await readFile(suppliedTarball);
-  const archive = { byteLength: bytes.length, sha256: digest(bytes), integrity: `sha512-${digest(bytes, "sha512", "base64")}` };
+  const archive = packageArchiveIdentity(bytes);
   let metadata;
   try { metadata = inspectPackageArchive(bytes, expected, archive); }
   catch (error) { error.archive = archive; throw error; }

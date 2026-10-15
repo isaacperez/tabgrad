@@ -29,8 +29,8 @@ application's loading, entry, connection and cleanup contracts.
 Use [Browser package installation](browser-package.md) for inspected tarballs,
 public entries, matched static files and the executable JavaScript example.
 
-Use [Qualifying a retained browser package](package-qualification.md) for the
-contributor command's admitted inputs, archive checks, profiles and JSON report.
+Use [Qualifying a browser package](package-qualification.md) for admitted local
+archives or exact registry installations, shared consumers and JSON reports.
 
 Use [Release record tooling](release-record.md) for enrolled Git history,
 bounded event data, exact intent/observation relationships and recorder commands.
