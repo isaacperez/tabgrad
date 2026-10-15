@@ -12,18 +12,18 @@ Use an explicitly selected control branch outside the library source, build,
 consumer and signing inputs. Supply its location and trusted enrollment through
 private configuration, never through checked-in deployment data. Each command
 uses an owned temporary bare Git repository without checkout, templates, hooks,
-global/system Git configuration, replacements, recursive submodules or automatic
-credential fallback. It reads only the selected reference. The installed Git
-executable and explicit authentication helpers are trusted tooling inputs.
+global/system Git configuration, replacements or recursive submodules. It reads
+only the selected reference. The installed Git executable and explicit
+authentication helpers are trusted tooling inputs.
 
 The private JSON configuration has exactly these fields:
 
 | Field | Meaning |
 | --- | --- |
 | `schemaVersion` | `1` |
-| `location` | Explicit absolute local repository path, `https://` URL or `ssh://` URL; no remote alias or directory default |
+| `location` | Explicit absolute local repository path or `https://` URL without embedded username/password; no remote alias or directory default |
 | `ref` | Dedicated `refs/heads/` name containing lowercase letters/digits and single hyphens; `main` and `master` are refused |
-| `protocol` | Exactly `file`, `https` or `ssh`; Git is restricted to this transport |
+| `protocol` | Exactly `file` or `https`; Git is restricted to this transport |
 | `root` | Independently enrolled 40-character SHA-1 Git commit; `null` only for explicit enrollment |
 | `writerPolicy` | SHA-256 of the retained writer-authority/protection record |
 | `evidence` | Object mapping SHA-256 identities to retained original files; relative paths resolve against this configuration |
@@ -33,6 +33,16 @@ The location evidence is the exact canonical encoding of
 Changing that binding, the enrolled root or writer-policy identity fails.
 This binds supplied configuration bytes; it does not authenticate an endpoint,
 resolve malicious redirection or establish effective branch protection.
+
+Git receives a small system environment allowlist and an owned empty home, not
+ambient Git/SSH/npm settings, agents, proxies or Node preload options. File
+transport receives no publishing tokens or authentication helper. HTTPS requires
+an explicit absolute `GIT_ASKPASS` helper; only that path and an explicitly
+supplied `GITHUB_TOKEN` are additionally forwarded. Interactive terminal prompts
+are disabled. SSH is unsupported. The recorder does not choose a default helper
+or recover by changing credentials. The selected helper is trusted code: its
+own credential sources and behavior must be qualified separately. Environment
+selection tests are not evidence of actual HTTPS authentication or enforcement.
 
 Before operational enrollment, reconcile preceding effects, authorize the
 root/location and writer, and qualify actual permissions/protection. Enrollment
@@ -137,8 +147,9 @@ identity. A different current head fails, including a rewind below that pin.
 An unobserved administrative rewrite cannot be detected from an older root
 alone. Keep required observation pins/history under qualified control.
 
-New objects use fixed public recorder author/committer metadata, fixed message
-and the admitted frame; those Git identity fields are not authenticated actors.
+New objects use fixed public recorder author/committer names/address, the
+event's UTC instant, fixed message and the admitted frame; those Git identity
+fields are not authenticated actors or independent time attestations.
 Input, plan, original evidence, time and replay checks precede authored objects,
 including objects whose subsequent reference update fails. The recorder writes
 no recursive journal intent for its own Git call. Its own authority is the

@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
 import { applyEvent, canonicalBytes, emptyReplay, inputEvent, planBytes, sha256 } from "../../../scripts/release-record-data.mjs";
-import { locationIdentity, releaseRecord } from "../../../scripts/release-record.mjs";
+import { locationIdentity, recorderEnvironment, releaseRecord } from "../../../scripts/release-record.mjs";
 
 const at = "2026-01-01T00:00:00.000Z";
 const deadline = "2026-01-01T01:00:00.000Z";
@@ -29,7 +29,8 @@ function git(location, args, input) {
 
 async function fixture(t) {
   const directory = await mkdtemp(join(tmpdir(), "tabgrad-record-test-"));
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  const logs = [];
+  t.after(() => cleanupFixture(directory, logs));
   const location = join(directory, "destination.git");
   await mkdir(location);
   git(location, ["init", "--bare", "--object-format=sha1", "--template="]);
@@ -53,7 +54,26 @@ async function fixture(t) {
   const planPath = join(directory, "plan.json");
   await writeFile(planPath, planBytes(opened));
   evidence[opened.plan] = planPath;
-  return { directory, config, root, opened };
+  return { directory, config, root, opened, logs };
+}
+
+async function cleanupFixture(directory, logs) {
+  const directories = new Set();
+  for (const log of logs) {
+    let bytes;
+    try { bytes = await readFile(log, "utf8"); } catch (error) {
+      if (error.code === "ENOENT") continue;
+      throw error;
+    }
+    for (const line of bytes.trim().split("\n").filter(Boolean)) {
+      const { args } = JSON.parse(line);
+      const owned = args[args.indexOf("--git-dir") + 1];
+      assert.ok(owned.startsWith(join(tmpdir(), "tabgrad-release-record-")));
+      directories.add(owned);
+    }
+  }
+  for (const owned of directories) await rm(owned, { recursive: true, force: true });
+  await rm(directory, { recursive: true, force: true });
 }
 
 function changedPlan(original, changes) {
@@ -118,6 +138,8 @@ test("Git enrollment, exact root/head readback, intents, partial progress and co
   assert.equal(git(f.config.location, ["for-each-ref", "--format=%(refname)"]), f.config.ref);
   assert.equal(git(f.config.location, ["show", "--format=%an <%ae>%n%cn <%ce>%n%B", "--no-patch", head]),
     "Tabgrad release recorder <release-recorder@invalid>\nTabgrad release recorder <release-recorder@invalid>\nTabgrad release record");
+  assert.equal(git(f.config.location, ["show", "--format=%aI%n%cI", "--no-patch", head]),
+    "2026-01-01T00:00:00+00:00\n2026-01-01T00:00:00+00:00");
 });
 
 for (const [name, mutate] of [
@@ -284,6 +306,7 @@ test("CLI inspect validates the exact canonical bytes without Git writes or priv
 async function wrapper(f, mode) {
   const executable = join(f.directory, `git-${mode}.mjs`);
   const log = join(f.directory, `git-${mode}.jsonl`);
+  f.logs.push(log);
   const marker = join(f.directory, `git-${mode}.marker`);
   const realGit = spawnSync("which", ["git"], { encoding: "utf8" }).stdout.trim();
   const source = `#!${process.execPath}
@@ -476,7 +499,6 @@ test("process cancellation after the real Git write leaves a readable unresolved
   // SIGTERM can prevent finally. The fixture identifies and removes only its own leftover.
   for (const directory of new Set(logs.map(x => x.args[x.args.indexOf("--git-dir") + 1]))) {
     assert.ok(directory.startsWith(join(tmpdir(), "tabgrad-release-record-")));
-    await rm(directory, { recursive: true, force: true });
   }
 });
 
@@ -518,3 +540,26 @@ for (const operationCount of [1, 16, 64]) for (const effectCount of [1, 8]) {
     assert.equal(state.calls.values().next().value.lastObservation.evidence, identity("evidence"));
   });
 }
+
+test("recorder environment has explicit HTTPS helper selection and no file-transport credentials", () => {
+  const directory = resolve("synthetic-control-home");
+  const provided = { PATH: "synthetic-path", HOME: "synthetic-home", GITHUB_TOKEN: "public-synthetic-token",
+    SSH_AUTH_SOCK: "synthetic-agent", SSH_ASKPASS: "synthetic-ssh-helper", GIT_SSH_COMMAND: "synthetic-ssh",
+    GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "synthetic-key", GIT_CONFIG_VALUE_0: "synthetic-value",
+    NODE_OPTIONS: "synthetic-preload", NPM_TOKEN: "public-synthetic-npm-token", HTTPS_PROXY: "synthetic-proxy" };
+  const file = recorderEnvironment("file", directory, provided);
+  for (const key of ["GITHUB_TOKEN", "SSH_AUTH_SOCK", "SSH_ASKPASS", "GIT_SSH_COMMAND", "GIT_CONFIG_COUNT",
+    "GIT_CONFIG_KEY_0", "GIT_CONFIG_VALUE_0", "NODE_OPTIONS", "NPM_TOKEN", "HTTPS_PROXY", "GIT_ASKPASS"]) {
+    assert.equal(file[key], undefined, key);
+  }
+  assert.equal(file.HOME, directory);
+  assert.equal(file.XDG_CONFIG_HOME, directory);
+  assert.equal(file.CURL_HOME, directory);
+  assert.throws(() => recorderEnvironment("https", directory, provided), { code: "AUTHENTICATION_REQUIRED" });
+  const helper = resolve("synthetic-helper");
+  const https = recorderEnvironment("https", directory, { ...provided, GIT_ASKPASS: helper });
+  assert.equal(https.GIT_ASKPASS, helper);
+  assert.equal(https.GITHUB_TOKEN, "public-synthetic-token");
+  assert.equal(https.NPM_TOKEN, undefined);
+  assert.equal(https.SSH_AUTH_SOCK, undefined);
+});

@@ -11,13 +11,16 @@ import { ReleaseRecordError, RECORD_LIMIT, applyEvent, canonicalBytes, digest, e
 const oidPattern = /^[0-9a-f]{40}$/;
 const refPattern = /^refs\/heads\/[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
-function gitEnvironment(protocol) {
-  const environment = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")));
-  // Credentials, if separately authorized, have one explicit noninteractive path.
-  for (const key of ["GIT_ASKPASS", "GIT_SSH_COMMAND"]) {
-    if (process.env[key] !== undefined) environment[key] = process.env[key];
+export function recorderEnvironment(protocol, directory, provided = process.env) {
+  const environment = Object.fromEntries(["PATH", "SYSTEMROOT", "WINDIR", "TMPDIR", "TMP", "TEMP", "LANG", "LC_ALL", "TZ"]
+    .filter(key => provided[key] !== undefined).map(key => [key, provided[key]]));
+  if (protocol === "https") {
+    requireRecord(typeof provided.GIT_ASKPASS === "string" && isAbsolute(provided.GIT_ASKPASS), "AUTHENTICATION_REQUIRED");
+    environment.GIT_ASKPASS = provided.GIT_ASKPASS;
+    if (provided.GITHUB_TOKEN !== undefined) environment.GITHUB_TOKEN = provided.GITHUB_TOKEN;
   }
-  return { ...environment, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null",
+  return { ...environment, HOME: directory, XDG_CONFIG_HOME: directory, CURL_HOME: directory,
+    GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null",
     GIT_TERMINAL_PROMPT: "0", GIT_ALLOW_PROTOCOL: protocol, GIT_NO_REPLACE_OBJECTS: "1",
     GIT_AUTHOR_NAME: "Tabgrad release recorder", GIT_COMMITTER_NAME: "Tabgrad release recorder",
     GIT_AUTHOR_EMAIL: "release-recorder@invalid", GIT_COMMITTER_EMAIL: "release-recorder@invalid" };
@@ -29,17 +32,17 @@ class GitStore {
     this.config = config;
     this.executable = executable;
     this.timeoutMs = timeoutMs;
-    this.environment = gitEnvironment(config.protocol);
+    this.environment = recorderEnvironment(config.protocol, directory);
   }
 
-  call(arguments_, input) {
+  call(arguments_, input, environment = {}) {
     return spawnSync(this.executable, ["-c", "core.hooksPath=/dev/null", "-c", "gc.auto=0",
-      "--git-dir", this.directory, ...arguments_], { env: this.environment, input,
+      "--git-dir", this.directory, ...arguments_], { env: { ...this.environment, ...environment }, input,
       encoding: "utf8", timeout: this.timeoutMs, maxBuffer: 16 * 1024 * 1024 });
   }
 
-  run(arguments_, input) {
-    const result = this.call(arguments_, input);
+  run(arguments_, input, environment) {
+    const result = this.call(arguments_, input, environment);
     if (result.error || result.status !== 0) {
       const error = new ReleaseRecordError("GIT_FAILED", { cause: result });
       error.phase = arguments_[0];
@@ -100,7 +103,7 @@ class GitStore {
     const tree = this.run(["mktree"], `100644 blob ${blob}\tcheckpoint.json\n`).trim();
     requireRecord(oidPattern.test(tree), "OBJECT_INVALID");
     const commit = this.run(["commit-tree", tree, ...(parent === null ? [] : ["-p", parent])],
-      "Tabgrad release record\n").trim();
+      "Tabgrad release record\n", { GIT_AUTHOR_DATE: frame.event.at, GIT_COMMITTER_DATE: frame.event.at }).trim();
     requireRecord(oidPattern.test(commit), "OBJECT_INVALID");
     return commit;
   }
@@ -123,10 +126,14 @@ function validateConfig(config, command) {
     && config.location.length > 0 && !config.location.startsWith("-")
     && !/[\r\n\0]/.test(config.location), "CONFIG_INVALID");
   requireRecord(refPattern.test(config.ref) && !["refs/heads/main", "refs/heads/master"].includes(config.ref), "CONFIG_INVALID");
-  requireRecord(["file", "https", "ssh"].includes(config.protocol), "CONFIG_INVALID");
+  requireRecord(["file", "https"].includes(config.protocol), "CONFIG_INVALID");
   requireRecord(config.protocol !== "file" || isAbsolute(config.location), "CONFIG_INVALID");
   requireRecord(config.protocol !== "https" || config.location.startsWith("https://"), "CONFIG_INVALID");
-  requireRecord(config.protocol !== "ssh" || config.location.startsWith("ssh://"), "CONFIG_INVALID");
+  if (config.protocol === "https") {
+    let url;
+    try { url = new URL(config.location); } catch { throw new ReleaseRecordError("CONFIG_INVALID"); }
+    requireRecord(url.username === "" && url.password === "", "CONFIG_INVALID");
+  }
   requireRecord(command === "enroll" ? config.root === null : oidPattern.test(config.root), "ROOT_REQUIRED");
   digest(config.writerPolicy);
   requireRecord(config.evidence !== null && typeof config.evidence === "object" && !Array.isArray(config.evidence), "CONFIG_INVALID");
