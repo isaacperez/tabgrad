@@ -276,6 +276,17 @@ test("inherited stderr preserves the primary application failure and explicit ca
   assert.equal(outcome.profileRemoved, true);
 });
 
+test("structured callers can capture the stderr cutoff note without extra stdout", async () => {
+  const { output, outcome } = await runInheritedStderrFixture("captured-success");
+  assert.deepEqual(outcome.result, { ok: true });
+  assert.equal(output, `OUTCOME ${JSON.stringify(outcome)}\n`);
+  assert.equal(outcome.notes.length, 1);
+  assert.match(outcome.notes[0], /stderr capture ended without EOF/);
+  assert.match(outcome.notes[0], /does not establish descendant termination/);
+  assert.equal(outcome.writerJoined, true);
+  assert.equal(outcome.profileRemoved, true);
+});
+
 test("a failed stderr read remains a diagnostic failure rather than a successful process join", async (context) => {
   const emit = ChildProcess.prototype.emit;
   context.mock.method(ChildProcess.prototype, "emit", function (event, ...arguments_) {

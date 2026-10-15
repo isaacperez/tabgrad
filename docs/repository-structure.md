@@ -301,6 +301,14 @@ The [distribution design](architecture/browser-distribution.md) defines the
 matched public artifact boundary, including the distinction between emitted
 development content and selected release content.
 
+`scripts/package-artifact.mjs` separately owns admitted archive/evidence and
+complete installed/static inventory checks; it neither builds nor launches a
+profile. The package-application fixture uses that owner for retained input,
+while the package browser driver composes installation, public-consumer
+checks, relocated application profiles and their structured report. The
+[qualification reference](reference/package-qualification.md) describes this
+non-publishing contributor interface.
+
 ## Understand the files kept at the root
 
 The root is the entry point for repository readers and several tools. Moving

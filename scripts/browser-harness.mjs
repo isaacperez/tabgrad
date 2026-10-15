@@ -576,6 +576,7 @@ export async function runBrowserPage({
   version = "unknown",
   validateResult,
   removeProfile = removeBrowserProfile,
+  reportNote = (message) => process.stdout.write(message),
 }) {
   const token = randomUUID();
   const profile = await mkdtemp(join(tmpdir(), "tabgrad-browser-profile-"));
@@ -749,7 +750,7 @@ export async function runBrowserPage({
   }
 
   if (standardErrorClosedEarly) {
-    process.stdout.write(
+    reportNote(
       `NOTE ${browser.name} stderr capture ended without EOF; this does not establish descendant termination.\n`,
     );
   }
