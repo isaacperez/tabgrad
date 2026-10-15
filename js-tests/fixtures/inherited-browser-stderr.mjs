@@ -61,6 +61,7 @@ async function runBrowser(port, token, pageUrl, scenario) {
 }
 
 async function runHarness(scenario) {
+  const notes = [];
   const token = randomUUID();
   let writer;
   let writerPid;
@@ -88,12 +89,14 @@ async function runHarness(scenario) {
         name: "InheritedStderrBrowser",
         argumentsFor(directory, url) {
           profile = directory;
-          return [fixture, "browser", String(gate.address().port), token, url, scenario];
+          return [fixture, "browser", String(gate.address().port), token, url,
+            scenario === "captured-success" ? "success" : scenario];
         },
       },
       validateResult(result) { assert.equal(result.ok, true, "controlled application failure"); },
+      reportNote: scenario === "captured-success" ? message => notes.push(message) : undefined,
     });
-    outcome = { result };
+    outcome = { result, notes };
   } catch (error) {
     outcome = { failureKind: error.diagnostics?.failureKind, diagnostics: error.diagnostics };
   } finally {

@@ -17,6 +17,10 @@ This is an offline installation path, not evidence that the name/version is
 published in a registry or that a publisher controls that namespace. An actual
 release follows the [release policy](https://github.com/isaacperez/tabgrad/blob/main/docs/releases.md).
 
+Contributors can [qualify an admitted retained archive](https://github.com/isaacperez/tabgrad/blob/main/docs/reference/package-qualification.md)
+without rebuilding it. That check does not publish a package or authenticate
+its producer.
+
 Copy the installed package's complete `dist/` tree into an application-owned
 static directory, such as `/vendor/tabgrad/`. The prepared candidate also
 provides the identical tree at `package/dist/`. Serve JavaScript as modules,

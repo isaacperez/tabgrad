@@ -354,8 +354,8 @@ checks do not depend on shell activation or an unprepared global interpreter.
 | Expose installed Pyodide type sources | `.venv/bin/python -I scripts/prepare_pyodide_types.py` | Reads the locked Pyodide standard-library archive and writes only its upstream Python modules under ignored `node_modules/pyodide/python-types/`; no download, installation or import of browser modules; included in `check:python` |
 | Validate repository policies and structure | `.venv/bin/python scripts/check_repository.py` | The prepared repository tooling environment |
 | Prepare an inspected browser package candidate | `npm run package` | Clean identified source; prepared pinned Node/npm/TypeScript/Rust environment; rebuilds, stages selected files, writes an offline tarball and `candidate.json`; no install, lifecycle scripts, registry publication or account access |
-| Qualify the candidate in external browser applications | `npm run test:package:browser` | Prepared build and Chrome/Firefox (or `TABGRAD_BROWSER`); requires clean source; builds a disposable candidate, installs its tarball offline with scripts disabled, serves relocated files and copied pinned Pyodide, executes the packaged README example and Python CPU/hosting rejection controls; selected browser CI runs this after the existing browser suite |
-| Qualify managed GPU use of the external candidate | `npm run test:package:webgpu` | Same clean prepared environment, plus a real nonfallback WebGPU browser (Chrome by default); effective secure isolation, application-owned interpreter/physical workers, no JSPI; checks result/gradient, shared runtime identity, drain and cross-origin worker rejection; local hardware qualification, no interpreter/download/registry access |
+| Qualify an external browser package | `npm run test:package:browser` | Prepared pinned Node/npm/TypeScript/Pyodide and Chrome/Firefox (or `TABGRAD_BROWSER`); optional paired `--tarball archive.tgz --expected candidate.json` consumes admitted retained bytes without a build or checkout dist; no inputs requires clean identified source and full build setup to prepare a disposable candidate; scripts disabled, installed and relocated inventories verified, packaged README example and Python CPU/hosting rejection profiles executed; selected browser CI also runs the source route |
+| Qualify managed GPU use of an external package | `npm run test:package:webgpu` | Same input choices, plus a real nonfallback WebGPU browser (Chrome by default); effective secure isolation, application-owned interpreter/physical workers, no JSPI; checks result/gradient, shared runtime identity, drain and cross-origin worker rejection; local hardware qualification, no interpreter/download/registry access |
 | Test the repository validator | `.venv/bin/python scripts/run_tests.py` | The prepared repository tooling environment |
 | Select CI execution applicability | `node scripts/validation-scope.mjs` | Prepared Node.js and Git; reads `TABGRAD_VALIDATION_EVENT`, `TABGRAD_VALIDATION_BASE` and `TABGRAD_VALIDATION_HEAD`; compares the checked-out candidate for PRs, otherwise selects full coverage; prints categorical JSON and appends flags to `GITHUB_OUTPUT` only when set; no build or installation |
 | Test CI applicability independently | `node --test --test-concurrency=2 js-tests/unit/tooling/validation-scope.test.mjs` | Prepared Node.js and Git; disposable local Git trees, no distribution or browser; always-on consistency evidence |
@@ -499,6 +499,10 @@ choosing a public release version, publisher and destination remains governed
 by [releases](releases.md), separately from candidate preparation.
 
 Candidate browser checks use disposable directories outside the checkout.
+Supply paired `--tarball` and `--expected` options to check an admitted retained
+archive without rebuilding or repacking it; omit both for clean-source
+preparation. The [qualification reference](reference/package-qualification.md)
+owns the input schema, admitted archive format, profiles and report fields.
 They copy only their registered application fixtures and locally prepared
 Pyodide files, consume the actual installed tarball, and serve every application
 module from that external tree. The existing browser harness still owns process,
@@ -506,6 +510,11 @@ profile, loopback-server and diagnostic cleanup. Successful GPU output records
 the actual adapter/features/limits and requires joined normal drain; it is not
 a timing, memory-growth, model-scale or broader hardware claim. These commands
 remove their disposable application/candidate directories even after failure.
+The Node driver emits one JSON report that distinguishes requested coverage
+from validated observations and preserves bounded failures without private
+input paths. A source label or matching sidecar does not authenticate a
+producer or authorize executing its code; admission remains with the
+[release policy](releases.md).
 
 Use one stable entry point for each purpose. Prefer package scripts or a small
 repository script over instructions that require contributors to assemble a
