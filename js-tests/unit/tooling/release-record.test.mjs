@@ -138,8 +138,11 @@ test("Git enrollment, exact root/head readback, intents, partial progress and co
   assert.equal(git(f.config.location, ["for-each-ref", "--format=%(refname)"]), f.config.ref);
   assert.equal(git(f.config.location, ["show", "--format=%an <%ae>%n%cn <%ce>%n%B", "--no-patch", head]),
     "Tabgrad release recorder <release-recorder@invalid>\nTabgrad release recorder <release-recorder@invalid>\nTabgrad release record");
-  assert.equal(git(f.config.location, ["show", "--format=%aI%n%cI", "--no-patch", head]),
-    "2026-01-01T00:00:00+00:00\n2026-01-01T00:00:00+00:00");
+  // Inspect encoded Git metadata, independent of a Git release's pretty UTC spelling.
+  const dates = git(f.config.location, ["cat-file", "commit", head]).split("\n")
+    .filter(line => /^(?:author|committer) /.test(line));
+  assert.deepEqual(dates, ["author", "committer"].map(role =>
+    `${role} Tabgrad release recorder <release-recorder@invalid> ${Date.parse(at) / 1000} +0000`));
 });
 
 for (const [name, mutate] of [
