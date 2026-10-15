@@ -54,4 +54,3 @@ export async function packageFixture(context, { fullRuntime = false, extraFiles 
     sourceRevision, staticDirectory: "package/dist", files, tarball: { path: packed.filename, ...archiveIdentity(bytes) } };
   return { directory, source, metadata, tarball, bytes, expected, lifecycleMarker };
 }
-

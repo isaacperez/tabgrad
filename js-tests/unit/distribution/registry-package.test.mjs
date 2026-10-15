@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { access, chmod, mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import { delimiter, join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { spawn } from "node:child_process";
 import { test } from "node:test";
 import { packageFixture } from "../../fixtures/package-candidate.mjs";
@@ -403,7 +404,7 @@ test("changing the repository npm selection does not silently qualify another ca
   const commands = join(input.directory, "different-client-commands"); await mkdir(commands);
   await writeFile(join(commands, "npm"), '#!/usr/bin/env node\nconsole.log("11.1.1");\n');
   await chmod(join(commands, "npm"), 0o755);
-  const { createRegistryPackageApplication: otherClient } = await import(new URL(`file://${join(verifier, "scripts/package-registry.mjs")}`));
+  const { createRegistryPackageApplication: otherClient } = await import(pathToFileURL(join(verifier, "scripts/package-registry.mjs")));
   await withEnvironment({ PATH: `${commands}${delimiter}${process.env.PATH}` }, async () => {
     await assert.rejects(otherClient({ registryPlan: registry.plan, expected: input.expected }), { code: "REGISTRY_CLIENT_UNQUALIFIED" });
   });
