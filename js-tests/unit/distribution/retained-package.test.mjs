@@ -266,6 +266,26 @@ test("unsupported tar entries and malformed framing reject before package execut
   assert.equal((await cliProbe(input, truncated, expected)).failure.code, "ARCHIVE_INVALID");
 });
 
+test("an undelimited checksum rejects before npm can interpret it differently", async context => {
+  const input = await packageFixture(context);
+  const tar = gunzipSync(input.bytes);
+  tar.fill(32, 148, 156);
+  const checksum = tar.subarray(0, 512).reduce((sum, byte) => sum + byte, 0);
+  tar.write(checksum.toString(8).padStart(8, "0"), 148, 8, "ascii");
+  const bytes = gzipSync(tar);
+  const expected = structuredClone(input.expected);
+  Object.assign(expected.tarball, archiveIdentity(bytes));
+  const commands = join(input.directory, "commands");
+  const invoked = join(input.directory, "npm-invoked");
+  await mkdir(commands);
+  await writeFile(join(commands, "npm"), `#!/usr/bin/env node\nrequire('node:fs').writeFileSync(${JSON.stringify(invoked)}, 'unexpected'); process.exit(87);\n`);
+  await chmod(join(commands, "npm"), 0o755);
+  const report = await cliProbe(input, bytes, expected, { PATH: `${commands}${delimiter}${process.env.PATH}` });
+  assert.equal(report.failure.code, "ARCHIVE_INVALID");
+  assert.deepEqual(report.profiles, []);
+  await assert.rejects(access(invoked));
+});
+
 test("complete installed/static checks reject additions, omissions, changed bytes and links", async context => {
   const input = await packageFixture(context);
   const tree = join(input.directory, "verified");

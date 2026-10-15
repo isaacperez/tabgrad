@@ -85,7 +85,9 @@ function archiveFiles(compressed) {
     }
     let checksum = 0;
     for (let index = 0; index < 512; index += 1) checksum += index >= 148 && index < 156 ? 32 : header[index];
-    requireArtifact(checksum === tarNumber(header.subarray(148, 156))
+    // A missing terminator can make npm absorb the following type byte.
+    requireArtifact((header[155] === 0 || header[155] === 32)
+      && checksum === tarNumber(header.subarray(148, 156))
       && header.subarray(257, 265).equals(Buffer.from("ustar\0" + "00"))
       && (header[156] === 48 || header[156] === 0)
       && header.subarray(157, 257).every(byte => byte === 0), "ARCHIVE_INVALID", "Archive header or entry type is unsupported.");
