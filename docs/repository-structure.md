@@ -323,6 +323,17 @@ client proxy and raw bounded archive acquisition before npm sees package content
 The qualified client/cache layout stays with this integration owner, outside
 library execution and producer authentication.
 
+`scripts/package-provenance.mjs` owns retained producer policy, exact original
+inventory/subject pairing and composition with shared archive/static admission.
+`scripts/provenance-client.mjs` owns the identified offline client's invocation,
+environment, bounds and result boundary. `scripts/qualify-provenance-client.mjs`
+qualifies that actual client with separately prepared public originals whose
+identities are in `js-tests/fixtures/provenance-client.json`; default distribution
+tests use separately identified synthetic policy/adapter evidence. This stays
+outside candidate generation, browser imports and privileged signing/publication.
+The [producer-proof reference](reference/package-provenance.md) owns these commands
+and their explicit operational limits.
+
 ## Understand the files kept at the root
 
 The root is the entry point for repository readers and several tools. Moving

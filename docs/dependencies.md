@@ -103,6 +103,7 @@ to reproduce a required check or release.
 | `PyYAML` | Parse repository YAML during local and continuous-integration checks; development only | `6.0.3`, with accepted artifact hashes in `requirements-dev.lock` | Python Package Index and `yaml/pyyaml`, MIT License |
 | `Ruff` | Format and lint maintained Python compatibility source, repository tooling and tests; development only | `0.16.5`, with accepted artifact hashes in `requirements-dev.lock` | Python Package Index and `astral-sh/ruff`, MIT License |
 | Node.js | Run TypeScript compilation, build scripts, tests, and bounded measurements; development and release time only | `22.12.0`, selected by `.node-version` | Official Node.js distribution, MIT License |
+| GitHub CLI (`gh`) | Optional offline producer-proof verification and specialized actual-client qualification; release tooling only, outside runtime/build/default CI setup | `2.102.0`; exact prepared binary SHA-256 is separately admitted in the private plan, with no PATH/version-only substitution | Official `cli/cli` commit `fc4b137cdef0a6bd28fd461b7cf9c84a5812a8cd`, MIT License |
 | npm | Resolve the JavaScript development dependency and run package scripts; development and release time only | `11.1.0`, selected by `packageManager` in `package.json` | Official npm CLI distribution, Artistic License 2.0 |
 | TypeScript | Type-check and compile the browser-side semantic runtime and WebAssembly adapter; build time only | `6.0.3`, with registry URL and integrity in `package-lock.json` | npm registry and `microsoft/TypeScript`, Apache License 2.0 |
 | Pyodide | Execute Python in the host-owned browser interpreter; installed for development integration checks, not bundled into the direct JavaScript entry | `314.0.6`, with registry URL and integrity in `package-lock.json` | Official `pyodide/pyodide` distribution on npm; Mozilla Public License 2.0, with separate notices for included CPython and other components |
@@ -111,6 +112,17 @@ to reproduce a required check or release.
 | Rust toolchain | Compile the CPU numerical kernel to scalar and SIMD WebAssembly and run Rustfmt and Clippy; development and release time only | Compiler and standard library `1.98.1` plus `wasm32-unknown-unknown`, Rustfmt, and Clippy, selected by `rust-toolchain.toml` | Official Rust distribution, dual Apache License 2.0 and MIT License |
 | Google Chrome | Execute browser integration and bounded performance checks; test time only and not downloaded or redistributed by Tabgrad | Installed compatible release; exact version recorded with verification evidence | Google distribution under the Google Chrome Terms of Service |
 | Mozilla Firefox | Execute browser integration and bounded performance checks; test time only and not downloaded or redistributed by Tabgrad | Installed compatible release; exact version recorded with verification evidence | Mozilla distribution; source components under the Mozilla Public License 2.0 and accompanying notices |
+
+The release maintainer owns the optional provenance client's pin and update
+qualification. Its binary origin/integrity must be established before admitting
+it; a reported version or an arbitrary local hash is not that proof. Missing
+tools require separately authorized preparation. It adds no npm package,
+browser download, tensor-import request or default CI installation. The
+[producer-proof reference](reference/package-provenance.md) identifies its
+specialized original-fixture checks, actual field mapping and trust/operational
+limits. The repository retains fixture identities/public facts, not third-party
+archive or bundle payloads. Another client version or platform requires the
+affected qualification before release use.
 
 `requirements-dev.lock` is the authoritative repository-tooling dependency
 manifest and integrity record. It accepts every CPython 3.11 wheel published
