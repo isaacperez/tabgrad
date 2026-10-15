@@ -32,6 +32,9 @@ public entries, matched static files and the executable JavaScript example.
 Use [Qualifying a browser package](package-qualification.md) for admitted local
 archives or exact registry installations, shared consumers and JSON reports.
 
+Use [Verifying retained producer proofs](package-provenance.md) for offline
+signature, identity, claim and original-candidate verification under admitted trust.
+
 Use [Release record tooling](release-record.md) for enrolled Git history,
 bounded event data, exact intent/observation relationships and recorder commands.
 

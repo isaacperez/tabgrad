@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "repository": "https://github.com/cli/cli",
+  "revision": "26d2302cb8d6a327de6ab48f85bb039df57848c3",
+  "sourceVersion": "2.90.0",
+  "license": "https://github.com/cli/cli/blob/26d2302cb8d6a327de6ab48f85bb039df57848c3/LICENSE",
+  "files": [
+    {
+      "path": "pkg/cmd/attestation/test/data/sigstore-js-2.1.0.tgz",
+      "gitBlob": "390b823fd12e377849e020aa2915f7ed9e77f924",
+      "sha256": "f0c641fce0310cb43208f4272dc1423153630e44ba8cdc0b5ce8466f724e0eed",
+      "bytes": 37137,
+      "name": "sigstore-js-2.1.0.tgz"
+    },
+    {
+      "path": "pkg/cmd/attestation/test/data/sigstore-js-2.1.0-bundle.json",
+      "gitBlob": "d318ea3197629276fbc2d03b6bd6664f7ca7ebeb",
+      "sha256": "cfadddd579b9fb45947530cd0e860986ec610a28f7fa6de3ef31cc051f07f761",
+      "bytes": 10468,
+      "name": "sigstore-js-2.1.0-bundle.json"
+    },
+    {
+      "path": "pkg/cmd/attestation/test/data/trusted_root.json",
+      "gitBlob": "eddf07bbb4b243a2b3e8633371e4760b520a0c54",
+      "sha256": "455b3fe53e2678889f093d66ebbfda5f12ebb9d682b146c3535fa04e97689787",
+      "bytes": 3806,
+      "name": "trusted_root.json"
+    },
+    {
+      "path": "pkg/cmd/attestation/test/data/reusable-workflow-artifact",
+      "gitBlob": "391e327c952a04c6a40cf9a068bcc66555c29728",
+      "sha256": "49a3aa6075e0f49f82843e74b5baa614ad2a588e6675612bf108a0a008c5ac25",
+      "bytes": 2962,
+      "name": "reusable-workflow-artifact"
+    },
+    {
+      "path": "pkg/cmd/attestation/test/data/reusable-workflow-attestation.sigstore.json",
+      "gitBlob": "4150fad017018a4901863e45a9fd61a6a7a3c12e",
+      "sha256": "88e35c3496fc9b9bd29629b69271bd32738e170f0d85a12d67da0c72c743f3bd",
+      "bytes": 11346,
+      "name": "reusable-workflow-attestation.sigstore.json"
+    }
+  ],
+  "cases": [
+    {
+      "name": "npm",
+      "artifact": "sigstore-js-2.1.0.tgz",
+      "bundle": "sigstore-js-2.1.0-bundle.json",
+      "algorithm": "sha512",
+      "subject": {
+        "name": "pkg:npm/sigstore@2.1.0",
+        "digest": {
+          "sha512": "90f223f992e4c88dd068cd2a5fc57f9d2b30798343dd6e38f29c240e04ba090ef831f84490847c4e82b9232c78e8a258463b1e55c0f7469f730265008fa6633f"
+        }
+      },
+      "identity": {
+        "repository": "sigstore/sigstore-js",
+        "repositoryId": "495574555",
+        "ownerId": "71096353",
+        "sourceRevision": "26d16513386ffaa790b1c32f927544f1322e4194",
+        "sourceRef": "refs/heads/main",
+        "workflowPath": ".github/workflows/release.yml",
+        "workflowRevision": "26d16513386ffaa790b1c32f927544f1322e4194",
+        "signerUri": "https://github.com/sigstore/sigstore-js/.github/workflows/release.yml@refs/heads/main",
+        "signerRevision": "26d16513386ffaa790b1c32f927544f1322e4194",
+        "runId": "6014488666",
+        "runAttempt": "1",
+        "event": "push"
+      }
+    },
+    {
+      "name": "reusable",
+      "artifact": "reusable-workflow-artifact",
+      "bundle": "reusable-workflow-attestation.sigstore.json",
+      "algorithm": "sha256",
+      "subject": {
+        "name": "github_provenance_demo-0.0.0-py3-none-any.whl",
+        "digest": {
+          "sha256": "49a3aa6075e0f49f82843e74b5baa614ad2a588e6675612bf108a0a008c5ac25"
+        }
+      },
+      "identity": {
+        "repository": "malancas/attest-demo",
+        "repositoryId": "804070735",
+        "ownerId": "16248153",
+        "sourceRevision": "95baf27389e83e6a5c48f42e190d48d7abcea19e",
+        "sourceRef": "refs/heads/main",
+        "workflowPath": ".github/workflows/shared.yml",
+        "workflowRevision": "95baf27389e83e6a5c48f42e190d48d7abcea19e",
+        "signerUri": "https://github.com/github/artifact-attestations-workflows/.github/workflows/attest.yml@09b495c3f12c7881b3cc17209a327792065c1a1d",
+        "signerRevision": "09b495c3f12c7881b3cc17209a327792065c1a1d",
+        "runId": "9228858953",
+        "runAttempt": "1",
+        "event": "workflow_dispatch"
+      }
+    }
+  ]
+}
