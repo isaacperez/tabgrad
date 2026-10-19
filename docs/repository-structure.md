@@ -343,6 +343,14 @@ contract and local-file tests live under `js-tests/unit/tooling/`. These modules
 do not depend on the offline client, enter the distribution, supervise processes
 or perform privileged signing/publication.
 
+`scripts/provenance-acquisition-control.mjs` owns the separate experimental
+actor-control decisions and action correlation. Its `-session.mjs` companion
+composes those decisions with the acquisition record's ordinary-file I/O and
+confirmed-prefix collection. The [local coordination reference](reference/provenance-acquisition-control.md)
+defines their bounded domain: separate logical states in one process, without
+IPC, native supervision, clock admission or client execution. These tools and
+their tooling tests remain outside library builds and signing/publication.
+
 ## Understand the files kept at the root
 
 The root is the entry point for repository readers and several tools. Moving

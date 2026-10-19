@@ -207,6 +207,23 @@ owned outstanding writes and closes all handles; it does not declare an
 unfinished progress stream complete. Closing is idempotent and does not
 establish an externally enforced shutdown deadline.
 
+The set also has `readHeader()`, usable once after the header write completes
+without uncertainty. It reads the known confirmed length on that **same open
+FileHandle**, checks regular type, one link, capacity and identity before and
+after reading, and never reopens by pathname. Length is checked before buffer
+allocation. Known short reads advance within this range; failure is not retried
+as another header read. Result is `{bytes, confirmedBytes, readBytes, state,
+uncertain, readError}`. Invalid timing/concurrent use rejects with
+`WRITER_STOPPED`, missing read support with `READ_RANGE`; admitted I/O failures
+return unknown state and their known read prefix. Writing snapshots are not
+rewritten to disguise a read failure. The read and identity checks are owned
+pending operations, so close waits for them and excludes new operations.
+The header writer also exposes this method; other roles reject it.
+
+This readback establishes neither durability nor an independent watchdog
+opening. The [local coordination interface](provenance-acquisition-control.md)
+uses it without changing the JSONL representation or external trust domain.
+
 Writes are sequential per role; concurrent writes/finish are rejected. Header
 and ending writers stop after one emission. Known short writes finish the same
 range; digest and offset advance only by confirmed bytes. Zero advance, thrown
