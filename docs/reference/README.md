@@ -38,6 +38,10 @@ signature, identity, claim and original-candidate verification under admitted tr
 Use [Release record tooling](release-record.md) for enrolled Git history,
 bounded event data, exact intent/observation relationships and recorder commands.
 
+Use [Acquisition control record](provenance-acquisition-record.md) for the internal
+experimental JSONL profile, independent file reserves, confirmed prefixes and
+bounded local readback, separate from trust admission and producer proofs.
+
 Use [Python tensor creation, metadata, addition and observation](python-tensors.md) for the
 bounded Python call forms, metadata objects, errors and ownership obligations.
 
