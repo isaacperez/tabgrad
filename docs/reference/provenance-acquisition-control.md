@@ -15,6 +15,11 @@ work. There is no timer, IPC, cgroup observer or physical independence between
 the actors. The synchronous clock and file-transfer seam are trusted internal
 ports, not user plugins.
 
+The shared `provenance-acquisition-actor.mjs` owns each actor's control/effect
+assembly, used here and by the separate
+[process adapter](provenance-acquisition-process.md). Sharing that owner does
+not expand this same-process session's observation or admission domain.
+
 ## Control state and inputs
 
 `createAcquisitionControl(context)` returns a frozen state for one actor.

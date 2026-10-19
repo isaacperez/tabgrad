@@ -46,6 +46,10 @@ Use [Local acquisition coordination](provenance-acquisition-control.md) for
 separate actor states, exact action confirmations, irreversible revocation and
 the experimental ordinary-file session, distinct from external supervision.
 
+Use [Acquisition coordination across local processes](provenance-acquisition-process.md)
+for the experimental two-actor launcher, closed IPC, peer observations and
+failure-preserving direct-child cleanup, separate from physical containment.
+
 Use [Python tensor creation, metadata, addition and observation](python-tensors.md) for the
 bounded Python call forms, metadata objects, errors and ownership obligations.
 

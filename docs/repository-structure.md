@@ -346,10 +346,21 @@ or perform privileged signing/publication.
 `scripts/provenance-acquisition-control.mjs` owns the separate experimental
 actor-control decisions and action correlation. Its `-session.mjs` companion
 composes those decisions with the acquisition record's ordinary-file I/O and
-confirmed-prefix collection. The [local coordination reference](reference/provenance-acquisition-control.md)
+confirmed-prefix collection. `provenance-acquisition-actor.mjs` owns per-actor
+state/effect assembly shared by local and process composition, including ending
+generation. The [local coordination reference](reference/provenance-acquisition-control.md)
 defines their bounded domain: separate logical states in one process, without
 IPC, native supervision, clock admission or client execution. These tools and
 their tooling tests remain outside library builds and signing/publication.
+
+`scripts/provenance-acquisition-process.mjs` owns experimental two-child launch,
+IPC routing, direct-child observation and collection. Its `-actor.mjs` entry
+owns local peer watch/close and its `-protocol.mjs` companion owns closed messages.
+The record I/O owner supplies role-scoped openings after complete-set validation.
+The [process reference](reference/provenance-acquisition-process.md) distinguishes
+these trusted local processes from physical resource/containment qualification.
+Tests stay under `js-tests/unit/tooling/`; no library entry or privileged workflow
+depends on these owners.
 
 ## Understand the files kept at the root
 

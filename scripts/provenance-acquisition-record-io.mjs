@@ -7,6 +7,10 @@ import {
 } from "./provenance-acquisition-record.mjs";
 
 const roles = Object.keys(ACQUISITION_LIMITS);
+export const ACQUISITION_ACTOR_PARTS = Object.freeze({
+  supervisor: Object.freeze(["header", "progress", "supervisor"]),
+  watchdog: Object.freeze(["watchdog"]),
+});
 const nativeTransfer = {
   write: (handle, bytes, offset, length, position) => handle.write(bytes, offset, length, position),
   read: (handle, bytes, offset, length, position) => handle.read(bytes, offset, length, position),
@@ -188,28 +192,31 @@ function partWriter(role, handle, transfer, identity) {
  * transfer is a trusted, narrow test seam with FileHandle read/write signatures.
  * Native failures are replaced with closed codes; root paths are never diagnostics.
  */
-export async function openAcquisitionRecord({ root, destinations, transfer = nativeTransfer }) {
+async function openRecordParts({ root, destinations, transfer }, selected) {
   const opened = [];
   const owned = [];
   try {
-    requireAcquisition(destinations && Object.keys(destinations).sort().join() === [...roles].sort().join(), "FILE_DESTINATION");
+    requireAcquisition(destinations && Object.keys(destinations).sort().join() === [...selected].sort().join(), "FILE_DESTINATION");
     requireAcquisition(typeof transfer.write === "function", "FILE_DESTINATION");
     const rootIdentity = await ownedRoot(root);
     const seen = new Set();
-    for (const role of roles) {
+    for (const role of selected) {
       const part = await openPart(root, role, destinations[role], owned);
       opened.push(part);
       requireAcquisition(!seen.has(part.identity), "FILE_ALIAS");
       seen.add(part.identity);
     }
     identityMatches(await lstat(root, { bigint: true }), rootIdentity);
-    const writers = Object.fromEntries(roles.map((role, index) => [role,
+    const writers = Object.fromEntries(selected.map((role, index) => [role,
       partWriter(role, opened[index].handle, transfer, opened[index].identity)]));
     return Object.freeze({ writers: Object.freeze(writers),
-      readHeader() { return writers.header.readHeader(); },
+      readHeader() {
+        requireAcquisition(writers.header !== undefined, "WRITER_STOPPED");
+        return writers.header.readHeader();
+      },
       async close() {
-        const snapshots = await Promise.all(roles.map(role => writers[role].close()));
-        return Object.fromEntries(roles.map((role, index) => [role, snapshots[index]]));
+        const snapshots = await Promise.all(selected.map(role => writers[role].close()));
+        return Object.fromEntries(selected.map((role, index) => [role, snapshots[index]]));
       },
     });
   } catch (error) {
@@ -217,6 +224,20 @@ export async function openAcquisitionRecord({ root, destinations, transfer = nat
     failure.cleanup = await closeHandles(owned);
     throw failure;
   }
+}
+
+export async function openAcquisitionRecord({ root, destinations, transfer = nativeTransfer }) {
+  return openRecordParts({ root, destinations, transfer }, roles);
+}
+
+/**
+ * Open only one actor's assigned parts. The preparer must first validate the
+ * complete set with openAcquisitionRecord and close those preparer handles.
+ * This rechecks the assigned native identities; it is not filesystem isolation.
+ */
+export function openAcquisitionActorRecord({ role, root, destinations, transfer = nativeTransfer }) {
+  requireAcquisition(Object.hasOwn(ACQUISITION_ACTOR_PARTS, role), "FILE_DESTINATION");
+  return openRecordParts({ root, destinations, transfer }, ACQUISITION_ACTOR_PARTS[role]);
 }
 
 /**

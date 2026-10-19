@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { ACQUISITION_LIMITS, acquisitionSha256, encodeAcquisitionRecord, inspectAcquisitionRecord } from "../../../scripts/provenance-acquisition-record.mjs";
-import { acquisitionFileIdentity, openAcquisitionRecord, readAcquisitionPart } from "../../../scripts/provenance-acquisition-record-io.mjs";
+import { acquisitionFileIdentity, openAcquisitionRecord, openAcquisitionActorRecord, readAcquisitionPart } from "../../../scripts/provenance-acquisition-record-io.mjs";
 
 const operationId = "1".repeat(32);
 const hash = "a".repeat(64);
@@ -446,4 +446,37 @@ test("close joins an admitted header read and excludes concurrent read/write wit
   assert.equal((await closing).header.closeError, null);
   assert.equal(handle.fd, -1);
   await rejects(record.readHeader(), "WRITER_STOPPED");
+});
+
+test("actor openers retain only the assigned files after complete-set preparation", async t => {
+  const config = await fixture(t);
+  const preparer = await openAcquisitionRecord(config);
+  await preparer.close();
+  const subset = parts => Object.fromEntries(parts.map(role => [role, config.destinations[role]]));
+  const s = await openAcquisitionActorRecord({ role: "supervisor", root: config.root,
+    destinations: subset(["header", "progress", "supervisor"]) });
+  const w = await openAcquisitionActorRecord({ role: "watchdog", root: config.root,
+    destinations: subset(["watchdog"]) });
+  t.after(async () => { await s.close(); await w.close(); });
+  assert.deepEqual(Object.keys(s.writers), ["header", "progress", "supervisor"]);
+  assert.deepEqual(Object.keys(w.writers), ["watchdog"]);
+  assert.throws(() => w.readHeader(), { code: "WRITER_STOPPED" });
+  const h = await s.writers.header.write(header());
+  assert.deepEqual((await s.readHeader()).bytes, encodeAcquisitionRecord("header", header()));
+  await s.writers.progress.write(event());
+  const p = s.writers.progress.finish();
+  await s.writers.supervisor.write(end("supervisor", h.sha256, p));
+  await w.writers.watchdog.write(end("watchdog", h.sha256, p));
+  const ranges = { ...await s.close(), ...await w.close() };
+  assert.equal(inspectAcquisitionRecord(await readParts(config, ranges)).formatComplete, true);
+});
+
+test("actor openers reject missing or foreign role delivery before writing", async t => {
+  const config = await fixture(t);
+  for (const destinations of [{}, config.destinations,
+    { watchdog: config.destinations.watchdog, header: config.destinations.header }]) {
+    await rejects(openAcquisitionActorRecord({ role: "watchdog", root: config.root, destinations }), "FILE_DESTINATION");
+  }
+  assert.throws(() => openAcquisitionActorRecord({ role: "client", root: config.root, destinations: {} }), { code: "FILE_DESTINATION" });
+  for (const d of Object.values(config.destinations)) assert.equal((await readFile(join(config.root, d.name))).every(b => b === 0), true);
 });
