@@ -41,9 +41,12 @@ const hash = value => typeof value === "string" && /^[0-9a-f]{64}$/.test(value);
 const token = value => typeof value === "string" && /^[0-9a-f]{32}$/.test(value);
 const uint = value => typeof value === "string" && /^(0|[1-9][0-9]{0,19})$/.test(value)
   && BigInt(value) <= uintMax;
+// The control protocol uses the same scalar domain without another wire codec.
+export { hash as isAcquisitionHash, token as isAcquisitionToken, uint as isAcquisitionUint };
 const utc = value => typeof value === "string"
   && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)
   && Number.isFinite(Date.parse(value)) && new Date(value).toISOString() === value;
+export { utc as isAcquisitionUtc };
 const commonEnd = {
   operationId: token, headerSha256: nullable(hash), atNs: uint, observedUtc: utc,
   phaseReached: enumeration(phases),

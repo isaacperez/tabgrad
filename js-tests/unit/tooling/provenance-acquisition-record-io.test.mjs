@@ -328,3 +328,122 @@ test("writers reject concurrent use, mutation cannot change committed sequence, 
   await newFile.truncate(ACQUISITION_LIMITS.progress); await newFile.close();
   await rejects(readAcquisitionPart({ ...config, role: "progress", destination: config.destinations.progress, range: snapshots.progress }), "FILE_IDENTITY");
 });
+
+test("header readback uses the writing handle, confirmed length and short positional reads without reopening", async t => {
+  const config = await fixture(t);
+  let writing;
+  let readBytes = 0;
+  const record = await openAcquisitionRecord({ ...config, transfer: {
+    async write(handle, ...args) { writing = handle; return nativeWrite(handle, ...args); },
+    async read(handle, bytes, offset, length, position) {
+      assert.equal(handle, writing);
+      assert.equal(bytes.length, encodeAcquisitionRecord("header", header()).length);
+      assert.equal(position, readBytes);
+      const result = await nativeRead(handle, bytes, offset, Math.min(13, length), position);
+      readBytes += result.bytesRead;
+      return result;
+    },
+  } });
+  await rejects(record.readHeader(), "WRITER_STOPPED");
+  await record.writers.header.write(header());
+  const snapshot = record.writers.header.snapshot();
+  const path = join(config.root, config.destinations.header.name);
+  await rename(path, join(config.root, "retained-header"));
+  const replacement = await open(path, "wx+");
+  await replacement.truncate(ACQUISITION_LIMITS.header); await replacement.close();
+  const read = await record.readHeader();
+  assert.deepEqual(read.bytes, encodeAcquisitionRecord("header", header()));
+  assert.equal(read.readBytes, snapshot.confirmedBytes);
+  assert.equal(read.state, "complete");
+  assert.equal(read.uncertain, false);
+  assert.equal(read.readError, null);
+  assert.deepEqual(record.writers.header.snapshot(), snapshot);
+  await rejects(record.readHeader(), "WRITER_STOPPED");
+  await record.close();
+  assert.equal(writing.fd, -1);
+});
+
+test("failed header readback is one shot and preserves the separate successful writing snapshot", async t => {
+  for (const mode of ["zero", "throw", "extent"]) {
+    const config = await fixture(t);
+    let calls = 0;
+    const record = await openAcquisitionRecord({ ...config, transfer: { write: nativeWrite,
+      async read(handle, bytes, offset, length, position) {
+        if (++calls === 1) return nativeRead(handle, bytes, offset, 3, position);
+        if (mode === "zero") return { bytesRead: 0 };
+        if (mode === "throw") throw Error("private read failure");
+        return { bytesRead: length + 1 };
+      },
+    } });
+    await record.writers.header.write(header());
+    const before = record.writers.header.snapshot();
+    const read = await record.readHeader();
+    assert.equal(read.readBytes, 3);
+    assert.equal(read.state, "unknown");
+    assert.equal(read.uncertain, true);
+    assert.equal(read.readError, mode === "zero" ? "READ_INCOMPLETE" : mode === "throw" ? "READ_FAILED" : "READ_EXTENT_UNKNOWN");
+    assert.deepEqual(read.bytes, encodeAcquisitionRecord("header", header()).subarray(0, 3));
+    assert.deepEqual(record.writers.header.snapshot(), before);
+    await rejects(record.readHeader(), "WRITER_STOPPED");
+    assert.equal(calls, 2);
+    assert.equal((await record.close()).header.firstError, null);
+  }
+});
+
+test("header identity is checked around readback and no unconfirmed write can be read", async t => {
+  for (const during of [false, true]) {
+    const config = await fixture(t);
+    let handle;
+    const record = await openAcquisitionRecord({ ...config, transfer: {
+      async write(file, ...args) { handle = file; return nativeWrite(file, ...args); },
+      async read(file, ...args) {
+        const result = await nativeRead(file, ...args);
+        if (during) await file.truncate(0);
+        return result;
+      },
+    } });
+    await record.writers.header.write(header());
+    const before = record.writers.header.snapshot();
+    if (!during) await handle.truncate(0);
+    const read = await record.readHeader();
+    assert.equal(read.readError, "FILE_IDENTITY");
+    assert.equal(read.state, "unknown");
+    assert.equal(read.readBytes, during ? before.confirmedBytes : 0);
+    assert.deepEqual(record.writers.header.snapshot(), before);
+    await record.close();
+  }
+  const config = await fixture(t);
+  const record = await openAcquisitionRecord({ ...config, transfer: {
+    async write() { throw Error("private write"); }, read() { assert.fail("must not read"); },
+  } });
+  await rejects(record.writers.header.write(header()), "WRITE_FAILED");
+  await rejects(record.readHeader(), "WRITER_STOPPED");
+  await record.close();
+});
+
+test("close joins an admitted header read and excludes concurrent read/write without pretending a timeout cancels I/O", async t => {
+  const config = await fixture(t);
+  let release;
+  let started;
+  let handle;
+  const held = new Promise(resolve => { release = resolve; });
+  const entered = new Promise(resolve => { started = resolve; });
+  const record = await openAcquisitionRecord({ ...config, transfer: { write: nativeWrite,
+    async read(file, ...args) { handle = file; started(); await held; return nativeRead(file, ...args); },
+  } });
+  await record.writers.header.write(header());
+  const reading = record.readHeader();
+  await entered;
+  await rejects(record.readHeader(), "WRITER_STOPPED");
+  await rejects(record.writers.header.write(header()), "WRITER_STOPPED");
+  let closed = false;
+  const closing = record.close().then(value => { closed = true; return value; });
+  await Promise.resolve();
+  assert.equal(closed, false);
+  assert.notEqual(handle.fd, -1);
+  release();
+  assert.equal((await reading).state, "complete");
+  assert.equal((await closing).header.closeError, null);
+  assert.equal(handle.fd, -1);
+  await rejects(record.readHeader(), "WRITER_STOPPED");
+});

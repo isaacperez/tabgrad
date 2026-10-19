@@ -42,6 +42,10 @@ Use [Acquisition control record](provenance-acquisition-record.md) for the inter
 experimental JSONL profile, independent file reserves, confirmed prefixes and
 bounded local readback, separate from trust admission and producer proofs.
 
+Use [Local acquisition coordination](provenance-acquisition-control.md) for
+separate actor states, exact action confirmations, irreversible revocation and
+the experimental ordinary-file session, distinct from external supervision.
+
 Use [Python tensor creation, metadata, addition and observation](python-tensors.md) for the
 bounded Python call forms, metadata objects, errors and ownership obligations.
 

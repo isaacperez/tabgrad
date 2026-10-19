@@ -102,10 +102,48 @@ async function closePart(writer, handle) {
   return writerSnapshot(writer);
 }
 
+/** Read only a known prefix; virtual size and zero padding never supply length. */
+async function readPrefix(handle, length, transfer) {
+  const bytes = Buffer.alloc(length ?? 0);
+  let offset = 0;
+  let readError = null;
+  while (offset < bytes.length) {
+    let result;
+    try { result = await transfer.read(handle, bytes, offset, bytes.length - offset, offset); }
+    catch { readError = "READ_FAILED"; break; }
+    const count = result?.bytesRead;
+    if (!Number.isInteger(count) || count < 0 || count > bytes.length - offset) { readError = "READ_EXTENT_UNKNOWN"; break; }
+    if (count === 0) { readError = "READ_INCOMPLETE"; break; }
+    offset += count;
+  }
+  return { bytes: bytes.subarray(0, offset), readBytes: offset, readError };
+}
+
+async function checkHeaderHandle(handle, expectedIdentity) {
+  const stat = await handle.stat({ bigint: true });
+  const identity = acquisitionFileIdentity(stat);
+  requireAcquisition(stat.isFile() && stat.nlink === 1n && stat.size === BigInt(ACQUISITION_LIMITS.header)
+    && `${identity.dev}:${identity.ino}` === expectedIdentity, "FILE_IDENTITY");
+}
+
+async function readHeaderPart(writer, handle, transfer, expectedIdentity) {
+  const confirmedBytes = writer.confirmedBytes;
+  let result = { bytes: Buffer.alloc(0), readBytes: 0, readError: null };
+  try {
+    await checkHeaderHandle(handle, expectedIdentity);
+    result = await readPrefix(handle, confirmedBytes, transfer);
+    await checkHeaderHandle(handle, expectedIdentity);
+  } catch (error) {
+    result.readError ??= closedError(error, "READ_FAILED").code;
+  } finally { writer.busy = null; }
+  return { ...result, confirmedBytes, state: result.readError ? "unknown" : "complete",
+    uncertain: result.readError !== null };
+}
+
 /** One independent positional writer. No cross-role access, implicit finish, or retry. */
-function partWriter(role, handle, transfer) {
+function partWriter(role, handle, transfer, identity) {
   const writer = { role, state: "pending", confirmedBytes: 0, uncertain: false, firstError: null, closeError: null,
-    busy: null, closed: false, closing: null, nextSequence: 1n, operationId: null, lastAtNs: 0n,
+    busy: null, closed: false, closing: null, readStarted: false, nextSequence: 1n, operationId: null, lastAtNs: 0n,
     digest: createHash("sha256") };
   return Object.freeze({
     snapshot() { return writerSnapshot(writer); },
@@ -125,6 +163,15 @@ function partWriter(role, handle, transfer) {
       requireAcquisition(role === "progress" && !writer.closed && !writer.busy && writer.state === "pending", "WRITER_STOPPED");
       writer.state = "complete";
       return writerSnapshot(writer);
+    },
+    async readHeader() {
+      requireAcquisition(role === "header" && !writer.closed && !writer.busy && !writer.readStarted
+        && writer.state === "complete" && !writer.uncertain, "WRITER_STOPPED");
+      requireAcquisition(typeof transfer.read === "function" && Number.isSafeInteger(writer.confirmedBytes)
+        && writer.confirmedBytes > 0 && writer.confirmedBytes <= ACQUISITION_LIMITS.header, "READ_RANGE");
+      writer.readStarted = true;
+      writer.busy = Promise.resolve().then(() => readHeaderPart(writer, handle, transfer, identity));
+      return writer.busy;
     },
     async close() {
       if (writer.closing) return writer.closing;
@@ -156,8 +203,10 @@ export async function openAcquisitionRecord({ root, destinations, transfer = nat
       seen.add(part.identity);
     }
     identityMatches(await lstat(root, { bigint: true }), rootIdentity);
-    const writers = Object.fromEntries(roles.map((role, index) => [role, partWriter(role, opened[index].handle, transfer)]));
+    const writers = Object.fromEntries(roles.map((role, index) => [role,
+      partWriter(role, opened[index].handle, transfer, opened[index].identity)]));
     return Object.freeze({ writers: Object.freeze(writers),
+      readHeader() { return writers.header.readHeader(); },
       async close() {
         const snapshots = await Promise.all(roles.map(role => writers[role].close()));
         return Object.fromEntries(roles.map((role, index) => [role, snapshots[index]]));
@@ -193,21 +242,11 @@ export async function readAcquisitionPart({ root, role, destination, range, tran
     const rootIdentity = await ownedRoot(root);
     opened = await openPart(root, role, destination, owned);
     identityMatches(await lstat(root, { bigint: true }), rootIdentity);
-    const bytes = Buffer.alloc(length ?? 0);
-    let offset = 0;
-    let readError = null;
-    while (offset < bytes.length) {
-      let result;
-      try { result = await transfer.read(opened.handle, bytes, offset, bytes.length - offset, offset); }
-      catch { readError = "READ_FAILED"; break; }
-      const count = result?.bytesRead;
-      if (!Number.isInteger(count) || count < 0 || count > bytes.length - offset) { readError = "READ_EXTENT_UNKNOWN"; break; }
-      if (count === 0) { readError = "READ_INCOMPLETE"; break; }
-      offset += count;
-    }
-    result = { bytes: bytes.subarray(0, offset), state: readError || length === null ? "unknown" : range.state,
+    const prefix = await readPrefix(opened.handle, length, transfer);
+    const { readError } = prefix;
+    result = { ...prefix, state: readError || length === null ? "unknown" : range.state,
       uncertain: range.uncertain || readError !== null || length === null,
-      confirmedBytes: length, readBytes: offset, readError };
+      confirmedBytes: length };
   } catch (error) { failure = closedError(error, "READ_FAILED"); }
   const cleanup = await closeHandles(owned);
   if (failure) { failure.cleanup = cleanup; throw failure; }
