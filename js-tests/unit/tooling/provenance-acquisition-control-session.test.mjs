@@ -4,7 +4,7 @@ import { mkdtemp, open, readFile, rename, rm, realpath } from "node:fs/promises"
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { ACQUISITION_LIMITS, inspectAcquisitionRecord } from "../../../scripts/provenance-acquisition-record.mjs";
+import { ACQUISITION_LIMITS, inspectAcquisitionRecord, decodeAcquisitionRecord } from "../../../scripts/provenance-acquisition-record.mjs";
 import { acquisitionFileIdentity } from "../../../scripts/provenance-acquisition-record-io.mjs";
 import { createAcquisitionControlSession } from "../../../scripts/provenance-acquisition-control-session.mjs";
 
@@ -336,4 +336,13 @@ test("finishing without starting closes owned files and cannot manufacture a suc
   assert.deepEqual(result.localClose, { supervisor: true, watchdog: true });
   assert.equal(result.actors.supervisor.stage, "new");
   assert.equal(result.actors.watchdog.stage, "new");
+});
+
+test("a supervisor expectation mismatch preserves its actual written header hash in the ending", async t => {
+  const { session } = await fixture(t, { supervisor: { expectedHeaderSha256: "b".repeat(64) } });
+  assert.equal((await session.start()).mayStart, false);
+  const result = await session.finish({ observedUtc: utc });
+  assert.equal(result.actors.supervisor.firstFailure.code, "protocol");
+  const ending = decodeAcquisitionRecord("supervisor", result.parts.supervisor.bytes);
+  assert.equal(ending.headerSha256, digest);
 });

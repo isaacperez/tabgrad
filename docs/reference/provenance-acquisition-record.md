@@ -224,6 +224,15 @@ This readback establishes neither durability nor an independent watchdog
 opening. The [local coordination interface](provenance-acquisition-control.md)
 uses it without changing the JSONL representation or external trust domain.
 
+`ACQUISITION_ACTOR_PARTS` assigns header/progress/S-ending to `supervisor` and
+W-ending to `watchdog`. `openAcquisitionActorRecord({role, root, destinations,
+transfer?})` returns the same I/O interface for exactly the assigned subset;
+other/missing roles reject. Its caller must first validate the complete set
+with `openAcquisitionRecord` and close preparer handles. It rechecks its own
+native openings without opening another actor's files. The
+[process adapter](provenance-acquisition-process.md) owns that handoff; the
+subset opener alone cannot establish cross-process delivery or host isolation.
+
 Writes are sequential per role; concurrent writes/finish are rejected. Header
 and ending writers stop after one emission. Known short writes finish the same
 range; digest and offset advance only by confirmed bytes. Zero advance, thrown
