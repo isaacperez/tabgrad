@@ -334,6 +334,15 @@ outside candidate generation, browser imports and privileged signing/publication
 The [producer-proof reference](reference/package-provenance.md) owns these commands
 and their explicit operational limits.
 
+`scripts/provenance-acquisition-record.mjs` owns the separate internal experimental
+acquisition record format and structural association; its `-io.mjs` companion
+owns effective file identity, independent logical reserves, positional transfers
+and bounded readback. Their [reference](reference/provenance-acquisition-record.md)
+distinguishes confirmed representation from operational admission. Synthetic
+contract and local-file tests live under `js-tests/unit/tooling/`. These modules
+do not depend on the offline client, enter the distribution, supervise processes
+or perform privileged signing/publication.
+
 ## Understand the files kept at the root
 
 The root is the entry point for repository readers and several tools. Moving
