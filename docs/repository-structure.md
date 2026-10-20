@@ -388,6 +388,14 @@ not extend JSONL roles or compose transport, client launch or startup admission.
 Its [reference](reference/provenance-acquisition-capture.md) defines supplied-byte
 ownership and the limits of framing, clock and handle-close observations.
 
+`scripts/provenance-acquisition-exec-profile.mjs` owns the closed Exec request
+and metadata domains; `-exec-http.mjs` owns explicit Unix HTTP/upgrade and
+owned transaction observations; `-exec.mjs` connects one attempt with startup
+and raw capture. The [Exec reference](reference/provenance-acquisition-exec.md)
+distinguishes daemon channels/status from exclusive program provenance and
+admission. Local wire peers and finite startup fixtures test these boundaries;
+they are not a Docker laboratory or a new operational/publication entry.
+
 ## Understand the files kept at the root
 
 The root is the entry point for repository readers and several tools. Moving

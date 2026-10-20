@@ -30,6 +30,7 @@ class AcquisitionStartup {
     this.#guardReady = new Promise(resolve => { this.#resolveReady = resolve; });
     this.#guardClosed = new Promise(resolve => { this.#resolveClosed = resolve; });
     this.supervisor = Object.freeze({ append: this.#append.bind(this) });
+    Object.defineProperty(this, "context", { enumerable: true, value: session.context });
   }
 
   #check = () => {

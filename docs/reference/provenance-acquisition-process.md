@@ -57,6 +57,11 @@ expectations are not learned from received bytes. Caller mutation after creation
 does not change the frozen inputs. These clock readings and caller UTC values
 are observations, not admitted native-clock/UTC correlation.
 
+The session exposes an immutable `context` with its copied operation identity,
+T0, original operation cutoff and root. Composition uses that independent
+binding rather than learning it from a child observation. This adds no lease,
+operational authority or host admission.
+
 Creation validates inputs and opens all four distinct effective files before
 any child launch or data write, then closes those preparer handles. Failure
 rejects without launching. `start()` hands S only header/progress/S-ending paths
@@ -116,8 +121,11 @@ bounded Promise wait cannot guarantee kernel progress or physical shutdown.
 S and W retain their first local failure independently. W's ending can record a
 last received peer observation or loss of the expected pulse; if no pulse was
 ever observed, loss has no invented observation timestamp. It never reports
-planned peer end or confirmed containment from an IPC result. All client,
-validation, physical-closure and custody fields remain unknown/not started.
+planned peer end or confirmed containment from an IPC result. Client fields
+remain not_started unless the supervisor receives a declared acquisition-client
+intent, in which case its ending is conservatively unknown, including after an
+intent write failure. Daemon observations do not upgrade those fields.
+Validation, physical closure and custody remain unknown/not run.
 
 The parent signals only its owned child handles, at most once per scheduled
 signal, and stops signalling a child after an observed native exit. Signal API

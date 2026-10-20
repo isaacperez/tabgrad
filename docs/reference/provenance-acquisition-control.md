@@ -126,8 +126,11 @@ After finish, start/append/stop reject without changing the final state.
 
 Append validates closed own-data input before accessing values. The existing
 record codec validates the event domain; caller assertions still need their
-own evidence. Session-generated endings report no client start and leave
-external observations, custody and validation unknown. W never infers planned
+own evidence. A supervisor receiving `phase: acquire`, `kind: transition`,
+`subject: client`, `code: begun` conservatively records unknown client state,
+even if that intent's write or acknowledgment later fails. This declaration
+does not establish launch. Without it, endings retain not_started. External
+observations, custody and validation remain unknown/not run. W never infers planned
 peer termination, unnecessary containment or physical closure from S's logical
 finish. An unreadable clock leaves an ending absent rather than fabricating
 its time. `observedUtc` is a valid UTC supplied by the caller, which owns its
