@@ -1,6 +1,6 @@
 import { AcquisitionRecordError, requireAcquisition, isAcquisitionUint } from "./provenance-acquisition-record.mjs";
 import { copyHostProfile, freezeHostData, HOST_ROLES, validateHostReport } from "./provenance-acquisition-host-profile.mjs";
-import { openAcquisitionHost } from "./provenance-acquisition-host-io.mjs";
+import { openAcquisitionHost, enterAcquisitionHost } from "./provenance-acquisition-host-io.mjs";
 
 const causes = Object.freeze({ controller: "HOST_CONTROLLER", peer: "HOST_PEER", channel: "HOST_CHANNEL",
   protocol: "HOST_PROTOCOL", clock: "HOST_CLOCK", deadline: "HOST_DEADLINE", storage: "HOST_READ" });
@@ -93,4 +93,11 @@ export async function createAcquisitionHostController(profile, role, {
   controller.check();
   void controller.poll().catch(() => {});
   return controller;
+}
+
+/** Fixed startup entry: existing open-only consumers never implicitly migrate. */
+export function createEnteringAcquisitionHostController(profile, role, {
+  clock = () => process.hrtime.bigint(), openHost = (p, r) => enterAcquisitionHost(p, r, { clock }),
+} = {}) {
+  return createAcquisitionHostController(profile, role, { clock, openHost });
 }

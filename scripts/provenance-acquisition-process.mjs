@@ -5,6 +5,7 @@ import {
 } from "./provenance-acquisition-record.mjs";
 import { ACQUISITION_ACTOR_PARTS, openAcquisitionRecord, readAcquisitionPart } from "./provenance-acquisition-record-io.mjs";
 import { createAcquisitionControl } from "./provenance-acquisition-control.mjs";
+import { validateHostReportProgress } from "./provenance-acquisition-host-profile.mjs";
 import {
   ACQUISITION_PROCESS_CAUSES, decodeAcquisitionProcessMessage, encodeAcquisitionProcessMessage,
   sendAcquisitionProcessMessage, validateProcessTiming, validateProcessProgress, processFields,
@@ -12,6 +13,8 @@ import {
 
 const roles = Object.keys(ACQUISITION_ACTOR_PARTS);
 const actorEntry = new URL("./provenance-acquisition-process-actor.mjs", import.meta.url);
+const enteringActorEntry = new URL("./provenance-acquisition-startup-actor.mjs", import.meta.url);
+export const ENTERING_PROCESS_FIELDS = Object.freeze(["root", "destinations", "header", "supervisorContext", "watchdogContext", "timing", "host"]);
 
 function immutable(value) {
   if (value !== null && typeof value === "object") {
@@ -50,28 +53,20 @@ function validateReportProgress(previous, next) {
       && (old.firstError === null || current.firstError === old.firstError)
       && (old.closeError === null || current.closeError === old.closeError), "PROCESS_PROTOCOL");
   }
-  if (previous.host) {
-    const old = previous.host;
-    const h = next.host;
-    requireAcquisition(h && (!old.revoked || h.revoked) && (old.firstFailure === null || h.firstFailure === old.firstFailure)
-      && (h.lastAtNs === null || old.lastAtNs === null || BigInt(h.lastAtNs) >= BigInt(old.lastAtNs)), "PROCESS_PROTOCOL");
-    requireAcquisition(old.ioClosed === "open" || old.ioClosed === "pending" && h.ioClosed !== "open"
-      || old.ioClosed === h.ioClosed, "PROCESS_PROTOCOL");
-    for (const effect of ["freeze", "kill"]) requireAcquisition(old[effect].state === "not_requested"
-      || old[effect].state === "pending" && h[effect].state !== "not_requested"
-      || old[effect].state === h[effect].state && old[effect].error === h[effect].error, "PROCESS_PROTOCOL");
-  }
+  validateHostReportProgress(previous.host, next.host, "PROCESS_PROTOCOL");
 }
 
 /** Parent owns transport/child lifetimes, not actor decisions or external containment. */
 class AcquisitionProcessSession {
+  #entry;
   #source; #initial; #inputs; #timing; #fork; #states; #operationId; #deadline; #origin;
   #started = false; #busy = null; #stopped = false; #firstFailure = null; #finishing = null; #finished = false;
   #timer = null; #collection = null;
 
-  constructor(source, initial, inputs, timing, forkActor) {
+  constructor(source, initial, inputs, timing, forkActor, entry) {
     this.#source = source; this.#initial = initial; this.#inputs = inputs; this.#timing = timing; this.#fork = forkActor;
     this.#states = Object.fromEntries(roles.map(role => [role, childState()]));
+    this.#entry = entry;
     this.#operationId = inputs.supervisor.context.operationId;
     this.#origin = BigInt(inputs.supervisor.context.t0MonotonicNs);
     this.#deadline = BigInt(inputs.supervisor.context.deadlineNs);
@@ -232,7 +227,7 @@ class AcquisitionProcessSession {
       for (const role of roles) {
         if (this.#stopped || this.#finishing) break;
         try {
-          const child = this.#fork(role, actorEntry, { execPath: process.execPath, execArgv: [], env: {},
+          const child = this.#fork(role, this.#entry, { execPath: process.execPath, execArgv: [], env: {},
             cwd: this.#source.root, stdio: ["ignore", "ignore", "ignore", "ipc"], serialization: "json" });
           this.#adopt(role, child);
         } catch { this.#fail(role, "startup"); break; }
@@ -379,6 +374,16 @@ class AcquisitionProcessSession {
  * actors. forkActor is a trusted test seam, not a launcher/plugin configuration.
  */
 export async function createAcquisitionProcessSession(input, { forkActor = nativeFork } = {}) {
+  return createProcessSession(input, forkActor, actorEntry);
+}
+
+/** Explicit startup variant with fixed self-entering actors, not a caller-chosen executable. */
+export async function createEnteringAcquisitionProcessSession(input, { forkActor = nativeFork } = {}) {
+  requireAcquisition(processFields(input, ENTERING_PROCESS_FIELDS), "PROCESS_INPUT");
+  return createProcessSession(input, forkActor, enteringActorEntry);
+}
+
+async function createProcessSession(input, forkActor, entry) {
   const base = ["root", "destinations", "header", "supervisorContext", "watchdogContext", "timing"];
   const withHost = processFields(input, [...base, "host"]);
   requireAcquisition((processFields(input, base) || withHost)
@@ -404,5 +409,5 @@ export async function createAcquisitionProcessSession(input, { forkActor = nativ
   const prepared = await openAcquisitionRecord(source);
   const initial = await prepared.close();
   requireAcquisition(Object.values(initial).every(part => part.closeError === null), "PROCESS_INPUT");
-  return new AcquisitionProcessSession(source, initial, inputs, timing, forkActor);
+  return new AcquisitionProcessSession(source, initial, inputs, timing, forkActor, entry);
 }

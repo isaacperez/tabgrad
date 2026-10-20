@@ -372,6 +372,14 @@ retained experiments to encoded interfaces and synthetic controls, separate
 from native environment/resource/containment qualification. They create no
 infrastructure and are not signing/publication or library entries.
 
+`scripts/provenance-acquisition-startup.mjs` composes the process session and
+third guard without duplicating record policy or native path/identity ownership.
+Its `-protocol.mjs` owns the closed guard channel, while `-actor.mjs` and
+`-guard.mjs` select fixed explicit self-entering entries. The host I/O owner
+retains that pre-case effect; existing open-only consumers retain their domain.
+The [startup reference](reference/provenance-acquisition-startup.md) separates
+local observed admission and owned-child joins from native qualification.
+
 ## Understand the files kept at the root
 
 The root is the entry point for repository readers and several tools. Moving

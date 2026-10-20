@@ -28,7 +28,7 @@ export function hostModel(options = {}) {
     const group = directory(role, BigInt(i + 2));
     owned.children.set(role, group); nodes[role] = group;
     for (const [name, text] of [["cgroup.type", "domain\n"], ["cgroup.events", "populated 1\nfrozen 0\n"],
-      ["cgroup.procs", `${options.pid ?? 777}\n`], ["cgroup.freeze", ""], ["cgroup.kill", ""]]) group.children.set(name, file(name, text));
+      ["cgroup.procs", options.enter ? "888\n" : `${options.pid ?? 777}\n`], ["cgroup.freeze", ""], ["cgroup.kill", ""]]) group.children.set(name, file(name, text));
   }
   const port = { platform: "linux", constants: flags, pid: options.pid ?? 777,
     async open(path, mode) {
@@ -74,6 +74,11 @@ export function hostModel(options = {}) {
             if (result) return result;
           }
           if (handle.closed) throw new Error("synthetic closed write");
+          if (options.enter && node.name === "cgroup.procs") {
+            if (bytes.subarray(offset, offset + length).toString() !== "0") throw new Error("synthetic foreign PID");
+            for (const group of Object.values(nodes)) group.children.get("cgroup.procs").text = "888\n";
+            node.text = `${port.pid}\n`;
+          }
           return { bytesWritten: length, buffer: bytes };
         },
         async close() {
