@@ -86,7 +86,10 @@ Capture keeps its existing one-borrowed-chunk contract; producer/Node/kernel
 buffers and RSS are outside that structural claim. No speed improvement is claimed.
 
 `stop()` revokes synchronously, excludes new HTTP/capture and notifies controls
-without waiting behind I/O. Original monotonic nonregression and operation
+without waiting behind I/O. It also initiates owned file closure, including
+when `run()` has never been called; repeated stops do not reopen or close twice.
+Snapshots retain pending or failed file closure without requiring actor launch.
+Original monotonic nonregression and operation
 cutoff are checked at effects/awaits and by a local poll. Process allowance
 starts once before start and renews neither bound. Ambiguous create/start/write
 effects are not retried; late effects cannot restore permission.
@@ -99,6 +102,13 @@ ended; fresh snapshots may retain late effects without rewriting an earlier one.
 `cleanupWaitExpired` and its cleanup error are permanent: late closure can add
 facts but cannot turn the expired result into local completion. The clock
 sample accepted while opening capture also governs the first daemon effect.
+Cleanup reobserves that same clock and operation cutoff after its await;
+late reports survive a clock failure or an expired operation without allowing
+local completion. Process allowance does not extend the operation cutoff.
+A response arriving after cancellation is still owned: destruction requests
+are distinct from observed stream closure. A fresh snapshot can reveal this
+late pending stream even after an earlier snapshot observed all known handles
+closed; earlier snapshots remain observations of their own known handles.
 
 `snapshot()` contains identities, create/start phases, separate daemon reports,
 first failure/cleanup error, pending work, each request/stream end/close, capture

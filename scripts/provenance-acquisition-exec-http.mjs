@@ -22,6 +22,7 @@ function responseType(response, upgrade) {
 class ExecHttpTransaction {
   #request = null; #stream = null; #response = false; #aborted = false; #requestClosed = false;
   #streamClosed = false; #ended = false; #cleanupError = null; #resolveClosed;
+  #streamsPending = 0; #closureObserved = false;
   #resolveResponse; #rejectResponse; #ready; #closed;
 
   constructor() {
@@ -30,24 +31,33 @@ class ExecHttpTransaction {
   }
 
   #join() {
-    if (this.#requestClosed && (!this.#response || this.#streamClosed)) this.#resolveClosed();
+    if (this.#requestClosed && (!this.#response || this.#streamClosed)) {
+      this.#closureObserved = true; this.#resolveClosed();
+    }
   }
 
   #reject = () => { this.#rejectResponse(new AcquisitionRecordError("EXEC_HTTP")); };
 
   #receive(response, stream, head, upgraded) {
     // Install ownership before rejecting even a late or unexpected response.
+    const unexpected = this.#response || this.#aborted;
+    if (this.#closureObserved) {
+      this.#closureObserved = false;
+      this.#closed = new Promise(resolve => { this.#resolveClosed = resolve; });
+    }
+    this.#response = true; this.#streamClosed = false; this.#streamsPending++;
+    stream.once("close", () => { this.#streamsPending--; this.#streamClosed = this.#streamsPending === 0; this.#join(); });
+    stream.on("error", this.#reject);
+    if (!this.#stream) {
+      this.#stream = stream;
+      stream.once("end", () => { this.#ended = true; });
+    }
     stream.pause();
-    if (this.#response || this.#aborted) {
-      stream.on("error", () => {});
+    if (unexpected) {
       try { stream.destroy(); } catch { this.#cleanupError ??= "EXEC_CLEANUP"; }
       this.#reject();
       return;
     }
-    this.#response = true; this.#stream = stream;
-    stream.once("end", () => { this.#ended = true; });
-    stream.once("close", () => { this.#streamClosed = true; this.#join(); });
-    stream.on("error", this.#reject);
     this.#resolveResponse({ response, stream, head, upgraded });
   }
 

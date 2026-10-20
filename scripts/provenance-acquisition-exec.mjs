@@ -40,6 +40,12 @@ class AcquisitionExec {
     return now;
   }
 
+  #cleanupTime() {
+    const now = this.#now();
+    requireAcquisition(now - BigInt(this.#profile.timing.t0MonotonicNs) < BigInt(this.#profile.timing.deadlineNs), "EXEC_DEADLINE");
+    return now;
+  }
+
   #check = () => {
     if (this.#revoked) throw new AcquisitionRecordError(this.#firstFailure ?? "EXEC_STOPPED");
     try {
@@ -65,6 +71,7 @@ class AcquisitionExec {
     if (this.#revoked) return;
     this.#revoked = true;
     this.#capture.stop(); this.#http.stop(); this.#resolveStop();
+    this.#closeCapture();
     try { this.#startup.stop("supervisor", code === "EXEC_CLOCK" ? "clock" : code === "EXEC_DEADLINE" ? "deadline" : "controller"); }
     catch { this.#cleanupError ??= "EXEC_CLEANUP"; }
   }
@@ -121,7 +128,7 @@ class AcquisitionExec {
       .finally(() => { this.#controlsClosePending = false; });
     const origin = BigInt(this.#profile.timing.t0MonotonicNs);
     let now;
-    try { now = this.#now(); } catch { this.#firstFailure ??= "EXEC_CLOCK"; }
+    try { now = this.#cleanupTime(); } catch (error) { this.#firstFailure ??= error.code; }
     const remaining = now === undefined ? 0n : origin + BigInt(this.#profile.timing.deadlineNs) - now;
     const waitMs = Math.min(this.#profile.timing.closeWaitMs, Number(remaining > 0n ? remaining / 1000000n : 0n));
     let timer;
@@ -129,6 +136,7 @@ class AcquisitionExec {
     const settled = await Promise.race([Promise.all([capture, controls, this.#http.join()]).then(() => true), cutoff]);
     if (!settled) { this.#cleanupExpired = true; this.#cleanupError ??= "EXEC_CLEANUP"; }
     clearTimeout(timer);
+    try { this.#cleanupTime(); } catch (error) { this.#firstFailure ??= error.code; }
     this.#finished = true;
   }
 

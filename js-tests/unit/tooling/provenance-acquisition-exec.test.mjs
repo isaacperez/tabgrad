@@ -4,6 +4,8 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { setTimeout as delay, setImmediate as turn } from "node:timers/promises";
 import { request as nativeRequest } from "node:http";
+import { EventEmitter } from "node:events";
+import { PassThrough } from "node:stream";
 import { createAcquisitionExec } from "../../../scripts/provenance-acquisition-exec.mjs";
 import { acquisitionSha256 } from "../../../scripts/provenance-acquisition-record.mjs";
 import { deferred } from "../../fixtures/provenance-acquisition-host.mjs";
@@ -20,7 +22,7 @@ async function fixture(t, options = {}) {
   let exec;
   const state = { ready: false, starts: 0, stops: 0, ends: 0, events: [] };
   let now = 101n;
-  t.after(async () => { if (exec) { exec.stop(); await exec.run({ observedUtc }); } await rm(root, { recursive: true, force: true }); });
+  t.after(async () => { if (exec) { exec.stop(); if (!options.abandon) await exec.run({ observedUtc }); } await rm(root, { recursive: true, force: true }); });
   const daemon = await fakeExecDaemon(t, root, options.reply);
   const input = await execProfile(root, daemon.socket);
   const startup = { context: Object.freeze({ operationId: input.operationId, t0MonotonicNs: "100", deadlineNs: input.timing.deadlineNs, root }),
@@ -30,7 +32,7 @@ async function fixture(t, options = {}) {
     stop() { state.ready = false; state.stops++; },
     async finish() { state.ready = false; state.ends++; await options.finish?.();
       return { firstFailure: options.controlFailure ? {} : null, process: { collection: { formatComplete: !options.badRecord } } }; } };
-  const create = async () => { exec = await createAcquisitionExec(input, { startup, clock: () => now,
+  const create = async () => { exec = await createAcquisitionExec(input, { startup, clock: () => { if (now instanceof Error) throw now; return now; },
     ...(options.request ? { request: options.request } : {}), ...(options.transfer ? { transfer: options.transfer } : {}) }); return exec; };
   return { input, startup, state, daemon, create, now: value => { now = value; },
     prefix: async (role, length) => (await readFile(join(root, `${role}.payload`))).subarray(0, length) };
@@ -225,6 +227,72 @@ test("late control closure preserves facts but cannot upgrade an expired cleanup
   assert.equal(s.locallyComplete, false); assert.equal(s.controlsClosePending, true);
   held.resolve(); await until(() => !e.snapshot().controlsClosePending);
   assert.equal(e.snapshot().locallyComplete, false); assert.equal(s.controlsClosePending, true);
+});
+
+test("cleanup reobserves the original clock after awaited closure without losing reports or the first failure", async t => {
+  for (const [now, code] of [[5000000100n, "EXEC_DEADLINE"], [5000000101n, "EXEC_DEADLINE"],
+    [100n, "EXEC_CLOCK"], ["invalid", "EXEC_CLOCK"], [Error("controlled clock"), "EXEC_CLOCK"]]) {
+    let f;
+    f = await fixture(t, { finish: () => { f.now(now); } });
+    const s = await (await f.create()).run({ observedUtc });
+    assert.equal(s.firstFailure, code); assert.equal(s.locallyComplete, false);
+    assert.equal(s.after.reportedExitCode, 0); assert.equal(s.capture.ioClosed, "closed");
+    assert.equal(s.controls.process.collection.formatComplete, true);
+  }
+  let f;
+  f = await fixture(t, { reply() { return true; }, finish: () => { f.now(5000000100n); } });
+  const e = await f.create(); const run = e.run({ observedUtc });
+  await until(() => f.daemon.requests.length === 1); e.stop();
+  const s = await run;
+  assert.equal(s.firstFailure, "EXEC_STOPPED"); assert.equal(s.locallyComplete, false);
+  assert.equal(s.controls.process.collection.formatComplete, true);
+});
+
+test("stop before run disposes owned files once without starting controls or HTTP", async t => {
+  for (const outcome of ["closed", "pending", "failed"]) {
+    const held = deferred(); const handles = [];
+    const f = await fixture(t, { abandon: true, transfer: { write: (h, ...args) => h.write(...args),
+      async close(h) { handles.push(h); if (outcome === "pending") await held.promise;
+        await h.close(); if (outcome === "failed") throw Error("controlled close"); } } });
+    const e = await f.create(); const initial = e.stop(); e.stop();
+    await until(() => handles.length === 2);
+    assert.equal(initial.firstFailure, "EXEC_STOPPED");
+    assert.equal(f.state.starts, 0); assert.equal(f.state.ends, 0); assert.equal(f.state.stops, 1);
+    assert.equal(f.daemon.requests.length, 0); assert.equal(e.snapshot().locallyComplete, false);
+    if (outcome === "pending") {
+      assert.equal(e.snapshot().captureClosePending, true); assert.equal(e.snapshot().capture.ioClosed, "pending");
+      held.resolve();
+    }
+    await until(() => !e.snapshot().captureClosePending);
+    assert.equal(e.snapshot().capture.ioClosed, outcome === "failed" ? "unknown" : "closed");
+    for (const h of handles) await assert.rejects(h.stat(), { code: "EBADF" });
+    e.stop(); assert.equal(handles.length, 2); assert.equal(f.state.starts, 0);
+  }
+});
+
+test("responses arriving after cancellation retain their own close uncertainty", async t => {
+  for (const event of ["response", "upgrade"]) for (const throwDestroy of [false, true]) {
+    let request; let requestCloses = 0; let streamDestroys = 0;
+    const f = await fixture(t, { request() {
+      request = new EventEmitter(); request.end = () => {};
+      request.destroy = () => { requestCloses++; request.emit("close"); };
+      return request;
+    } });
+    const e = await f.create(); const run = e.run({ observedUtc }); await until(() => request);
+    e.stop(); const prior = await run;
+    assert.equal(prior.transportClosed, true); assert.equal(prior.firstFailure, "EXEC_STOPPED");
+    const stream = new PassThrough();
+    stream.destroy = () => { streamDestroys++; if (throwDestroy) throw Error("controlled destroy"); return stream; };
+    request.emit(event, stream, stream, Buffer.alloc(0));
+    const late = e.snapshot();
+    assert.equal(late.transport.create.responseObserved, true); assert.equal(late.transportClosed, false);
+    assert.equal(late.transport.create.streamClosed, false); assert.equal(streamDestroys, 1);
+    if (throwDestroy) assert.equal(late.transport.create.cleanupError, "EXEC_CLEANUP");
+    assert.equal(prior.transportClosed, true); assert.equal(late.locallyComplete, false);
+    stream.emit("close");
+    assert.equal(e.snapshot().transportClosed, true); assert.equal(e.snapshot().firstFailure, "EXEC_STOPPED");
+    assert.equal(requestCloses, 1); assert.equal(f.daemon.requests.length, 0);
+  }
 });
 
 test("stop never waits behind a payload write; late effects retain the prefix without reopening", async t => {
