@@ -30,6 +30,11 @@ assigned paths/capabilities do not isolate a hostile same-user process from the
 filesystem. No cgroup, Docker, systemd, network filter or operating-system
 resource guard is installed or probed.
 
+An explicit optional [host binding](provenance-acquisition-host.md) supplies
+already prepared Linux group identities and direct per-actor routes. It does
+not configure a host, launch a client/guard or qualify physical containment.
+Without that binding the process-only domain below is unchanged.
+
 ## Creation and file delivery
 
 `await createAcquisitionProcessSession(input, {forkActor?})` requires exactly:
@@ -40,6 +45,7 @@ resource guard is installed or probed.
 | `header` | Closed v1 header, copied through its exact encoding |
 | `supervisorContext`, `watchdogContext` | Independent control expectations; roles must match, operation/T0/deadline must agree |
 | `timing` | Explicit local observation and cleanup intervals below |
+| `host` (optional) | Closed prepared host profile with matching operation/origin and no longer observation horizon |
 
 Context T0 is an explicit `process.hrtime.bigint()` origin no later than creation.
 It must also match the header when checked by each actor. Header digest/profile
@@ -165,6 +171,8 @@ Each child observation contains native `pid`, state (`not_started`, `starting`, 
 separate channel error, `finishAck`, `finalReceipt` and signal-request flags.
 Actor reports contain PID, gate/phase/stage/action/time, first local failure,
 `localClosed` and own writer snapshots. They do not authenticate external truth.
+When explicitly bound, actor reports also contain the closed `host` observation;
+local file receipt and native/global closure still have separate meanings.
 
 Finish adds `parts` with original confirmed bytes and uncertainty. Collection
 requires a stopped child and a confirmed owner-close receipt for complete range

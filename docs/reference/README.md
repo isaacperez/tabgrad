@@ -50,6 +50,10 @@ Use [Acquisition coordination across local processes](provenance-acquisition-pro
 for the experimental two-actor launcher, closed IPC, peer observations and
 failure-preserving direct-child cleanup, separate from physical containment.
 
+Use [Experimental Linux acquisition host control](provenance-acquisition-host.md)
+for prepared group identities, direct controller routes, an external deadline
+entry and conservative native observations, distinct from host qualification.
+
 Use [Python tensor creation, metadata, addition and observation](python-tensors.md) for the
 bounded Python call forms, metadata objects, errors and ownership obligations.
 

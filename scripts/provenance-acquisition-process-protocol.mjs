@@ -1,9 +1,11 @@
 import {
   ACQUISITION_LIMITS, requireAcquisition, isAcquisitionToken, isAcquisitionUint,
   isAcquisitionHash, isAcquisitionUtc, decodeAcquisitionRecord, encodeAcquisitionRecord,
+  acquisitionFields as processFields,
 } from "./provenance-acquisition-record.mjs";
 import { ACQUISITION_ACTOR_PARTS } from "./provenance-acquisition-record-io.mjs";
 import { createAcquisitionControl } from "./provenance-acquisition-control.mjs";
+import { validateHostProfile, validateHostReport } from "./provenance-acquisition-host-profile.mjs";
 
 // Total wire budget, including base64 header, escaped setup paths and metadata.
 export const ACQUISITION_PROCESS_MESSAGE_LIMIT = 2 * ACQUISITION_LIMITS.header;
@@ -14,12 +16,7 @@ const controlCauses = ["protocol", "peer", "deadline", "controller", "storage", 
 const ioCodes = ["PART_LIMIT", "INVALID_RECORD", "OPERATION_MISMATCH", "EVENT_ORDER", "WRITER_STOPPED",
   "WRITE_FAILED", "WRITE_EXTENT_UNKNOWN", "WRITE_NO_PROGRESS", "CLOSE_FAILED"];
 
-export function processFields(value, keys) {
-  if (value === null || typeof value !== "object" || ![Object.prototype, null].includes(Object.getPrototypeOf(value))) return false;
-  const descriptors = Object.getOwnPropertyDescriptors(value);
-  return Reflect.ownKeys(value).length === keys.length && keys.every(key => descriptors[key]
-    && Object.hasOwn(descriptors[key], "value") && descriptors[key].enumerable);
-}
+export { processFields };
 
 export function validateProcessTiming(timing) {
   requireAcquisition(processFields(timing, ["heartbeatMs", "peerTimeoutMs", "termAfterMs", "killAfterMs", "closeWaitMs"])
@@ -64,7 +61,10 @@ function validWrite(w, role) {
 }
 
 function validReport(r, actor) {
-  return processFields(r, ["pid", "gate", "phase", "stage", "nextActionId", "lastAtNs", "firstFailure", "localClosed", "writes"])
+  const base = ["pid", "gate", "phase", "stage", "nextActionId", "lastAtNs", "firstFailure", "localClosed", "writes"];
+  const withHost = processFields(r, [...base, "host"]);
+  if (withHost && r.host !== null) validateHostReport(r.host, actor);
+  return (processFields(r, base) || withHost)
     && Number.isSafeInteger(r.pid) && r.pid > 0 && ["pending", "ready", "revoked"].includes(r.gate)
     && ["setup", "observe", "close"].includes(r.phase) && ["new", "written", "read", "bound"].includes(r.stage)
     && isAcquisitionUint(r.nextActionId) && r.nextActionId !== "0" && isAcquisitionUint(r.lastAtNs)
@@ -85,11 +85,19 @@ function validateRequest(message) {
   switch (p.command) {
     case "init": {
       const d = p.data;
-      requireAcquisition(processFields(d, ["root", "destinations", "context", "header", "timing"])
+      const base = ["root", "destinations", "context", "header", "timing"];
+      const withHost = processFields(d, [...base, "host"]);
+      requireAcquisition((processFields(d, base) || withHost)
         && typeof d.root === "string" && d.root.length > 0 && Buffer.byteLength(d.root) <= 4096
         && validDestinations(d.destinations, actor), "PROCESS_PROTOCOL");
       const state = createAcquisitionControl(d.context);
       requireAcquisition(state.context.role === actor && state.context.operationId === message.operationId, "PROCESS_PROTOCOL");
+      if (withHost) {
+        validateHostProfile(d.host);
+        requireAcquisition(d.host.operationId === state.context.operationId
+          && d.host.t0MonotonicNs === state.context.t0MonotonicNs
+          && BigInt(d.host.observeUntilNs) <= BigInt(state.context.deadlineNs), "PROCESS_PROTOCOL");
+      }
       validateProcessTiming(d.timing);
       if (actor === "supervisor") processHeader(d.header);
       else requireAcquisition(d.header === null, "PROCESS_PROTOCOL");
@@ -120,11 +128,13 @@ function validateMessage(m) {
       && ["init", "prepare", "verify", "ready", "append", "finish"].includes(p.command)
       && typeof p.ok === "boolean" && validReport(p.report, m.actor), "PROCESS_PROTOCOL");
     if (p.header !== null) { requireAcquisition(m.actor === "supervisor" && p.command === "prepare", "PROCESS_PROTOCOL"); processHeader(p.header); }
+    if (p.report.host) requireAcquisition(p.report.host.operationId === m.operationId, "PROCESS_PROTOCOL");
   } else if (m.kind === "pulse") {
     requireAcquisition(m.id !== "0" && processFields(m.payload, ["atNs"]) && isAcquisitionUint(m.payload.atNs), "PROCESS_PROTOCOL");
   } else if (m.kind === "closed") {
     requireAcquisition(m.id === "0" && processFields(m.payload, ["report"])
       && validReport(m.payload.report, m.actor) && m.payload.report.localClosed, "PROCESS_PROTOCOL");
+    if (m.payload.report.host) requireAcquisition(m.payload.report.host.operationId === m.operationId, "PROCESS_PROTOCOL");
   } else {
     requireAcquisition(["stop", "fault"].includes(m.kind) && m.id === "0" && processFields(m.payload, ["code"])
       && ACQUISITION_PROCESS_CAUSES.includes(m.payload.code), "PROCESS_PROTOCOL");
