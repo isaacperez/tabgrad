@@ -10,6 +10,7 @@ import { ACQUISITION_LIMITS, inspectAcquisitionRecord } from "../../../scripts/p
 import { acquisitionFileIdentity } from "../../../scripts/provenance-acquisition-record-io.mjs";
 import { createAcquisitionProcessSession } from "../../../scripts/provenance-acquisition-process.mjs";
 import { decodeAcquisitionProcessMessage } from "../../../scripts/provenance-acquisition-process-protocol.mjs";
+import { hostProfile } from "../../fixtures/provenance-acquisition-host.mjs";
 
 const operationId = "1".repeat(32);
 const hash = "a".repeat(64);
@@ -74,6 +75,126 @@ async function fixture(t, options = {}) {
   session = await createAcquisitionProcessSession(input, { forkActor });
   return { session, children, root, destinations, original, input, sent, received };
 }
+
+function hostOptions(options = {}) {
+  return { ...options,
+    beforeCreate(input) {
+      input.host = hostProfile(input.supervisorContext.t0MonotonicNs);
+      input.host.stopAtNs = "20000000000";
+      input.host.observeUntilNs = "25000000000";
+      options.beforeCreate?.(input);
+    },
+    forkActor: (role, entry, settings) => fork(new URL("../../fixtures/provenance-acquisition-host-actor.mjs", import.meta.url), [], settings),
+  };
+}
+
+test("parent admits actual host-bound actors, preserves the profile and joins their native-port closure", { timeout: 15000 }, async t => {
+  const f = await fixture(t, hostOptions());
+  f.input.host.root.path = "/changed";
+  f.input.host.stopAtNs = "1";
+  assert.equal((await f.session.start()).mayStart, true);
+  for (const role of ["supervisor", "watchdog"]) {
+    const host = f.session.snapshot().actors[role].host;
+    assert.equal(host.actor, role);
+    assert.equal(host.operationId, operationId);
+    assert.equal(host.firstFailure, null);
+    assert.notEqual(host.observation.atNs, null);
+    assert.equal(host.observation.error, null);
+    const init = f.sent.find(m => m.actor === role && m.kind === "request" && m.payload.command === "init");
+    assert.equal(init.payload.data.host.root.path, "/owned");
+    assert.equal(init.payload.data.host.stopAtNs, "20000000000");
+    assert.equal(init.payload.data.host.t0MonotonicNs, f.input.header.t0MonotonicNs);
+  }
+  assert.equal((await f.session.supervisor.append(progress())).mayStart, true);
+  const result = await f.session.finish({ observedUtc: utc });
+  assert.equal(result.firstFailure, null);
+  assert.equal(result.collection.formatComplete, true);
+  assert.deepEqual(result.parts.header.bytes, f.original);
+  for (const role of ["supervisor", "watchdog"]) {
+    assert.equal(result.children[role].finishAck, true);
+    assert.equal(result.actors[role].host.ioClosed, "closed");
+    assert.equal(result.actors[role].host.firstFailure, null);
+    assert.equal(result.actors[role].host.externalClosure, "unqualified");
+  }
+  assert.equal(result.externalClosure, "unqualified");
+});
+
+test("parent rejects a current host-bound reply with absent, revoked, failed or unobserved capability", { timeout: 15000 }, async t => {
+  for (const change of [r => { delete r.host; }, r => { r.host.revoked = true; },
+    r => { r.host.observation.error = "HOST_READ"; },
+    r => { r.host.observation = { atNs: null, populated: null, frozen: null, error: null }; }]) {
+    let changed = false;
+    const f = await fixture(t, hostOptions({ rewriteReply(role, m) {
+      if (changed || role !== "supervisor" || m.payload.command !== "init") return null;
+      assert.equal(m.payload.ok, true);
+      changed = true;
+      change(m.payload.report);
+      const wire = JSON.stringify(m);
+      decodeAcquisitionProcessMessage(wire); // Valid DTO: admission must reject it, not the codec.
+      return wire;
+    } }));
+    assert.equal((await f.session.start()).mayStart, false);
+    assert.equal(changed, true);
+    const result = await f.session.finish({ observedUtc: utc });
+    assert.deepEqual(result.firstFailure, { actor: "supervisor", code: "protocol" });
+  }
+});
+
+test("parent rejects a host clock regression on an otherwise current successful append", { timeout: 15000 }, async t => {
+  let changed = false;
+  const f = await fixture(t, hostOptions({ rewriteReply(role, m) {
+    if (role !== "supervisor" || m.payload.command !== "append") return null;
+    assert(BigInt(f.session.snapshot().actors.supervisor.host.lastAtNs) > 0n);
+    m.payload.report.host.lastAtNs = "0";
+    m.payload.report.host.observation.atNs = "0";
+    changed = true;
+    const wire = JSON.stringify(m);
+    decodeAcquisitionProcessMessage(wire);
+    return wire;
+  } }));
+  assert.equal((await f.session.start()).mayStart, true);
+  assert.equal((await f.session.supervisor.append(progress())).mayStart, false);
+  assert.equal(changed, true);
+  assert.deepEqual((await f.session.finish({ observedUtc: utc })).firstFailure, { actor: "supervisor", code: "protocol" });
+});
+
+test("parent retains host terminal facts across independent closure and correlated finish receipts", { timeout: 15000 }, async t => {
+  for (const [seed, regress] of [
+    [h => {}, h => { delete h.report.host; }],
+    [h => {}, h => { h.report.host.revoked = false; }],
+    [h => { h.firstFailure = "HOST_CHANNEL"; }, h => { h.report.host.firstFailure = "HOST_PEER"; }],
+    [h => {}, h => { h.report.host.ioClosed = "open"; }],
+    ...["freeze", "kill"].map(effect => [h => { h[effect].state = "acknowledged"; },
+      h => { h.report.host[effect].state = "not_requested"; }]),
+  ]) {
+    let changed = false;
+    const f = await fixture(t, hostOptions({ rewriteReply(role, m) {
+      if (changed || role !== "supervisor" || m.payload.command !== "finish") return null;
+      assert.equal(m.payload.report.localClosed, true);
+      assert.equal(m.payload.report.host.ioClosed, "closed");
+      assert.equal(m.payload.report.host.revoked, true);
+      // Use an actual actor's completed local report. The transport adversary
+      // varies only host facts to test the parent's independent monotonic gate;
+      // these injected facts make no claim about actual native effects.
+      seed(m.payload.report.host);
+      const closed = { ...m, kind: "closed", id: "0", payload: { report: structuredClone(m.payload.report) } };
+      const receipt = JSON.stringify(closed);
+      decodeAcquisitionProcessMessage(receipt);
+      f.children.supervisor.emit("message", receipt);
+      assert.equal(f.session.snapshot().children.supervisor.finalReceipt, true);
+      regress(m.payload);
+      const wire = JSON.stringify(m);
+      decodeAcquisitionProcessMessage(wire);
+      changed = true;
+      return wire;
+    } }));
+    assert.equal((await f.session.start()).mayStart, true);
+    const result = await f.session.finish({ observedUtc: utc });
+    assert.equal(changed, true);
+    assert.deepEqual(result.firstFailure, { actor: "supervisor", code: "protocol" });
+    assert.equal(result.children.supervisor.finishAck, false);
+  }
+});
 
 test("two actual actors own only their parts, bind exact bytes and close without external admission", { timeout: 15000 }, async t => {
   const f = await fixture(t, { beforeFork(role, settings) {

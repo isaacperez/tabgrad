@@ -227,8 +227,8 @@ export class AcquisitionProcessActor {
   };
 }
 
-export function runAcquisitionProcessActor(endpoint = process, pid = process.pid) {
-  const actor = new AcquisitionProcessActor(endpoint, pid);
+export function runAcquisitionProcessActor(endpoint = process, pid = process.pid, options = {}) {
+  const actor = new AcquisitionProcessActor(endpoint, pid, options);
   endpoint.on("message", actor.receive);
   endpoint.on("disconnect", actor.disconnected);
   endpoint.on("SIGTERM", actor.terminated);

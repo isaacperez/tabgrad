@@ -46,7 +46,7 @@ export function hostModel(options = {}) {
       if (!node || node.kind === "symlink" && (mode & flags.O_NOFOLLOW)
         || mode & flags.O_DIRECTORY && node.kind !== "dir") throw new Error("synthetic native path error");
       const fd = nextFD++;
-      const handle = { fd, node, closed: false,
+      const handle = { fd, node, mode, closed: false,
         async stat() {
           if (handle.closed) throw new Error("synthetic closed");
           calls.push({ kind: "stat", fd });
@@ -54,6 +54,7 @@ export function hostModel(options = {}) {
             isDirectory: () => node.kind === "dir", isFile: () => node.kind === "file" };
         },
         async read(bytes, offset, length, position) {
+          if ((mode & 3) !== flags.O_RDONLY || node.kind !== "file") throw new Error("synthetic access mode");
           calls.push({ kind: "read", fd, name: node.name, length, position });
           if (options.beforeRead) {
             const result = await options.beforeRead(node, bytes, offset, length, position);
@@ -66,6 +67,7 @@ export function hostModel(options = {}) {
           return { bytesRead: count, buffer: bytes };
         },
         async write(bytes, offset, length, position) {
+          if ((mode & 3) !== flags.O_WRONLY || node.kind !== "file") throw new Error("synthetic access mode");
           calls.push({ kind: "write", fd, name: node.name, text: bytes.subarray(offset, offset + length).toString(), position });
           if (options.beforeWrite) {
             const result = await options.beforeWrite(node, bytes, offset, length, position);

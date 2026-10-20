@@ -18,6 +18,10 @@ test("native adapter uses retained descriptor paths, fixed flags/files and exact
   for (const call of m.calls.filter(c => c.kind === "open")) {
     assert.equal((call.mode & m.port.constants.O_NOFOLLOW) !== 0, true);
     if (call.path !== "/") assert.match(call.path, /^\/proc\/self\/fd\/[0-9]+\/[A-Za-z0-9_.@-]+$/);
+    const writable = /\/cgroup\.(freeze|kill)$/.test(call.path);
+    const file = /\/cgroup\.(freeze|kill|events|type|procs)$/.test(call.path);
+    assert.equal(call.mode & 3, writable ? m.port.constants.O_WRONLY : m.port.constants.O_RDONLY);
+    assert.equal((call.mode & m.port.constants.O_DIRECTORY) !== 0, !file);
   }
   const close = io.close();
   assert.equal(io.close(), close);

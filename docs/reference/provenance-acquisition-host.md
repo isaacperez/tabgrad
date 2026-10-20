@@ -120,6 +120,11 @@ Host closure is joined before local ending/file receipts; host errors stay
 visible. Reports then add `host`; without the option, existing calls, wire
 shapes and reports retain their original domain. Record v1 does not change.
 
+The actor constructor and `runAcquisitionProcessActor(endpoint, pid, options)`
+accept a trusted `createHost` test boundary. Finite-process controls use it to
+exercise the actual parent/actor protocol with synthetic native I/O; the wire
+cannot select a factory, and the ordinary actor entry keeps the native default.
+
 The process parent does not launch the external guard or an acquisition client.
 The future bootstrap must separately place, launch and check that guard before
 admitting client work. A process-session ready report alone does not establish
