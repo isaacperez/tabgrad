@@ -58,6 +58,10 @@ Use [Experimental acquisition startup](provenance-acquisition-startup.md) for
 explicit pre-case self-entry, the three-control local gate, guard-channel
 correlation and separate record/guard cleanup over prepared premises.
 
+Use [Experimental binary acquisition capture](provenance-acquisition-capture.md)
+for the finite non-TTY framing subset, separate payload reservations, confirmed
+prefixes and incomplete outcomes, without transport or client admission.
+
 Use [Python tensor creation, metadata, addition and observation](python-tensors.md) for the
 bounded Python call forms, metadata objects, errors and ownership obligations.
 

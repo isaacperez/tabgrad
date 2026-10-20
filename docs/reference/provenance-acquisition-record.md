@@ -13,6 +13,9 @@ association. `scripts/provenance-acquisition-record-io.mjs` owns effective file
 identity, positional transfers and bounded reads. Both are import-only modules
 without import-time effects or environment configuration. They are outside
 the browser distribution and do not depend on the offline provenance client.
+Native file-opening premises are shared with binary capture through
+`provenance-acquisition-file-io.mjs`; the four JSONL roles and their writer/
+readback contracts remain owned here.
 
 There are four independent files, totaling 1 MiB:
 
