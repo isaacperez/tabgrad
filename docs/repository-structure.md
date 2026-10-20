@@ -337,7 +337,8 @@ and their explicit operational limits.
 `scripts/provenance-acquisition-record.mjs` owns the separate internal experimental
 acquisition record format and structural association; its `-io.mjs` companion
 owns effective file identity, independent logical reserves, positional transfers
-and bounded readback. Their [reference](reference/provenance-acquisition-record.md)
+and bounded readback, using shared native file premises in
+`provenance-acquisition-file-io.mjs`. Their [reference](reference/provenance-acquisition-record.md)
 distinguishes confirmed representation from operational admission. Synthetic
 contract and local-file tests live under `js-tests/unit/tooling/`. These modules
 do not depend on the offline client, enter the distribution, supervise processes
@@ -379,6 +380,13 @@ Its `-protocol.mjs` owns the closed guard channel, while `-actor.mjs` and
 retains that pre-case effect; existing open-only consumers retain their domain.
 The [startup reference](reference/provenance-acquisition-startup.md) separates
 local observed admission and owned-child joins from native qualification.
+
+`scripts/provenance-acquisition-capture.mjs` owns the separate experimental
+binary frame/payload writer, channel limits, confirmed prefixes and local
+capture lifetime. It shares only native file premises with record I/O; it does
+not extend JSONL roles or compose transport, client launch or startup admission.
+Its [reference](reference/provenance-acquisition-capture.md) defines supplied-byte
+ownership and the limits of framing, clock and handle-close observations.
 
 ## Understand the files kept at the root
 

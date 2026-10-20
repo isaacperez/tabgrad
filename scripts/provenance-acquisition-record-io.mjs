@@ -1,10 +1,13 @@
 import { createHash } from "node:crypto";
-import { constants } from "node:fs";
-import { lstat, open, realpath } from "node:fs/promises";
-import { basename, isAbsolute, join, resolve } from "node:path";
+import { lstat } from "node:fs/promises";
 import {
   ACQUISITION_LIMITS, AcquisitionRecordError, encodeAcquisitionRecord, requireAcquisition,
 } from "./provenance-acquisition-record.mjs";
+import {
+  acquisitionFileIdentity, identityMatches, ownedRoot, openOwnedAcquisitionFile, closeHandles,
+} from "./provenance-acquisition-file-io.mjs";
+
+export { acquisitionFileIdentity } from "./provenance-acquisition-file-io.mjs";
 
 const roles = Object.keys(ACQUISITION_LIMITS);
 export const ACQUISITION_ACTOR_PARTS = Object.freeze({
@@ -16,49 +19,12 @@ const nativeTransfer = {
   read: (handle, bytes, offset, length, position) => handle.read(bytes, offset, length, position),
 };
 
-/** Identity of an effective regular file, not a pathname or allocation proof. */
-export function acquisitionFileIdentity(stat) {
-  requireAcquisition(typeof stat.dev === "bigint" && typeof stat.ino === "bigint"
-    && stat.dev >= 0n && stat.ino > 0n, "FILE_IDENTITY");
-  return Object.freeze({ dev: stat.dev.toString(), ino: stat.ino.toString() });
-}
-
-function identityMatches(stat, expected) {
-  const actual = acquisitionFileIdentity(stat);
-  requireAcquisition(expected && actual.dev === expected.dev && actual.ino === expected.ino, "FILE_IDENTITY");
-  return `${actual.dev}:${actual.ino}`;
-}
-
-async function ownedRoot(root) {
-  requireAcquisition(typeof root === "string" && isAbsolute(root) && resolve(root) === root, "FILE_ROOT");
-  const before = await lstat(root, { bigint: true });
-  requireAcquisition(before.isDirectory() && !before.isSymbolicLink(), "FILE_ROOT");
-  requireAcquisition(await realpath(root) === root, "FILE_ROOT");
-  return acquisitionFileIdentity(before);
-}
-
 async function openPart(root, role, destination, owned) {
-  requireAcquisition(destination && typeof destination.name === "string"
-    && destination.name !== "." && destination.name !== ".."
-    && basename(destination.name) === destination.name && destination.name.length > 0, "FILE_DESTINATION");
-  requireAcquisition(Number.isInteger(constants.O_NOFOLLOW), "FILE_IDENTITY");
-  const handle = await open(join(root, destination.name), constants.O_RDWR | constants.O_NOFOLLOW | constants.O_NONBLOCK);
-  owned.push(handle);
-  const stat = await handle.stat({ bigint: true });
-  requireAcquisition(stat.isFile() && stat.nlink === 1n
-    && stat.size === BigInt(ACQUISITION_LIMITS[role]), "FILE_DESTINATION");
-  const identity = identityMatches(stat, destination.identity);
-  return { handle, identity };
+  return openOwnedAcquisitionFile(root, destination, ACQUISITION_LIMITS[role], owned);
 }
 
 function closedError(error, fallback) {
   return error instanceof AcquisitionRecordError ? error : new AcquisitionRecordError(fallback);
-}
-
-async function closeHandles(handles) {
-  const results = await Promise.allSettled(handles.map(handle => handle.close()));
-  return { openedHandles: handles.length,
-    closedHandles: results.filter(result => result.status === "fulfilled").length };
 }
 
 function writerSnapshot(writer) {
