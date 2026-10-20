@@ -120,7 +120,8 @@ export function validateHostReportProgress(old, h, code = "HOST_INPUT") {
 export function failedHostReport(role, operationId, error) {
   const known = error instanceof AcquisitionRecordError;
   const code = known && HOST_ERRORS.includes(error.code) ? error.code : "HOST_OPEN";
-  const closed = known && (error.closeError === null || ["HOST_INPUT", "HOST_PLATFORM", "HOST_CLOCK"].includes(code));
+  const closed = known && (error.closeError === null
+    || error.closeError === undefined && ["HOST_INPUT", "HOST_PLATFORM", "HOST_CLOCK"].includes(code));
   const r = { actor: role, operationId, revoked: true, lastAtNs: null, firstFailure: code,
     observation: { atNs: null, populated: null, frozen: null, error: code },
     freeze: { state: "not_requested", error: null }, kill: { state: "not_requested", error: null },

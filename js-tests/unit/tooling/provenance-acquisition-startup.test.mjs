@@ -8,6 +8,7 @@ import { test } from "node:test";
 import { ACQUISITION_LIMITS, acquisitionSha256 } from "../../../scripts/provenance-acquisition-record.mjs";
 import { acquisitionFileIdentity } from "../../../scripts/provenance-acquisition-record-io.mjs";
 import { createAcquisitionStartup } from "../../../scripts/provenance-acquisition-startup.mjs";
+import { decodeAcquisitionProcessMessage } from "../../../scripts/provenance-acquisition-process-protocol.mjs";
 import { decodeStartupGuardMessage, encodeStartupGuardMessage } from "../../../scripts/provenance-acquisition-startup-protocol.mjs";
 import { hostProfile } from "../../fixtures/provenance-acquisition-host.mjs";
 
@@ -53,7 +54,19 @@ async function fixture(t, options = {}) {
       launches.push(role);
       assert.equal(entry.pathname.endsWith("/provenance-acquisition-startup-actor.mjs"), true);
       options.beforeActor?.(role);
-      const child = fork(childEntry, ["actor"], opts); children.push(child); return child;
+      const child = fork(childEntry, ["actor"], opts); children.push(child);
+      if (options.actorMessage) {
+        const emit = child.emit.bind(child);
+        child.emit = (event, ...values) => {
+          if (event === "message") {
+            const m = decodeAcquisitionProcessMessage(values[0]);
+            options.actorMessage(role, m);
+            values[0] = JSON.stringify(m);
+          }
+          return emit(event, ...values);
+        };
+      }
+      return child;
     },
     forkGuard(entry, args, opts) {
       launches.push("guard");
@@ -211,6 +224,27 @@ test("stale observation, unverified entry and a nonempty/frozen initial case can
     assert.equal((await s.start()).mayStart, false);
     assert.deepEqual(f.launches, ["guard"]);
     assert.deepEqual((await s.finish({ observedUtc: utc })).firstFailure, { actor: "guard", code: "protocol" });
+  }
+});
+
+test("each record actor must independently report verified entry and an empty unfrozen initial case", { timeout: 30000 }, async t => {
+  for (const role of ["supervisor", "watchdog"]) {
+    for (const change of [h => { h.entry.state = "acknowledged"; },
+      h => { h.observation.populated = true; }, h => { h.observation.frozen = true; }]) {
+      let changed = false;
+      const f = await fixture(t, { actorMessage(actor, m) {
+        if (actor === role && m.kind === "reply" && m.payload.report.host) {
+          change(m.payload.report.host); changed = true;
+        }
+      } });
+      const s = await f.create();
+      assert.equal((await s.start()).mayStart, false);
+      assert.equal(changed, true);
+      assert.deepEqual(f.launches, ["guard", "supervisor", "watchdog"]);
+      const r = await s.finish({ observedUtc: utc });
+      assert.equal(r.firstFailure.code, "protocol");
+      assert.equal(r.mayStart, false);
+    }
   }
 });
 
