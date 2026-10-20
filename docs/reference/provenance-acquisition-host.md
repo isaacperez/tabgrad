@@ -126,19 +126,23 @@ exercise the actual parent/actor protocol with synthetic native I/O; the wire
 cannot select a factory, and the ordinary actor entry keeps the native default.
 
 The process parent does not launch the external guard or an acquisition client.
-The future bootstrap must separately place, launch and check that guard before
+The [startup composition](provenance-acquisition-startup.md) provides explicit
+pre-case self-entry and guard launch over those prepared premises. A bootstrap
+using another entry must separately place, launch and check the guard before
 admitting client work. A process-session ready report alone does not establish
 that guard, native resource enforcement or authority to acquire anything.
 
 ## External guard and observations
 
-`runAcquisitionHostGuard(profile, {clock?, wait?, createController?, onArmed?})`
+`runAcquisitionHostGuard(profile, {clock?, wait?, createController?, onArmed?, onObservation?})`
 owns an independent loop. It opens the guard's own route, optionally issues one
 trusted nonblocking armed notification, samples the original clock and cuts
 waits at both absolute boundaries. It never waits for native observation work
 inside that loop; at most one poll notification remains outstanding.
 An armed notification reports opened capabilities/current state, not an
-authenticated host, current lease or permission to start a client.
+authenticated host, current lease or permission to start a client. The optional
+trusted nonblocking observation callback receives completed polls; callback
+failure requests containment without delaying the deadline loop.
 
 The returned `{observation, settled}` separates the frozen final wait-boundary
 report from the promise joining owned native I/O. A late callback does not

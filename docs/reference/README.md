@@ -54,6 +54,10 @@ Use [Experimental Linux acquisition host control](provenance-acquisition-host.md
 for prepared group identities, direct controller routes, an external deadline
 entry and conservative native observations, distinct from host qualification.
 
+Use [Experimental acquisition startup](provenance-acquisition-startup.md) for
+explicit pre-case self-entry, the three-control local gate, guard-channel
+correlation and separate record/guard cleanup over prepared premises.
+
 Use [Python tensor creation, metadata, addition and observation](python-tensors.md) for the
 bounded Python call forms, metadata objects, errors and ownership obligations.
 

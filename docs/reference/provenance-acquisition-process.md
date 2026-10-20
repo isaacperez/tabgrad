@@ -35,6 +35,10 @@ already prepared Linux group identities and direct per-actor routes. It does
 not configure a host, launch a client/guard or qualify physical containment.
 Without that binding the process-only domain below is unchanged.
 
+The separate [startup composition](provenance-acquisition-startup.md) uses an
+explicit fixed self-entering actor variant and a third guard. The default
+process session remains open-only and does not launch that guard.
+
 ## Creation and file delivery
 
 `await createAcquisitionProcessSession(input, {forkActor?})` requires exactly:

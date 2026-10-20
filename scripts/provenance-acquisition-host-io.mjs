@@ -54,11 +54,12 @@ async function ownMembership(handle, pid) {
 
 /** Owns retained native handles; no command, creation, configuration or implicit retry. */
 class HostIO {
+  #entry;
   #handles; #files; #pending = new Set(); #reading = null; #closing = null;
   #effects = { freeze: { state: "not_requested", error: null }, kill: { state: "not_requested", error: null } };
   #promises = {}; #closed = "open";
 
-  constructor(handles, files) { this.#handles = handles; this.#files = files; }
+  constructor(handles, files, entry) { this.#handles = handles; this.#files = files; this.#entry = entry; }
 
   #track(work) {
     this.#pending.add(work);
@@ -115,12 +116,33 @@ class HostIO {
 
   snapshot() {
     return freezeHostData({ freeze: { ...this.#effects.freeze }, kill: { ...this.#effects.kill },
-      ioClosed: this.#closed, ioPending: this.#pending.size });
+      ioClosed: this.#closed, ioPending: this.#pending.size, ...(this.#entry ? { entry: { ...this.#entry } } : {}) });
   }
 }
 
 /** Trusted narrow syscall port for synthetic tests, never a user/plugin boundary. */
 export async function openAcquisitionHost(profile, role, port = nativePort) {
+  return openPreparedHost(profile, role, port, null);
+}
+
+/** Explicit trusted bootstrap entry, once before any case: never migrates a foreign PID. */
+export async function enterAcquisitionHost(profile, role, {
+  port = nativePort, clock = () => process.hrtime.bigint(),
+} = {}) {
+  requireAcquisition(typeof clock === "function", "HOST_INPUT");
+  return openPreparedHost(profile, role, port, clock);
+}
+
+function checkEntryClock(profile, clock, previous = null) {
+  let now;
+  try { now = clock(); } catch { throw new AcquisitionRecordError("HOST_CLOCK"); }
+  requireAcquisition(typeof now === "bigint" && now >= BigInt(profile.t0MonotonicNs)
+    && (previous === null || now >= previous), "HOST_CLOCK");
+  requireAcquisition(now - BigInt(profile.t0MonotonicNs) < BigInt(profile.stopAtNs), "HOST_DEADLINE");
+  return now;
+}
+
+async function openPreparedHost(profile, role, port, entryClock) {
   const p = copyHostProfile(profile);
   requireAcquisition(HOST_ROLES.includes(role), "HOST_INPUT");
   requireAcquisition(port.platform === "linux", "HOST_PLATFORM");
@@ -128,6 +150,8 @@ export async function openAcquisitionHost(profile, role, port = nativePort) {
   requireAcquisition([c.O_RDONLY, c.O_WRONLY, c.O_DIRECTORY, c.O_NOFOLLOW].every(Number.isInteger)
     && Number.isSafeInteger(port.pid) && port.pid > 0, "HOST_PLATFORM");
   const handles = [];
+  const entry = entryClock ? { state: "not_requested", error: null } : null;
+  let enteredAt = null;
   try {
     const root = await openRoot(p.root, port, handles);
     const groups = await openGroups(p, root, port, handles);
@@ -145,14 +169,31 @@ export async function openAcquisitionHost(profile, role, port = nativePort) {
     const member = await port.open(`${fdPath(groups[role])}/cgroup.procs`, c.O_RDONLY | c.O_NOFOLLOW);
     handles.push(member);
     const stat = await member.stat({ bigint: true });
-    nativeIdentity(stat, null, false);
+    const memberIdentity = nativeIdentity(stat, null, false);
     requireAcquisition(stat.dev.toString() === p.groups[role].at(-1).identity.dev, "HOST_IDENTITY");
+    if (entry) {
+      const writer = await port.open(`${fdPath(groups[role])}/cgroup.procs`, c.O_WRONLY | c.O_NOFOLLOW);
+      handles.push(writer);
+      requireAcquisition(nativeIdentity(await writer.stat({ bigint: true }), null, false) === memberIdentity, "HOST_IDENTITY");
+      enteredAt = checkEntryClock(p, entryClock);
+      entry.state = "pending";
+      try {
+        const result = await writer.write(Buffer.from("0"), 0, 1, 0);
+        requireAcquisition(result.bytesWritten === 1, "HOST_ENTRY");
+        entry.state = "acknowledged";
+      } catch {
+        entry.state = "unknown"; entry.error = "HOST_ENTRY";
+        throw new AcquisitionRecordError("HOST_ENTRY");
+      }
+    }
     await ownMembership(member, port.pid);
-    return new HostIO(handles, files);
+    if (entry) { entry.state = "verified"; checkEntryClock(p, entryClock, enteredAt); }
+    return new HostIO(handles, files, entry);
   } catch (error) {
     const closed = await Promise.allSettled(handles.map(handle => handle.close()));
     const failure = new AcquisitionRecordError(error instanceof AcquisitionRecordError ? error.code : "HOST_OPEN");
     failure.closeError = closed.some(r => r.status === "rejected") ? "HOST_CLOSE" : null;
+    if (entry) failure.entry = Object.freeze({ ...entry });
     throw failure;
   }
 }

@@ -6,7 +6,7 @@ export const HOST_ROLES = Object.freeze(["supervisor", "watchdog", "guard"]);
 export const HOST_GROUPS = Object.freeze(["case", ...HOST_ROLES]);
 export const HOST_ERRORS = Object.freeze(["HOST_INPUT", "HOST_PLATFORM", "HOST_FILESYSTEM", "HOST_IDENTITY",
   "HOST_TYPE", "HOST_MEMBER", "HOST_OPEN", "HOST_READ", "HOST_WRITE", "HOST_CLOSE", "HOST_CLOCK", "HOST_BUSY", "HOST_STOPPED",
-  "HOST_DEADLINE", "HOST_PEER", "HOST_CHANNEL", "HOST_CONTROLLER", "HOST_PROTOCOL"]);
+  "HOST_DEADLINE", "HOST_PEER", "HOST_CHANNEL", "HOST_CONTROLLER", "HOST_PROTOCOL", "HOST_ENTRY"]);
 export const HOST_READ_LIMITS = Object.freeze({ type: 32, events: 128, procs: 1024 });
 
 export function freezeHostData(value) {
@@ -77,8 +77,10 @@ function effect(e) {
 }
 
 export function validateHostReport(r, role) {
-  requireAcquisition(fields(r, ["actor", "operationId", "revoked", "lastAtNs", "firstFailure", "observation",
-    "freeze", "kill", "ioClosed", "ioPending", "externalClosure", "clockAdmission", "releaseAdmission"])
+  const base = ["actor", "operationId", "revoked", "lastAtNs", "firstFailure", "observation",
+    "freeze", "kill", "ioClosed", "ioPending", "externalClosure", "clockAdmission", "releaseAdmission"];
+  const entering = fields(r, [...base, "entry"]);
+  requireAcquisition((fields(r, base) || entering)
     && r.actor === role && HOST_ROLES.includes(role) && isAcquisitionToken(r.operationId)
     && typeof r.revoked === "boolean" && (r.lastAtNs === null || isAcquisitionUint(r.lastAtNs))
     && (r.firstFailure === null || HOST_ERRORS.includes(r.firstFailure))
@@ -90,6 +92,9 @@ export function validateHostReport(r, role) {
     && Number.isInteger(r.ioPending) && r.ioPending >= 0 && r.ioPending <= 3
     && r.externalClosure === "unqualified" && r.clockAdmission === "unqualified" && r.releaseAdmission === "unqualified",
   "HOST_INPUT");
+  if (entering) requireAcquisition(fields(r.entry, ["state", "error"])
+    && ["not_requested", "pending", "acknowledged", "verified", "unknown"].includes(r.entry.state)
+    && (r.entry.state === "unknown" ? r.entry.error === "HOST_ENTRY" : r.entry.error === null), "HOST_INPUT");
   requireAcquisition((r.firstFailure === null || r.revoked)
     && (r.ioClosed !== "closed" || r.ioPending === 0)
     && (r.observation.atNs !== null || r.observation.populated === null && r.observation.frozen === null)
@@ -97,16 +102,32 @@ export function validateHostReport(r, role) {
   return r;
 }
 
+/** Monotonic evidence shared by the process and guard transports. */
+export function validateHostReportProgress(old, h, code = "HOST_INPUT") {
+  if (!old) return;
+  requireAcquisition(h && old.actor === h.actor && old.operationId === h.operationId
+    && (!old.revoked || h.revoked) && (old.firstFailure === null || h.firstFailure === old.firstFailure)
+    && (h.lastAtNs === null || old.lastAtNs === null || BigInt(h.lastAtNs) >= BigInt(old.lastAtNs)), code);
+  requireAcquisition(old.ioClosed === "open" || old.ioClosed === "pending" && h.ioClosed !== "open"
+    || old.ioClosed === h.ioClosed, code);
+  for (const effect of ["freeze", "kill"]) requireAcquisition(old[effect].state === "not_requested"
+    || old[effect].state === "pending" && h[effect].state !== "not_requested"
+    || old[effect].state === h[effect].state && old[effect].error === h[effect].error, code);
+  if (old.entry) requireAcquisition(h.entry && JSON.stringify(old.entry) === JSON.stringify(h.entry), code);
+}
+
 /** Failed opening has no live controller; retain its known cause and cleanup uncertainty. */
 export function failedHostReport(role, operationId, error) {
   const known = error instanceof AcquisitionRecordError;
   const code = known && HOST_ERRORS.includes(error.code) ? error.code : "HOST_OPEN";
-  const closed = known && (error.closeError === null || ["HOST_INPUT", "HOST_PLATFORM", "HOST_CLOCK"].includes(code));
+  const closed = known && (error.closeError === null
+    || error.closeError === undefined && ["HOST_INPUT", "HOST_PLATFORM", "HOST_CLOCK"].includes(code));
   const r = { actor: role, operationId, revoked: true, lastAtNs: null, firstFailure: code,
     observation: { atNs: null, populated: null, frozen: null, error: code },
     freeze: { state: "not_requested", error: null }, kill: { state: "not_requested", error: null },
     ioClosed: closed ? "closed" : "unknown", ioPending: 0,
     externalClosure: "unqualified", clockAdmission: "unqualified", releaseAdmission: "unqualified" };
+  if (known && error.entry) r.entry = { ...error.entry };
   validateHostReport(r, role);
   return freezeHostData(r);
 }

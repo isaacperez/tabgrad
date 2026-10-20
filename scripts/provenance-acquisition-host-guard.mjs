@@ -12,11 +12,13 @@ const waitNative = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 /** Separate entry has no parent-channel lease. Joining native work is not a physical-time guarantee. */
 export async function runAcquisitionHostGuard(profile, {
-  clock = () => process.hrtime.bigint(), wait = waitNative, createController = createAcquisitionHostController, onArmed = null,
+  clock = () => process.hrtime.bigint(), wait = waitNative, createController = createAcquisitionHostController,
+  onArmed = null, onObservation = null,
 } = {}) {
   const p = copyHostProfile(profile);
   requireAcquisition(typeof clock === "function" && typeof wait === "function" && typeof createController === "function"
-    && (onArmed === null || typeof onArmed === "function"), "HOST_INPUT");
+    && (onArmed === null || typeof onArmed === "function")
+    && (onObservation === null || typeof onObservation === "function"), "HOST_INPUT");
   const controller = await createController(p, "guard", { clock });
   // One trusted nonblocking notification; a missing receipt cannot admit later work.
   try { if (onArmed) onArmed(controller.snapshot()); }
@@ -28,7 +30,10 @@ export async function runAcquisitionHostGuard(profile, {
     if (at === null || BigInt(at) >= BigInt(p.observeUntilNs)) break;
     if (!observing) {
       observing = true;
-      void controller.poll().finally(() => { observing = false; }).catch(() => {});
+      void controller.poll().then(report => {
+        try { if (onObservation) onObservation(report); }
+        catch { controller.contain("channel"); }
+      }).finally(() => { observing = false; }).catch(() => {});
     }
     const boundary = BigInt(at) < BigInt(p.stopAtNs) ? BigInt(p.stopAtNs) : BigInt(p.observeUntilNs);
     const remainingMs = (boundary - BigInt(at) + 999999n) / 1000000n;
