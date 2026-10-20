@@ -362,6 +362,16 @@ these trusted local processes from physical resource/containment qualification.
 Tests stay under `js-tests/unit/tooling/`; no library entry or privileged workflow
 depends on these owners.
 
+`scripts/provenance-acquisition-host-profile.mjs` owns the prepared native
+profile/report domain; `-host-io.mjs` owns native openings and one-shot requests;
+`-host.mjs` owns a controller's revocation/observations; `-host-guard.mjs` owns
+the explicit external deadline entry. Process actors consume the optional
+binding, while native I/O does not depend on parent transport or tensor owners.
+The [host reference](reference/provenance-acquisition-host.md) limits these
+retained experiments to encoded interfaces and synthetic controls, separate
+from native environment/resource/containment qualification. They create no
+infrastructure and are not signing/publication or library entries.
+
 ## Understand the files kept at the root
 
 The root is the entry point for repository readers and several tools. Moving

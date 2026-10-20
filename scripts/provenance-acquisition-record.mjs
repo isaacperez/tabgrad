@@ -30,6 +30,14 @@ export function requireAcquisition(condition, code = "INVALID_RECORD") {
   if (!condition) throw new AcquisitionRecordError(code);
 }
 
+/** Closed ordinary-data shape; do not invoke accessors while admitting inputs. */
+export function acquisitionFields(value, keys) {
+  if (value === null || typeof value !== "object" || ![Object.prototype, null].includes(Object.getPrototypeOf(value))) return false;
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  return Reflect.ownKeys(value).length === keys.length && keys.every(key => descriptors[key]
+    && Object.hasOwn(descriptors[key], "value") && descriptors[key].enumerable);
+}
+
 export function acquisitionSha256(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
 }

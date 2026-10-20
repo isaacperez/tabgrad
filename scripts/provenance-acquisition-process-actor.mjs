@@ -2,10 +2,16 @@ import { pathToFileURL } from "node:url";
 import { AcquisitionActor } from "./provenance-acquisition-actor.mjs";
 import { decodeAcquisitionRecord, isAcquisitionUint } from "./provenance-acquisition-record.mjs";
 import { openAcquisitionActorRecord } from "./provenance-acquisition-record-io.mjs";
+import { createAcquisitionHostController } from "./provenance-acquisition-host.mjs";
+import { failedHostReport } from "./provenance-acquisition-host-profile.mjs";
 import {
   decodeAcquisitionProcessMessage, encodeAcquisitionProcessMessage, processHeader,
   sendAcquisitionProcessMessage,
 } from "./provenance-acquisition-process-protocol.mjs";
+
+function hostCause(code) {
+  return ["peer", "channel", "protocol", "clock", "deadline", "storage"].includes(code) ? code : "controller";
+}
 
 /** Explicit child entry, no client execution or module-import effects. */
 export class AcquisitionProcessActor {
@@ -13,8 +19,11 @@ export class AcquisitionProcessActor {
   #requestId = 0n; #pulseId = 0n; #lastPeerId = 0n; #lastPeerSeen = null; #peerLost = false;
   #timer = null; #pulseSending = false; #replySending = false; #faultSent = false; #firstStop = null;
   #autoClosing = false; #disconnectRequested = false;
+  #host = null; #hostExpected = false; #hostPolling = false; #openHost; #hostFailure = null;
 
-  constructor(endpoint, pid) { this.#endpoint = endpoint; this.#pid = pid; }
+  constructor(endpoint, pid, { createHost = createAcquisitionHostController } = {}) {
+    this.#endpoint = endpoint; this.#pid = pid; this.#openHost = createHost;
+  }
 
   #now = () => {
     const at = process.hrtime.bigint() - BigInt(this.#context.t0MonotonicNs);
@@ -28,7 +37,8 @@ export class AcquisitionProcessActor {
   #report() {
     const s = this.#actor.state;
     return { pid: this.#pid, gate: s.gate, phase: s.phase, stage: s.stage, nextActionId: s.nextActionId,
-      lastAtNs: s.lastAtNs, firstFailure: s.firstFailure, localClosed: s.localClosed, writes: this.#actor.writes() };
+      lastAtNs: s.lastAtNs, firstFailure: s.firstFailure, localClosed: s.localClosed, writes: this.#actor.writes(),
+      ...(this.#hostExpected ? { host: this.#host?.snapshot() ?? this.#hostFailure } : {}) };
   }
 
   async #reply(message, ok, header = null) {
@@ -42,6 +52,16 @@ export class AcquisitionProcessActor {
   #tick = () => {
     if (!this.#actor || this.#closing) return;
     this.#actor.tick();
+    if (this.#host) {
+      this.#host.check();
+      if (this.#host.snapshot().revoked) { this.#fail(this.#hostCause()); return; }
+      if (!this.#hostPolling) {
+        this.#hostPolling = true;
+        void this.#host.poll().then(() => {
+          if (!this.#closing && this.#host.snapshot().revoked) this.#fail(this.#hostCause());
+        }).catch(() => { if (!this.#closing) this.#fail("storage"); }).finally(() => { this.#hostPolling = false; });
+      }
+    }
     const now = this.#now();
     if (this.#actor.state.gate === "revoked") { this.#fail(this.#actor.state.firstFailure.code); return; }
     if (now === null) { this.#fail("clock"); return; }
@@ -71,6 +91,7 @@ export class AcquisitionProcessActor {
   #fail(code) {
     this.#firstStop ??= code;
     this.#peerLost ||= code === "peer";
+    this.#host?.contain(hostCause(code));
     this.#actor?.stop(["protocol", "peer", "clock", "deadline", "storage"].includes(code) ? code : "controller");
     if (this.#context && !this.#faultSent && this.#endpoint.connected) {
       this.#faultSent = true;
@@ -111,6 +132,14 @@ export class AcquisitionProcessActor {
       root: data.root, destinations: data.destinations });
     const header = data.header === null ? null : decodeAcquisitionRecord("header", processHeader(data.header));
     this.#actor = new AcquisitionActor({ context: this.#context, record: this.#record, header, clock: this.#now });
+    this.#hostExpected = Object.hasOwn(data, "host");
+    if (this.#hostExpected) {
+      try { this.#host = await this.#openHost(data.host, this.#context.role); }
+      catch (error) { this.#hostFailure = failedHostReport(this.#context.role, this.#context.operationId, error); throw error; }
+      if (this.#firstStop) this.#host.contain(hostCause(this.#firstStop));
+      await this.#host.poll();
+      if (this.#host.snapshot().revoked) this.#fail(this.#hostCause());
+    }
     this.#lastPeerSeen = this.#now();
     if (this.#firstStop) this.#actor.stop("controller");
     else if (!this.#closing) this.#timer = setInterval(this.#tick, this.#timing.heartbeatMs);
@@ -150,11 +179,20 @@ export class AcquisitionProcessActor {
       if (this.#record) await this.#record.close();
       return;
     }
+    if (this.#host) {
+      const host = await this.#host.close();
+      if (host.ioClosed !== "closed" || host.observation.error !== null) this.#actor.stop("storage");
+    }
     if (this.#context.role === "supervisor") await this.#actor.perform("finish_progress");
     const peer = this.#peerLost ? { state: "lost", atNs: this.#lastPeerId === 0n ? null : this.#lastPeerSeen }
       : this.#lastPeerId === 0n ? null : { state: "alive", atNs: this.#lastPeerSeen };
     await this.#actor.perform("write_ending", { observedUtc, peer });
     await this.#actor.perform("close_writer");
+  }
+
+  #hostCause() {
+    const code = this.#host.snapshot().firstFailure;
+    return code === "HOST_CLOCK" ? "clock" : code === "HOST_DEADLINE" ? "deadline" : "storage";
   }
 
   receive = wire => {

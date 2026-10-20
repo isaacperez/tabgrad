@@ -50,6 +50,17 @@ function validateReportProgress(previous, next) {
       && (old.firstError === null || current.firstError === old.firstError)
       && (old.closeError === null || current.closeError === old.closeError), "PROCESS_PROTOCOL");
   }
+  if (previous.host) {
+    const old = previous.host;
+    const h = next.host;
+    requireAcquisition(h && (!old.revoked || h.revoked) && (old.firstFailure === null || h.firstFailure === old.firstFailure)
+      && (h.lastAtNs === null || old.lastAtNs === null || BigInt(h.lastAtNs) >= BigInt(old.lastAtNs)), "PROCESS_PROTOCOL");
+    requireAcquisition(old.ioClosed === "open" || old.ioClosed === "pending" && h.ioClosed !== "open"
+      || old.ioClosed === h.ioClosed, "PROCESS_PROTOCOL");
+    for (const effect of ["freeze", "kill"]) requireAcquisition(old[effect].state === "not_requested"
+      || old[effect].state === "pending" && h[effect].state !== "not_requested"
+      || old[effect].state === h[effect].state && old[effect].error === h[effect].error, "PROCESS_PROTOCOL");
+  }
 }
 
 /** Parent owns transport/child lifetimes, not actor decisions or external containment. */
@@ -171,6 +182,9 @@ class AcquisitionProcessSession {
         const stage = pending.command === "init" ? "new" : pending.command === "prepare" ? "read" : "bound";
         requireAcquisition(message.payload.report.phase === expected && message.payload.report.stage === stage
           && !message.payload.report.localClosed, "PROCESS_PROTOCOL");
+        if (this.#inputs[role].host) requireAcquisition(message.payload.report.host
+          && !message.payload.report.host.revoked && message.payload.report.host.observation.error === null
+          && message.payload.report.host.observation.atNs !== null, "PROCESS_PROTOCOL");
       }
       validateReportProgress(s.report, message.payload.report);
       s.report = immutable(message.payload.report);
@@ -365,7 +379,9 @@ class AcquisitionProcessSession {
  * actors. forkActor is a trusted test seam, not a launcher/plugin configuration.
  */
 export async function createAcquisitionProcessSession(input, { forkActor = nativeFork } = {}) {
-  requireAcquisition(processFields(input, ["root", "destinations", "header", "supervisorContext", "watchdogContext", "timing"])
+  const base = ["root", "destinations", "header", "supervisorContext", "watchdogContext", "timing"];
+  const withHost = processFields(input, [...base, "host"]);
+  requireAcquisition((processFields(input, base) || withHost)
     && typeof forkActor === "function", "PROCESS_INPUT");
   const timing = validateProcessTiming(input.timing);
   const header = encodeAcquisitionRecord("header", input.header).toString("base64");
@@ -379,7 +395,8 @@ export async function createAcquisitionProcessSession(input, { forkActor = nativ
   const inputs = {};
   for (const role of roles) {
     const data = { root: input.root, destinations: Object.fromEntries(ACQUISITION_ACTOR_PARTS[role].map(part => [part,
-      input.destinations?.[part]])), context: contexts[role], header: role === "supervisor" ? header : null, timing };
+      input.destinations?.[part]])), context: contexts[role], header: role === "supervisor" ? header : null, timing,
+      ...(withHost ? { host: input.host } : {}) };
     const wire = encodeAcquisitionProcessMessage("request", role, contexts.supervisor.operationId, "1", { command: "init", data });
     inputs[role] = immutable(decodeAcquisitionProcessMessage(wire).payload.data);
   }
