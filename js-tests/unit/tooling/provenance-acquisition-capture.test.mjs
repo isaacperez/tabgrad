@@ -251,6 +251,25 @@ test("empty-frame lifetime uses the original clock instead of only the payload a
   assert.equal(f.writes, 0); assert.equal(c.snapshot().channels.stdout.receivedBytes, 0);
 });
 
+test("clock regression between accepted samples above the origin revokes before another transfer", async t => {
+  const f = await fixture(t); const c = await f.create();
+  f.setTime(500n);
+  await c.write(frame(1, Buffer.from([37])));
+  assert.equal(c.snapshot().lastAtNs, "400");
+  const writes = f.writes;
+  f.setTime(400n); // Still above origin100, but below the accepted reading500.
+  await assert.rejects(c.write(frame(2, Buffer.from([38]))), { code: "CAPTURE_CLOCK" });
+  f.setTime(600n);
+  await assert.rejects(c.write(frame(2, Buffer.from([39]))), { code: "CAPTURE_CLOCK" });
+  assert.throws(() => c.finish(), { code: "CAPTURE_CLOCK" });
+  const r = await c.close();
+  assert.equal(f.writes, writes);
+  assert.equal(r.state, "incomplete");
+  assert.equal(r.channels.stdout.confirmedBytes, 1);
+  assert.equal(r.channels.stdout.sha256, hash(Buffer.from([37])));
+  assert.equal(r.channels.stderr.receivedBytes, 0);
+});
+
 test("bad identity, alias/link/capacity and replaced paths reject or retain their original handles", async t => {
   for (const change of [async f => { f.input.destinations.stderr.identity.ino = "9999"; },
     async f => { await rm(join(f.root, "stderr")); await link(join(f.root, "stdout"), join(f.root, "stderr")); },
