@@ -66,6 +66,10 @@ Use [Experimental Docker Exec acquisition](provenance-acquisition-exec.md) for
 one local request sequence, raw daemon-channel capture and observed startup/
 cleanup composition, separate from process provenance and admission.
 
+Use [Experimental acquisition program launcher](provenance-acquisition-launch.md)
+for the canonical program/profile binding, bounded separate control channel and
+single nonprivileged attempt over independently prepared endpoints.
+
 Use [Python tensor creation, metadata, addition and observation](python-tensors.md) for the
 bounded Python call forms, metadata objects, errors and ownership obligations.
 

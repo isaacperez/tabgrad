@@ -396,6 +396,15 @@ distinguishes daemon channels/status from exclusive program provenance and
 admission. Local wire peers and finite startup fixtures test these boundaries;
 they are not a Docker laboratory or a new operational/publication entry.
 
+`scripts/provenance-acquisition-launch-profile.mjs` owns the closed program and
+endpoint profile; `-launch-protocol.mjs` owns bounded ASCII control and state
+validation; `-launch.mjs` owns one attempt, its parent FD copies and fixed
+explicit entry. They share only scalar/file premises with the acquisition
+record, without extending its roles or depending on Exec/startup. The
+[launcher reference](reference/provenance-acquisition-launch.md) distinguishes
+finite local child/file tests from native FIFO, client and host qualification.
+They remain retained experiments outside distribution and signing/publication.
+
 ## Understand the files kept at the root
 
 The root is the entry point for repository readers and several tools. Moving
