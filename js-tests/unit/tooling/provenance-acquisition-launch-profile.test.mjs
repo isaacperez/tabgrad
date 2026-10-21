@@ -64,6 +64,17 @@ test("independent length/hash and 32 KiB quota are checked before decoding", () 
   assert.throws(() => admit(Buffer.alloc(32769)));
 });
 
+test("derived endpoint paths enforce independent component and UTF-8 byte bounds", () => {
+  for (const [root, valid] of [["/" + Array(63).fill("a").join("/"), true],
+    ["/" + Array(64).fill("a").join("/"), false],
+    ["/" + "a".repeat(4087), true], ["/" + "a".repeat(4088), false],
+    ["/" + "é".repeat(2044), false]]) {
+    const p = JSON.parse(literal); p.ipc.root.path = root;
+    if (valid) assert.ok(encodeLaunchProfile(p).length <= 32768);
+    else assert.throws(() => encodeLaunchProfile(p), { code: "LAUNCH_PROFILE" });
+  }
+});
+
 test("readonly identified file: exact P, no symlink, single link, exact size and EOF", async () => {
   const root = await realpath(await mkdtemp(join(tmpdir(), "launch-profile-")));
   try {
@@ -79,5 +90,30 @@ test("readonly identified file: exact P, no symlink, single link, exact size and
     await assert.rejects(readLaunchProfile(join(root, "alias"), expected));
     await link(path, join(root, "hard"));
     await assert.rejects(readLaunchProfile(path, expected));
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test("read expectation is copied before awaiting; caller mutation cannot change admitted bytes/hash/identity", async () => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), "launch-expectation-")));
+  try {
+    const path = join(root, "profile"); await writeFile(path, literal);
+    const info = await stat(path, { bigint: true });
+    const expected = { sha256: hash(literal), bytes: Buffer.byteLength(literal), identity: { dev: String(info.dev), ino: String(info.ino) } };
+    const pending = readLaunchProfile(path, expected);
+    expected.bytes = 32769; expected.sha256 = "0".repeat(64); expected.identity.ino = "1";
+    expected.identity = { dev: "0", ino: "1" };
+    assert.equal((await pending).sha256, hash(literal));
+
+    // The rejected oversized file must never turn initial admitted P=1 into an oversized allocation.
+    const oversized = Buffer.alloc(38508, 65); await writeFile(path, oversized);
+    const one = { sha256: hash(oversized), bytes: 1, identity: { dev: String(info.dev), ino: String(info.ino) } };
+    const originalAlloc = Buffer.alloc;
+    const allocations = [];
+    Buffer.alloc = function (size, ...rest) { allocations.push(size); return originalAlloc(size, ...rest); };
+    try {
+      const rejected = readLaunchProfile(path, one); one.bytes = oversized.length;
+      await assert.rejects(rejected, { code: "LAUNCH_PROFILE_READ" });
+      assert.ok(allocations.every(size => size <= 32768), String(allocations));
+    } finally { Buffer.alloc = originalAlloc; }
   } finally { await rm(root, { recursive: true, force: true }); }
 });

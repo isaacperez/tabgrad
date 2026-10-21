@@ -8,6 +8,7 @@ const causes = "input clock deadline open identity spawn child protocol control 
 const pid = v => isAcquisitionUint(v) && BigInt(v) > 0n && BigInt(v) <= 0xffffffffn;
 const nullable = (v, predicate) => v === null || predicate(v);
 const check = condition => requireAcquisition(condition, "LAUNCH_CONTROL");
+const failedOutcome = record => (record.exitCode !== null && record.exitCode !== 0) || record.signal !== null;
 
 function copyObservation(value) {
   check(acquisitionFields(value, keys));
@@ -29,6 +30,9 @@ function copyObservation(value) {
   if (value.kind === "X") check(value.attempted);
   if (value.kind === "F") check(value.cause !== null);
   if (value.kind === "E") check(!/[op]/.test(value.fds));
+  if (value.cleanupError !== null) check(value.cause !== null);
+  if (value.cause === "child") check(failedOutcome(value));
+  if (value.kind === "X" && value.cause === null) check(value.exitCode === 0);
   return Object.freeze(Object.fromEntries(keys.map(key => [key, value[key]])));
 }
 
@@ -72,6 +76,7 @@ function transition(previous, current, seen) {
   }
   if (current.kind === "F") check(!seen.F);
   else check(current.cause === (previous?.cause ?? null));
+  if ((previous?.cause ?? null) === null && failedOutcome(current)) check(current.cause === "child");
   if (current.kind === "R") check(!previous);
   if (current.kind === "S") check(seen.R && !seen.X && (!seen.F || seen.F.attempted));
   if (current.kind === "X") check(seen.R && (!seen.F || seen.F.attempted));

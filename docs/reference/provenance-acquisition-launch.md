@@ -44,6 +44,9 @@ supplied identity/size, reads P bytes and a one-byte EOF probe, checks canonical
 bytes/hash and final identity/size, and closes the known handle. It does not
 perform an unbounded `readFile` or infer P from untrusted stat. Native waiting
 and namespace immutability still require the separately admitted outer guard.
+P, hash and identity are copied before the first await; later caller mutation
+cannot change the admitted allocation or read. Derived endpoint paths obey the
+same byte/component limits as the root.
 
 The future binding is Exec-body hash -> profile hash -> program-recipe hash;
 the profile contains neither its own digest nor the Exec-body digest. Tool
@@ -88,6 +91,9 @@ The two `fds` characters describe the parent's stdout/stderr copies: n never
 adopted, o open, p close pending, c close confirmed, u close failed/uncertain.
 Transitions are monotonic; c/u are terminal. IDs, outcomes, first cause and
 cleanup error cannot be replaced; time and attempted cannot regress.
+An unsuccessful child outcome introduces cause `child` when there was no prior
+failure. An X without a known outcome requires a prior failure; a cleanup error
+also requires a failure cause.
 No new spawn follows F. Success requires R/S/X/E, child exit0 and output cc.
 Child close is not FIFO EOF, disappearance of descendants or external closure.
 
@@ -154,6 +160,10 @@ receipt. `finished` describes the local wait. `exitStatus` is zero only after
 child exit0, successful control and all owned closure within the original
 budget. `payloadOrigin`, `externalClosure`, `clockAdmission`, `releaseAdmission`
 always remain `unqualified`.
+`pendingEffects` counts owned root/open/stat/write/close promises; the separate
+`childSettled` field describes the child attempt. A rejected native effect is
+classified before checking the post-await clock, preserving the observed
+operation failure and first cleanup failure if that clock also fails.
 
 ## Validation domain
 

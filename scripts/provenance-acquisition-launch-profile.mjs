@@ -1,6 +1,6 @@
 import { constants } from "node:fs";
 import { open } from "node:fs/promises";
-import { basename, isAbsolute, resolve } from "node:path";
+import { basename, isAbsolute, join, resolve } from "node:path";
 import {
   acquisitionFields, acquisitionSha256, isAcquisitionHash, isAcquisitionToken,
   isAcquisitionUint, requireAcquisition,
@@ -92,6 +92,7 @@ function copyData(value) {
     stdout: endpoint(i.stdout), stderr: endpoint(i.stderr), control: endpoint(i.control) });
   check(new Set([ipc.stdout.name, ipc.stderr.name, ipc.control.name]).size === 3
     && new Set([ipc.root, ipc.stdout, ipc.stderr, ipc.control].map(e => `${e.identity.dev}:${e.identity.ino}`)).size === 4);
+  for (const role of ["stdout", "stderr", "control"]) launchPath(join(ipc.root.path, ipc[role].name));
   const t = value.timing;
   fields(t, "t0MonotonicNs workUntilNs closeUntilNs");
   check(Object.values(t).every(isAcquisitionUint) && BigInt(t.workUntilNs) > 0n
@@ -125,10 +126,10 @@ export function copyLaunchProfile(bytes, expected) {
 /** Bounded, readonly, existing regular file. Namespace stability is an admitted premise. */
 export async function readLaunchProfile(path, expected) {
   fields(expected, "sha256 bytes identity");
-  fields(expected.identity, "dev ino");
-  identity(expected.identity);
+  const admittedIdentity = identity(expected.identity);
   check(Number.isInteger(expected.bytes) && expected.bytes > 0 && expected.bytes <= LAUNCH_PROFILE_LIMIT
     && isAcquisitionHash(expected.sha256));
+  const admitted = Object.freeze({ sha256: expected.sha256, bytes: expected.bytes, identity: admittedIdentity });
   launchPath(path);
   let handle;
   let result;
@@ -137,9 +138,9 @@ export async function readLaunchProfile(path, expected) {
     await ownedRoot(resolve(path, ".."));
     handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
     const before = await handle.stat({ bigint: true });
-    check(before.isFile() && before.nlink === 1n && before.size === BigInt(expected.bytes));
-    identityMatches(before, expected.identity);
-    const bytes = Buffer.alloc(expected.bytes);
+    check(before.isFile() && before.nlink === 1n && before.size === BigInt(admitted.bytes));
+    identityMatches(before, admitted.identity);
+    const bytes = Buffer.alloc(admitted.bytes);
     let offset = 0;
     while (offset < bytes.length) {
       const { bytesRead } = await handle.read(bytes, offset, bytes.length - offset, offset);
@@ -150,8 +151,8 @@ export async function readLaunchProfile(path, expected) {
     check(probe.bytesRead === 0);
     const after = await handle.stat({ bigint: true });
     check(after.isFile() && after.nlink === 1n && after.size === before.size);
-    identityMatches(after, expected.identity);
-    result = copyLaunchProfile(bytes, { sha256: expected.sha256, bytes: expected.bytes });
+    identityMatches(after, admitted.identity);
+    result = copyLaunchProfile(bytes, { sha256: admitted.sha256, bytes: admitted.bytes });
   } catch { failed = true; }
   if (handle) {
     try { await handle.close(); } catch { failed = true; }

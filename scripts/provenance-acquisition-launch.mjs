@@ -150,9 +150,10 @@ class AcquisitionLauncher {
     this.workTimer = this.ports.schedule(() => { this.sample(); this.fail("deadline"); void this.closeOutputs(); }, Number((work + 999999n) / 1000000n));
     this.closeTimer = this.ports.schedule(() => this.expire(), Number((close + 999999n) / 1000000n));
   }
-  async effect(operation) {
+  async effect(operation, failure, cleanup = null) {
     this.pending++;
     try { return await operation(); }
+    catch (error) { this.fail(failure, cleanup); throw error; }
     finally { this.pending--; this.sample(); }
   }
   emit(kind) {
@@ -175,7 +176,7 @@ class AcquisitionLauncher {
         let offset = 0;
         while (offset < bytes.length) {
           if (!this.permitted(false)) { this.controlUsable = false; break; }
-          const result = await this.effect(() => this.handles.control.handle.write(bytes, offset, bytes.length - offset, null));
+          const result = await this.effect(() => this.handles.control.handle.write(bytes, offset, bytes.length - offset, null), "control");
           requireAcquisition(Number.isInteger(result.bytesWritten) && result.bytesWritten > 0
             && result.bytesWritten <= bytes.length - offset, "LAUNCH_CONTROL_WRITE");
           this.confirmedControlBytes += result.bytesWritten;
@@ -201,7 +202,7 @@ class AcquisitionLauncher {
     const slot = this.handles[role];
     if (!slot.handle || slot.close) return slot.close ?? Promise.resolve();
     slot.state = "p";
-    slot.close = this.effect(() => slot.handle.close()).then(() => { slot.state = "c"; }, () => {
+    slot.close = this.effect(() => slot.handle.close(), "close", "close").then(() => { slot.state = "c"; }, () => {
       slot.state = "u"; this.fail("close", "close");
     });
     return slot.close;
@@ -211,12 +212,12 @@ class AcquisitionLauncher {
     if (!this.permitted(true)) return;
     const slot = this.handles[role];
     try {
-      const handle = await this.effect(() => this.ports.openWriter(join(this.profile.ipc.root.path, this.profile.ipc[role].name)));
+      const handle = await this.effect(() => this.ports.openWriter(join(this.profile.ipc.root.path, this.profile.ipc[role].name)), "open");
       slot.handle = handle;
       slot.state = "o";
       if (!this.permitted(true)) return;
       try {
-        const stat = await this.effect(() => handle.stat({ bigint: true }));
+        const stat = await this.effect(() => handle.stat({ bigint: true }), "identity");
         requireAcquisition(stat.isFIFO(), "LAUNCH_IDENTITY");
         identityMatches(stat, this.profile.ipc[role].identity);
         requireAcquisition(Number.isInteger(handle.fd) && handle.fd >= 0, "LAUNCH_IDENTITY");
@@ -286,7 +287,7 @@ class AcquisitionLauncher {
         && credentials.uid === expected.uid && credentials.gid === expected.gid
         && Array.isArray(credentials.groups) && JSON.stringify(credentials.groups) === JSON.stringify(expected.groups), "LAUNCH_INPUT");
       this.pid = credentials.pid;
-      try { await this.effect(() => this.ports.root(this.profile.ipc.root)); }
+      try { await this.effect(() => this.ports.root(this.profile.ipc.root), "identity"); }
       catch { this.fail("identity"); return; }
       for (const role of roles) await this.openEndpoint(role);
       if (!this.permitted(true) || !roles.every(role => this.handles[role].state === "o")) return;

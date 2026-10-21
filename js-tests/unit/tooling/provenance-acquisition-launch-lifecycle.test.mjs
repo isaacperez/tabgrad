@@ -382,3 +382,22 @@ test("fixed entry rejects invalid arguments with only a closed diagnostic", () =
   assert.equal(result.stdout, "");
   assert.equal(result.stderr, "LAUNCH_FAILED\n");
 });
+
+test("native rejection is classified before a failed post-await clock sample", async () => {
+  for (const operation of ["open", "close"]) {
+    const h = await Harness.create();
+    try {
+      const t0 = BigInt(h.admitted.profile.timing.t0MonotonicNs);
+      let invalid = false;
+      if (operation === "open") h.hooks.beforeOpen = () => { invalid = true; throw Error("PRIVATE"); };
+      // Control closes after every other transfer/close settles: isolate this await's observation order.
+      else h.hooks.close = role => { if (role === "control") { invalid = true; throw Error("PRIVATE"); } };
+      const result = await h.launcher({ clock: () => invalid ? t0 - 1n : t0 }).run();
+      assert.equal(result.cause, operation);
+      assert.equal(result.cleanupError, operation === "open" ? "clock" : "close");
+      assert.equal(result.exitStatus, 1);
+      if (operation === "open") assert.equal(result.observations.E, null);
+      else assert.ok(result.observations.E);
+    } finally { await h.dispose(); }
+  }
+});

@@ -42,6 +42,19 @@ test("phase order, first cause, cleanup, PID, time, descriptors and result canno
   for (const lines of bad) assert.throws(() => decode(lines), { code: "LAUNCH_CONTROL" });
 });
 
+test("failed outcome and cleanup cannot be followed by an unrelated first cause", () => {
+  const cases = [
+    [normal[0], normal[1], "X|3|12|13|1|7|-|cc|-|-", "F|4|12|13|1|7|-|cc|stopped|-", "E|5|12|13|1|7|-|cc|stopped|-"],
+    [normal[0], "S|2|12|13|1|-|-|oo|-|close", "F|3|12|13|1|-|-|cc|stopped|close", "X|4|12|13|1|0|-|cc|stopped|close", "E|5|12|13|1|0|-|cc|stopped|close"],
+    [normal[0], normal[1], "F|3|12|13|1|7|-|cc|stopped|-", "X|4|12|13|1|7|-|cc|stopped|-", "E|5|12|13|1|7|-|cc|stopped|-"],
+    [normal[0], normal[1], "X|3|12|13|1|-|-|cc|-|-", "F|4|12|13|1|-|-|cc|stopped|-", "E|5|12|13|1|-|-|cc|stopped|-"],
+    [normal[0], normal[1], "F|3|12|13|1|0|-|cc|child|-", "X|4|12|13|1|0|-|cc|child|-", "E|5|12|13|1|0|-|cc|child|-"],
+  ];
+  for (const lines of cases) assert.throws(() => decode(lines), { code: "LAUNCH_CONTROL" });
+  assert.equal(decode([normal[0], normal[1], "F|3|12|13|1|7|-|pp|child|-", "X|4|12|13|1|7|-|cc|child|-", "E|5|12|13|1|7|-|cc|child|-"]).finished, true);
+  assert.equal(decode([normal[0], normal[1], "F|3|12|13|1|-|-|pp|stopped|-", "X|4|12|13|1|7|-|cc|stopped|-", "E|5|12|13|1|7|-|cc|stopped|-"]).finished, true);
+});
+
 test("closed ASCII grammar and ranges; EOF requires complete terminal record", () => {
   const bad = [wire(normal[0]).subarray(0, -1), Buffer.from(wire(normal[0]).toString().replace(/\n$/, "\r\n")),
     wire(normal[0].replace("|1|", "|01|")), wire(normal[0].replace("|12|", "|0|")),
