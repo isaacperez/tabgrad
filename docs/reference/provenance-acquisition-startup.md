@@ -80,6 +80,12 @@ cannot restore admission. Finish revokes synchronously and returns the same
 promise on repeated calls. A local ready state is observed metadata, never an
 authenticated host, current physical lease or authority to run a client.
 
+Its immutable `context` is the process owner's copied operation, origin,
+original operation cutoff and root. This cutoff differs from the host's
+earlier work-admission cutoff and guard horizon. The separate
+[Exec adapter](provenance-acquisition-exec.md) uses that binding and observed
+permission; startup itself makes no Docker request or data-provenance claim.
+
 ## Guard channel and lifetime
 
 `provenance-acquisition-startup-protocol.mjs` owns canonical JSON strings within

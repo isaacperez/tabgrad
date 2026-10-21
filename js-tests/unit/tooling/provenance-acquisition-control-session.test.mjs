@@ -97,6 +97,24 @@ test("watchdog receives independently frozen expectations rather than learning t
   }
 });
 
+test("declared client intent makes endings unknown even when the intent write fails", async t => {
+  for (const fail of [false, true]) {
+    let writes = 0;
+    const { session } = await fixture(t, { transfer: { read, async write(handle, ...args) {
+      writes++;
+      if (fail && writes === 2) throw Error("finite failed intent write");
+      return write(handle, ...args);
+    } } });
+    assert.equal((await session.start()).mayStart, true);
+    await session.supervisor.append({ phase: "acquire", kind: "transition", subject: "client", code: "begun", reference: hash, value: null });
+    const result = await session.finish({ observedUtc: utc });
+    const s = decodeAcquisitionRecord("supervisor", result.parts.supervisor.bytes);
+    assert.equal(s.clientState, "unknown"); assert.equal(s.clientExitCode, null);
+    assert.equal(s.stdoutState, "unknown"); assert.equal(s.lifecycleState, "unknown");
+    assert.equal(s.stopCode, fail ? "storage" : "normal");
+  }
+});
+
 test("read failure preserves the writing outcome and the exact known read prefix", async t => {
   let calls = 0;
   const { session } = await fixture(t, { transfer: { write,

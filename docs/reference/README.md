@@ -62,6 +62,10 @@ Use [Experimental binary acquisition capture](provenance-acquisition-capture.md)
 for the finite non-TTY framing subset, separate payload reservations, confirmed
 prefixes and incomplete outcomes, without transport or client admission.
 
+Use [Experimental Docker Exec acquisition](provenance-acquisition-exec.md) for
+one local request sequence, raw daemon-channel capture and observed startup/
+cleanup composition, separate from process provenance and admission.
+
 Use [Python tensor creation, metadata, addition and observation](python-tensors.md) for the
 bounded Python call forms, metadata objects, errors and ownership obligations.
 

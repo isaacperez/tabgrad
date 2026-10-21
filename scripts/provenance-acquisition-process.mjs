@@ -71,6 +71,9 @@ class AcquisitionProcessSession {
     this.#origin = BigInt(inputs.supervisor.context.t0MonotonicNs);
     this.#deadline = BigInt(inputs.supervisor.context.deadlineNs);
     this.supervisor = Object.freeze({ append: this.#append.bind(this) });
+    Object.defineProperty(this, "context", { enumerable: true, value: Object.freeze({ operationId: this.#operationId,
+      t0MonotonicNs: inputs.supervisor.context.t0MonotonicNs,
+      deadlineNs: inputs.supervisor.context.deadlineNs, root: source.root }) });
   }
 
   #wire(role, kind, id, payload) { return encodeAcquisitionProcessMessage(kind, role, this.#operationId, id, payload); }

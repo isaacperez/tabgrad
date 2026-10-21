@@ -5,12 +5,14 @@ import { mkdtemp, open, readFile, realpath, rm, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { ACQUISITION_LIMITS, acquisitionSha256 } from "../../../scripts/provenance-acquisition-record.mjs";
+import { ACQUISITION_LIMITS, acquisitionSha256, decodeAcquisitionRecord } from "../../../scripts/provenance-acquisition-record.mjs";
 import { acquisitionFileIdentity } from "../../../scripts/provenance-acquisition-record-io.mjs";
 import { createAcquisitionStartup } from "../../../scripts/provenance-acquisition-startup.mjs";
 import { decodeAcquisitionProcessMessage } from "../../../scripts/provenance-acquisition-process-protocol.mjs";
 import { decodeStartupGuardMessage, encodeStartupGuardMessage } from "../../../scripts/provenance-acquisition-startup-protocol.mjs";
 import { hostProfile } from "../../fixtures/provenance-acquisition-host.mjs";
+import { createAcquisitionExec } from "../../../scripts/provenance-acquisition-exec.mjs";
+import { fakeExecDaemon, execProfile, output } from "../../fixtures/provenance-acquisition-exec.mjs";
 
 const utc = "2026-01-02T03:04:05.006Z";
 const childEntry = new URL("../../fixtures/provenance-acquisition-startup-child.mjs", import.meta.url);
@@ -93,6 +95,24 @@ async function fixture(t, options = {}) {
   const create = async () => { startup = await createAcquisitionStartup(input, settings); return startup; };
   return { create, input, root, launches, children, bytes };
 }
+
+test("actual three-control startup binds one fake-daemon Exec and retains conservative client ending", { timeout: 15000 }, async t => {
+  const f = await fixture(t, { host: { stopAtNs: "3000000000", observeUntilNs: "3300000000" } });
+  const s = await f.create(); const daemon = await fakeExecDaemon(t, f.root);
+  const p = await execProfile(f.root, daemon.socket, f.input.process.header.t0MonotonicNs, "5000000000");
+  p.timing.closeWaitMs = 3500;
+  assert.equal(Object.isFrozen(s.context), true);
+  assert.throws(() => { s.context = {}; }, TypeError);
+  const exec = await createAcquisitionExec(p, { startup: s });
+  const result = await exec.run({ observedUtc: utc });
+  assert.equal(result.firstFailure, null); assert.equal(result.locallyComplete, true);
+  assert.deepEqual(f.launches, ["guard", "supervisor", "watchdog"]); assert.equal(daemon.requests.length, 4);
+  assert.equal(result.capture.channels.stdout.sha256, acquisitionSha256(output));
+  const ending = decodeAcquisitionRecord("supervisor", result.controls.process.parts.supervisor.bytes);
+  assert.equal(ending.clientState, "unknown"); assert.equal(ending.clientExitCode, null);
+  assert.equal(ending.stdoutState, "unknown"); assert.equal(ending.validationState, "not_run");
+  assert.equal(result.controls.process.collection.formatComplete, true); assert.equal(result.payloadOrigin, "unqualified");
+});
 
 test("startup requires three entered controls, preserves copied inputs and collects the original record", { timeout: 15000 }, async t => {
   const f = await fixture(t);

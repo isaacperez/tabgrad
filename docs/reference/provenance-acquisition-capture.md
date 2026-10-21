@@ -8,6 +8,11 @@ Imports perform no I/O. The [release policy](../releases.md) governs operational
 qualification and authority; neither complete framing nor a prefix hash admits
 trust, process closure, custody, signing or a release.
 
+The separate [Exec adapter](provenance-acquisition-exec.md) supplies transport
+bytes and correlates daemon observations. Daemon payloads can include daemon
+diagnostics; complete capture does not attribute them exclusively to a program.
+The binary capture owner remains independent of that transport.
+
 ## Input and ownership
 
 `await openAcquisitionCapture(input, {clock?, transfer?})` requires the exact

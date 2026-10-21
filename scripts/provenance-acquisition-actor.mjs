@@ -2,7 +2,7 @@ import { AcquisitionRecordError } from "./provenance-acquisition-record.mjs";
 import { ACQUISITION_ACTOR_PARTS } from "./provenance-acquisition-record-io.mjs";
 import { ACQUISITION_CONTROL_PHASES, createAcquisitionControl, advanceAcquisitionControl } from "./provenance-acquisition-control.mjs";
 
-function ending(role, state, headerHash, progress, observedUtc, peer) {
+function ending(role, state, headerHash, progress, observedUtc, peer, clientAttempted) {
   const failure = state.firstFailure;
   const stopCode = failure?.code === "clock" ? "controller" : failure?.code === "peer" ? "observer" : failure?.code ?? "normal";
   const common = { recordType: `acq_${role}_end_v1`, operationId: state.context.operationId,
@@ -11,7 +11,7 @@ function ending(role, state, headerHash, progress, observedUtc, peer) {
   if (role === "watchdog") return { ...common, peerState: peer?.state ?? "unknown", peerObservedAtNs: peer?.atNs ?? null,
     containmentState: "unconfirmed", containmentAtNs: null, caseEmptyState: "unknown",
     lifecycleState: "unknown", helperClosureState: "unknown" };
-  return { ...common, clientState: "not_started", clientExitCode: null, clientSignal: null,
+  return { ...common, clientState: clientAttempted ? "unknown" : "not_started", clientExitCode: null, clientSignal: null,
     stdoutState: "unknown", stdoutReceivedBytes: null, stdoutConfirmedBytes: null, stdoutSha256: null,
     stderrState: "unknown", stderrReceivedBytes: null, stderrConfirmedBytes: null, stderrSha256: null,
     progressState: progress.state === "pending" ? "incomplete" : progress.state,
@@ -25,6 +25,7 @@ function ending(role, state, headerHash, progress, observedUtc, peer) {
 /** One actor's state and owned effects, shared by local and process composition. */
 export class AcquisitionActor {
   #record; #header; #clock; #state; #sequence = 1n; #headerReadback = null;
+  #clientAttempted = false;
 
   constructor({ context, record, header = null, clock }) {
     this.#state = createAcquisitionControl(context);
@@ -59,6 +60,9 @@ export class AcquisitionActor {
       case "verify_header": return payload;
       case "peer_ready": return payload;
       case "write_progress": {
+        // Keep an ending conservative even if this intent's write/ack later fails.
+        if (payload.phase === "acquire" && payload.kind === "transition"
+          && payload.subject === "client" && payload.code === "begun") this.#clientAttempted = true;
         const record = { recordType: "acq_event_v1", operationId: this.#state.context.operationId,
           sequence: this.#sequence.toString(), atNs: this.#state.lastAtNs, ...payload };
         const written = await this.#record.writers.progress.write(record);
@@ -72,7 +76,7 @@ export class AcquisitionActor {
         return this.#record.writers[role].write(ending(role, this.#state,
           known ? (role === "supervisor" ? header.sha256 : this.#state.context.expectedHeaderSha256) : null,
           this.#record.writers.progress?.snapshot(),
-          payload.observedUtc, payload.peer));
+          payload.observedUtc, payload.peer, this.#clientAttempted));
       }
       case "close_writer": return Promise.all(ACQUISITION_ACTOR_PARTS[role].map(part => this.#record.writers[part].close()));
       default: throw new AcquisitionRecordError("SESSION_INPUT");
