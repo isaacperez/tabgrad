@@ -226,15 +226,15 @@ class AcquisitionLauncher {
     } catch { this.fail("open"); }
   }
   onSpawn() {
-    this.sample();
     if (!this.child || !Number.isInteger(this.child.pid) || this.child.pid <= 0 || this.child.pid > 0xffffffff) {
       this.fail("protocol");
-    } else { this.childPid = String(this.child.pid); this.emit("S"); }
+    } else this.childPid = String(this.child.pid);
+    this.sample();
+    if (this.childPid !== null) this.emit("S");
     void this.closeOutputs();
   }
-  onError() { this.sample(); this.fail("spawn"); void this.closeOutputs(); }
+  onError() { this.fail("spawn"); this.sample(); void this.closeOutputs(); }
   onClose(code, signal) {
-    this.sample();
     const validCode = code === null || (Number.isInteger(code) && code >= 0 && code <= 255);
     const validSignal = signal === null || (typeof signal === "string" && Object.hasOwn(linuxSignals, signal));
     if (!validCode || !validSignal || (code !== null && signal !== null)
@@ -245,6 +245,7 @@ class AcquisitionLauncher {
       if (code !== 0 && !this.cause) this.fail("child");
     }
     if (!this.observations.S && !this.cause) this.fail("protocol");
+    this.sample();
     this.childSettled = true;
     this.child.removeListener("spawn", this.spawnListener);
     this.child.removeListener("error", this.errorListener);
@@ -264,7 +265,7 @@ class AcquisitionLauncher {
       this.child = this.ports.spawn(program.argv[0], program.argv.slice(1), { cwd: program.workingDir, env,
         shell: false, stdio: ["ignore", this.handles.stdout.handle.fd, this.handles.stderr.handle.fd] });
     } catch {
-      this.sample(); this.fail("spawn"); this.childSettled = true; this.emit("X");
+      this.fail("spawn"); this.sample(); this.childSettled = true; this.emit("X");
       await this.closeOutputs();
       return;
     }

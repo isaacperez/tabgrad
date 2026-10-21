@@ -29,7 +29,10 @@ function copyObservation(value) {
     && value.exitCode === null && value.signal === null);
   if (value.kind === "X") check(value.attempted);
   if (value.kind === "F") check(value.cause !== null);
-  if (value.kind === "E") check(!/[op]/.test(value.fds));
+  if (value.kind === "E") {
+    check(!/[op]/.test(value.fds));
+    if (value.cleanupError === "close") check(value.fds.includes("u"));
+  }
   if (value.cleanupError !== null) check(value.cause !== null);
   if (value.cause === "child") check(failedOutcome(value));
   if (value.kind === "X" && value.cause === null) check(value.exitCode === 0);
@@ -79,7 +82,10 @@ function transition(previous, current, seen) {
   if ((previous?.cause ?? null) === null && failedOutcome(current)) check(current.cause === "child");
   if (current.kind === "R") check(!previous);
   if (current.kind === "S") check(seen.R && !seen.X && (!seen.F || seen.F.attempted));
-  if (current.kind === "X") check(seen.R && (!seen.F || seen.F.attempted));
+  if (current.kind === "X") {
+    check(seen.R && (!seen.F || seen.F.attempted));
+    if (current.cause === null) check(seen.S !== null);
+  }
   if (current.attempted) check(seen.R);
   if (current.kind === "E") {
     check(current.attempted ? !!seen.X : !seen.S && !seen.X);

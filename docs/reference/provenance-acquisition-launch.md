@@ -92,8 +92,10 @@ adopted, o open, p close pending, c close confirmed, u close failed/uncertain.
 Transitions are monotonic; c/u are terminal. IDs, outcomes, first cause and
 cleanup error cannot be replaced; time and attempted cannot regress.
 An unsuccessful child outcome introduces cause `child` when there was no prior
-failure. An X without a known outcome requires a prior failure; a cleanup error
-also requires a failure cause.
+failure. An X without a known outcome or preceding S requires a prior failure;
+a cleanup error also requires a failure cause. E with cleanup `close` requires
+at least one output copy in u: control has not closed yet, and this owner has
+no other earlier file closure to which that error could refer.
 No new spawn follows F. Success requires R/S/X/E, child exit0 and output cc.
 Child close is not FIFO EOF, disappearance of descendants or external closure.
 
@@ -162,8 +164,10 @@ budget. `payloadOrigin`, `externalClosure`, `clockAdmission`, `releaseAdmission`
 always remain `unqualified`.
 `pendingEffects` counts owned root/open/stat/write/close promises; the separate
 `childSettled` field describes the child attempt. A rejected native effect is
-classified before checking the post-await clock, preserving the observed
-operation failure and first cleanup failure if that clock also fails.
+classified before checking the subsequent clock, preserving the observed
+operation failure and first cleanup failure if that clock also fails. The same
+local ordering applies to a spawn throw and native error/outcome callbacks;
+it asserts no physical ordering of independent actors.
 
 ## Validation domain
 

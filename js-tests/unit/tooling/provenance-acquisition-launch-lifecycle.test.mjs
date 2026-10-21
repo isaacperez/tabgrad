@@ -383,20 +383,32 @@ test("fixed entry rejects invalid arguments with only a closed diagnostic", () =
   assert.equal(result.stderr, "LAUNCH_FAILED\n");
 });
 
-test("native rejection is classified before a failed post-await clock sample", async () => {
-  for (const operation of ["open", "close"]) {
+test("native failures are classified before their failed subsequent clock sample", async () => {
+  for (const operation of ["open", "close", "throw", "error", "child", "pid"]) {
     const h = await Harness.create();
     try {
       const t0 = BigInt(h.admitted.profile.timing.t0MonotonicNs);
       let invalid = false;
       if (operation === "open") h.hooks.beforeOpen = () => { invalid = true; throw Error("PRIVATE"); };
       // Control closes after every other transfer/close settles: isolate this await's observation order.
-      else h.hooks.close = role => { if (role === "control") { invalid = true; throw Error("PRIVATE"); } };
+      else if (operation === "close") h.hooks.close = role => { if (role === "control") { invalid = true; throw Error("PRIVATE"); } };
+      else if (operation === "throw") h.hooks.spawn = () => { invalid = true; throw Error("PRIVATE"); };
+      else h.hooks.spawn = () => {
+        const c = new EventEmitter(); c.pid = operation === "pid" ? 0 : 321;
+        queueMicrotask(() => {
+          if (operation === "pid") invalid = true;
+          c.emit("spawn");
+          invalid = true;
+          if (operation === "error") c.emit("error", Error("PRIVATE"));
+          c.emit("close", operation === "error" ? null : operation === "child" ? 7 : 0, null);
+        });
+        return c;
+      };
       const result = await h.launcher({ clock: () => invalid ? t0 - 1n : t0 }).run();
-      assert.equal(result.cause, operation);
-      assert.equal(result.cleanupError, operation === "open" ? "clock" : "close");
+      assert.equal(result.cause, ["throw", "error"].includes(operation) ? "spawn" : operation === "pid" ? "protocol" : operation);
+      assert.equal(result.cleanupError, operation === "close" ? "close" : "clock");
       assert.equal(result.exitStatus, 1);
-      if (operation === "open") assert.equal(result.observations.E, null);
+      if (operation !== "close") assert.equal(result.observations.E, null);
       else assert.ok(result.observations.E);
     } finally { await h.dispose(); }
   }

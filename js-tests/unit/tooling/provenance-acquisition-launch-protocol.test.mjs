@@ -44,6 +44,8 @@ test("phase order, first cause, cleanup, PID, time, descriptors and result canno
 
 test("failed outcome and cleanup cannot be followed by an unrelated first cause", () => {
   const cases = [
+    [normal[0], "F|2|12|-|0|-|-|cc|stopped|close", "E|3|12|-|0|-|-|cc|stopped|close"],
+    [normal[0], "X|2|12|-|1|0|-|cc|-|-", "F|3|12|-|1|0|-|cc|stopped|-", "E|4|12|-|1|0|-|cc|stopped|-"],
     [normal[0], normal[1], "X|3|12|13|1|7|-|cc|-|-", "F|4|12|13|1|7|-|cc|stopped|-", "E|5|12|13|1|7|-|cc|stopped|-"],
     [normal[0], "S|2|12|13|1|-|-|oo|-|close", "F|3|12|13|1|-|-|cc|stopped|close", "X|4|12|13|1|0|-|cc|stopped|close", "E|5|12|13|1|0|-|cc|stopped|close"],
     [normal[0], normal[1], "F|3|12|13|1|7|-|cc|stopped|-", "X|4|12|13|1|7|-|cc|stopped|-", "E|5|12|13|1|7|-|cc|stopped|-"],
@@ -53,6 +55,7 @@ test("failed outcome and cleanup cannot be followed by an unrelated first cause"
   for (const lines of cases) assert.throws(() => decode(lines), { code: "LAUNCH_CONTROL" });
   assert.equal(decode([normal[0], normal[1], "F|3|12|13|1|7|-|pp|child|-", "X|4|12|13|1|7|-|cc|child|-", "E|5|12|13|1|7|-|cc|child|-"]).finished, true);
   assert.equal(decode([normal[0], normal[1], "F|3|12|13|1|-|-|pp|stopped|-", "X|4|12|13|1|7|-|cc|stopped|-", "E|5|12|13|1|7|-|cc|stopped|-"]).finished, true);
+  assert.equal(decode([normal[0], "F|2|12|-|1|-|-|pp|protocol|-", "X|3|12|-|1|0|-|cc|protocol|-", "E|4|12|-|1|0|-|cc|protocol|-"]).finished, true);
 });
 
 test("closed ASCII grammar and ranges; EOF requires complete terminal record", () => {
