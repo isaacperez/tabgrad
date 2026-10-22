@@ -173,6 +173,21 @@ test("known short writes advance only by confirmed extents without replaying pre
   assert.equal(c.finish().channels.stdout.sha256, hash(Buffer.from([1, 2, 3, 4, 5])));
 });
 
+test("clock checks retain their order around opening, decode, short writes and finish", async t => {
+  const observed = [];
+  const f = await fixture(t, { clock() { observed.push("clock"); return 101n; },
+    write(h, b, o, n, p) { observed.push(`write:${o}:${n}:${p}`); return h.write(b, o, Math.min(1, n), p); },
+  });
+  const c = await f.create();
+  await c.write(frame(1, Buffer.from([255, 0])));
+  c.finish();
+  assert.deepEqual(observed, ["clock", "clock", "clock", "clock", "clock", "clock",
+    "write:0:2:0", "clock", "clock", "write:1:1:1", "clock", "clock"]);
+  const before = [...observed];
+  c.snapshot(); c.finish(); await c.close();
+  assert.deepEqual(observed, before);
+});
+
 test("zero, invalid and throw-after-effect writes stop permanently with truthful extent and close uncertainty", async t => {
   for (const outcome of [0, -1, 1.5, 99, null, "throw"]) {
     let calls = 0;

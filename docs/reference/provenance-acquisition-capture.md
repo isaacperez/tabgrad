@@ -13,6 +13,12 @@ bytes and correlates daemon observations. Daemon payloads can include daemon
 diagnostics; complete capture does not attribute them exclusively to a program.
 The binary capture owner remains independent of that transport.
 
+The [raw payload writer](provenance-acquisition-payload.md) owns identified
+files, positional writes, prefix hashes, clock history and handle closure.
+This Docker adapter owns framing, its serial call boundary and decoder
+progress; both adapters use that same file owner without inventing frames
+for raw payloads.
+
 ## Input and ownership
 
 `await openAcquisitionCapture(input, {clock?, transfer?})` requires the exact

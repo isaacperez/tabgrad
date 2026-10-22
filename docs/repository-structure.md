@@ -381,10 +381,13 @@ retains that pre-case effect; existing open-only consumers retain their domain.
 The [startup reference](reference/provenance-acquisition-startup.md) separates
 local observed admission and owned-child joins from native qualification.
 
-`scripts/provenance-acquisition-capture.mjs` owns the separate experimental
-binary frame/payload writer, channel limits, confirmed prefixes and local
-capture lifetime. It shares only native file premises with record I/O; it does
-not extend JSONL roles or compose transport, client launch or startup admission.
+`scripts/provenance-acquisition-payload.mjs` owns experimental identified raw
+payload writes, confirmed prefixes, shared clock history and handle lifetime.
+Its [reference](reference/provenance-acquisition-payload.md) defines independent
+channel progress and the shared file-owner seam. It shares native file premises
+with record I/O. `scripts/provenance-acquisition-capture.mjs` owns Docker framing,
+the serial call boundary and decoding progress over that same file owner.
+Neither extends JSONL roles or composes transport, client launch or startup admission.
 Its [reference](reference/provenance-acquisition-capture.md) defines supplied-byte
 ownership and the limits of framing, clock and handle-close observations.
 
