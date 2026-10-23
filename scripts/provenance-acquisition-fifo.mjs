@@ -16,7 +16,8 @@ function copyPorts(ports) {
   requireAcquisition(ports && Object.getPrototypeOf(ports) === Object.prototype, "FIFO_INPUT");
   const descriptors = Object.getOwnPropertyDescriptors(ports);
   requireAcquisition(Reflect.ownKeys(ports).every(key => Object.hasOwn(fifoNativePorts, key)
-    && Object.hasOwn(descriptors[key], "value") && typeof descriptors[key].value === "function"), "FIFO_INPUT");
+    && Object.hasOwn(descriptors[key], "value") && descriptors[key].enumerable
+    && typeof descriptors[key].value === "function"), "FIFO_INPUT");
   return { ...fifoNativePorts, ...ports };
 }
 
@@ -61,12 +62,13 @@ class AcquisitionFifos {
     }
   }
 
-  #check(work) {
+  #check(work, limitPrefix = false) {
     const at = this.#sample();
     if (at === null) return false;
     if (at >= BigInt(this.#profile.timing.closeUntilNs)) { this.#expire(); return false; }
     if (work && at >= BigInt(this.#profile.timing.workUntilNs)) { this.#fail("FIFO_DEADLINE"); return false; }
-    return !this.#waitExpired && (!work || (!this.#firstError && !this.#closeRequested));
+    return !this.#waitExpired && (!work || (!this.#closeRequested
+      && (!this.#firstError || (limitPrefix && this.#firstError === "FIFO_LIMIT"))));
   }
 
   #fail(code, cleanup = null) {
@@ -225,9 +227,12 @@ class AcquisitionFifos {
     const count = result?.bytesRead;
     if (!Number.isInteger(count) || count < 0 || count > length) { this.#fail("FIFO_READ_EXTENT"); return null; }
     c.readUncertain = false; c.readBytes += count;
-    if (count > FIFO_LIMITS[role].capacity - c.submittedBytes) c.overflow = true;
+    const overflow = count > FIFO_LIMITS[role].capacity - c.submittedBytes;
+    const limitPrefix = overflow && this.#firstError === null;
+    if (overflow) c.overflow = true;
+    if (limitPrefix) this.#firstError = "FIFO_LIMIT";
     if (count === 0 && this.#releaseRequested && c.sentinel.state === "closed") c.eof = true;
-    return count;
+    return { count, limitPrefix };
   }
 
   async #pump(role) {
@@ -239,14 +244,13 @@ class AcquisitionFifos {
         c.readPending = true;
         const read = await this.#effect(() => this.#read(role, length), "FIFO_READ",
           (ok, result) => this.#readResult(role, length, ok, result));
-        if (!read.ok || !this.#check(true)) return;
-        if (read.value === again || (read.value === 0 && !c.eof)) { await this.#pause(role, true); continue; }
+        // Only the first overflow read may submit its already-read allowed prefix.
+        // It still needs a valid clock and no intervening stop/deadline/cleanup.
+        if (!read.ok || !this.#check(true, read.value?.limitPrefix)) return;
+        if (read.value === again || (read.value.count === 0 && !c.eof)) { await this.#pause(role, true); continue; }
         if (c.eof) { this.#closeSlot(role, "reader"); return; }
-        const allowed = Math.min(read.value, remaining);
-        const overflow = read.value > remaining;
-        // This prefix belongs to the just-admitted read. Retain the known limit before calling
-        // a sink (even if it reenters stop), then revoke without waiting for its settlement.
-        if (overflow) this.#firstError ??= "FIFO_LIMIT";
+        const allowed = Math.min(read.value.count, remaining);
+        const overflow = read.value.count > remaining;
         let delivery;
         if (allowed) {
           const sink = c.sink; const bytes = c.buffer.subarray(0, allowed);

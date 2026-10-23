@@ -110,6 +110,9 @@ test("closed FIFO profile rejects malformed data without invoking getters or nat
   assert.throws(() => createAcquisitionFifos(profile(), Object.defineProperty({}, "clock", {
     enumerable: true, get() { assert.fail("port getter"); },
   })), { code: "FIFO_INPUT" });
+  assert.throws(() => createAcquisitionFifos(profile(), Object.defineProperty({}, "clock", {
+    value() { assert.fail("non-enumerable override must not be silently discarded"); },
+  })), { code: "FIFO_INPUT" });
 });
 
 test("owner is returned before I/O, copies input, opens readers before sentinels and rechecks root", async t => {
@@ -429,6 +432,41 @@ test("stop from a prefix sink preserves the known limit; release closure can sta
   assert.equal(end.firstError, "FIFO_LIMIT"); assert.equal(end.cleanupError, "FIFO_CLOSE");
   assert.equal(end.channels.control.readBytes, 891); assert.equal(end.channels.control.submittedBytes, 890);
   assert.equal(end.channels.control.eof, false); assert.equal(end.ioClosed, "unknown");
+});
+
+test("observed overflow precedes the post-read clock failure without admitting its remaining prefix", async t => {
+  const f = fixture(t, { streams: { control: [Buffer.alloc(889), Buffer.alloc(2)] }, clock(now) {
+    return f.owner.snapshot().channels.control.overflow ? 100n : now;
+  } });
+  const p = f.owner; await p.open(); const end = await p.drain(f.sinks);
+  assert.equal(end.firstError, "FIFO_LIMIT"); assert.equal(end.cleanupError, "FIFO_CLOCK");
+  assert.equal(end.channels.control.overflow, true); assert.equal(end.channels.control.readBytes, 891);
+  assert.equal(end.channels.control.submittedBytes, 889); assert.equal(f.output.control.length, 5);
+  assert.equal(end.state, "limit");
+});
+
+test("two observed overflows admit only the first read's allowed prefix", async t => {
+  const probes = {}; const transferred = { stdout: 0, stderr: 0 };
+  const f = fixture(t, { read(h, buffer, length) {
+    if (h.role === "control") return { bytesRead: 0 };
+    const remaining = limits[h.role].capacity - 1 - transferred[h.role];
+    if (remaining) {
+      const n = Math.min(remaining, length); buffer.fill(0xa7, 0, n); transferred[h.role] += n;
+      return { bytesRead: n };
+    }
+    assert.equal(length, 2); const wait = f.hold(); probes[h.role] = { wait, buffer };
+    return wait.promise;
+  } });
+  const p = f.owner; await p.open(); const draining = p.drain(f.sinks);
+  await until(() => probes.stdout && probes.stderr);
+  for (const role of ["stdout", "stderr"]) {
+    probes[role].buffer.fill(0xa7, 0, 2); probes[role].wait.resolve({ bytesRead: 2 });
+  }
+  const end = await draining;
+  assert.equal(end.firstError, "FIFO_LIMIT"); assert.equal(end.channels.stdout.submittedBytes, limits.stdout.capacity);
+  assert.equal(end.channels.stderr.submittedBytes, limits.stderr.capacity - 1);
+  assert.equal(end.channels.stdout.readBytes, limits.stdout.capacity + 1);
+  assert.equal(end.channels.stderr.readBytes, limits.stderr.capacity + 1);
 });
 
 test("a zero result cannot establish EOF while its sentinel close is retained", async t => {

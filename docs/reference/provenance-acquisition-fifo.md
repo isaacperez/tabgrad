@@ -48,7 +48,7 @@ the FIFO adapter does not broaden that file opener.
 After successful opening, `drain({stdout,stderr,control})` validates exactly
 three functions and starts one drain. Repeated calls return the same promise,
 without replacing sinks. Each sink receives one Buffer view borrowed until its
-returned operation settles; it must not retain or mutate that view afterwards.
+returned operation settles; it must not mutate the view or retain it afterwards.
 There is no second read on that role while the sink is pending. Other roles
 can progress independently. This owner never finishes or closes a sink.
 
@@ -63,9 +63,11 @@ control bounds come from the [launch protocol](provenance-acquisition-launch.md#
 Each role retains one fixed scratch Buffer. Reads request
 `min(quantum, remaining + 1)`. Known positive bytes are delivered in order;
 short reads do not cause replay. A read containing excess submits only the
-allowed prefix, records `FIFO_LIMIT` before invoking that sink and immediately
-starts cleanup without awaiting its settlement. The extra byte proves local
-excess; it is not submitted. At an exact capacity a one-byte probe still
+allowed prefix, records `FIFO_LIMIT` before the post-read clock check and
+immediately starts cleanup without awaiting the sink's settlement. Only that
+first overflow read may submit its allowed prefix, with a valid clock and no
+intervening stop/deadline; otherwise the prefix remains unsubmitted. The extra
+byte proves local excess; it is not submitted. At an exact capacity a one-byte probe still
 distinguishes EOF from excess. No chunk history or input queue is retained.
 
 Each positive chunk yields before another read. EAGAIN/EWOULDBLOCK and early
@@ -139,7 +141,7 @@ Trusted finite test ports are `clock()`, `root(expected)`, `open(path,kind)`,
 `cancel(token)`. Open returns a Node-style handle with `stat({bigint:true})`;
 read returns `{bytesRead}`. Scheduled callbacks are asynchronous; zero delay
 yields with setImmediate, positive delay uses setTimeout. Ports are copied own
-functions, not an extension/plugin or filesystem admission interface.
+enumerable functions, not an extension/plugin or filesystem admission interface.
 
 Tests use synthetic FIFO metadata, finite native effects/clocks and ordinary
 owned temporary files. They cover flags, identity/type/root failure, independent
