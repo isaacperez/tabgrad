@@ -74,6 +74,10 @@ Use [Experimental acquisition program launcher](provenance-acquisition-launch.md
 for the canonical program/profile binding, bounded separate control channel and
 single nonprivileged attempt over independently prepared endpoints.
 
+Use [Experimental acquisition FIFO transport](provenance-acquisition-fifo.md)
+for independent host-view readers, sentinel release, borrowed prefix delivery
+and conservative local waiting over existing identified endpoints.
+
 Use [Python tensor creation, metadata, addition and observation](python-tensors.md) for the
 bounded Python call forms, metadata objects, errors and ownership obligations.
 
