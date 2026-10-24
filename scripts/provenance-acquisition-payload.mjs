@@ -38,12 +38,13 @@ function payloadInputs(input) {
 
 /** Shared identified-file owner. Framing and call scheduling belong to its two adapters. */
 class AcquisitionPayloadStore {
-  #channels; #timing; #last; #clock; #transfer;
+  #channels; #timing; #last; #clock; #transfer; #roles; #limits;
   #state = "pending"; #firstError = null; #closed = false; #closing = null;
   #ioClosed = "open"; #ioPending = 0;
 
-  constructor(parts, timing, last, clock, transfer) {
-    this.#channels = Object.fromEntries(roles.map(role => [role, { ...parts[role], submittedBytes: 0, confirmedBytes: 0,
+  constructor(parts, timing, last, clock, transfer, limits = ACQUISITION_PAYLOAD_LIMITS) {
+    this.#limits = Object.freeze({ ...limits }); this.#roles = Object.freeze(Object.keys(limits));
+    this.#channels = Object.fromEntries(this.#roles.map(role => [role, { ...parts[role], submittedBytes: 0, confirmedBytes: 0,
       digest: createHash("sha256"), uncertain: false, firstError: null, closeError: null, complete: false }]));
     this.#timing = timing; this.#last = last; this.#clock = clock; this.#transfer = transfer;
   }
@@ -61,13 +62,14 @@ class AcquisitionPayloadStore {
     catch (error) { this.fail(error.code); }
   }
 
-  remaining(role) { return ACQUISITION_PAYLOAD_LIMITS[role] - this.#channels[role].submittedBytes; }
+  get roles() { return this.#roles; }
+  remaining(role) { return this.#limits[role] - this.#channels[role].submittedBytes; }
   complete(role) { return this.#channels[role].complete; }
   get state() { return this.#state; }
 
   finish(role) {
     this.#channels[role].complete = true;
-    if (roles.every(name => this.#channels[name].complete)) this.#state = "complete";
+    if (this.#roles.every(name => this.#channels[name].complete)) this.#state = "complete";
   }
 
   /** Validated, stable payload only. Caller serializes each role and enforces its allowance. */
@@ -98,9 +100,9 @@ class AcquisitionPayloadStore {
 
   async #close(pending) {
     if (pending.length) await Promise.allSettled(pending);
-    const results = await Promise.allSettled(roles.map(role => Promise.resolve().then(() => this.#transfer.close(this.#channels[role].handle))));
+    const results = await Promise.allSettled(this.#roles.map(role => Promise.resolve().then(() => this.#transfer.close(this.#channels[role].handle))));
     for (const [index, result] of results.entries()) if (result.status === "rejected") {
-      const channel = this.#channels[roles[index]];
+      const channel = this.#channels[this.#roles[index]];
       channel.closeError = "CLOSE_FAILED"; channel.firstError ??= "CLOSE_FAILED";
       this.#firstError ??= "CLOSE_FAILED"; this.#state = "incomplete";
     }
@@ -116,7 +118,7 @@ class AcquisitionPayloadStore {
   }
 
   snapshot() {
-    const channels = Object.fromEntries(roles.map(role => {
+    const channels = Object.fromEntries(this.#roles.map(role => {
       const c = this.#channels[role];
       return [role, Object.freeze({ submittedBytes: c.submittedBytes, confirmedBytes: c.confirmedBytes,
         sha256: c.digest.copy().digest("hex"), uncertain: c.uncertain, firstError: c.firstError, closeError: c.closeError })];
@@ -125,6 +127,11 @@ class AcquisitionPayloadStore {
       lastAtNs: (this.#last - this.#timing.origin).toString(), ioPending: this.#ioPending, ioClosed: this.#ioClosed,
       externalClosure: "unqualified", clockAdmission: "unqualified", releaseAdmission: "unqualified" });
   }
+}
+
+/** Internal ownership transfer after the composing owner has admitted every file. */
+export function createAcquisitionPayloadStore(parts, timing, last, clock, transfer, limits = ACQUISITION_PAYLOAD_LIMITS) {
+  return Object.freeze(new AcquisitionPayloadStore(parts, timing, last, clock, transfer, limits));
 }
 
 /** Internal seam for raw and Docker adapters; not an independently scheduled public writer. */
@@ -156,11 +163,14 @@ export async function openAcquisitionPayloadStore(input, { clock = () => process
 
 /** Raw payload pair: one borrowed Buffer/work item per role, no framing or read-ahead. */
 class AcquisitionPayload {
-  #store; #busy = { stdout: null, stderr: null }; #closing = null;
-  constructor(store) { this.#store = store; }
+  #store; #busy; #closing = null; #roles;
+  constructor(store) {
+    this.#store = store; this.#roles = store.roles;
+    this.#busy = Object.fromEntries(this.#roles.map(role => [role, null]));
+  }
 
   async write(role, bytes) {
-    if (!roles.includes(role)) this.#store.fail("CAPTURE_INPUT");
+    if (!this.#roles.includes(role)) this.#store.fail("CAPTURE_INPUT");
     requireAcquisition(!this.#busy[role], "CAPTURE_BUSY");
     this.#store.check();
     if (this.#store.complete(role)) throw new AcquisitionRecordError("CAPTURE_STOPPED");
@@ -175,7 +185,7 @@ class AcquisitionPayload {
   }
 
   finish(role) {
-    if (!roles.includes(role)) this.#store.fail("CAPTURE_INPUT");
+    if (!this.#roles.includes(role)) this.#store.fail("CAPTURE_INPUT");
     requireAcquisition(!this.#busy[role], "CAPTURE_BUSY");
     if (this.#store.complete(role) && ["pending", "complete"].includes(this.#store.state)) return this.snapshot();
     this.#store.check(); this.#store.finish(role);
@@ -191,10 +201,13 @@ class AcquisitionPayload {
 
   snapshot() {
     return Object.freeze({ ...this.#store.snapshot(),
-      busy: Object.freeze(Object.fromEntries(roles.map(role => [role, this.#busy[role] !== null]))),
-      complete: Object.freeze(Object.fromEntries(roles.map(role => [role, this.#store.complete(role)]))) });
+      busy: Object.freeze(Object.fromEntries(this.#roles.map(role => [role, this.#busy[role] !== null]))),
+      complete: Object.freeze(Object.fromEntries(this.#roles.map(role => [role, this.#store.complete(role)]))) });
   }
 }
+
+/** Internal adapter for an already owned store; it performs no opening. */
+export function createAcquisitionPayload(store) { return Object.freeze(new AcquisitionPayload(store)); }
 
 /** Existing identified regular reservations only; opening owns no transport/process preparation. */
 export async function openAcquisitionPayload(input, ports) {

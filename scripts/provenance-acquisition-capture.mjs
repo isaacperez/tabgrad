@@ -91,3 +91,6 @@ class AcquisitionCapture {
 export async function openAcquisitionCapture(input, ports = {}) {
   return Object.freeze(new AcquisitionCapture(await openAcquisitionPayloadStore(input, ports)));
 }
+
+/** Internal decoder for an already owned store; it performs no opening. */
+export function createAcquisitionCapture(store) { return Object.freeze(new AcquisitionCapture(store)); }

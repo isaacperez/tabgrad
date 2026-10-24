@@ -78,6 +78,10 @@ Use [Experimental acquisition FIFO transport](provenance-acquisition-fifo.md)
 for independent host-view readers, sentinel release, borrowed prefix delivery
 and conservative local waiting over existing identified endpoints.
 
+Use [Experimental local program capture](provenance-acquisition-capture-attempt.md)
+for nine-file admission, original control persistence and FIFO/Exec coordination
+under borrowed permission, with startup and global acquisition kept by the caller.
+
 Use [Python tensor creation, metadata, addition and observation](python-tensors.md) for the
 bounded Python call forms, metadata objects, errors and ownership obligations.
 
