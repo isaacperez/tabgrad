@@ -6,19 +6,41 @@ const empty = Buffer.alloc(0);
 const startBody = Buffer.from('{"Detach":false,"Tty":false}');
 const failureCode = error => error instanceof AcquisitionRecordError && /^EXEC_/.test(error.code) ? error.code : "EXEC_PROTOCOL";
 
+/** Shared accepted-clock bounds; the convenience gate preserves time-before-permission order. */
+class ExecBounds {
+  #origin; #last; #deadline; #processBudget; #launchAt = null;
+  constructor(profile, last) {
+    this.#origin = BigInt(profile.timing.t0MonotonicNs); this.#last = last ?? this.#origin;
+    this.#deadline = BigInt(profile.timing.deadlineNs); this.#processBudget = BigInt(profile.timing.processBudgetNs);
+  }
+  observe(now) {
+    requireAcquisition(typeof now === "bigint" && now >= this.#origin && now >= this.#last, "EXEC_CLOCK");
+    this.#last = now; return now;
+  }
+  operation(now) { requireAcquisition(now - this.#origin < this.#deadline, "EXEC_DEADLINE"); return now; }
+  check(now) {
+    this.operation(now);
+    requireAcquisition(this.#launchAt === null || now - this.#launchAt < this.#processBudget, "EXEC_DEADLINE");
+    return now;
+  }
+  start() { this.#launchAt = this.#last; }
+}
+
+export function createExecBounds(profile, last) { return new ExecBounds(profile, last); }
+
 /** One HTTP attempt, borrowing permission and framing, never global lifecycle ownership. */
 class AcquisitionExecAttempt {
-  #profile; #gate; #capture; #http; #last; #launchAt = null;
+  #profile; #gate; #capture; #http; #bounds;
   #revoked = false; #complete = false; #firstFailure = null; #revocationError = null;
   #execId = null; #before = null; #after = null; #create = "not_requested"; #start = "not_requested";
   #workPending = false; #run = null; #timer = null; #resolveStop; #stopped;
 
-  constructor(profile, gate, capture, request) {
+  constructor(profile, gate, capture, request, bounds) {
     this.#profile = profile;
     // Freeze the ports selected before any await, keeping each callback's receiver.
     this.#gate = { check: gate.check.bind(gate), appendIntent: gate.appendIntent.bind(gate), revoke: gate.revoke.bind(gate) };
     this.#capture = { write: capture.write.bind(capture), finish: capture.finish.bind(capture) };
-    this.#last = BigInt(profile.timing.t0MonotonicNs);
+    this.#bounds = bounds;
     this.#http = createExecHttp(profile, this.#check, request);
     this.#stopped = new Promise(resolve => { this.#resolveStop = resolve; });
   }
@@ -28,12 +50,7 @@ class AcquisitionExecAttempt {
     try {
       // The gate owns the operation's clock history and current permission. There
       // is no second clock: enforce this attempt's possibly tighter bounds on it.
-      const now = this.#gate.check();
-      requireAcquisition(typeof now === "bigint" && now >= this.#last, "EXEC_CLOCK");
-      this.#last = now;
-      requireAcquisition(now - BigInt(this.#profile.timing.t0MonotonicNs) < BigInt(this.#profile.timing.deadlineNs)
-        && (this.#launchAt === null || now - this.#launchAt < BigInt(this.#profile.timing.processBudgetNs)), "EXEC_DEADLINE");
-      return now;
+      return this.#bounds.check(this.#bounds.observe(this.#gate.check()));
     } catch (error) {
       this.#fail(error instanceof AcquisitionRecordError && /^EXEC_/.test(error.code) ? error.code : "EXEC_GATE");
       throw new AcquisitionRecordError(this.#firstFailure);
@@ -74,7 +91,7 @@ class AcquisitionExecAttempt {
     const path = `/v1.56/exec/${this.#execId}`;
     this.#before = inspectedExec(await this.#http.exchange("before", "GET", `${path}/json`, empty, 200), this.#profile, this.#execId, true);
     this.#check();
-    this.#launchAt = this.#last; this.#start = "pending";
+    this.#bounds.start(); this.#start = "pending";
     await this.#http.exchange("start", "POST", `${path}/start`, startBody, 101, this.#consume);
     this.#check(); this.#capture.finish(); this.#start = "stream_ended";
     this.#after = inspectedExec(await this.#http.exchange("after", "GET", `${path}/json`, empty, 200), this.#profile, this.#execId, false);
@@ -115,9 +132,9 @@ class AcquisitionExecAttempt {
 }
 
 /** Internal seam for the convenience owner's already copied and validated profile. */
-export function createExecAttempt(profile, gate, capture, request) {
+export function createExecAttempt(profile, gate, capture, request, bounds = createExecBounds(profile)) {
   requireAcquisition(capture && ["write", "finish"].every(k => typeof capture[k] === "function"), "EXEC_INPUT");
-  return new AcquisitionExecAttempt(profile, gate, capture, request);
+  return new AcquisitionExecAttempt(profile, gate, capture, request, bounds);
 }
 
 /** Copies before effects; the caller retains startup, capture files and global closure. */

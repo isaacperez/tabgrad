@@ -407,3 +407,12 @@ test("HTTP abort callbacks still observe capture revocation before control notif
   const s = await run;
   assert.equal(s.firstFailure, "EXEC_GATE"); assert.equal(aborts, 1); assert.equal(f.state.stops, 1);
 });
+
+test("expired process allowance precedes lost readiness on the same observation", async t => {
+  let f;
+  f = await fixture(t, { reply(r) { if (r.index === 2) { f.now(1101n); f.state.ready = false; } } });
+  f.input.timing.processBudgetNs = "1000";
+  const s = await (await f.create()).run({ observedUtc });
+  assert.equal(s.firstFailure, "EXEC_DEADLINE");
+  assert.equal(f.daemon.requests.length, 3); assert.equal(s.capture.channels.stdout.confirmedBytes, 0);
+});

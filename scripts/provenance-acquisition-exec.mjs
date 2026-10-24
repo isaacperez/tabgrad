@@ -1,11 +1,11 @@
 import { AcquisitionRecordError, requireAcquisition, isAcquisitionUtc } from "./provenance-acquisition-record.mjs";
 import { openAcquisitionCapture } from "./provenance-acquisition-capture.mjs";
 import { copyExecProfile } from "./provenance-acquisition-exec-profile.mjs";
-import { createExecAttempt } from "./provenance-acquisition-exec-attempt.mjs";
+import { createExecAttempt, createExecBounds } from "./provenance-acquisition-exec-attempt.mjs";
 
 /** A single daemon-channel attempt; reported Exec status never authenticates process output. */
 class AcquisitionExec {
-  #profile; #startup; #capture; #clock; #attempt; #last = null;
+  #profile; #startup; #capture; #clock; #attempt; #bounds;
   #started = false; #revoked = false; #finished = false; #firstFailure = null;
   #work = null; #workPending = false; #run = null; #timer = null; #resolveStop; #stopped;
   #captureClose = null; #captureClosePending = false; #controlsClosePending = false; #cleanupError = null;
@@ -14,32 +14,24 @@ class AcquisitionExec {
 
   constructor(profile, startup, capture, clock, request) {
     this.#profile = profile; this.#startup = startup; this.#capture = capture; this.#clock = clock;
-    this.#last = BigInt(profile.timing.t0MonotonicNs) + BigInt(capture.snapshot().lastAtNs);
+    this.#bounds = createExecBounds(profile, BigInt(profile.timing.t0MonotonicNs) + BigInt(capture.snapshot().lastAtNs));
     this.#attempt = createExecAttempt(profile, { check: this.#check,
-      appendIntent: event => this.#startup.supervisor.append(event), revoke: code => this.#fail(code) }, capture, request);
+      appendIntent: event => this.#startup.supervisor.append(event), revoke: code => this.#fail(code) }, capture, request, this.#bounds);
     this.#stopped = new Promise(resolve => { this.#resolveStop = resolve; });
   }
 
   #now() {
     let now;
     try { now = this.#clock(); } catch { throw new AcquisitionRecordError("EXEC_CLOCK"); }
-    const origin = BigInt(this.#profile.timing.t0MonotonicNs);
-    requireAcquisition(typeof now === "bigint" && now >= origin && (this.#last === null || now >= this.#last), "EXEC_CLOCK");
-    this.#last = now;
-    return now;
+    return this.#bounds.observe(now);
   }
 
   #time() {
-    const now = this.#now();
-    const origin = BigInt(this.#profile.timing.t0MonotonicNs);
-    requireAcquisition(now - origin < BigInt(this.#profile.timing.deadlineNs), "EXEC_DEADLINE");
-    return now;
+    return this.#bounds.check(this.#now());
   }
 
   #cleanupTime() {
-    const now = this.#now();
-    requireAcquisition(now - BigInt(this.#profile.timing.t0MonotonicNs) < BigInt(this.#profile.timing.deadlineNs), "EXEC_DEADLINE");
-    return now;
+    return this.#bounds.operation(this.#now());
   }
 
   #check = () => {

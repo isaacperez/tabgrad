@@ -81,7 +81,9 @@ The gate has exactly four own data fields:
 The gate owns prior operation clock history, including file opening. There is
 no independent clock port or fresh origin for this entry. On that same returned
 sample the attempt checks nonregression and its possibly tighter operation
-cutoff; it alone owns the process allowance starting just before Start. A poll
+cutoff; it starts the process allowance just before Start. The convenience gate
+shares that same bounds state so expiration still precedes a lost-permission
+report on the same observation. A poll
 also checks permission and these bounds while ACK or HTTP is pending. The
 convenience owner checks the original clock while startup is pending and during
 its own cleanup, preserving the opening sample and cutoff.
