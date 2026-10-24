@@ -41,15 +41,16 @@ class AcquisitionCaptureAttempt {
       return now;
     } catch (error) { this.#fail(codeOf(error)); throw error; }
   };
-  #checkGate = () => {
+  #checkGate = (closing = false) => {
     if (this.#revoked) throw new AcquisitionRecordError(this.#firstFailure);
     try {
-      this.#dataClock();
+      const bound = closing ? this.#closeUntil : this.#workUntil;
+      requireAcquisition(this.#sample() - this.#origin < bound, "CAPTURE_ATTEMPT_DEADLINE");
       const now = this.#gate.check();
       requireAcquisition(!this.#revoked, this.#firstFailure ?? "CAPTURE_ATTEMPT_STOPPED");
       requireAcquisition(typeof now === "bigint" && now >= this.#last, "CAPTURE_ATTEMPT_CLOCK");
       this.#last = now;
-      requireAcquisition(now - this.#origin < this.#workUntil, "CAPTURE_ATTEMPT_DEADLINE");
+      requireAcquisition(now - this.#origin < bound, "CAPTURE_ATTEMPT_DEADLINE");
       const fifo = this.#fifos?.snapshot();
       if (fifo?.firstError) throw new AcquisitionRecordError(fifo.firstError);
       return now;
@@ -71,7 +72,7 @@ class AcquisitionCaptureAttempt {
       if (!this.#revoked && !this.#localComplete) {
         requireAcquisition(elapsed < (this.#started ? this.#workUntil : 15000000000n), "CAPTURE_ATTEMPT_DEADLINE");
         if (this.#started) this.#checkGate();
-      }
+      } else if (!this.#revoked) this.#checkGate(true);
     } catch (error) {
       this.#fail(codeOf(error));
       if (this.#clockBroken) { this.#cleanupExpired = true; this.#finishWait(); return; }
@@ -108,6 +109,16 @@ class AcquisitionCaptureAttempt {
     if (f.cleanupError || stores.some(s => s.ioClosed !== "closed")) this.#cleanupError ??= "CAPTURE_ATTEMPT_CLEANUP";
     if (this.#fifos?.snapshot().ioClosed !== undefined && this.#fifos.snapshot().ioClosed !== "closed") {
       this.#cleanupError ??= "CAPTURE_ATTEMPT_CLEANUP";
+    }
+    // A poll cannot stand in for observing the return of the last owned await.
+    // Retain closure facts, but never admit a success outside its original horizon.
+    try {
+      requireAcquisition(this.#sample() - this.#origin < this.#closeUntil, "CAPTURE_ATTEMPT_DEADLINE");
+      if (this.#localComplete && !this.#revoked) this.#checkGate(true);
+    } catch (error) {
+      const code = codeOf(error);
+      if (this.#clockBroken || /_(CLOCK|DEADLINE)$/.test(code)) this.#cleanupExpired = true;
+      this.#fail(code);
     }
     this.#finishWait();
   }
@@ -183,6 +194,7 @@ class AcquisitionCaptureAttempt {
     const execution = this.#exec.run().then(result => {
       this.#execSettled = true;
       if (!result.protocolComplete || result.firstFailure) this.#fail(result.firstFailure ?? "CAPTURE_ATTEMPT_EXEC");
+      else if (result.after.reportedExitCode !== 0) this.#fail("CAPTURE_ATTEMPT_LAUNCH");
       this.#release(); return result;
     });
     const [fifo, exec] = await Promise.all([draining, execution]);
@@ -239,9 +251,10 @@ export function createAcquisitionCaptureAttempt(input, ports) {
   requireAcquisition((ports.clock === undefined || typeof ports.clock === "function")
     && (ports.request === undefined || typeof ports.request === "function"), "CAPTURE_ATTEMPT_INPUT");
   // Optional ports are trusted finite-test seams, selected before any await.
-  const fifo = ports.fifo ?? {};
-  requireAcquisition(fields(fifo, Object.keys(fifo)) && Reflect.ownKeys(fifo).every(k =>
+  const fifo = ports.fifo === undefined ? {} : ports.fifo;
+  requireAcquisition(fifo && Object.getPrototypeOf(fifo) === Object.prototype
+    && fields(fifo, Object.keys(fifo)) && Reflect.ownKeys(fifo).every(k =>
     ["root", "open", "read", "close", "schedule", "cancel"].includes(k) && typeof fifo[k] === "function"), "CAPTURE_ATTEMPT_INPUT");
   return Object.freeze(new AcquisitionCaptureAttempt(p, gate, { clock: ports.clock ?? (() => process.hrtime.bigint()),
-    files: ports.files ?? {}, fifo: Object.freeze({ ...fifo }), request: ports.request }));
+    files: ports.files === undefined ? {} : ports.files, fifo: Object.freeze({ ...fifo }), request: ports.request }));
 }

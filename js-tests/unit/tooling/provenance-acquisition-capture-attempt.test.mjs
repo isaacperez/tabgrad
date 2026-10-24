@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { acquisitionSha256 } from "../../../scripts/provenance-acquisition-record.mjs";
 import { captureFixture, until } from "../../fixtures/provenance-acquisition-capture-attempt.mjs";
-import { wireFrame } from "../../fixtures/provenance-acquisition-exec.mjs";
+import { wireFrame, inspectBody, jsonReply } from "../../fixtures/provenance-acquisition-exec.mjs";
 
 test("preparation is inert to the gate; empty local capture binds recipes and leaves the caller's controls alive", async t => {
   const f = await captureFixture(t); const owner = f.create();
@@ -50,6 +50,17 @@ test("nine-file aliases, missing record inventory and accessors reject before an
   }
 });
 
+test("optional native ports reject unknown, hidden, accessor and null overrides before I/O", async t => {
+  for (const change of [f => { f.ports.fifo = null; }, f => { f.ports.files = null; },
+    f => { f.ports.fifo.extra = () => {}; },
+    f => { Object.defineProperty(f.ports.files, "open", { value() {}, enumerable: false }); },
+    f => { Object.defineProperty(f.ports.fifo, "read", { get() { assert.fail("port accessor"); } }); },
+    f => { Object.defineProperty(f.ports, "clock", { value() {}, enumerable: false }); }]) {
+    const f = await captureFixture(t); change(f); assert.throws(() => f.create());
+    assert.equal(f.fileHandles.length, 0); assert.equal(f.fifoHandles.length, 0);
+  }
+});
+
 test("nonempty daemon data revokes independently of its text or reported zero exit", async t => {
   for (const role of [1, 2]) {
     const bytes = Buffer.from([0, 255, 65]); const f = await captureFixture(t, { daemonBytes: wireFrame(role, bytes) });
@@ -93,7 +104,6 @@ test("E and Exec settle in either order; sentinels release only after both", asy
     if (later === "control") ready = true;
     else {
       await until(() => heldRequest);
-      const { inspectBody, jsonReply } = await import("../../fixtures/provenance-acquisition-exec.mjs");
       jsonReply(heldRequest.socket, inspectBody(false, { ProcessConfig: { tty: false, privileged: false,
         entrypoint: f.input.exec.command.argv[0], arguments: f.input.exec.command.argv.slice(1), user: "1000:1000" } }));
     }
@@ -226,4 +236,59 @@ test("reentrant run/stop callbacks retain one operation and the first cause", as
   owner = f.create(); await owner.open(); const running = owner.run(); const end = await running;
   assert.equal(same, running); assert.equal(end.firstFailure, "CAPTURE_ATTEMPT_STOPPED");
   assert.equal(end.cleanupError, "CAPTURE_ATTEMPT_GATE"); assert.equal(f.revocations.length, 1); assert.equal(f.daemon.requests.length, 0);
+});
+
+test("reported launcher failure rejects a complete child-zero control transcript", async t => {
+  let after;
+  const f = await captureFixture(t, { reply(request) {
+    if (request.index !== 3) return false;
+    after = request; return true;
+  } });
+  const owner = f.create(); await owner.open(); const running = owner.run();
+  await until(() => after && owner.snapshot().control.observations.E);
+  jsonReply(after.socket, inspectBody(false, { ExitCode: 7, ProcessConfig: { tty: false, privileged: false,
+    entrypoint: f.input.exec.command.argv[0], arguments: f.input.exec.command.argv.slice(1), user: "1000:1000" } }));
+  const end = await running;
+  assert.equal(end.exec.protocolComplete, true); assert.equal(end.exec.after.reportedExitCode, 7);
+  assert.equal(end.control.observations.E.exitCode, 0);
+  assert.equal(end.localComplete, false); assert.equal(end.firstFailure, "CAPTURE_ATTEMPT_LAUNCH");
+});
+
+test("the final native close is followed by an original-cutoff and clock observation", async t => {
+  for (const [now, cause] of [[2000000100n, "CAPTURE_ATTEMPT_DEADLINE"], [99n, "CAPTURE_ATTEMPT_CLOCK"],
+    [undefined, "CAPTURE_ATTEMPT_CLOCK"]]) {
+    const f = await captureFixture(t); let settled = 0; const close = f.ports.files.close;
+    f.ports.files.close = async h => { await close(h); if (++settled === 10) f.time(now); };
+    const owner = f.create(); await owner.open(); const end = await owner.run();
+    assert.equal(settled, 10); assert(f.fileHandles.every(h => h.closes === 1));
+    assert.equal(end.localComplete, false); assert.equal(end.firstFailure, cause); assert.equal(end.cleanupWaitExpired, true);
+  }
+});
+
+test("permission lost at the last settled close prevents local success without changing the clock", async t => {
+  let permitted = true; let settled = 0;
+  const f = await captureFixture(t, { check() { if (!permitted) throw Error("finite denied permission"); } });
+  const close = f.ports.files.close;
+  f.ports.files.close = async h => { await close(h); if (++settled === 10) permitted = false; };
+  const owner = f.create(); await owner.open(); const end = await owner.run();
+  assert.equal(end.localComplete, false); assert.equal(end.firstFailure, "CAPTURE_ATTEMPT_GATE");
+  assert.equal(end.cleanupWaitExpired, false); assert(f.fileHandles.every(h => h.closes === 1));
+});
+
+test("reentrant cancellation at each observed pre-open clock sample prevents every file open", async t => {
+  let samples = 0; let firstOpenSample;
+  const baseline = await captureFixture(t, { clock(now) { samples++; return now; } });
+  const open = baseline.ports.files.open;
+  baseline.ports.files.open = (...args) => { firstOpenSample ??= samples; return open(...args); };
+  const initial = baseline.create(); await initial.open(); initial.stop(); await initial.join();
+  assert(firstOpenSample > 0);
+  // Cutpoints derive from the observed admission trace, not an assumed number
+  // of helper calls. None of them has admitted the first native open yet.
+  for (let cut = 1; cut <= firstOpenSample; cut++) {
+    let f; let count = 0;
+    f = await captureFixture(t, { clock(now) { if (++count === cut) f.owner.stop(); return now; } });
+    const owner = f.create(); const end = await owner.open();
+    assert.equal(end.firstFailure, "CAPTURE_ATTEMPT_STOPPED"); assert.equal(end.localComplete, false);
+    assert.equal(f.fileHandles.length, 0); assert.equal(f.daemon.requests.length, 0);
+  }
 });

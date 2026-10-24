@@ -19,7 +19,12 @@ class CaptureFiles {
   #program = null; #daemon = null; #control = null; #launch = null;
 
   constructor(profile, clock, ports) { this.#profile = profile; this.#clock = clock; this.#ports = ports; }
-  #check() { requireAcquisition(!this.#stopped, "CAPTURE_ATTEMPT_STOPPED"); return this.#clock(); }
+  #check() {
+    requireAcquisition(!this.#stopped, "CAPTURE_ATTEMPT_STOPPED");
+    const now = this.#clock();
+    requireAcquisition(!this.#stopped, "CAPTURE_ATTEMPT_STOPPED");
+    return now;
+  }
   async #effect(fn, adopt) {
     this.#check(); this.#pending++;
     try { const value = await fn(); adopt?.(value); this.#check(); return value; }

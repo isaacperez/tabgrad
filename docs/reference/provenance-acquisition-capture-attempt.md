@@ -98,6 +98,10 @@ Local success requires R/S/X/E, child exit0, no signal/cause/cleanup failure,
 reported launcher exit0, complete empty Docker framing, all three EOF after
 sentinel release and all owned effects/files closed. A close failure prevents
 success even after valid E. Stop and cleanup failure preserve the first cause.
+The original clock, closure horizon and caller permission are observed again
+after the final owned await; a periodic poll cannot substitute for that check.
+Closing observations use the original closure bound without admitting new work
+past the data cutoff.
 Snapshot counters distinguish FIFO read/submitted bytes, file submitted/
 confirmed extents and their hashes; none means durable storage or receipt.
 
