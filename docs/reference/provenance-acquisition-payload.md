@@ -114,6 +114,10 @@ The original open entries retain the fixed stdout/stderr layout. The only
 other internal layout is the fixed control890 destination, using the same
 transfer/hash/cleanup implementation without Docker framing or JSONL encoding.
 These trusted seams are not public configurable writer factories.
+The internal `createAcquisitionCapture(store,onPayload?)` decoder can notify
+its composing owner synchronously after nonempty submission, before awaiting
+the transfer. It still awaits that borrowed write if notification throws. The
+ordinary pair-opening entry adds no callback or provenance policy.
 
 Each pair store retains two digest/counter states (the control store one);
 adapters borrow at most one chunk

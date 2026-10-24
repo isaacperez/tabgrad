@@ -20,7 +20,7 @@ class AcquisitionCaptureAttempt {
     this.#profile = profile; this.#gate = gate; this.#clock = ports.clock; this.#request = ports.request; this.#fifoPorts = ports.fifo;
     this.#origin = BigInt(profile.exec.timing.t0MonotonicNs); this.#last = this.#origin;
     this.#workUntil = BigInt(profile.exec.timing.deadlineNs); this.#closeUntil = this.#workUntil;
-    this.#files = createCaptureFiles(profile, this.#dataClock, ports.files);
+    this.#files = createCaptureFiles(profile, this.#dataClock, ports.files, () => this.#fail("CAPTURE_ATTEMPT_DAEMON_OUTPUT"));
   }
 
   #sample = () => {
@@ -150,7 +150,7 @@ class AcquisitionCaptureAttempt {
       const ready = await this.#fifos.open();
       requireAcquisition(ready.prepared && !ready.firstError && !this.#revoked, ready.firstError ?? this.#firstFailure ?? "CAPTURE_ATTEMPT_FILE");
       this.#dataClock();
-      const capture = { write: this.#daemonWrite, finish: () => this.#files.daemon.finish() };
+      const capture = { write: bytes => this.#files.daemon.write(bytes), finish: () => this.#files.daemon.finish() };
       const { body, recipeSha256, ...execInput } = this.#profile.exec;
       this.#exec = createAcquisitionExecAttempt(execInput, { gate: { context: this.#gate.context, check: this.#checkGate,
         appendIntent: event => this.#gate.appendIntent(event), revoke: code => this.#fail(code) }, capture, request: this.#request });
@@ -163,13 +163,6 @@ class AcquisitionCaptureAttempt {
     const channels = this.#files.daemon.snapshot().channels;
     if (channels.stdout.receivedBytes || channels.stderr.receivedBytes) this.#fail("CAPTURE_ATTEMPT_DAEMON_OUTPUT");
   }
-  #daemonWrite = async bytes => {
-    const work = this.#files.daemon.write(bytes).then(() => null, error => error);
-    // The existing decoder schedules consume once. Observe submission before a
-    // held native write can hide nonempty daemon payload; never duplicate framing.
-    await Promise.resolve(); this.#observeDaemon();
-    const error = await work; this.#observeDaemon(); if (error) throw error;
-  };
   #release() {
     if (!this.#revoked && this.#execSettled && this.#decoder.snapshot().observations.E) void this.#fifos.releaseSentinels();
   }

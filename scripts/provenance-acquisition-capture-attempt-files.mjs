@@ -14,11 +14,13 @@ const requireFile = value => requireAcquisition(value, "CAPTURE_ATTEMPT_FILE");
 
 /** Global admission owns only temporary checks and the five capture files, never record writers. */
 class CaptureFiles {
-  #profile; #clock; #ports; #slots = []; #pending = 0; #stopped = false;
+  #profile; #clock; #ports; #onDaemonPayload; #slots = []; #pending = 0; #stopped = false;
   #opening = null; #closing = null; #error = null; #cleanup = null; #prepared = false; #rootIdentity = null;
   #program = null; #daemon = null; #control = null; #launch = null;
 
-  constructor(profile, clock, ports) { this.#profile = profile; this.#clock = clock; this.#ports = ports; }
+  constructor(profile, clock, ports, onDaemonPayload) {
+    this.#profile = profile; this.#clock = clock; this.#ports = ports; this.#onDaemonPayload = onDaemonPayload;
+  }
   #check() {
     requireAcquisition(!this.#stopped, "CAPTURE_ATTEMPT_STOPPED");
     const now = this.#clock();
@@ -107,7 +109,7 @@ class CaptureFiles {
       return result;
     };
     this.#program = createAcquisitionPayload(store("program", ACQUISITION_PAYLOAD_LIMITS));
-    this.#daemon = createAcquisitionCapture(store("daemon", ACQUISITION_PAYLOAD_LIMITS));
+    this.#daemon = createAcquisitionCapture(store("daemon", ACQUISITION_PAYLOAD_LIMITS), this.#onDaemonPayload);
     this.#control = createAcquisitionPayload(store("control", { control: LAUNCH_CONTROL_LIMITS.total }));
     this.#prepared = true;
   }
@@ -142,10 +144,10 @@ class CaptureFiles {
   }
 }
 
-export function createCaptureFiles(profile, clock, ports = {}) {
+export function createCaptureFiles(profile, clock, ports = {}, onDaemonPayload) {
   requireFile(ports && Object.getPrototypeOf(ports) === Object.prototype
     && Reflect.ownKeys(ports).every(k => Object.hasOwn(native, k)
       && Object.hasOwn(Object.getOwnPropertyDescriptor(ports, k), "value")
       && Object.getOwnPropertyDescriptor(ports, k).enumerable && typeof ports[k] === "function"));
-  return new CaptureFiles(profile, clock, Object.freeze({ ...native, ...ports }));
+  return new CaptureFiles(profile, clock, Object.freeze({ ...native, ...ports }), onDaemonPayload);
 }

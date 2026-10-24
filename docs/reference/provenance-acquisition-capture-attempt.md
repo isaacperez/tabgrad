@@ -85,6 +85,9 @@ Any nonempty daemon payload revokes local capture, independently of text or a
 reported zero exit. Its actual submitted/confirmed prefixes remain in the
 daemon files. Empty daemon payload alone supplies no client-origin proof. No
 diagnostic is filtered, removed or reassigned to a program channel.
+The decoder notifies this owner synchronously on actual nonempty submission,
+before awaiting its transfer. Empty-frame yields, chunk boundaries and a held
+write cannot postpone notification. The borrowed write still remains owned.
 
 Normal sentinel release requires both persisted/valid E and settled successful
 Exec; either can arrive first. It never waits for EOF while retaining the

@@ -74,6 +74,22 @@ test("nonempty daemon data revokes independently of its text or reported zero ex
   }
 });
 
+test("an empty Docker frame cannot hide subsequent nonempty admission behind a held write", async t => {
+  for (const [type, channel] of [[1, "stdout"], [2, "stderr"]]) {
+    let hold; const bytes = Buffer.from([7]);
+    const f = await captureFixture(t, { daemonBytes: Buffer.concat([wireFrame(1, Buffer.alloc(0)), wireFrame(type, bytes)]),
+      async write(h, b, o, n, p, name) { if (name === `${channel}.payload`) await hold.promise; return h.write(b, o, n, p); } });
+    hold = f.hold(); const owner = f.create(); await owner.open(); const running = owner.run();
+    await until(() => owner.snapshot().files.daemon.channels[channel].receivedBytes === 1);
+    const pending = owner.snapshot();
+    assert.equal(pending.files.daemon.channels[channel].confirmedBytes, 0);
+    assert.equal(pending.firstFailure, "CAPTURE_ATTEMPT_DAEMON_OUTPUT"); assert.equal(f.revocations.length, 1);
+    hold.resolve(); const end = await running;
+    assert.equal(end.localComplete, false); assert.equal(end.firstFailure, "CAPTURE_ATTEMPT_DAEMON_OUTPUT");
+    assert.deepEqual(await f.original(`${channel}.payload`, 1), bytes);
+  }
+});
+
 test("control bytes persist before parsing; malformed input keeps its original confirmed prefix", async t => {
   const bytes = Buffer.from("invalid-control\n"); const f = await captureFixture(t, { control: [bytes] });
   const owner = f.create(); await owner.open(); const end = await owner.run();
