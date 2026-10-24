@@ -393,12 +393,12 @@ test("stopping a held startup or intent does not make cleanup wait for borrowed 
 });
 
 test("HTTP abort callbacks still observe capture revocation before control notification", async t => {
-  let e; let f; let request; let aborts = 0;
+  let e; let f; let request; let aborts = 0; let observed;
   f = await fixture(t, { request() {
     request = new EventEmitter(); request.end = () => {};
     request.destroy = () => {
-      aborts++; assert.equal(e.snapshot().capture.state, "stopped");
-      assert.equal(f.state.stops, 0); request.emit("close");
+      aborts++; observed = { capture: e.snapshot().capture.state, controlStops: f.state.stops };
+      request.emit("close");
     };
     return request;
   } });
@@ -406,6 +406,7 @@ test("HTTP abort callbacks still observe capture revocation before control notif
   f.state.ready = false;
   const s = await run;
   assert.equal(s.firstFailure, "EXEC_GATE"); assert.equal(aborts, 1); assert.equal(f.state.stops, 1);
+  assert.deepEqual(observed, { capture: "stopped", controlStops: 0 });
 });
 
 test("expired process allowance precedes lost readiness on the same observation", async t => {
