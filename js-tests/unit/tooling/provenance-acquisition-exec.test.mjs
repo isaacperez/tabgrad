@@ -397,7 +397,8 @@ test("HTTP abort callbacks still observe capture revocation before control notif
   f = await fixture(t, { request() {
     request = new EventEmitter(); request.end = () => {};
     request.destroy = () => {
-      aborts++; observed = { capture: e.snapshot().capture.state, controlStops: f.state.stops };
+      aborts++; const capture = e.snapshot().capture;
+      observed = { capture: capture.state, firstError: capture.firstError, controlStops: f.state.stops };
       request.emit("close");
     };
     return request;
@@ -406,7 +407,7 @@ test("HTTP abort callbacks still observe capture revocation before control notif
   f.state.ready = false;
   const s = await run;
   assert.equal(s.firstFailure, "EXEC_GATE"); assert.equal(aborts, 1); assert.equal(f.state.stops, 1);
-  assert.deepEqual(observed, { capture: "stopped", controlStops: 0 });
+  assert.deepEqual(observed, { capture: "incomplete", firstError: "CAPTURE_STOPPED", controlStops: 0 });
 });
 
 test("expired process allowance precedes lost readiness on the same observation", async t => {

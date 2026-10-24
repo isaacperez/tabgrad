@@ -206,3 +206,18 @@ test("a synchronous intent callback can repeat run without creating a second att
   assert.equal(repeated, run); assert.equal(f.state.intents.length, 1);
   assert.equal(f.daemon.requests.length, 4); assert.equal(s.protocolComplete, true);
 });
+
+test("stop inside permission check prevents a later intent or borrowed stream write", async t => {
+  for (const phase of ["intent", "stream"]) {
+    const f = await fixture(t); let a;
+    f.gate.check = () => {
+      if (phase === "intent" || f.daemon.requests.length === 3) a.stop();
+      return 101n;
+    };
+    a = f.create(); const s = await a.run(); await a.join();
+    assert.equal(s.firstFailure, "EXEC_STOPPED"); assert.equal(s.protocolComplete, false);
+    assert.equal(f.state.intents.length, phase === "intent" ? 0 : 1);
+    assert.equal(f.daemon.requests.length, phase === "intent" ? 0 : 3);
+    assert.equal(f.state.writes, 0); assert.equal(f.state.eof, 0); assert.equal(f.state.revocations.length, 1);
+  }
+});

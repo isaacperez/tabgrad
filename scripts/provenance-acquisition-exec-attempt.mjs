@@ -50,7 +50,9 @@ class AcquisitionExecAttempt {
     try {
       // The gate owns the operation's clock history and current permission. There
       // is no second clock: enforce this attempt's possibly tighter bounds on it.
-      return this.#bounds.check(this.#bounds.observe(this.#gate.check()));
+      const now = this.#gate.check();
+      if (this.#revoked) throw new AcquisitionRecordError(this.#firstFailure);
+      return this.#bounds.check(this.#bounds.observe(now));
     } catch (error) {
       this.#fail(error instanceof AcquisitionRecordError && /^EXEC_/.test(error.code) ? error.code : "EXEC_GATE");
       throw new AcquisitionRecordError(this.#firstFailure);
