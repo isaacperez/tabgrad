@@ -351,3 +351,59 @@ test("independent wire partitions and payload sizes preserve both channel prefix
     await turn();
   }
 });
+
+test("profile validation preserves startup getter order and copies command before final scalar fields", async t => {
+  const invalid = await fixture(t);
+  Object.defineProperty(invalid.startup, "context", { get() { assert.fail("invalid data must reject first"); } });
+  invalid.input.command.argv = new Array(2);
+  await assert.rejects(invalid.create, { code: "EXEC_INPUT" });
+  const f = await fixture(t); const observations = [];
+  for (const name of ["context", "start", "stop", "finish", "snapshot", "supervisor"]) {
+    const value = f.startup[name];
+    Object.defineProperty(f.startup, name, { get() {
+      observations.push(name);
+      if (name === "context") {
+        f.input.command.argv[0] = "/changed"; f.input.command.user = "changed"; f.input.containerId = "b".repeat(64);
+      }
+      return value;
+    } });
+  }
+  const e = await f.create();
+  assert.deepEqual(observations, ["context", "start", "stop", "finish", "snapshot", "supervisor"]);
+  const s = await e.run({ observedUtc });
+  assert.equal(s.firstFailure, "EXEC_IDENTITY");
+  assert.equal(f.daemon.requests[0].route, `/v1.56/containers/${"b".repeat(64)}/exec`);
+  assert.deepEqual(JSON.parse(f.daemon.requests[0].body).Cmd, ["/usr/bin/fixture", "--finite"]);
+  assert.equal(JSON.parse(f.daemon.requests[0].body).User, "1000:1000");
+});
+
+test("stopping a held startup or intent does not make cleanup wait for borrowed work", async t => {
+  for (const phase of ["start", "append"]) {
+    const held = deferred(); let entered = false;
+    const f = await fixture(t, { [phase]: () => { entered = true; return held.promise; } });
+    f.input.timing.closeWaitMs = 100;
+    const e = await f.create(); const run = e.run({ observedUtc }); await until(() => entered);
+    e.stop(); const s = await run;
+    assert.equal(s.workPending, true); assert.equal(s.captureClosePending, false);
+    assert.equal(s.cleanupWaitExpired, false); assert.equal(s.cleanupError, null);
+    assert.equal(f.state.ends, 1); assert.equal(f.daemon.requests.length, 0);
+    held.resolve(); await until(() => !e.snapshot().workPending);
+    assert.equal(f.daemon.requests.length, 0); assert.equal(f.state.ends, 1);
+  }
+});
+
+test("HTTP abort callbacks still observe capture revocation before control notification", async t => {
+  let e; let f; let request; let aborts = 0;
+  f = await fixture(t, { request() {
+    request = new EventEmitter(); request.end = () => {};
+    request.destroy = () => {
+      aborts++; assert.equal(e.snapshot().capture.state, "stopped");
+      assert.equal(f.state.stops, 0); request.emit("close");
+    };
+    return request;
+  } });
+  e = await f.create(); const run = e.run({ observedUtc }); await until(() => request);
+  f.state.ready = false;
+  const s = await run;
+  assert.equal(s.firstFailure, "EXEC_GATE"); assert.equal(aborts, 1); assert.equal(f.state.stops, 1);
+});

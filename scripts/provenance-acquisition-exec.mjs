@@ -1,16 +1,12 @@
 import { AcquisitionRecordError, requireAcquisition, isAcquisitionUtc } from "./provenance-acquisition-record.mjs";
 import { openAcquisitionCapture } from "./provenance-acquisition-capture.mjs";
-import { copyExecProfile, createdExec, inspectedExec } from "./provenance-acquisition-exec-profile.mjs";
-import { createExecHttp } from "./provenance-acquisition-exec-http.mjs";
-
-const empty = Buffer.alloc(0);
-const startBody = Buffer.from('{"Detach":false,"Tty":false}');
+import { copyExecProfile } from "./provenance-acquisition-exec-profile.mjs";
+import { createExecAttempt } from "./provenance-acquisition-exec-attempt.mjs";
 
 /** A single daemon-channel attempt; reported Exec status never authenticates process output. */
 class AcquisitionExec {
-  #profile; #startup; #capture; #clock; #http; #last = null; #launchAt = null;
-  #started = false; #revoked = false; #finished = false; #complete = false; #firstFailure = null;
-  #execId = null; #before = null; #after = null; #create = "not_requested"; #start = "not_requested";
+  #profile; #startup; #capture; #clock; #attempt; #last = null;
+  #started = false; #revoked = false; #finished = false; #firstFailure = null;
   #work = null; #workPending = false; #run = null; #timer = null; #resolveStop; #stopped;
   #captureClose = null; #captureClosePending = false; #controlsClosePending = false; #cleanupError = null;
   #cleanupExpired = false;
@@ -19,7 +15,8 @@ class AcquisitionExec {
   constructor(profile, startup, capture, clock, request) {
     this.#profile = profile; this.#startup = startup; this.#capture = capture; this.#clock = clock;
     this.#last = BigInt(profile.timing.t0MonotonicNs) + BigInt(capture.snapshot().lastAtNs);
-    this.#http = createExecHttp(profile, this.#check, request);
+    this.#attempt = createExecAttempt(profile, { check: this.#check,
+      appendIntent: event => this.#startup.supervisor.append(event), revoke: code => this.#fail(code) }, capture, request);
     this.#stopped = new Promise(resolve => { this.#resolveStop = resolve; });
   }
 
@@ -35,8 +32,7 @@ class AcquisitionExec {
   #time() {
     const now = this.#now();
     const origin = BigInt(this.#profile.timing.t0MonotonicNs);
-    requireAcquisition(now - origin < BigInt(this.#profile.timing.deadlineNs)
-      && (this.#launchAt === null || now - this.#launchAt < BigInt(this.#profile.timing.processBudgetNs)), "EXEC_DEADLINE");
+    requireAcquisition(now - origin < BigInt(this.#profile.timing.deadlineNs), "EXEC_DEADLINE");
     return now;
   }
 
@@ -59,10 +55,9 @@ class AcquisitionExec {
   };
 
   #poll = () => {
-    if (this.#complete || this.#revoked) return;
+    if (this.#started || this.#revoked) return;
     try {
-      if (!this.#started) this.#time();
-      else this.#check();
+      this.#time();
     } catch (error) { this.#fail(error instanceof AcquisitionRecordError ? error.code : "EXEC_GATE"); }
   };
 
@@ -70,7 +65,7 @@ class AcquisitionExec {
     this.#firstFailure ??= code;
     if (this.#revoked) return;
     this.#revoked = true;
-    this.#capture.stop(); this.#http.stop(); this.#resolveStop();
+    this.#capture.stop(); this.#attempt.stop(); this.#resolveStop();
     this.#closeCapture();
     try { this.#startup.stop("supervisor", code === "EXEC_CLOCK" ? "clock" : code === "EXEC_DEADLINE" ? "deadline" : "controller"); }
     catch { this.#cleanupError ??= "EXEC_CLEANUP"; }
@@ -78,32 +73,11 @@ class AcquisitionExec {
 
   stop() { if (!this.#finished && !this.#revoked) this.#fail("EXEC_STOPPED"); return this.snapshot(); }
 
-  #consume = async bytes => {
-    this.#check();
-    try { await this.#capture.write(bytes); }
-    catch { this.#fail("EXEC_CAPTURE"); throw new AcquisitionRecordError("EXEC_CAPTURE"); }
-    this.#check();
-  };
-
   async #execute() {
     this.#time();
     await this.#startup.start();
-    this.#started = true; this.#check();
-    // Acknowledged intent makes autonomous endings conservative before any daemon effect.
-    await this.#startup.supervisor.append({ phase: "acquire", kind: "transition", subject: "client", code: "begun",
-      reference: this.#profile.recipeSha256, value: null });
-    this.#check();
-    this.#create = "pending";
-    const created = await this.#http.exchange("create", "POST", `/v1.56/containers/${this.#profile.containerId}/exec`, this.#profile.body, 201);
-    this.#execId = createdExec(created); this.#create = "responded"; this.#check();
-    const path = `/v1.56/exec/${this.#execId}`;
-    this.#before = inspectedExec(await this.#http.exchange("before", "GET", `${path}/json`, empty, 200), this.#profile, this.#execId, true);
-    this.#check();
-    this.#launchAt = this.#last; this.#start = "pending";
-    await this.#http.exchange("start", "POST", `${path}/start`, startBody, 101, this.#consume);
-    this.#check(); this.#capture.finish(); this.#start = "stream_ended";
-    this.#after = inspectedExec(await this.#http.exchange("after", "GET", `${path}/json`, empty, 200), this.#profile, this.#execId, false);
-    this.#check(); this.#complete = true;
+    this.#started = true; clearInterval(this.#timer);
+    await this.#attempt.run();
   }
 
   #closeCapture() {
@@ -116,7 +90,6 @@ class AcquisitionExec {
 
   async #cleanup() {
     if (this.#timer) clearInterval(this.#timer);
-    this.#http.stop();
     const capture = this.#closeCapture();
     this.#controlsClosePending = true;
     const controls = Promise.resolve().then(() => this.#startup.finish({ observedUtc: this.#utc }))
@@ -133,7 +106,7 @@ class AcquisitionExec {
     const waitMs = Math.min(this.#profile.timing.closeWaitMs, Number(remaining > 0n ? remaining / 1000000n : 0n));
     let timer;
     const cutoff = new Promise(resolve => { timer = setTimeout(() => resolve(false), waitMs); });
-    const settled = await Promise.race([Promise.all([capture, controls, this.#http.join()]).then(() => true), cutoff]);
+    const settled = await Promise.race([Promise.all([capture, controls, this.#attempt.join()]).then(() => true), cutoff]);
     if (!settled) { this.#cleanupExpired = true; this.#cleanupError ??= "EXEC_CLEANUP"; }
     clearTimeout(timer);
     try { this.#cleanupTime(); } catch (error) { this.#firstFailure ??= error.code; }
@@ -156,17 +129,16 @@ class AcquisitionExec {
   }
 
   snapshot() {
-    const transport = this.#http.snapshot();
-    const transportClosed = Object.values(transport).every(t => t.requestClosed && (!t.responseObserved || t.streamClosed));
+    const attempt = this.#attempt.snapshot();
+    const { transport, transportClosed } = attempt;
     const capture = this.#capture.snapshot();
     return Object.freeze({ operationId: this.#profile.operationId, recipeSha256: this.#profile.recipeSha256,
-      containerId: this.#profile.containerId, execId: this.#execId,
-      createState: this.#create === "pending" && this.#revoked ? "unknown" : this.#create,
-      startState: this.#start === "pending" && this.#revoked ? "unknown" : this.#start,
-      before: this.#before, after: this.#after, firstFailure: this.#firstFailure,
-      locallyComplete: this.#complete && this.#firstFailure === null && capture.state === "complete"
+      containerId: this.#profile.containerId, execId: attempt.execId,
+      createState: attempt.createState, startState: attempt.startState,
+      before: attempt.before, after: attempt.after, firstFailure: this.#firstFailure,
+      locallyComplete: attempt.protocolComplete && this.#firstFailure === null && capture.state === "complete"
         && capture.ioClosed === "closed" && !this.#cleanupError && !this.#controlsClosePending && transportClosed,
-      finished: this.#finished, workPending: this.#workPending, captureClosePending: this.#captureClosePending,
+      finished: this.#finished, workPending: this.#workPending || attempt.workPending, captureClosePending: this.#captureClosePending,
       controlsClosePending: this.#controlsClosePending, cleanupError: this.#cleanupError,
       cleanupWaitExpired: this.#cleanupExpired,
       transportClosed, transport, capture, controls: this.#controlsResult,
