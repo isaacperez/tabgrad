@@ -58,6 +58,64 @@ privileged replacement between check and connect. Explicit environment does
 not clear image defaults; inspection does not expose effective environment/cwd.
 Declared budgets qualify neither aggregate RSS nor physical storage.
 
+## Borrowed protocol attempt
+
+`createAcquisitionExecAttempt(input, {gate, capture, request?})` is the
+synchronous internal protocol entry from `provenance-acquisition-exec-attempt.mjs`.
+It copies the same request profile before effects, without opening payload
+files or starting controls. `input.capture` binds the declared root to the
+gate; it does not verify or open those destinations. The caller supplies the
+already admitted capture for that operation. The convenience entry above still
+validates its startup and opens/owns its files. Its validation order remains
+data and command first, startup observations second, final scalar copying last.
+
+The gate has exactly four own data fields:
+
+| Field | Collaboration contract |
+| --- | --- |
+| `context` | Readonly `{operationId,t0MonotonicNs,deadlineNs,root}` for the existing operation; identities/origin/canonical root match input and the attempt cutoff cannot exceed the context cutoff |
+| `check()` | Synchronous current permission check returning the operation owner's accepted monotonic `bigint`; throws on loss of permission or clock failure |
+| `appendIntent(event)` | Awaits the real supervisor acknowledgement of the same client-begun/body-hash intent before any daemon request |
+| `revoke(code)` | Synchronously notifies the upper owner to revoke its borrowed work; takes no authority over startup finish, payload files or global closure |
+
+The gate owns prior operation clock history, including file opening. There is
+no independent clock port or fresh origin for this entry. On that same returned
+sample the attempt checks nonregression and its possibly tighter operation
+cutoff; it starts the process allowance just before Start. The convenience gate
+shares that same bounds state so expiration still precedes a lost-permission
+report on the same observation. A poll
+also checks permission and these bounds while ACK or HTTP is pending. The
+convenience owner checks the original clock while startup is pending and during
+its own cleanup, preserving the opening sample and cutoff.
+
+The borrowed capture supplies awaited `write(Buffer)` and synchronous `finish()`.
+Here `finish` validates stream EOF/framing before after-inspect; it grants no
+file-close or global-finish authority. The attempt never calls capture stop or
+close. The upper owner must revoke its sink on notification, and remains
+responsible for pending borrowed writes and eventual file disposal. Callback
+ports are selected/bound at construction; later method replacement cannot
+redirect an admitted attempt. These are trusted collaboration ports, not
+untrusted plugins or proof of the capture's provenance.
+
+`run()` returns one promise, settling after protocol completion or revocation.
+`stop()` synchronously notifies once and aborts owned HTTP; stopping an already
+successful protocol has no further effect. Parent notification precedes HTTP
+abort callbacks. A failed notification remains visible as `revocationError`
+without replacing `firstFailure`. `snapshot()` is passive and frozen; it contains
+the same identities, phases and HTTP observations, plus `protocolComplete` and
+`workPending`. It makes no assertion that capture files or controls are closed.
+Nonzero reported exit remains protocol data. All four admission/origin flags
+remain `unqualified`.
+
+`join()` passively observes closure of currently known HTTP handles. It neither
+starts work nor waits for a borrowed ACK/write nor closes files or controls.
+Thus stop can return with `workPending`; a late ACK cannot issue a request and
+a late write may still add a confirmed prefix. A later response can introduce
+new close uncertainty after an earlier join. The caller must retain ownership
+and inspect fresh observations; neither run nor join establishes physical
+termination. The convenience entry delegates this exact four-phase sequence
+and retains its original general cleanup contract below.
+
 ## One attempt and cleanup
 
 `run({observedUtc})` returns one promise; repeated valid calls return it without

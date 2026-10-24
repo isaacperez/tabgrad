@@ -25,8 +25,7 @@ function strings(value, allowance, nonempty = false) {
   return result;
 }
 
-/** Closed retained-experiment profile; limits are declared budgets, not resource admission. */
-export function copyExecProfile(input, startup) {
+function commandProfile(input) {
   requireAcquisition(fields(input, ["operationId", "socket", "containerId", "command", "capture", "timing", "limits"])
     && isAcquisitionToken(input.operationId) && id(input.containerId)
     && fields(input.socket, ["path", "identity"]) && fields(input.socket.identity, ["dev", "ino"])
@@ -54,16 +53,40 @@ export function copyExecProfile(input, startup) {
   const body = Buffer.from(JSON.stringify({ AttachStdin: false, AttachStdout: true, AttachStderr: true,
     Tty: false, Privileged: false, Cmd: command.argv, Env: command.env, User: command.user, WorkingDir: command.workingDir }));
   requireAcquisition(body.length <= input.limits.controlBytes, "EXEC_INPUT");
-  const binding = startup?.context;
-  requireAcquisition(fields(binding, ["operationId", "t0MonotonicNs", "deadlineNs", "root"])
+  return { command, body };
+}
+
+function matchesContext(input, binding) {
+  return fields(binding, ["operationId", "t0MonotonicNs", "deadlineNs", "root"])
     && binding.operationId === input.operationId && binding.t0MonotonicNs === input.timing.t0MonotonicNs
     && isAcquisitionUint(binding.deadlineNs) && BigInt(input.timing.deadlineNs) <= BigInt(binding.deadlineNs)
-    && binding.root === input.capture.root
-    && ["start", "stop", "finish", "snapshot"].every(k => typeof startup[k] === "function")
-    && typeof startup.supervisor?.append === "function", "EXEC_INPUT");
+    && binding.root === input.capture.root;
+}
+
+function copiedProfile(input, { command, body }) {
   return { operationId: input.operationId, socket: { path: input.socket.path, identity: { ...input.socket.identity } },
     containerId: input.containerId, command, body, recipeSha256: acquisitionSha256(body),
     capture: input.capture, timing: { ...input.timing }, limits: { ...input.limits } };
+}
+
+/** Preserve data validation, startup observations, then final copying in that order. */
+export function copyExecProfile(input, startup) {
+  const command = commandProfile(input);
+  const binding = startup?.context;
+  requireAcquisition(matchesContext(input, binding)
+    && ["start", "stop", "finish", "snapshot"].every(k => typeof startup[k] === "function")
+    && typeof startup.supervisor?.append === "function", "EXEC_INPUT");
+  return copiedProfile(input, command);
+}
+
+/** A borrowed gate has no startup/finish authority. Limits remain declared budgets. */
+export function copyExecAttemptProfile(input, gate) {
+  const command = commandProfile(input);
+  requireAcquisition(fields(gate, ["context", "check", "appendIntent", "revoke"])
+    && matchesContext(input, gate.context)
+    && text(gate.context.root) && isAbsolute(gate.context.root) && resolve(gate.context.root) === gate.context.root
+    && ["check", "appendIntent", "revoke"].every(k => typeof gate[k] === "function"), "EXEC_INPUT");
+  return copiedProfile(input, command);
 }
 
 /** Detect duplicate decoded keys before JSON.parse can erase them. Body is already bounded. */
