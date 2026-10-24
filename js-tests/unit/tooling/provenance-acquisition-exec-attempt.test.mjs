@@ -198,3 +198,11 @@ test("reported nonzero exit is protocol data; failed parent notification remains
   assert.equal(failed.firstFailure, "EXEC_GATE"); assert.equal(failed.revocationError, "EXEC_GATE");
   assert.equal(g.daemon.requests.length, 0); assert.equal(failed.externalClosure, "unqualified");
 });
+
+test("a synchronous intent callback can repeat run without creating a second attempt", async t => {
+  let a; let repeated; let entered = false;
+  const f = await fixture(t, { append() { if (!entered) { entered = true; repeated = a.run(); } } });
+  a = f.create(); const run = a.run(); const s = await run;
+  assert.equal(repeated, run); assert.equal(f.state.intents.length, 1);
+  assert.equal(f.daemon.requests.length, 4); assert.equal(s.protocolComplete, true);
+});

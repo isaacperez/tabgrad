@@ -100,6 +100,10 @@ class AcquisitionExecAttempt {
 
   run() {
     if (this.#run) return this.#run;
+    // Publish identity before invoking borrowed synchronous callbacks. They may
+    // reenter run/stop; neither may create another execution or orphan a poll.
+    let resolveRun; let rejectRun;
+    this.#run = new Promise((resolve, reject) => { resolveRun = resolve; rejectRun = reject; });
     let work;
     if (!this.#revoked) {
       this.#workPending = true;
@@ -107,9 +111,9 @@ class AcquisitionExecAttempt {
         .finally(() => { this.#workPending = false; });
       this.#timer = setInterval(this.#poll, this.#profile.timing.pollMs);
     }
-    this.#run = Promise.race([work, this.#stopped]).then(() => {
+    Promise.race([work, this.#stopped]).then(() => {
       clearInterval(this.#timer); this.#http.stop(); return this.snapshot();
-    });
+    }).then(resolveRun, rejectRun);
     return this.#run;
   }
 
