@@ -410,6 +410,13 @@ record, without extending its roles or depending on Exec/startup. The
 finite local child/file tests from native FIFO, client and host qualification.
 They remain retained experiments outside distribution and signing/publication.
 
+`scripts/provenance-acquisition-capture-attempt.mjs` composes those existing
+owners for local program/control capture and distinct raw daemon channels.
+Its `-profile.mjs` owns copied inputs and recipe bindings; `-files.mjs` owns
+nine-file admission and transfer of capture handles to existing writer stores.
+The [capture-attempt reference](reference/provenance-acquisition-capture-attempt.md)
+keeps preparation, permission, local closure and global acquisition distinct.
+
 ## Understand the files kept at the root
 
 The root is the entry point for repository readers and several tools. Moving

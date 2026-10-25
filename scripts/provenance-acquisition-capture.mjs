@@ -7,9 +7,9 @@ export const ACQUISITION_CAPTURE_LIMITS = ACQUISITION_PAYLOAD_LIMITS;
 /** Owns Docker framing and serial calls over the shared identified-file writer. */
 class AcquisitionCapture {
   #store; #header = Buffer.alloc(8); #headerUsed = 0;
-  #role = null; #remaining = 0; #busy = null; #closing = null;
+  #role = null; #remaining = 0; #busy = null; #closing = null; #onPayload;
 
-  constructor(store) { this.#store = store; }
+  constructor(store, onPayload) { this.#store = store; this.#onPayload = onPayload; }
 
   #frame() {
     const type = this.#header[0];
@@ -43,7 +43,10 @@ class AcquisitionCapture {
       if (!count) continue;
       const payload = bytes.subarray(offset, offset + count);
       offset += count; this.#remaining -= count;
-      await this.#store.append(this.#role, payload);
+      const writing = this.#store.append(this.#role, payload);
+      // Observe actual submission here, irrespective of earlier empty-frame
+      // yields or chunk boundaries, without abandoning the borrowed write.
+      try { this.#onPayload?.(); } finally { await writing; }
       if (!this.#remaining) { this.#headerUsed = 0; this.#role = null; }
     }
   }
@@ -90,4 +93,10 @@ class AcquisitionCapture {
 /** Existing identified reservations only; no create/truncate/append, transport or native preparation. */
 export async function openAcquisitionCapture(input, ports = {}) {
   return Object.freeze(new AcquisitionCapture(await openAcquisitionPayloadStore(input, ports)));
+}
+
+/** Internal decoder for an already owned store; it performs no opening. */
+export function createAcquisitionCapture(store, onPayload) {
+  requireAcquisition(onPayload === undefined || typeof onPayload === "function", "CAPTURE_INPUT");
+  return Object.freeze(new AcquisitionCapture(store, onPayload));
 }

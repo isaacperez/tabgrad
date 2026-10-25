@@ -106,7 +106,21 @@ keeps its declared-frame precheck, serial `CAPTURE_BUSY`, framing progress and
 original meaning of `receivedBytes`; it does not copy payloads into invented
 frames for raw writing.
 
-The store retains two digest/counter states; adapters borrow at most one chunk
+The [local capture composition](provenance-acquisition-capture-attempt.md) uses
+internal `createAcquisitionPayloadStore`, `createAcquisitionPayload` and
+`createAcquisitionCapture` seams after its complete file admission. These
+perform no opening; the caller transfers the identified handles exactly once.
+The original open entries retain the fixed stdout/stderr layout. The only
+other internal layout is the fixed control890 destination, using the same
+transfer/hash/cleanup implementation without Docker framing or JSONL encoding.
+These trusted seams are not public configurable writer factories.
+The internal `createAcquisitionCapture(store,onPayload?)` decoder can notify
+its composing owner synchronously after nonempty submission, before awaiting
+the transfer. It still awaits that borrowed write if notification throws. The
+ordinary pair-opening entry adds no callback or provenance policy.
+
+Each pair store retains two digest/counter states (the control store one);
+adapters borrow at most one chunk
 per independent channel, and Docker retains its eight-byte header. There is
 no chunk history, frame-sized allocation, read-ahead or payload copy introduced
 by this extraction. Returned snapshots copy bounded metadata/digest state.

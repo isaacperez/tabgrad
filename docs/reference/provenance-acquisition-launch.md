@@ -185,3 +185,6 @@ TypeScript check. Distributed executable behavior is unchanged; production
 TDD does not apply. [Development commands](../development.md) own test entry
 points. Transport, global destination admission, full acquisition coordination
 and physical qualification are outside this standalone owner's contract.
+The separate [local capture owner](provenance-acquisition-capture-attempt.md)
+composes transport, identified files and Exec without taking startup or global
+acquisition ownership.
