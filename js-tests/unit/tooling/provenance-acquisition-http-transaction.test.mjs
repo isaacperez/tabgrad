@@ -54,13 +54,16 @@ test("a failed request factory rejects with the caller code and has no known req
   await tx.closed; assert.equal(tx.snapshot().requestClosed, true); assert.equal(tx.statusCode, null);
 });
 
-test("failed status observation owns the delivered response before rejecting, including late delivery and failed disposal", async () => {
-  for (const late of [false, true]) for (const failClose of [false, true]) {
+test("status observation failure or reentry owns the response before rejecting, including late delivery and failed disposal", async () => {
+  for (const late of [false, true]) for (const failClose of [false, true]) for (const reenter of [false, true]) {
     const tx = new AcquisitionHttpTransaction("ACTIVATION_HTTP", "ACTIVATION_CLEANUP", true);
     let requests = 0; let streams = 0;
     const req = new EventEmitter(); req.end = () => {}; req.destroy = () => { requests++; req.emit("close"); };
     const res = new PassThrough();
-    Object.defineProperty(res, "statusCode", { get() { throw Error("STATUS_OBSERVATION_SENTINEL"); } });
+    Object.defineProperty(res, "statusCode", { get() {
+      if (reenter) { tx.abort(); return 204; }
+      throw Error("STATUS_OBSERVATION_SENTINEL");
+    } });
     res.destroy = () => { streams++; if (failClose) throw Error("synthetic disposal failure"); return res; };
     const rejected = assert.rejects(tx.begin({}, Buffer.alloc(0), () => req), { code: "ACTIVATION_HTTP" });
     if (late) { tx.abort(); await tx.closed; }
@@ -70,7 +73,7 @@ test("failed status observation owns the delivered response before rejecting, in
     const observed = tx.snapshot();
     assert.equal(prior.responseObserved, false); assert.equal(observed.responseObserved, true);
     assert.equal(observed.streamClosed, false); assert.equal(observed.cleanupError, failClose ? "ACTIVATION_CLEANUP" : null);
-    assert.equal(tx.statusCode, null); assert.equal(requests, 1); assert.equal(streams, 1);
+    assert.equal(tx.statusCode, reenter ? 204 : null); assert.equal(requests, 1); assert.equal(streams, 1);
     let joined = false; const join = tx.closed.then(() => { joined = true; }); await Promise.resolve();
     assert.equal(joined, false); res.emit("close"); await join; assert.equal(tx.snapshot().streamClosed, true);
   }
