@@ -115,6 +115,11 @@ new close uncertainty after an earlier join. The caller must retain ownership
 and inspect fresh observations; neither run nor join establishes physical
 termination. The convenience entry delegates this exact four-phase sequence
 and retains its original general cleanup contract below.
+These are Node object observations: IncomingMessage.close means message
+completion, not native socket closure. The shared internal HTTP transaction
+owns lifetime for Exec and [container activation](provenance-acquisition-activation.md);
+the Exec wrapper retains its JSON/upgrade policy, diagnostics and snapshot
+fields, without adding status-property reads to its shared-lifetime path.
 
 ## One attempt and cleanup
 
