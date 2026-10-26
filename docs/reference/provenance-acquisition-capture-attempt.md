@@ -12,6 +12,8 @@ readonly conversion, custody and global closure. This component never starts
 or finishes startup. Its local completion is insufficient to admit an
 acquisition or release. Native use requires separate authority and qualification
 under the [release policy](../releases.md#qualify-mechanisms-before-claiming-readiness).
+The [local acquisition caller](provenance-acquisition-attempt.md) composes
+startup and this capture without taking the remaining admission responsibilities.
 
 ## Input and preparation
 
@@ -117,6 +119,9 @@ are adopted and closed, late facts remain visible in fresh immutable snapshots,
 and prior snapshots never change. A late result cannot restore success.
 
 ## Implementation and evidence domain
+
+The passive `timing` getter exposes the frozen, already copied Exec timing to
+that caller. It performs no I/O, clock sample or original input read.
 
 The capture-attempt module owns orchestration, its profile module owns closed
 data/bindings, and its file module owns global file admission and transfer to
