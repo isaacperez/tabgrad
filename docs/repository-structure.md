@@ -392,14 +392,22 @@ Its [reference](reference/provenance-acquisition-capture.md) defines supplied-by
 ownership and the limits of framing, clock and handle-close observations.
 
 `scripts/provenance-acquisition-exec-profile.mjs` owns the closed Exec request
-and metadata domains; `-exec-http.mjs` owns explicit Unix HTTP/upgrade and
-owned transaction observations; `-exec-attempt.mjs` owns the four-phase protocol
+and metadata domains; `-exec-http.mjs` owns explicit Unix HTTP/upgrade policy;
+`-http-transaction.mjs` owns shared request/response lifetime and close
+observations. `-exec-attempt.mjs` owns the four-phase protocol
 under a borrowed gate and framing sink, without closing controls or files.
 `-exec.mjs` owns startup and payload-file lifecycle around that same attempt.
 The [Exec reference](reference/provenance-acquisition-exec.md)
 distinguishes daemon channels/status from exclusive program provenance and
 admission. Local wire peers and finite startup fixtures test these boundaries;
 they are not a Docker laboratory or a new operational/publication entry.
+
+`scripts/provenance-acquisition-activation-profile.mjs` owns the copied closed
+Start profile and intent identity; `-activation.mjs` owns one Start under the
+original borrowed gate/clock. It shares HTTP lifetime with Exec, not response
+policy, startup or global closure. The [activation reference](reference/provenance-acquisition-activation.md)
+distinguishes protocol completion from unknown native effects and independently
+admitted physical placement; no coordinator or library entry depends on it.
 
 `scripts/provenance-acquisition-launch-profile.mjs` owns the closed program and
 endpoint profile; `-launch-protocol.mjs` owns bounded ASCII control and state
