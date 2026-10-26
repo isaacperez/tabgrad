@@ -417,6 +417,13 @@ nine-file admission and transfer of capture handles to existing writer stores.
 The [capture-attempt reference](reference/provenance-acquisition-capture-attempt.md)
 keeps preparation, permission, local closure and global acquisition distinct.
 
+`scripts/provenance-acquisition-attempt.mjs` is the concrete caller for startup
+and separated program capture. It reuses their owners, copied timing and
+existing bounds, preserving original results and local cleanup uncertainty.
+The [attempt reference](reference/provenance-acquisition-attempt.md) specifies
+that ordering/join without physical observation, record-truth upgrades, custody
+or release admission; it remains experimental tooling outside distribution.
+
 ## Understand the files kept at the root
 
 The root is the entry point for repository readers and several tools. Moving

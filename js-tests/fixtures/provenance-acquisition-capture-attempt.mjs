@@ -18,7 +18,8 @@ export async function until(predicate) {
 /** Real regular files/Unix peer; FIFO type, placement and transfers are finite doubles. */
 export async function captureFixture(t, options = {}) {
   const root = await realpath(await mkdtemp(join(tmpdir(), "tg-capture-")));
-  let now = 101n; let input; let argv; let owner;
+  const origin = options.origin ?? "100";
+  let now = BigInt(origin) + 1n; let input; let argv; let owner;
   const daemon = await fakeExecDaemon(t, root, request => {
     if (options.reply?.(request, { input, argv }) === true) return true;
     if (request.route.endsWith("/start")) { upgradeReply(request.socket, options.daemonBytes ?? Buffer.alloc(0)); return true; }
@@ -28,7 +29,7 @@ export async function captureFixture(t, options = {}) {
     }
     return false;
   });
-  const exec = await execProfile(root, daemon.socket, "100", "3000000000"); exec.timing.pollMs = 1;
+  const exec = await execProfile(root, daemon.socket, origin, options.deadlineNs ?? "3000000000"); exec.timing.pollMs = 1;
   async function reserve(name, capacity) {
     const h = await open(join(root, name), "wx+", 0o600); await h.truncate(capacity);
     const identity = acquisitionFileIdentity(await h.stat({ bigint: true })); await h.close(); return { name, identity };
@@ -45,7 +46,7 @@ export async function captureFixture(t, options = {}) {
     ipc: { root: { path: "/ipc", identity: { dev: "99", ino: "1" } },
       stdout: { name: "out", identity: { dev: "99", ino: "2" } }, stderr: { name: "err", identity: { dev: "99", ino: "3" } },
       control: { name: "control", identity: { dev: "99", ino: "4" } } },
-    timing: { t0MonotonicNs: "100", workUntilNs: "1000000000", closeUntilNs: "2000000000" } };
+    timing: { t0MonotonicNs: origin, workUntilNs: options.workUntilNs ?? "1000000000", closeUntilNs: options.closeUntilNs ?? "2000000000" } };
   launch.programRecipeSha256 = acquisitionSha256(JSON.stringify({ program: launch.program,
     credentials: { uid: "1000", gid: "1000", groups: ["1000"] } }));
   // Independent canonical JSON and literal wire grammar, not production encoders as oracles.
@@ -66,7 +67,7 @@ export async function captureFixture(t, options = {}) {
   const fileHandles = []; const paths = new WeakMap(); const holds = [];
   const acknowledgements = []; const revocations = []; let checks = 0;
   const gate = {
-    context: { operationId: exec.operationId, t0MonotonicNs: "100", deadlineNs: "3000000000", root },
+    context: { operationId: exec.operationId, t0MonotonicNs: origin, deadlineNs: exec.timing.deadlineNs, root },
     check() { checks++; options.check?.(); return now; },
     async appendIntent(event) { acknowledgements.push(event); await options.ack?.(event); },
     revoke(code) { revocations.push(code); options.revoke?.(code); },
@@ -105,7 +106,7 @@ export async function captureFixture(t, options = {}) {
   };
   t.after(async () => {
     for (const hold of holds) hold.resolve();
-    if (owner) { owner.stop(); now = 3000000100n; await pause(5); await owner.join(); }
+    if (owner) { owner.stop(); now = BigInt(origin) + BigInt(input.exec.timing.deadlineNs); await pause(5); await owner.join(); }
     // Test containment only: a deliberately failed close port must not leak the
     // fixture's real descriptor. This does not repair the owner's unknown result.
     await Promise.allSettled(fileHandles.map(s => s.h.close()));
@@ -114,7 +115,7 @@ export async function captureFixture(t, options = {}) {
   return { input, ports, streams, control, launch, daemon, fileHandles, fifoHandles, reads, acknowledgements, revocations,
     get checks() { return checks; }, get owner() { return owner; },
     time(value) { now = value; }, hold() { const d = deferred(); holds.push(d); return d; },
-    create() { owner = createAcquisitionCaptureAttempt(input, ports); return owner; },
+    create(factory = createAcquisitionCaptureAttempt) { owner = factory(input, ports); return owner; },
     async original(name, n) { return (await readFile(join(root, name))).subarray(0, n); },
   };
 }

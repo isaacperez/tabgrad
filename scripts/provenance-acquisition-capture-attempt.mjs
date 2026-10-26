@@ -215,6 +215,8 @@ class AcquisitionCaptureAttempt {
   }
   stop() { if (!this.#finished) this.#fail("CAPTURE_ATTEMPT_STOPPED"); return this.snapshot(); }
   join() { return this.#closed.promise; }
+  /** Already copied immutable timing; no input reread, clock sample or I/O. */
+  get timing() { return this.#profile.exec.timing; }
   snapshot() {
     const files = this.#files.snapshot();
     return Object.freeze({ operationId: this.#profile.exec.operationId, prepared: this.#prepared, opening: this.#opening,

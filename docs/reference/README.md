@@ -82,6 +82,10 @@ Use [Experimental local program capture](provenance-acquisition-capture-attempt.
 for nine-file admission, original control persistence and FIFO/Exec coordination
 under borrowed permission, with startup and global acquisition kept by the caller.
 
+Use [Experimental local acquisition attempt](provenance-acquisition-attempt.md)
+for startup/capture ordering and their conservative local join, retaining
+original results without physical observation, custody or release admission.
+
 Use [Python tensor creation, metadata, addition and observation](python-tensors.md) for the
 bounded Python call forms, metadata objects, errors and ownership obligations.
 
