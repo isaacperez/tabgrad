@@ -34,14 +34,11 @@ export class AcquisitionHttpTransaction {
 
   #receive(response, stream, head, upgraded) {
     // Install ownership before rejecting even a late or unexpected response.
-    const unexpected = this.#response || this.#aborted;
+    const first = !this.#response;
+    const unexpected = !first || this.#aborted;
     if (this.#closureObserved) {
       this.#closureObserved = false;
       this.#closed = new Promise(resolve => { this.#resolveClosed = resolve; });
-    }
-    if (this.#recordStatus && !this.#response) {
-      const status = response.statusCode;
-      if (Number.isInteger(status) && status >= 100 && status <= 999) this.#statusCode = status;
     }
     this.#response = true; this.#streamClosed = false; this.#streamsPending++;
     stream.once("close", () => { this.#streamsPending--; this.#streamClosed = this.#streamsPending === 0; this.#join(); });
@@ -49,6 +46,12 @@ export class AcquisitionHttpTransaction {
     if (!this.#stream) {
       this.#stream = stream;
       stream.once("end", () => { this.#ended = true; });
+    }
+    if (this.#recordStatus && first) {
+      try {
+        const status = response.statusCode;
+        if (Number.isInteger(status) && status >= 100 && status <= 999) this.#statusCode = status;
+      } catch { this.#dispose(stream); this.#reject(); return; }
     }
     stream.pause();
     if (unexpected) {

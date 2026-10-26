@@ -144,6 +144,9 @@ The internal shared HTTP transaction owns lifetime only. Fixed callers select
 their diagnostic family; activation additionally retains first response status,
 while Exec preserves its previous property reads and snapshot fields. Each
 protocol owns its own response policy. There is no general Docker client.
+Response ownership precedes status observation. If that observation throws,
+the response remains visible/owned, disposal is requested and the HTTP failure
+stays categorical; a failed status read supplies no invented status or closure.
 
 `npm run test:unit` discovers the activation/shared-transaction tests alongside
 existing Exec/acquisition consumers. Literal wire peers, finite borrowed-clock,

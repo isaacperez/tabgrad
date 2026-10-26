@@ -219,3 +219,21 @@ test("stop before run invokes no gate check, intent or factory", async t => {
   assert.equal(s.firstFailure, "ACTIVATION_STOPPED"); assert.equal(s.workPending, false); assert.equal(s.transportClosed, true);
   assert.equal(f.state.checks, 0); assert.equal(f.state.intents.length, 0); assert.equal(f.daemon.requests.length, 0);
 });
+
+test("a failed response status observation remains an owned response with a closed failure code", async t => {
+  let requestCloses = 0; let streamCloses = 0;
+  const f = await fixture(t, { request() {
+    const req = new EventEmitter(); req.destroy = () => { requestCloses++; req.emit("close"); };
+    req.end = () => queueMicrotask(() => {
+      const res = new PassThrough(); const destroy = res.destroy.bind(res);
+      res.destroy = () => { streamCloses++; return destroy(); };
+      Object.defineProperty(res, "statusCode", { get() { throw Error("STATUS_OBSERVATION_SENTINEL"); } });
+      req.emit("response", res);
+    }); return req;
+  } });
+  const a = f.create(); const s = await a.run(); await a.join();
+  assert.equal(s.firstFailure, "ACTIVATION_HTTP"); assert.equal(s.protocolComplete, false);
+  assert.equal(s.requestState, "response_observed"); assert.equal(s.effectState, "unknown"); assert.equal(s.statusCode, null);
+  assert.equal(requestCloses, 1); assert.equal(streamCloses, 1);
+  assert.equal(JSON.stringify(s).includes("STATUS_OBSERVATION_SENTINEL"), false);
+});
