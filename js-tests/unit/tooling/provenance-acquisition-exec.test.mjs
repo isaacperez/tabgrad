@@ -410,6 +410,36 @@ test("HTTP abort callbacks still observe capture revocation before control notif
   assert.deepEqual(observed, { capture: "incomplete", firstError: "CAPTURE_STOPPED", controlStops: 0 });
 });
 
+for (const phase of ["factory", "listeners", "end"]) for (const close of ["closed", "held", "throws"]) {
+  test(`stop during request ${phase} adopts the handle and preserves ${close} closure`, async t => {
+    let e; let request; let ends = 0; let destroys = 0;
+    const f = await fixture(t, { request() {
+      request = new EventEmitter();
+      request.end = () => { ends++; if (phase === "end") e.stop(); };
+      request.destroy = () => {
+        destroys++;
+        if (close === "throws") throw Error("synthetic close failure");
+        if (close === "closed") request.emit("close");
+      };
+      if (phase === "listeners") request.on("newListener", name => { if (name === "response") e.stop(); });
+      if (phase === "factory") e.stop();
+      return request;
+    } });
+    e = await f.create(); const s = await e.run({ observedUtc });
+    assert.equal(s.firstFailure, "EXEC_STOPPED");
+    assert.equal(ends, phase === "end" ? 1 : 0);
+    assert.equal(destroys, 1);
+    assert.equal(f.daemon.requests.length, 0);
+    assert.equal(s.transport.create.requestClosed, close === "closed");
+    assert.equal(s.transport.create.cleanupError, close === "throws" ? "EXEC_CLEANUP" : null);
+    e.stop(); e.stop(); assert.equal(destroys, 1);
+    if (close !== "closed") request.emit("close");
+    assert.equal(e.snapshot().transport.create.requestClosed, true);
+    assert.equal(s.transport.create.requestClosed, close === "closed");
+    assert.equal(e.snapshot().firstFailure, "EXEC_STOPPED");
+  });
+}
+
 test("expired process allowance precedes lost readiness on the same observation", async t => {
   let f;
   f = await fixture(t, { reply(r) { if (r.index === 2) { f.now(1101n); f.state.ready = false; } } });
