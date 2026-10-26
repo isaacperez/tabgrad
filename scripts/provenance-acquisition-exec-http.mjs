@@ -87,8 +87,9 @@ class ExecHttpTransaction {
   }
 
   abort() {
-    if (this.#aborted) return;
-    this.#aborted = true; this.#reject();
+    if (!this.#aborted) { this.#aborted = true; this.#reject(); }
+    // A prior abort can precede factory return or listener-installation failure.
+    // Revisit current ownership; disposal itself remains once per object.
     for (const handle of [this.#request, this.#stream]) if (handle) this.#dispose(handle);
   }
 

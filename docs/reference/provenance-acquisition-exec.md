@@ -170,8 +170,10 @@ closed; earlier snapshots remain observations of their own known handles.
 The trusted request factory may also return after a reentrant stop. Its returned
 request is adopted before disposal, receives no subsequent `end()` call, and
 gets at most one destruction request even if cancellation reenters while
-listeners are installed. Failed destruction remains an explicit cleanup error;
-missing close events remain unknown closure. These fixture cases do not prove
+listeners are installed. A listener-installation failure still disposes the
+returned request; it cannot reconstruct a close event whose listener was never
+installed. Failed destruction remains an explicit cleanup error; missing close
+events remain unknown closure. These fixture cases do not prove
 that Node's native factory reenters or that the daemon stopped.
 
 `snapshot()` contains identities, create/start phases, separate daemon reports,
