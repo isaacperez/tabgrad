@@ -23,6 +23,7 @@ class ExecHttpTransaction {
   #request = null; #stream = null; #response = false; #aborted = false; #requestClosed = false;
   #streamClosed = false; #ended = false; #cleanupError = null; #resolveClosed;
   #streamsPending = 0; #closureObserved = false;
+  #disposed = new WeakSet();
   #resolveResponse; #rejectResponse; #ready; #closed;
 
   constructor() {
@@ -37,6 +38,13 @@ class ExecHttpTransaction {
   }
 
   #reject = () => { this.#rejectResponse(new AcquisitionRecordError("EXEC_HTTP")); };
+
+  #dispose(handle) {
+    try {
+      if (this.#disposed.has(handle)) return;
+      this.#disposed.add(handle); handle.destroy();
+    } catch { this.#cleanupError ??= "EXEC_CLEANUP"; }
+  }
 
   #receive(response, stream, head, upgraded) {
     // Install ownership before rejecting even a late or unexpected response.
@@ -54,7 +62,7 @@ class ExecHttpTransaction {
     }
     stream.pause();
     if (unexpected) {
-      try { stream.destroy(); } catch { this.#cleanupError ??= "EXEC_CLEANUP"; }
+      this.#dispose(stream);
       this.#reject();
       return;
     }
@@ -68,7 +76,8 @@ class ExecHttpTransaction {
       this.#request.once("close", () => { this.#requestClosed = true; this.#reject(); this.#join(); });
       this.#request.on("response", res => this.#receive(res, res, null, false));
       this.#request.on("upgrade", (res, socket, head) => this.#receive(res, socket, head, true));
-      this.#request.end(body);
+      if (this.#aborted) this.#dispose(this.#request);
+      else this.#request.end(body);
     } catch {
       this.#reject();
       if (!this.#request) { this.#requestClosed = true; this.#join(); }
@@ -78,11 +87,10 @@ class ExecHttpTransaction {
   }
 
   abort() {
-    if (this.#aborted) return;
-    this.#aborted = true; this.#reject();
-    for (const handle of new Set([this.#request, this.#stream])) if (handle) {
-      try { handle.destroy(); } catch { this.#cleanupError ??= "EXEC_CLEANUP"; }
-    }
+    if (!this.#aborted) { this.#aborted = true; this.#reject(); }
+    // A prior abort can precede factory return or listener-installation failure.
+    // Revisit current ownership; disposal itself remains once per object.
+    for (const handle of [this.#request, this.#stream]) if (handle) this.#dispose(handle);
   }
 
   get ended() { return this.#ended; }
