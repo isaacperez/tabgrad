@@ -292,6 +292,9 @@ test("permission lost at the last settled close prevents local success without c
 });
 
 test("reentrant cancellation at each observed pre-open clock sample prevents every file open", async t => {
+  // Polls sample the same clock while filesystem awaits are pending. Freeze only
+  // intervals so these cutpoints describe admission, not a different poll schedule.
+  t.mock.timers.enable({ apis: ["setInterval"] });
   let samples = 0; let firstOpenSample;
   const baseline = await captureFixture(t, { clock(now) { samples++; return now; } });
   const open = baseline.ports.files.open;
