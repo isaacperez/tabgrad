@@ -45,7 +45,7 @@ async function caseOwner(kind, options = {}) {
   const m = await caseFilesModel(options.files); const docker = diagnosticDockerModel(options.docker);
   const plan = { ...docker.plan, launcherFiles: m.plan.launcherFiles }; const handles = new LabHandles();
   const lab = m.lab; lab.diagnostic = { path: "/private/plan.json", sha256: "b".repeat(64), case: kind };
-  const counts = { startup: 0, attempts: 0, runs: 0, stops: 0, startupFinished: false };
+  const counts = { startup: 0, attempts: 0, runs: 0, stops: 0, startupFinished: false, header: null };
   const records = new Map();
   const files = { ...m.files, async write(label, bytes) { return m.files.json(label, { finiteBytes: [...bytes] }); } };
   const filesystem = { ...m.port, lstat: docker.filesystem.lstat,
@@ -57,8 +57,8 @@ async function caseOwner(kind, options = {}) {
   let owner;
   const ports = { files, retirementFiles: files, handles, filesystem, request: docker.request, command: m.command,
     kernel: { caseHierarchy: async () => ({ casePath: "/case", groups: hostProfile().groups }) },
-    clock: () => options.now?.() ?? 1000n, check() { options.check?.(owner); },
-    async startupFactory() { counts.startup++; await options.startup?.(owner); return startup; },
+    clock: () => options.now?.() ?? 1000n, utcNow: options.utcNow, check() { options.check?.(owner); },
+    async startupFactory(input) { counts.startup++; counts.header = input.process.header; await options.startup?.(owner); return startup; },
     attemptFactory() { counts.attempts++; options.attempt?.(owner); return attempt; } };
   // All originals use finite maps; only m's protected ordinary directory is real.
   docker.files.write = async (label, bytes) => { records.set(label, Buffer.from(bytes)); return { label, bytes: bytes.length, sha256: acquisitionSha256(bytes) }; };
@@ -87,6 +87,23 @@ test("reentrant case cancellation at factory selection transfers revocation and 
     assert.equal(f.counts.attempts, 1); assert.equal(f.counts.runs, 0); assert(f.counts.stops >= 1);
     assert.equal(state.outcome, null); assert.equal(Object.keys(state.prefixes).length, 9);
   } finally { await f.close(); }
+});
+
+test("UTC projection uses the observation before T0, independently of later file and Create delays", async () => {
+  for (const phase of ["files", "create"]) {
+    const start = "2026-01-02T03:04:05.006Z"; let wall = Date.parse(start); const observed = [];
+    const f = await caseOwner("A", { utcNow() { observed.push("utc"); return new Date(wall).toISOString(); },
+      now() { observed.push("monotonic"); return 1000n; },
+      files: { beforeOpen() { if (phase === "files") wall += 1000; } },
+      docker: { response(settings) { if (phase === "create" && settings.path.includes("containers/create")) wall += 1000; } } });
+    try {
+      const result = await f.owner.run(); assert.equal(result.firstFailure, null);
+      assert.deepEqual(observed.slice(0, 2), ["utc", "monotonic"]);
+      assert.equal(f.counts.header.startedUtc, start); assert.equal(f.counts.header.t0MonotonicNs, "1000");
+      assert.equal(f.counts.header.deadlineUtc, "2026-01-02T03:04:05.186Z");
+      assert(Date.parse(f.counts.header.deadlineUtc) < wall); // Declared UTC advanced; no wall-time performance assertion.
+    } finally { await f.close(); }
+  }
 });
 
 test("insufficient original laboratory allowance excludes case files, Create and control processes", async () => {

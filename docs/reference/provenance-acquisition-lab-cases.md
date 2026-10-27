@@ -148,6 +148,11 @@ container, and composes the existing startup and activated attempt. There is
 one control/attempt selection, no retry, and cancellation transfers to owners
 returned late by a trusted factory. Native Docker work, source/FIFO preparation
 and result preservation remain separately owned and observable.
+The header's UTC observation is sampled immediately before that monotonic T0,
+before awaited file/container preparation. Its millisecond projection adds
+only the declared horizon to that earlier sample; later preparation cannot
+extend the reported deadline. Real UTC/monotonic correlation still requires
+the independently admitted clock premises. The monotonic cutoff governs work.
 
 The private result keeps placement originals, metadata and nine independently
 confirmed prefixes. Record bytes already have their own originals, so the

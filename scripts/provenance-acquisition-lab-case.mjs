@@ -9,6 +9,8 @@ import { createActivatedAcquisitionAttempt } from "./provenance-acquisition-atte
 import { labFailureCode } from "./provenance-acquisition-lab-command.mjs";
 import { freezeHostData } from "./provenance-acquisition-host-profile.mjs";
 
+const nativeUtc = () => new Date().toISOString();
+
 /** Exactly one case in one verified worker; the exterior still owns the entire producer domain. */
 export class LabDiagnosticCase {
   #lab; #plan; #kind; #ports; #docker; #files; #attempt = null; #startup = null; #run = null; #stopped = false;
@@ -32,6 +34,9 @@ export class LabDiagnosticCase {
   }
   async #execute() {
     this.#check(); await this.#docker.prepareImage(); this.#check();
+    // UTC is an earlier observation, never a later preparation sample projected forward.
+    // Millisecond truncation is conservative; native clock correlation still needs admission.
+    const startedUtc = (this.#ports.utcNow ?? nativeUtc)();
     const clock = this.#ports.clock ?? process.hrtime.bigint; const origin = clock();
     requireAcquisition(typeof origin === "bigint" && origin >= BigInt(this.#lab.context.t0MonotonicNs), "LAB_CLOCK");
     requireAcquisition(origin + BigInt(this.#plan.timing.deadlineNs) < BigInt(this.#lab.context.t0MonotonicNs)
@@ -40,7 +45,6 @@ export class LabDiagnosticCase {
     const hierarchy = await this.#ports.kernel.caseHierarchy(); this.#check();
     const body = labContainerRequest(this.#plan, hierarchy.casePath, this.#files.paths.input, this.#files.paths.ipc);
     const container = await this.#docker.create(this.#plan.operations[this.#kind], body); this.#check();
-    const startedUtc = new Date().toISOString();
     const profiles = await buildLabCaseProfiles({ lab: this.#lab, plan: this.#plan, kind: this.#kind,
       t0MonotonicNs: origin.toString(), startedUtc, caseFiles: this.#files, groups: hierarchy.groups,
       container, socket: this.#ports.socket, records: this.#ports.files });
@@ -51,7 +55,7 @@ export class LabDiagnosticCase {
     this.#attempt = attemptFactory(profiles.input, { startup: this.#startup, clock });
     // Construction/factory selection can reenter stop before the new owner is assigned.
     if (this.#stopped) this.#attempt.stop(); this.#check();
-    const state = await this.#attempt.run({ observedUtc: startedUtc });
+    const state = await this.#attempt.run({ observedUtc: nativeUtc() });
     await this.#attempt.join();
     this.#prefixes = labCasePrefixes(this.#files.snapshot(), state);
     const outcome = labCaseOutcome(this.#kind, state);
