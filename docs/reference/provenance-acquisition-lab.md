@@ -1,8 +1,9 @@
-# Experimental Linux acquisition laboratory preparation
+# Experimental Linux acquisition laboratory
 
-This retained experiment prepares and retires one private Docker laboratory.
-It is contributor tooling outside the browser distribution. It creates no
-container, image, FIFO or acquisition case, and requests no signature, upload,
+This retained experiment prepares and retires one private Docker laboratory,
+optionally running one explicitly selected diagnostic case. It is contributor
+tooling outside the browser distribution. Prepare-only creates no container,
+image, FIFO or acquisition case. Neither mode requests a signature, upload,
 package publication or deployment. Importing its modules performs no I/O.
 Native use requires the separate authority and qualification in the
 [release policy](../releases.md#qualify-mechanisms-before-claiming-readiness).
@@ -12,6 +13,8 @@ experiment. Read the lifecycle, then consult the input and evidence contracts.
 The [activated attempt](provenance-acquisition-attempt.md#activated-composition)
 owns the later capture/control/Start/placement/Exec order; preparation does not
 change its reports or provide its operational admission.
+The separate [diagnostic case contract](provenance-acquisition-lab-cases.md)
+defines those inputs and the three-laboratory experiment that consumes them.
 
 ## Domain and process ownership
 
@@ -55,6 +58,7 @@ independently expected SHA256; it never discovers configuration.
 | `expected` | Exactly `node`, `python`, `dockerd`, `containerd`, `runc`, `systemd`; version expectations, with Python3.11.patch, Docker29.9.1 and systemd255 fixed to this recipe |
 | `namespaces` | Exactly `pid`, `cgroup`, `time`, each an independently expected `{dev,ino}` |
 | `limits` | Positive safe integer `prepareMs`, `retireMs`, `stopMs`, `pollMs`, `tasks`, `cpuPercent`, `observationBytes`; decimal safe uint64 `memoryBytes`, `swapBytes`, `storageBytes`, allowing zero only for swap |
+| Optional `diagnostic` | Exactly `{path,sha256,case}`: absolute canonical plan path, independently expected hash and one of `A`, `B`, `C`; absent means prepare-only |
 
 Device/inode values are canonical decimal uint64 strings with nonzero inode.
 Paths are canonical absolute well-formed strings, exclude controls/backslashes,
@@ -128,7 +132,8 @@ node scripts/provenance-acquisition-lab-input-entry.mjs prepare PLAN_FILE EXPECT
 ```
 
 `observe` writes only the input candidate; `prepare` additionally invokes the
-privileged prepare/retire recipe above. Neither runs acquisition cases. These
+privileged prepare/retire recipe above, including one case only when the
+input explicitly selects `diagnostic`. `observe` never runs a case. These
 commands require their respective operational authority; import, valid input
 or a local test provides none. `presentedViewAdmission`, `externalClosure`,
 `clockAdmission` and `releaseAdmission` remain `unqualified`.
@@ -179,13 +184,23 @@ manager binding cannot be reaccepted by a later favorable sample.
 
 ## Lifecycle and retirement
 
-`run()` performs one preparation/readiness attempt, then retires that environment;
+`run()` performs one preparation/readiness attempt, optionally one diagnostic,
+then retires that environment;
 it is not a server for arbitrary callers. Repeated run/close calls share their
 original operation. `stop()` revokes work once. No late result restores permission.
 Checks share one original monotonic history/cutoff; phase allowances cannot renew
 it. Readiness requires correlated keeper, manager invocation, native groups,
 worker/daemon/containerd birth/membership, profile and worker record. CLI0 or a
 caller boolean provides none of those facts.
+
+The selected diagnostic adds a closed exterior start record only after that
+correlation. It binds the profile, copied diagnostic plan, case, exact ready
+record hash and worker birth/proc identity. The verified worker accepts it once
+and runs only that case. Preparation retains its first T0; the work phase then
+uses the same whole cutoff minus the declared retirement reserve. The case's
+complete allowance must still fit before that reserve. There is no fresh
+laboratory allowance or arbitrary interior executor. An unchanged prepare-only
+consumer never enters this phase.
 
 The exterior binds the keeper record and actual manager/proc identities before
 targeting the unit. Missing/ambiguous ownership leaves retirement unknown. A
@@ -227,6 +242,11 @@ identifies the initial worker-launch prefix separately. The exterior verifies
 their actual identities, capacities, confirmed counts and hashes. Missing or
 substituted evidence blocks preservation/collection. A failed HTTP response
 retains its bounded received prefix and failure metadata instead of dropping it.
+Selected diagnostics publish an updated worker ending, bound to that same
+ready/worker/plan, with the nine last-confirmed case prefixes. Exterior readback
+also checks these originals. A partial preparation preserves the known subset;
+missing objects cannot become a complete diagnostic. An unavailable producer
+observation remains explicitly unavailable even for a zero-length prefix.
 
 Forced retirement can interrupt a later daemon/worker-launch write. Only the
 last recorded prefix is known; continuation/final EOF stay explicitly unknown.

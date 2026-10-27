@@ -74,7 +74,7 @@ class LabInputCandidate {
     }
     this.#profile = copyLabProfile({ context: { ...p.context, t0MonotonicNs: this.#origin.toString() }, roots,
       slice: { name: p.slice, identity: id(sliceStat) }, tools, expected: p.expected, limits: p.limits,
-      namespaces: process.data.namespaces });
+      namespaces: process.data.namespaces, ...(p.diagnostic ? { diagnostic: p.diagnostic } : {}) });
     this.#files = new LabFiles(this.#profile, this.#gate, this.#handles);
     // Byte ownership exists before publication; a failed write cannot turn into an admitted candidate.
     this.#profileBytes = Buffer.from(JSON.stringify(this.#profile));

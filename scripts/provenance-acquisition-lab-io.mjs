@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { request } from "node:http";
 import { acquisitionSha256, AcquisitionRecordError, requireAcquisition } from "./provenance-acquisition-record.mjs";
 import { freezeHostData } from "./provenance-acquisition-host-profile.mjs";
-import { LabFiles } from "./provenance-acquisition-lab-files.mjs";
+import { LabFiles, readLabDiagnosticPlan } from "./provenance-acquisition-lab-files.mjs";
 import { LabKernel } from "./provenance-acquisition-lab-kernel.mjs";
 import { LabHandles, LabMemorySink, createLabFileSink, startLabCommand, collectLabCommand } from "./provenance-acquisition-lab-command.mjs";
 import { LAB_TOOLS, LAB_PROFILE_BYTES, labPaths, labManagerArguments, labChildEnvironment, labDaemonConfiguration }
@@ -14,6 +14,8 @@ import { labBusArguments, parseLabUnitPath, parseLabUnit, parseLabService, recon
 import { labContainerdPaths, validateLabContainerd, validateLabDocker } from "./provenance-acquisition-lab-daemon.mjs";
 import { AcquisitionHttpTransaction } from "./provenance-acquisition-http-transaction.mjs";
 import { readNativeBytes } from "./provenance-acquisition-native-path.mjs";
+import { LabDiagnosticCase } from "./provenance-acquisition-lab-case.mjs";
+import { ACQUISITION_PAYLOAD_LIMITS } from "./provenance-acquisition-payload.mjs";
 
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 const json = bytes => {
@@ -36,6 +38,8 @@ export class NativeLabIO {
   #evidenceReady = false;
   #workEntryObserved = false;
   #preservationFailed = false;
+  #diagnosticPlan = null; #diagnosticCase = null; #diagnosticResult = null; #readyRecord = null; #diagnosticInputHandles = null;
+  #readyHash = null; #diagnosticResultHash = null;
   constructor(p, checks, ports = {}) {
     this.#p = p; this.#f = labPaths(p); this.#checks = checks;
     const gate = { work: () => this.#work(), retire: () => this.#retire() };
@@ -89,6 +93,19 @@ export class NativeLabIO {
       await files.json(`${label}.${name}.result.json`, result.result);
     }
   }
+  async #readDiagnostic(path) {
+    let plan;
+    try { plan = await readLabDiagnosticPlan(path, this.#p.diagnostic.sha256); }
+    catch (error) { this.#diagnosticInputHandles = error?.handleOwner ?? null; throw error; }
+    this.#work();
+    requireAcquisition(plan.sourceRevision === this.#p.context.sourceRevision
+      && !Object.values(plan.operations).includes(this.#p.context.operationId)
+      && BigInt(plan.timing.deadlineNs) + BigInt(this.#p.limits.prepareMs + this.#p.limits.retireMs) * 1000000n
+        < BigInt(this.#p.context.deadlineNs)
+      && this.#p.limits.observationBytes >= Math.max(ACQUISITION_PAYLOAD_LIMITS.stdout,
+        ACQUISITION_PAYLOAD_LIMITS.stderr, plan.limits.responseBytes), "LAB_INPUT");
+    this.#diagnosticPlan = plan; return plan;
+  }
   async #managerObservation() {
     const originals = {};
     try {
@@ -127,10 +144,15 @@ export class NativeLabIO {
     const observer = await this.#kernel.open();
     requireAcquisition(observer.data.membership !== this.#f.group && !observer.data.membership.startsWith(this.#f.group + "/"), "LAB_IDENTITY");
     await this.#files.roots(); this.#evidenceReady = true;
+    if (this.#p.diagnostic) await this.#readDiagnostic(this.#p.diagnostic.path);
     for (const name of LAB_TOOLS) await this.#files.verifyTool(name);
     await this.#files.scratch();
     await this.#files.json("profile.json", this.#p, LAB_PROFILE_BYTES);
     await this.#files.json("daemon.json", labDaemonConfiguration(this.#p));
+    if (this.#diagnosticPlan) {
+      const saved = await this.#files.json("diagnostic.plan.json", this.#diagnosticPlan, LAB_PROFILE_BYTES);
+      requireAcquisition(saved.sha256 === this.#p.diagnostic.sha256, "LAB_PROFILE");
+    }
     await this.#saveProcess("observer", observer);
   }); }
   launch() { return this.#admit(async () => {
@@ -185,14 +207,40 @@ export class NativeLabIO {
           await this.#saveProcess(`${role}.exterior`, proc);
         }
         await this.#saveCommands("manager.ready", observed.originals, this.#files);
+        this.#readyRecord = ready; this.#readyHash = acquisitionSha256(JSON.stringify(ready));
         this.#workEntryObserved = true; return;
       }
       requireAcquisition(!this.#waiter.snapshot().closed, "LAB_MANAGER");
       await pause(this.#p.limits.pollMs);
     }
   }); }
+  diagnose() { return this.#admit(async () => {
+    requireAcquisition(this.#p.diagnostic && this.#diagnosticPlan && this.#readyRecord, "LAB_PROTOCOL");
+    await this.#files.json("diagnostic.start.json", { kind: "lab_diagnostic_start_v1", operationId: this.#p.context.operationId,
+      profileSha256: this.#profileHash, planSha256: this.#p.diagnostic.sha256, case: this.#p.diagnostic.case,
+      readySha256: this.#readyHash, worker: this.#readyRecord.processes.worker });
+    while (true) {
+      this.#work(); const failed = await this.#files.readJson("worker.json");
+      if (failed?.firstFailure) throw new AcquisitionRecordError("LAB_DIAGNOSTIC");
+      const result = await this.#files.readJson("diagnostic.result.json");
+      if (result) {
+        requireAcquisition(result.kind === "lab_diagnostic_result_v1" && result.operationId === this.#p.context.operationId
+          && result.profileSha256 === this.#profileHash && result.planSha256 === this.#p.diagnostic.sha256
+          && result.case === this.#p.diagnostic.case && result.readySha256 === this.#readyHash
+          && equal(result.worker?.procIdentity, this.#readyRecord.processes.worker.procIdentity)
+          && result.worker.pid === this.#readyRecord.processes.worker.pid
+          && result.worker.starttime === this.#readyRecord.processes.worker.starttime, "LAB_IDENTITY");
+        this.#diagnosticResult = result; this.#diagnosticResultHash = acquisitionSha256(JSON.stringify(result));
+        requireAcquisition(result.state?.finished && !result.state.firstFailure && !result.state.cleanupError
+          && result.state.outcome?.expected === true && result.state.preservationComplete === true, "LAB_DIAGNOSTIC");
+        return;
+      }
+      await pause(this.#p.limits.pollMs);
+    }
+  }); }
   revoke() {
     this.#revoked = true;
+    this.#diagnosticCase?.stop();
     // The waiter belongs to exterior retirement, not the revoked preparation work.
     for (const command of this.#commands) if (!this.#retirementCommands.has(command)) command.stop();
     for (const tx of this.#http) tx.abort();
@@ -239,11 +287,19 @@ export class NativeLabIO {
     if (this.#waiter) {
       const ready = await this.#retireFiles.readJson("ready.json");
       const failed = await this.#retireFiles.readJson("worker.json");
-      const worker = failed?.evidence ?? ready?.evidence;
-      requireAcquisition(worker && (failed ?? ready).operationId === this.#p.context.operationId
-        && (failed ?? ready).profileSha256 === this.#profileHash, "LAB_PRESERVATION");
+      const diagnostic = this.#p.diagnostic ? await this.#retireFiles.readJson("diagnostic.result.json") : null;
+      const ending = failed ?? diagnostic ?? ready; const worker = ending?.evidence;
+      requireAcquisition(worker && ending.operationId === this.#p.context.operationId
+        && ending.profileSha256 === this.#profileHash && (!this.#p.diagnostic || diagnostic || failed), "LAB_PRESERVATION");
       if (ready) requireAcquisition(worker.commands?.daemon, "LAB_PRESERVATION");
       await this.#verifyWorkerEvidence(worker);
+      if (diagnostic) {
+        requireAcquisition(diagnostic.operationId === this.#p.context.operationId && diagnostic.profileSha256 === this.#profileHash
+          && diagnostic.planSha256 === this.#p.diagnostic.sha256 && diagnostic.case === this.#p.diagnostic.case
+          && (!this.#diagnosticResultHash || acquisitionSha256(JSON.stringify(diagnostic)) === this.#diagnosticResultHash), "LAB_PRESERVATION");
+        await this.#verifyCasePrefixes(diagnostic.state?.prefixes ?? {}, diagnostic.state?.outcome?.expected === true);
+      }
+      if (failed?.diagnostic) await this.#verifyCasePrefixes(failed.diagnostic.prefixes ?? {});
       const keeper = await this.#retireFiles.readJson("keeper.launch.json");
       requireAcquisition(keeper && keeper.profileSha256 === this.#profileHash, "LAB_PRESERVATION");
       await this.#verifyCaptures({ "worker-launch": keeper.command });
@@ -265,20 +321,26 @@ export class NativeLabIO {
   close() {
     if (!this.#close) this.#close = (async () => {
       await Promise.allSettled([...this.#pending].map(p => p.promise));
+      await this.#diagnosticCase?.close();
       await Promise.allSettled([...this.#commands].map(c => c.result));
       await Promise.allSettled([...this.#http].map(tx => tx.closed));
       await this.#kernel.close(); await this.#handles.closeAll();
-      requireAcquisition(!this.#handles.snapshot().retained && !this.#kernel.snapshot().handles.retained, "LAB_CLEANUP");
+      const diagnosticHandles = await this.#diagnosticInputHandles?.closeAll();
+      requireAcquisition(!this.#handles.snapshot().retained && !this.#kernel.snapshot().handles.retained && !diagnosticHandles?.retained, "LAB_CLEANUP");
     })(); return this.#close;
   }
   snapshot() { return freezeHostData({ launched: !!this.#waiter, bound: !!this.#binding, boundarySaved: !!this.#boundary,
     workEntryObserved: this.#workEntryObserved,
     preserved: this.#preserved, registrationCollected: this.#collected, manager: this.#manager,
     pendingOperations: this.#pending.size, activeCommands: this.#commands.size, kernel: this.#kernel.snapshot(),
-    files: this.#files.snapshot(), retirementFiles: this.#retireFiles.snapshot() }); }
+    files: this.#files.snapshot(), retirementFiles: this.#retireFiles.snapshot(),
+    ...(this.#p.diagnostic ? { diagnostic: { case: this.#p.diagnostic.case, resultObserved: !!this.#diagnosticResult,
+      expected: this.#diagnosticResult?.state?.outcome?.expected === true, inputHandles: this.#diagnosticInputHandles?.snapshot() ?? null } } : {}) }); }
   #evidence() {
     const work = this.#files.snapshot(); const retire = this.#retireFiles.snapshot();
-    return { preservationComplete: !this.#preservationFailed && (work.unpreservedRecords ?? []).length === 0
+    return { preservationComplete: !this.#preservationFailed && !this.#diagnosticInputHandles?.snapshot().retained
+      && (!this.#diagnosticCase || this.#diagnosticCase.snapshot().preservationComplete)
+      && (work.unpreservedRecords ?? []).length === 0
       && (retire.unpreservedRecords ?? []).length === 0,
       records: Object.values({ ...work.records, ...retire.records }),
       commands: Object.fromEntries([...this.#fileCommands].map(([label, command]) => [label, command.snapshot()])) };
@@ -289,6 +351,18 @@ export class NativeLabIO {
       for (const role of ["stdout", "stderr"]) {
         await this.#retireFiles.verifyPrefix(`${label}.${role}`, command.capture?.files?.[role], command.capture?.channels?.[role]);
       }
+    }
+  }
+  async #verifyCasePrefixes(prefixes, complete = false) {
+    const entries = Object.entries(prefixes); requireAcquisition(entries.length <= 9 && (!complete || entries.length === 9), "LAB_PRESERVATION");
+    const kind = this.#p.diagnostic.case; const token = this.#diagnosticPlan.operations[kind];
+    const parts = ["program.stdout", "program.stderr", "daemon.stdout", "daemon.stderr", "control", "header", "progress", "supervisor", "watchdog"];
+    for (const [part, prefix] of entries) {
+      requireAcquisition(parts.includes(part)
+        && prefix.name === `${this.#p.context.operationId}.case-${kind.toLowerCase()}-${token}.${part}`, "LAB_PRESERVATION");
+      const label = prefix.name.slice(this.#p.context.operationId.length + 1);
+      await this.#retireFiles.verifyPrefix(label, { capacity: prefix.capacity,
+        identity: `${prefix.identity?.dev}:${prefix.identity?.ino}` }, prefix);
     }
   }
   async #verifyWorkerEvidence(evidence) {
@@ -373,6 +447,7 @@ export class NativeLabIO {
   async worker() {
     await this.#kernel.open(); await this.#kernel.enterWorker();
     await this.#files.roots(); this.#evidenceReady = true;
+    if (this.#p.diagnostic) await this.#readDiagnostic(`${this.#f.prefix}.diagnostic.plan.json`);
     for (const name of LAB_TOOLS) await this.#files.verifyTool(name, false);
     for (const [name, args, expected, pattern] of [
       ["node", ["--version"], this.#p.expected.node, (s, v) => s.trim() === v || s.trim() === "v" + v],
@@ -422,8 +497,30 @@ export class NativeLabIO {
     for (const key of ["grpc", "debug", "ttrpc"]) await this.#socket(paths[key]);
     requireAcquisition(!this.#daemon.snapshot().firstFailure && !this.#daemon.snapshot().cleanupError
       && this.#handles.snapshot().unknown === 0 && this.#kernel.snapshot().handles.unknown === 0, "LAB_WORKER");
-    await this.#files.json("ready.json", { kind: "lab_ready_v1", operationId: this.#p.context.operationId,
+    const readyRecord = await this.#files.json("ready.json", { kind: "lab_ready_v1", operationId: this.#p.context.operationId,
       profileSha256: this.#profileHash, entry: this.#kernel.snapshot().entry, processes, socket, evidence: this.#evidence() });
+    if (this.#p.diagnostic) {
+      while (true) {
+        this.#work(); const start = await this.#files.readJson("diagnostic.start.json");
+        if (start) {
+          requireAcquisition(start.kind === "lab_diagnostic_start_v1" && start.operationId === this.#p.context.operationId
+            && start.profileSha256 === this.#profileHash && start.planSha256 === this.#p.diagnostic.sha256
+            && start.case === this.#p.diagnostic.case && start.readySha256 === readyRecord.sha256
+            && equal(start.worker?.procIdentity, processes.worker.procIdentity)
+            && start.worker.pid === processes.worker.pid && start.worker.starttime === processes.worker.starttime, "LAB_IDENTITY");
+          this.#checks.beginDiagnostic(); break;
+        }
+        await pause(this.#p.limits.pollMs);
+      }
+      this.#diagnosticCase = new LabDiagnosticCase(this.#p, this.#diagnosticPlan, { path: this.#f.socket, identity: socket }, {
+        files: this.#files, retirementFiles: this.#retireFiles, handles: this.#handles, kernel: this.#kernel,
+        check: this.#work, command: this.#completed.bind(this) });
+      await this.#diagnosticCase.run(); await this.#diagnosticCase.close();
+      await this.#retireFiles.json("diagnostic.result.json", { kind: "lab_diagnostic_result_v1", operationId: this.#p.context.operationId,
+        profileSha256: this.#profileHash, planSha256: this.#p.diagnostic.sha256, case: this.#p.diagnostic.case,
+        readySha256: readyRecord.sha256, worker: processes.worker,
+        state: this.#diagnosticCase.snapshot(), evidence: this.#evidence() });
+    }
     await this.#daemon.result; throw new AcquisitionRecordError("LAB_WORKER");
   }
   async #rawProc(pid, leaf) {
@@ -437,6 +534,7 @@ export class NativeLabIO {
     this.revoke();
     if (!this.#evidenceReady) return;
     try { await this.#retireFiles.json("worker.json", { kind: "lab_worker_end_v1", firstFailure: code,
-      operationId: this.#p.context.operationId, profileSha256: this.#profileHash, evidence: this.#evidence(), state: this.snapshot() }); } catch { /* Exterior backstop remains required. */ }
+      operationId: this.#p.context.operationId, profileSha256: this.#profileHash, evidence: this.#evidence(), state: this.snapshot(),
+      ...(this.#diagnosticCase ? { diagnostic: this.#diagnosticCase.snapshot() } : {}) }); } catch { /* Exterior backstop remains required. */ }
   }
 }

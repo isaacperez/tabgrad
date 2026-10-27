@@ -145,7 +145,7 @@ export function labNativePorts(p = labProfile(), mutate = () => {}) {
     mutate({ name, args, options, value, records, originals, processes, groups,
       changeInvocation: next => { invocation = next; } }); return value;
   };
-  return { kernel, files, retirementFiles, command, calls, records, originals, processes, groups, childRecords };
+  return { kernel, files, retirementFiles, command, calls, records, originals, processes, groups, childRecords, fileIdentities };
 }
 
 /** Worker recipe model. No host reads, Docker process, server, image or socket is created. */

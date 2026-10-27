@@ -6,6 +6,8 @@ import { identityMatches, ownedRoot } from "./provenance-acquisition-file-io.mjs
 import { readNativeBytes } from "./provenance-acquisition-native-path.mjs";
 import { copyLabProfile, copyLabInputPlan, LAB_PROFILE_BYTES, LAB_TOOLS, labPaths } from "./provenance-acquisition-lab-profile.mjs";
 import { LabHandles, labFailureCode } from "./provenance-acquisition-lab-command.mjs";
+import { copyLabDiagnosticPlan } from "./provenance-acquisition-lab-diagnostic-profile.mjs";
+import { copyLabExperimentPlan } from "./provenance-acquisition-lab-experiment-profile.mjs";
 
 /** Caller owns these protected originals after service stop; no data-tree deletion. */
 export class LabFiles {
@@ -154,3 +156,7 @@ export function readLabProfile(path, expectedSha256) { return readLabData(path, 
 
 /** Expected preparation metadata only; reading it neither admits nor executes native effects. */
 export function readLabInputPlan(path, expectedSha256) { return readLabData(path, expectedSha256, copyLabInputPlan); }
+
+export function readLabDiagnosticPlan(path, expectedSha256) { return readLabData(path, expectedSha256, copyLabDiagnosticPlan); }
+
+export function readLabExperimentPlan(path, expectedSha256) { return readLabData(path, expectedSha256, copyLabExperimentPlan); }

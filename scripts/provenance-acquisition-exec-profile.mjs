@@ -1,8 +1,9 @@
 import { isAbsolute, resolve, posix } from "node:path";
 import { constants as bufferConstants } from "node:buffer";
 import { isDeepStrictEqual } from "node:util";
+import { parseAcquisitionJson } from "./provenance-acquisition-json.mjs";
 import {
-  acquisitionFields as fields, requireAcquisition, AcquisitionRecordError,
+  acquisitionFields as fields, requireAcquisition,
   isAcquisitionToken, isAcquisitionUint, acquisitionSha256,
 } from "./provenance-acquisition-record.mjs";
 
@@ -69,6 +70,12 @@ function copiedProfile(input, { command, body }) {
     capture: input.capture, timing: { ...input.timing }, limits: { ...input.limits } };
 }
 
+/** Concrete preparations can bind the exact request recipe before constructing a borrowed gate. */
+export function describeExecRequest(input) {
+  const { body } = commandProfile(input);
+  return Object.freeze({ body: Buffer.from(body), recipeSha256: acquisitionSha256(body) });
+}
+
 /** Preserve data validation, startup observations, then final copying in that order. */
 export function copyExecProfile(input, startup) {
   const command = commandProfile(input);
@@ -89,36 +96,8 @@ export function copyExecAttemptProfile(input, gate) {
   return copiedProfile(input, command);
 }
 
-/** Detect duplicate decoded keys before JSON.parse can erase them. Body is already bounded. */
-function uniqueJsonKeys(source) {
-  const stack = [];
-  for (let i = 0; i < source.length; i++) {
-    const c = source[i];
-    if (c === "{") stack.push(new Set());
-    else if (c === "[") stack.push(null);
-    else if (c === "}" || c === "]") stack.pop();
-    else if (c === '"') {
-      const begin = i;
-      for (i++; i < source.length && source[i] !== '"'; i++) if (source[i] === "\\") i++;
-      requireAcquisition(i < source.length, "EXEC_PROTOCOL");
-      let next = i + 1;
-      while (/\s/.test(source[next] ?? "") && next < source.length) next++;
-      if (source[next] === ":") {
-        const key = JSON.parse(source.slice(begin, i + 1));
-        const keys = stack.at(-1);
-        requireAcquisition(keys instanceof Set && !keys.has(key), "EXEC_PROTOCOL");
-        keys.add(key);
-      }
-    }
-  }
-}
-
 export function parseExecMetadata(bytes) {
-  try {
-    const source = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-    uniqueJsonKeys(source);
-    return JSON.parse(source);
-  } catch { throw new AcquisitionRecordError("EXEC_PROTOCOL"); }
+  return parseAcquisitionJson(bytes, "EXEC_PROTOCOL");
 }
 
 export function createdExec(bytes) {

@@ -5,7 +5,7 @@ import { labFailureCode } from "./provenance-acquisition-lab-command.mjs";
 
 /** One original lab clock. Retirement cannot renew preparation or the whole operation. */
 export class LabClock {
-  #p; #clock; #last; #revoked = false;
+  #p; #clock; #last; #revoked = false; #diagnostic = false;
   constructor(p, clock) { this.#p = p; this.#clock = clock; this.#last = BigInt(p.context.t0MonotonicNs); }
   revoke() { this.#revoked = true; }
   observe() {
@@ -16,7 +16,13 @@ export class LabClock {
   }
   work() {
     requireAcquisition(!this.#revoked, "LAB_STOPPED"); const elapsed = this.observe();
-    requireAcquisition(elapsed < BigInt(this.#p.limits.prepareMs) * 1000000n, "LAB_DEADLINE"); return elapsed;
+    const cutoff = this.#diagnostic ? BigInt(this.#p.context.deadlineNs) - BigInt(this.#p.limits.retireMs) * 1000000n
+      : BigInt(this.#p.limits.prepareMs) * 1000000n;
+    requireAcquisition(elapsed < cutoff, "LAB_DEADLINE"); return elapsed;
+  }
+  beginDiagnostic() {
+    requireAcquisition(this.#p.diagnostic && !this.#diagnostic, "LAB_PROTOCOL"); const elapsed = this.work();
+    this.#diagnostic = true; return elapsed;
   }
   retire() { return this.observe(); }
 }
@@ -34,7 +40,7 @@ class AcquisitionLab {
     } };
     if (typeof io === "function") io = io(p, checks);
     const names = ["open", "launch", "readiness", "revoke", "owned", "effect", "observe", "saveBoundary",
-      "waitRetired", "preserve", "collect", "close", "halt", "snapshot"];
+      "waitRetired", "preserve", "collect", "close", "halt", "snapshot", ...(p.diagnostic ? ["diagnose"] : [])];
     this.#io = Object.freeze(Object.fromEntries(names.map(name => {
       requireAcquisition(typeof io[name] === "function", "LAB_INPUT"); return [name, io[name].bind(io)];
     })));
@@ -58,6 +64,7 @@ class AcquisitionLab {
     this.#bounds.work(); await this.#call("open"); this.#bounds.work();
     await this.#call("launch"); this.#bounds.work();
     await this.#call("readiness"); this.#bounds.work(); this.#ready = true;
+    if (this.#p.diagnostic) { this.#bounds.beginDiagnostic(); await this.#call("diagnose"); this.#bounds.work(); }
   }
   run() {
     if (this.#run) return this.#run;
@@ -65,7 +72,7 @@ class AcquisitionLab {
       this.#workPending = true;
       this.#work = this.#prepare().catch(error => this.#fail(error)).finally(() => { this.#workPending = false; });
       this.#timer = setInterval(() => {
-        if (this.#ready || this.#closing) return;
+        if (this.#closing || this.#ready && !this.#p.diagnostic) return;
         try { this.#bounds.work(); } catch (error) { this.#fail(error); }
       }, this.#p.limits.pollMs);
     }

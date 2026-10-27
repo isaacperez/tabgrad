@@ -21,7 +21,7 @@ export async function runLabEntry(args) {
     finally { process.removeListener("SIGINT", stop); process.removeListener("SIGTERM", stop); }
   }
   const bounds = new LabClock(p, process.hrtime.bigint);
-  const io = new NativeLabIO(p, { work: () => bounds.work(), retire: () => bounds.retire() });
+  const io = new NativeLabIO(p, { work: () => bounds.work(), retire: () => bounds.retire(), beginDiagnostic: () => bounds.beginDiagnostic() });
   let timer;
   if (role === "worker") timer = setInterval(() => {
     try { bounds.work(); } catch { bounds.revoke(); io.revoke(); }
