@@ -85,9 +85,10 @@ class AcquisitionPlacement {
 
   observeExecution(observations) {
     if (this.#revoked || this.#closing) return Promise.resolve(this.snapshot());
+    try { this.#check(); }
+    catch (error) { this.#fail(placementIoCode(error)); return Promise.resolve(this.snapshot()); }
     let r; let s;
     try {
-      this.#check();
       requireAcquisition(fields(observations, ["R", "S", "X", "F", "E"]), "PLACEMENT_PROTOCOL");
       requireAcquisition(this.#io.snapshot().subjects.init, "PLACEMENT_PROTOCOL");
       r = observations.R ? this.#launchSource(observations.R, "R") : null;

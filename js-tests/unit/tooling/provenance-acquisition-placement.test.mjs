@@ -234,6 +234,24 @@ test("original cutoff, regressive/unavailable time and wrong sequence fail witho
   assert.deepEqual(m.calls, []);
 });
 
+test("execution observation preserves clock, gate and deadline causes before reading launch data", async () => {
+  for (const [cause, value] of [["PLACEMENT_CLOCK", 99n], ["PLACEMENT_DEADLINE", 3000000100n], ["PLACEMENT_GATE", null]]) {
+    let broken = false; const p = placementProfile(); const m = placementModel(p);
+    const g = placementGate(p, { check() { if (broken) throw Error("finite private gate detail"); } });
+    const owner = createAcquisitionPlacement(p, { gate: g.gate, io: m.port });
+    await owner.open(); await owner.beforeStart(); m.activate(); await owner.afterStart();
+    assert.equal(owner.snapshot().mayExec, true); const count = m.calls.length;
+    if (value === null) broken = true; else g.time(value);
+    const end = await owner.observeExecution(launchObservations(p));
+    assert.equal(end.firstFailure, cause); assert.deepEqual(g.revocations, [cause]);
+    assert.equal(end.executionObserved, false);
+    assert(m.calls.slice(count).every(c => c.kind === "close")); await owner.join();
+    assert(!JSON.stringify(end).includes("private gate detail"));
+  }
+  const f = await ready(); assert.equal((await f.owner.observeExecution({ R: "malformed" })).firstFailure, "PLACEMENT_PROTOCOL");
+  await f.owner.join();
+});
+
 test("closure failure is separate, attempts each known handle once and does not rewrite prior observations", async () => {
   const p = placementProfile(); const m = placementModel(p, { beforeClose(node) {
     if (node.name === "case") throw Error("finite private close detail");
