@@ -134,6 +134,43 @@ test("polling observes original clock/gate failure while native work remains pen
   assert.equal(g.revocations.length, 1); assert.equal(owner.snapshot().executionObserved, false);
 });
 
+test("stop during a short leaf type read admits no subsequent read syscall", async () => {
+  const p = placementProfile(); let owner; let model; let reads = 0;
+  const m = placementModel(p, { shortRead: 1, beforeRead(node) {
+    if (model && node === model.leaf.children.get("cgroup.type")) { reads++; owner.stop(); }
+  } }); model = m; const g = placementGate(p);
+  owner = createAcquisitionPlacement(p, { gate: g.gate, io: m.port });
+  await owner.open(); await owner.beforeStart(); m.activate();
+  const end = await owner.afterStart(); await owner.join();
+  assert.equal(reads, 1); assert.equal(end.firstFailure, "PLACEMENT_STOPPED");
+  assert.equal(end.mayExec, false); assert.equal(g.revocations.length, 1);
+  assert(!m.calls.some(c => c.kind === "read" && c.name === "cgroup.procs"));
+  assert([...m.handles.values()].every(h => h.closed));
+});
+
+test("rejected temporary closes stay owned, counted and never retried", async () => {
+  const p = placementProfile(); const m = placementModel(p, { beforeClose(node) {
+    if (node.name === "777") throw Error("finite private temporary close detail");
+  } }); const g = placementGate(p);
+  const owner = createAcquisitionPlacement(p, { gate: g.gate, io: m.port });
+  const old = owner.snapshot(); const end = await owner.open(); const joined = await owner.join();
+  assert.equal(end.firstFailure, "PLACEMENT_CLOSE"); assert.equal(joined.io.ioClosed, "unknown");
+  assert.equal(joined.io.unconfirmedCloses, 1); assert.equal(old.io.unconfirmedCloses, 0);
+  assert.equal(joined.cleanupError, "PLACEMENT_CLOSE");
+  for (const fd of m.handles.keys()) assert.equal(m.calls.filter(c => c.kind === "close" && c.fd === fd).length, 1);
+  assert(!JSON.stringify(joined).includes("private temporary close detail"));
+});
+
+test("a failed temporary close cannot replace an earlier identity failure", async () => {
+  const p = placementProfile(); const m = placementModel(p, { beforeClose(node) {
+    if (node.name === "777") throw Error("finite close failure");
+  } }); m.processes[777].children.get("ns/time").ino = 999n;
+  const g = placementGate(p); const owner = createAcquisitionPlacement(p, { gate: g.gate, io: m.port });
+  const end = await owner.open(); const joined = await owner.join();
+  assert.equal(end.firstFailure, "PLACEMENT_IDENTITY"); assert.equal(joined.cleanupError, "PLACEMENT_CLOSE");
+  assert.equal(joined.io.unconfirmedCloses, 1); assert.equal(joined.io.ioClosed, "unknown");
+});
+
 test("byte capacity, process count and positive short reads are independently checked", async () => {
   for (const [limit, value] of [["procBytes", 4], ["procsBytes", 3], ["maxProcesses", 1]]) {
     const p = placementProfile(); p.limits[limit] = value; const m = placementModel(p); const g = placementGate(p);

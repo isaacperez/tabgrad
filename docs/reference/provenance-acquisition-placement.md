@@ -114,7 +114,9 @@ its handle. Work and close pending remain separate. `stop()` revokes once and
 begins close; no late completion restores permission. `close()` prevents new
 work, joins admitted reads and attempts each owned handle's close once.
 `join()` observes this local close when started. Unmatched candidates close
-without retaining a scan history. First failure, revocation error and failed
+without retaining a scan history. Rejected closes retain their handles without
+retry; `unconfirmedCloses` counts those fixed-budget references and closure stays
+unknown. First failure, revocation error and failed
 cleanup remain separate; no native messages/stacks enter diagnostics.
 
 Passive frozen snapshots contain the fixed subject metadata, source byte counts

@@ -40,6 +40,12 @@ async function activatedFixture(t, options = {}) {
   if (options.realStartup) fixture.input.exec.timing.closeWaitMs = 5000;
   const startup = options.realStartup ? (await preparedStartup(t, fixture)).startup : fixture.startup;
   const p = placementProfile(startup.context, fixture.input.exec.containerId, fixture.input.launcherProfile.sha256);
+  if (!options.realStartup) {
+    Object.defineProperty(startup, "caseBinding", { value: Object.freeze({
+      root: Object.freeze({ path: "/owned", identity: Object.freeze({ dev: "1", ino: "1" }) }),
+      case: Object.freeze([Object.freeze({ name: "case", identity: Object.freeze({ dev: "1", ino: "2" }) })]),
+    }) });
+  }
   state.model = placementModel(p, options.native);
   const activation = { context: { ...startup.context }, socket: structuredClone(fixture.input.exec.socket),
     containerId: fixture.input.exec.containerId, preparedContainerSha256: p.preparedContainerSha256, pollMs: 1,
@@ -74,11 +80,16 @@ test("activated caller composes real capture/HTTP owners, one Start, concrete re
   assert(f.model.calls.every(c => c.kind !== "write")); assert([...f.model.handles.values()].every(h => h.closed));
 });
 
-test("mismatched copied container, preparation or launcher binding fails without I/O or requests", async t => {
+test("mismatched copied container, preparation, launcher or case binding fails without I/O or requests", async t => {
   for (const mutate of [f => { f.activation.containerId = "d".repeat(64); },
     f => { f.placement.preparedContainerSha256 = "d".repeat(64); },
     f => { f.placement.launcherProfileSha256 = "d".repeat(64); },
-    f => { f.activation.socket.identity.ino = "9"; }]) {
+    f => { f.activation.socket.identity.ino = "9"; },
+    f => { f.placement.hierarchy.root.path = "/different"; },
+    f => { f.placement.hierarchy.root.identity.ino = "9"; },
+    f => { f.placement.hierarchy.case[0].name = "different"; },
+    f => { f.placement.hierarchy.case[0].identity.ino = "9"; },
+    f => { f.placement.hierarchy.case.push({ name: "deeper", identity: { dev: "1", ino: "9" } }); }]) {
     const f = await activatedFixture(t); mutate(f);
     assert.throws(() => f.create(), { code: "ACQ_ATTEMPT_INPUT" });
     assert.equal(f.model.calls.length, 0); assert.equal(f.daemon.requests.length, 0);
@@ -175,6 +186,8 @@ test("late observer closure cannot restore an expired aggregate even after succe
 test("actual three-control startup retains conservative original endings on the activated path", { timeout: 15000 }, async t => {
   const f = await activatedFixture(t, { realStartup: true, capture: { origin: process.hrtime.bigint().toString(),
     deadlineNs: "6000000000", workUntilNs: "4000000000", closeUntilNs: "5000000000" } });
+  assert(Object.isFrozen(f.startup.caseBinding)); assert(Object.isFrozen(f.startup.caseBinding.case));
+  assert.equal(f.startup.caseBinding, f.startup.caseBinding);
   const end = await f.create().run({ observedUtc });
   assert.equal(end.localComplete, true, end.firstFailure ?? end.cleanupError ?? "incomplete");
   const s = decodeAcquisitionRecord("supervisor", end.controlsResult.process.parts.supervisor.bytes);

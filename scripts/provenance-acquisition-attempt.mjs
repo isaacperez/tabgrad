@@ -45,7 +45,8 @@ class AcquisitionAttempt {
       requireAcquisition(capture.containerId === activation.containerId && capture.containerId === placement.containerId
         && isDeepStrictEqual(capture.socket, activation.socket)
         && activation.preparedContainerSha256 === placement.preparedContainerSha256
-        && capture.launcherProfileSha256 === placement.launcherProfileSha256, "ACQ_ATTEMPT_INPUT");
+        && capture.launcherProfileSha256 === placement.launcherProfileSha256
+        && isDeepStrictEqual(startup.caseBinding, placement.hierarchy), "ACQ_ATTEMPT_INPUT");
     }
   }
 
@@ -281,7 +282,8 @@ function preparePorts(ports, activated) {
   requireAcquisition(s && ["start", "stop", "finish", "snapshot"].every(key => typeof s[key] === "function")
     && typeof s.supervisor?.append === "function" && (ports.clock === undefined || typeof ports.clock === "function"), "ACQ_ATTEMPT_INPUT");
   const startup = Object.freeze({ context: Object.freeze({ ...s.context }), start: s.start.bind(s), stop: s.stop.bind(s),
-    finish: s.finish.bind(s), snapshot: s.snapshot.bind(s), append: s.supervisor.append.bind(s.supervisor) });
+    finish: s.finish.bind(s), snapshot: s.snapshot.bind(s), append: s.supervisor.append.bind(s.supervisor),
+    ...(activated ? { caseBinding: s.caseBinding } : {}) });
   const { startup: ignored, clock, ...capture } = ports;
   const placementIo = activated && Object.hasOwn(capture, "placementIo") ? capture.placementIo : undefined;
   if (activated) delete capture.placementIo;

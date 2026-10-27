@@ -21,16 +21,11 @@ export function placementIoCode(error) {
   return "PLACEMENT_OPEN";
 }
 
-async function closeHandles(handles) {
-  const settled = await Promise.allSettled(handles.map(h => h.close()));
-  requireAcquisition(settled.every(r => r.status === "fulfilled"), "PLACEMENT_CLOSE");
-}
-
 /** Read-only native ownership for an already copied, admitted-view profile. */
 class PlacementIO {
   #p; #port; #checkpoint; #handles = []; #subjects = new Map(); #root = null; #proc = null; #case = null; #leaf = null;
   #procs = null; #pending = null; #closing = null; #closed = "open"; #cleanupError = null; #before = false;
-  #opened = false; #membership; #seenLeaf = null;
+  #opened = false; #membership; #seenLeaf = null; #failedHandles = new Set();
 
   constructor(profile, port, checkpoint) {
     requireAcquisition(port && typeof port.open === "function" && typeof port.statfs === "function" && port.constants, "PLACEMENT_INPUT");
@@ -99,7 +94,8 @@ class PlacementIO {
       try {
         check(own.data.pid === String(p.pid) && own.data.namespacePids.length === 1
           && names.every(name => same(own.data.namespaces[name], this.#p.namespaces[name])));
-      } finally { await this.#release(own.handles); }
+      } catch (error) { await this.#releaseFailed(own.handles); throw error; }
+      await this.#release(own.handles);
       this.#opened = true;
       return this.snapshot();
     });
@@ -126,7 +122,7 @@ class PlacementIO {
       const stat = await this.#checked(() => this.#leaf.stat({ bigint: true })); this.#seenLeaf = identity(stat);
       check(stat.dev === (await this.#checked(() => this.#case.stat({ bigint: true }))).dev);
       const type = await this.#file(this.#leaf, "cgroup.type", this.#handles, CGROUP2_MAGIC);
-      check(await readNativeAscii(type, 32) === "domain\n");
+      check(await readNativeAscii(type, 32, this.#checkpoint) === "domain\n");
       this.#procs = await this.#file(this.#leaf, "cgroup.procs", this.#handles, CGROUP2_MAGIC);
       const pids = await this.#pids(); check(pids.length === 1);
       const init = await this.#readProcess(pids[0]);
@@ -147,7 +143,8 @@ class PlacementIO {
         this.#port, fresh, CGROUP2_MAGIC, this.#checkpoint);
       check(nativeKey(await this.#checked(() => h.stat({ bigint: true })))
         === nativeKey(await this.#checked(() => this.#leaf.stat({ bigint: true }))));
-    } finally { await this.#release(fresh); }
+    } catch (error) { await this.#releaseFailed(fresh); throw error; }
+    await this.#release(fresh);
     return parsePlacementPids(await readNativeBytes(this.#procs, this.#p.limits.procsBytes, this.#checkpoint), this.#p.limits.maxProcesses);
   }
 
@@ -209,8 +206,14 @@ class PlacementIO {
   }
 
   async #release(handles) {
-    try { await closeHandles(handles); }
-    catch (error) { this.#cleanupError ??= "PLACEMENT_CLOSE"; throw error; }
+    const settled = await Promise.allSettled(handles.map(h => Promise.resolve().then(() => h.close())));
+    for (let i = 0; i < settled.length; i++) {
+      if (settled[i].status === "rejected") this.#failedHandles.add(handles[i]);
+    }
+    if (settled.some(r => r.status === "rejected")) {
+      this.#cleanupError ??= "PLACEMENT_CLOSE";
+      throw new AcquisitionRecordError("PLACEMENT_CLOSE");
+    }
   }
 
   async #releaseFailed(handles) {
@@ -240,7 +243,8 @@ class PlacementIO {
   snapshot() {
     return freezeHostData({ opened: this.#opened, beforeChecked: this.#before, leafIdentity: this.#seenLeaf,
       subjects: Object.fromEntries([...this.#subjects].map(([k, s]) => [k, s.data])),
-      ioPending: this.#pending !== null, ioClosed: this.#closed, cleanupError: this.#cleanupError });
+      ioPending: this.#pending !== null, ioClosed: this.#closed, cleanupError: this.#cleanupError,
+      unconfirmedCloses: this.#failedHandles.size });
   }
 }
 

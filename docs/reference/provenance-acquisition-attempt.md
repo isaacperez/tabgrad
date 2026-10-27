@@ -72,7 +72,9 @@ does not prove physical shutdown or storage durability.
 the same startup/capture ports, with an optional trusted `placementIo` syscall
 port for finite tests. The three closed inputs retain their own owners. Copied
 operation/context, container, socket, preparation-reference and launcher-profile
-bindings must match before effects. The existing unactivated entry and raw
+bindings must match before effects. Placement's complete case root/path and
+component identities must equal startup's immutable `caseBinding`, copied from
+the controls' validated host profile. The existing unactivated entry and raw
 daemon Exec route remain separate.
 
 Open prepares capture and [placement](provenance-acquisition-placement.md).
