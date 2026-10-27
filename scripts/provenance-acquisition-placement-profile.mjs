@@ -17,8 +17,10 @@ export const PLACEMENT_ERRORS = Object.freeze(["PLACEMENT_INPUT", "PLACEMENT_OPE
 
 /** Specific cgroupfs, single-leaf laboratory expectations; no discovery or authority. */
 export function copyPlacementProfile(input) {
+  const optional = Object.hasOwn(input ?? {}, "clockPolicy") ? ["clockPolicy"] : [];
   check(fields(input, ["context", "containerId", "preparedContainerSha256", "launcherProfileSha256",
-    "hierarchy", "proc", "namespaces", "limits"])
+    "hierarchy", "proc", "namespaces", "limits", ...optional])
+    && (!optional.length || input.clockPolicy === "monotonic_offsets")
     && fields(input.context, ["operationId", "t0MonotonicNs", "deadlineNs", "root"])
     && isAcquisitionToken(input.context.operationId) && isAcquisitionUint(input.context.t0MonotonicNs)
     && isAcquisitionUint(input.context.deadlineNs) && input.context.deadlineNs !== "0"

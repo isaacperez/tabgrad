@@ -1,11 +1,12 @@
 import { constants } from "node:fs";
 import { open, statfs } from "node:fs/promises";
-import { AcquisitionRecordError, isAcquisitionUint, requireAcquisition } from "./provenance-acquisition-record.mjs";
+import { AcquisitionRecordError, acquisitionSha256, isAcquisitionUint, requireAcquisition } from "./provenance-acquisition-record.mjs";
 import { freezeHostData } from "./provenance-acquisition-host-profile.mjs";
 import { nativeFdPath as fdPath, nativeKey, openNativeDirectory, openNativeRoot, openNativeFile,
   readNativeBytes, readNativeAscii, CGROUP2_MAGIC, PROC_MAGIC } from "./provenance-acquisition-native-path.mjs";
 import { parsePlacementPids, PLACEMENT_ERRORS } from "./provenance-acquisition-placement-profile.mjs";
 import { readAcquisitionProcess } from "./provenance-acquisition-process-observation.mjs";
+import { observeMonotonicDomain } from "./provenance-acquisition-monotonic-domain.mjs";
 
 const nativePort = Object.freeze({ open, statfs, constants, platform: process.platform, pid: process.pid });
 const names = ["pid", "cgroup", "time"];
@@ -26,6 +27,7 @@ class PlacementIO {
   #p; #port; #checkpoint; #handles = []; #subjects = new Map(); #root = null; #proc = null; #case = null; #leaf = null;
   #procs = null; #pending = null; #closing = null; #closed = "open"; #cleanupError = null; #before = false;
   #opened = false; #membership; #seenLeaf = null; #failedHandles = new Set();
+  #clockObserver = null; #clockRejected = null;
 
   constructor(profile, port, checkpoint) {
     requireAcquisition(port && typeof port.open === "function" && typeof port.statfs === "function" && port.constants, "PLACEMENT_INPUT");
@@ -74,8 +76,11 @@ class PlacementIO {
       try {
         check(own.data.pid === String(p.pid) && own.data.namespacePids.length === 1
           && names.every(name => same(own.data.namespaces[name], this.#p.namespaces[name])));
+        if (this.#p.clockPolicy === "monotonic_offsets") {
+          await this.#clock(own, "observer"); this.#clockObserver = own;
+        }
       } catch (error) { await this.#releaseFailed(own.handles); throw error; }
-      await this.#release(own.handles);
+      if (!this.#clockObserver) await this.#release(own.handles);
       this.#opened = true;
       return this.snapshot();
     });
@@ -107,6 +112,9 @@ class PlacementIO {
       const pids = await this.#pids(); check(pids.length === 1);
       const init = await this.#readProcess(pids[0]);
       try {
+        if (this.#clockObserver) {
+          await this.#clock(init, "init", this.#clockObserver.data.clock.offsets.monotonicNs);
+        }
         this.#checkSubject(init.data, "1", null);
         check(!same(init.data.namespaces.pid, this.#p.namespaces.pid));
       } catch (error) { await this.#releaseFailed(init.handles); throw error; }
@@ -133,10 +141,24 @@ class PlacementIO {
       handles => this.#releaseFailed(handles));
   }
 
+  async #clock(subject, role, expected = null) {
+    const trace = {};
+    try {
+      const clock = await observeMonotonicDomain(subject, this.#port, this.#p.limits.procBytes, this.#checkpoint, trace);
+      if (expected !== null) check(clock.offsets.monotonicNs === expected);
+      subject.data = freezeHostData({ ...subject.data, clock });
+    } catch (error) {
+      trace.originals = Object.fromEntries(Object.entries(subject.originals).map(([name, bytes]) =>
+        [name, { bytes: bytes.length, sha256: acquisitionSha256(bytes) }]));
+      this.#clockRejected = { role, subject, trace }; throw error;
+    }
+  }
+
   #checkSubject(data, internalPid, parent) {
     const init = this.#subjects.get("init")?.data;
-    check(data.namespacePids.length === 2 && data.namespacePids[1] === internalPid && data.membership === this.#membership
-      && same(data.namespaces.time, this.#p.namespaces.time));
+    check(data.namespacePids.length === 2 && data.namespacePids[1] === internalPid && data.membership === this.#membership);
+    if (!this.#clockObserver) check(same(data.namespaces.time, this.#p.namespaces.time));
+    else if (init) check(same(data.namespaces.time, init.namespaces.time));
     if (init) check(same(data.namespaces.pid, init.namespaces.pid) && same(data.namespaces.cgroup, init.namespaces.cgroup));
     if (parent !== null) check(data.ppid === parent);
   }
@@ -184,7 +206,7 @@ class PlacementIO {
       this.#closed = "pending";
       this.#closing = Promise.resolve().then(async () => {
         await Promise.allSettled(this.#pending ? [this.#pending] : []);
-        const handles = [...this.#handles, ...[...this.#subjects.values()].flatMap(s => s.handles)];
+        const handles = [...this.#handles, ...(this.#clockObserver?.handles ?? []), ...[...this.#subjects.values()].flatMap(s => s.handles)];
         try { await this.#release(handles); this.#closed = this.#cleanupError ? "unknown" : "closed"; }
         catch { this.#closed = "unknown"; }
         return this.snapshot();
@@ -194,13 +216,18 @@ class PlacementIO {
   }
 
   collect() {
-    return Object.freeze(Object.fromEntries([...this.#subjects].map(([role, subject]) => [role,
+    const subjects = [...this.#subjects];
+    if (this.#clockObserver) subjects.push(["clockObserver", this.#clockObserver]);
+    if (this.#clockRejected) subjects.push(["rejectedClock", this.#clockRejected.subject]);
+    return Object.freeze(Object.fromEntries(subjects.map(([role, subject]) => [role,
       Object.freeze(Object.fromEntries(Object.entries(subject.originals).map(([k, v]) => [k, Buffer.from(v)])))])));
   }
 
   snapshot() {
     return freezeHostData({ opened: this.#opened, beforeChecked: this.#before, leafIdentity: this.#seenLeaf,
       subjects: Object.fromEntries([...this.#subjects].map(([k, s]) => [k, s.data])),
+      ...(this.#p.clockPolicy ? { clockObserver: this.#clockObserver?.data ?? null,
+        rejectedClock: this.#clockRejected ? { role: this.#clockRejected.role, trace: this.#clockRejected.trace } : null } : {}),
       ioPending: this.#pending !== null, ioClosed: this.#closed, cleanupError: this.#cleanupError,
       unconfirmedCloses: this.#failedHandles.size });
   }

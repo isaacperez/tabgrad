@@ -391,6 +391,13 @@ dependencies. Their [reference](reference/provenance-acquisition-lab.md) separat
 finite local tests from privileged setup/qualification. No browser/package entry
 or automatic workflow imports them.
 
+`scripts/provenance-acquisition-lab-input.mjs` observes an expected-path/content
+plan into one identified input candidate, retaining its proc originals and first
+clock origin. `-input-entry.mjs` selects explicit observation or preparation;
+`-bootstrap.mjs` composes observation with the existing laboratory lifecycle
+without renewing its allowance. Observation does not admit the presented host
+or verify tool hashes a second time.
+
 `scripts/provenance-acquisition-startup.mjs` composes the process session and
 third guard without duplicating record policy or native path/identity ownership.
 Its `-protocol.mjs` owns the closed guard channel, while `-actor.mjs` and
@@ -435,6 +442,12 @@ permission and fixed init/launcher/program observations. The
 [placement reference](reference/provenance-acquisition-placement.md) separates
 this narrow laboratory contract from qualification, retirement and custody.
 It creates no infrastructure and adds no daemon inspection or library entry.
+
+`scripts/provenance-acquisition-monotonic-domain.mjs` owns the opt-in placement
+policy's bounded timens representation and retained native clock observations.
+It keeps monotonic and boottime separate; placement owns exact equivalence,
+init/launcher/program membership and failed-observation retention. It neither
+changes the strict default nor admits clock implementations or continuity.
 
 `scripts/provenance-acquisition-launch-profile.mjs` owns the closed program and
 endpoint profile; `-launch-protocol.mjs` owns bounded ASCII control and state

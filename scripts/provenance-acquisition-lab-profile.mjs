@@ -24,54 +24,76 @@ const anchor = value => fields(value, ["path", "identity"]) && path(value.path) 
 const version = value => typeof value === "string" && /^v?[0-9]+\.[0-9]+\.[0-9]+(?:[-+][A-Za-z0-9.-]+)?$/.test(value)
   && value.length <= 128;
 
+function commonContext(c) {
+  return isAcquisitionToken(c.operationId) && isAcquisitionUint(c.deadlineNs) && c.deadlineNs !== "0"
+    && BigInt(c.deadlineNs) % 1000000n === 0n && BigInt(c.deadlineNs) / 1000000n <= 2147483647n
+    && typeof c.sourceRevision === "string" && /^[0-9a-f]{40}$/.test(c.sourceRevision);
+}
+function expectedVersions(e) {
+  return fields(e, ["node", "python", "dockerd", "containerd", "runc", "systemd"])
+    && [e.node, e.python, e.dockerd, e.containerd, e.runc].every(version)
+    && /^3\.11\.[0-9]+$/.test(e.python) && e.dockerd === "29.9.1" && e.systemd === "255";
+}
+function limits(c, l) {
+  return fields(l, ["prepareMs", "retireMs", "stopMs", "pollMs", "memoryBytes", "swapBytes", "tasks", "cpuPercent", "storageBytes", "observationBytes"])
+    && [l.prepareMs, l.retireMs, l.stopMs, l.pollMs, l.tasks, l.cpuPercent, l.observationBytes].every(safe)
+    && l.pollMs <= Math.min(l.prepareMs, l.retireMs) && l.stopMs <= l.retireMs
+    && BigInt(l.prepareMs) + BigInt(l.retireMs) < BigInt(c.deadlineNs) / 1000000n
+    && l.cpuPercent <= Math.floor(Number.MAX_SAFE_INTEGER / 10000)
+    && [l.memoryBytes, l.swapBytes, l.storageBytes].every(safeUint)
+    && l.memoryBytes !== "0" && l.storageBytes !== "0" && l.observationBytes < bufferConstants.MAX_LENGTH;
+}
+function toolContent(t) {
+  return path(t.path) && path(t.realPath) && safe(t.bytes) && isAcquisitionHash(t.sha256);
+}
+function routes(p) {
+  const storage = [p.roots.scratch.path, p.roots.evidence.path, p.roots.tools.path];
+  check(storage.every((a, i) => storage.every((b, j) => i === j || a !== b && !a.startsWith(b + "/"))));
+  for (const name of ["dockerd", "containerd", "shim", "runc"]) {
+    check(p.tools[name].path === join(p.roots.tools.path, name === "shim" ? "containerd-shim-runc-v2" : name));
+  }
+  check(p.tools.python.path === join(p.roots.pythonEnvironment.path, "bin", "python")
+    && new Set(LAB_TOOLS.map(name => p.tools[name].path)).size === LAB_TOOLS.length);
+  check(Buffer.byteLength(join(p.roots.scratch.path, p.context.operationId, "docker.sock")) < 108);
+}
+
+/** Expected paths/content and budgets only. Observed inodes/namespaces remain absent, never invented. */
+export function copyLabInputPlan(input) {
+  check(fields(input, ["context", "roots", "slice", "tools", "expected", "limits"])
+    && fields(input.context, ["operationId", "deadlineNs", "sourceRevision"]) && commonContext(input.context)
+    && fields(input.roots, LAB_ROOTS) && Object.values(input.roots).every(r => fields(r, ["path"]) && path(r.path))
+    && input.slice === "system.slice" && fields(input.tools, LAB_TOOLS)
+    && expectedVersions(input.expected) && limits(input.context, input.limits));
+  for (const t of Object.values(input.tools)) check(fields(t, ["path", "realPath", "bytes", "sha256"]) && toolContent(t));
+  check(new Set(Object.values(input.roots).map(r => r.path)).size === LAB_ROOTS.length);
+  routes(input); const copied = freezeHostData(JSON.parse(JSON.stringify(input)));
+  check(Buffer.byteLength(JSON.stringify(copied)) <= LAB_PROFILE_BYTES); return copied;
+}
+
 /** Closed preparation inputs. Valid data never admits tools, a host or privilege. */
 export function copyLabProfile(input) {
   check(fields(input, ["context", "roots", "slice", "tools", "expected", "limits", "namespaces"])
     && fields(input.context, ["operationId", "t0MonotonicNs", "deadlineNs", "sourceRevision"])
-    && isAcquisitionToken(input.context.operationId) && isAcquisitionUint(input.context.t0MonotonicNs)
-    && isAcquisitionUint(input.context.deadlineNs) && input.context.deadlineNs !== "0"
-    && BigInt(input.context.deadlineNs) % 1000000n === 0n
-    && BigInt(input.context.deadlineNs) / 1000000n <= 2147483647n
-    && typeof input.context.sourceRevision === "string" && /^[0-9a-f]{40}$/.test(input.context.sourceRevision)
+    && commonContext(input.context) && isAcquisitionUint(input.context.t0MonotonicNs)
     && fields(input.roots, LAB_ROOTS) && Object.values(input.roots).every(anchor)
     && fields(input.slice, ["name", "identity"]) && input.slice.name === "system.slice" && identity(input.slice.identity)
     && fields(input.tools, LAB_TOOLS)
-    && fields(input.expected, ["node", "python", "dockerd", "containerd", "runc", "systemd"])
-    && [input.expected.node, input.expected.python, input.expected.dockerd, input.expected.containerd, input.expected.runc].every(version)
-    && /^3\.11\.[0-9]+$/.test(input.expected.python)
-    && input.expected.dockerd === "29.9.1" && input.expected.systemd === "255"
+    && expectedVersions(input.expected)
     && fields(input.namespaces, ["pid", "cgroup", "time"]) && Object.values(input.namespaces).every(identity)
-    && fields(input.limits, ["prepareMs", "retireMs", "stopMs", "pollMs", "memoryBytes", "swapBytes", "tasks",
-      "cpuPercent", "storageBytes", "observationBytes"]));
-  const l = input.limits;
-  check([l.prepareMs, l.retireMs, l.stopMs, l.pollMs, l.tasks, l.cpuPercent, l.observationBytes].every(safe)
-    && l.pollMs <= Math.min(l.prepareMs, l.retireMs) && l.stopMs <= l.retireMs
-    && BigInt(l.prepareMs) + BigInt(l.retireMs) < BigInt(input.context.deadlineNs) / 1000000n
-    && l.cpuPercent <= Math.floor(Number.MAX_SAFE_INTEGER / 10000)
-    && [l.memoryBytes, l.swapBytes, l.storageBytes].every(safeUint)
-    && l.memoryBytes !== "0" && l.storageBytes !== "0" && l.observationBytes < bufferConstants.MAX_LENGTH);
+    && limits(input.context, input.limits));
   const ids = new Set();
   for (const root of Object.values(input.roots)) {
     const key = `${root.identity.dev}:${root.identity.ino}`; check(!ids.has(key)); ids.add(key);
   }
-  const storage = [input.roots.scratch.path, input.roots.evidence.path, input.roots.tools.path];
-  check(storage.every((a, i) => storage.every((b, j) => i === j || a !== b && !a.startsWith(b + "/"))));
   const toolIds = new Set();
   for (const name of LAB_TOOLS) {
     const t = input.tools[name];
-    check(fields(t, ["path", "realPath", "identity", "bytes", "sha256"]) && path(t.path) && path(t.realPath) && identity(t.identity)
-      && safe(t.bytes) && isAcquisitionHash(t.sha256));
+    check(fields(t, ["path", "realPath", "identity", "bytes", "sha256"]) && toolContent(t) && identity(t.identity));
     const key = `${t.identity.dev}:${t.identity.ino}`; check(!toolIds.has(key)); toolIds.add(key);
-    if (["dockerd", "containerd", "shim", "runc"].includes(name)) {
-      check(t.path === join(input.roots.tools.path, name === "shim" ? "containerd-shim-runc-v2" : name));
-    }
   }
-  check(input.tools.python.path === join(input.roots.pythonEnvironment.path, "bin", "python"));
-  check(new Set(LAB_TOOLS.map(name => input.tools[name].path)).size === LAB_TOOLS.length);
+  routes(input);
   const p = freezeHostData(JSON.parse(JSON.stringify(input)));
   check(Buffer.byteLength(JSON.stringify(p)) <= LAB_PROFILE_BYTES);
-  // Linux sockaddr_un.sun_path has 108 bytes, including its terminating NUL.
-  check(Buffer.byteLength(labPaths(p).socket) < 108);
   return p;
 }
 
