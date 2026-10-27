@@ -26,7 +26,7 @@ function admitResponse({ response, upgraded }) {
 
 /** One borrowed Start; neither HTTP success nor closure admits native placement. */
 class AcquisitionActivation {
-  #profile; #gate; #request; #tx = null;
+  #profile; #binding; #gate; #request; #tx = null;
   #last; #lastAtNs = null; #origin; #deadline;
   #intent = "not_requested"; #requested = false; #bodyBytes = 0;
   #revoked = false; #complete = false; #firstFailure = null; #revocationError = null;
@@ -34,11 +34,17 @@ class AcquisitionActivation {
 
   constructor(profile, gate, request) {
     this.#profile = profile; this.#request = request;
+    this.#binding = Object.freeze({ context: profile.context, containerId: profile.containerId,
+      preparedContainerSha256: profile.preparedContainerSha256, socket: Object.freeze({ path: profile.socket.path,
+        identity: Object.freeze({ ...profile.socket.identity }) }) });
     this.#gate = { check: gate.check.bind(gate), appendIntent: gate.appendIntent.bind(gate), revoke: gate.revoke.bind(gate) };
     this.#origin = BigInt(profile.context.t0MonotonicNs); this.#last = this.#origin;
     this.#deadline = BigInt(profile.context.deadlineNs);
     this.#stopped = new Promise(resolve => { this.#resolveStop = resolve; });
   }
+
+  /** Copied immutable identity for composition; never a clock, request or admission. */
+  get binding() { return this.#binding; }
 
   #fail(code) {
     this.#firstFailure ??= code;

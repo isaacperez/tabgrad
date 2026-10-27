@@ -10,7 +10,7 @@ const codeOf = error => error instanceof AcquisitionRecordError ? error.code : "
 
 /** Local composition only: the caller keeps startup, observation, validation and custody. */
 class AcquisitionCaptureAttempt {
-  #profile; #gate; #clock; #request; #fifoPorts; #files; #fifos = null; #decoder = null; #exec = null;
+  #profile; #binding; #gate; #clock; #request; #fifoPorts; #files; #fifos = null; #decoder = null; #exec = null;
   #origin; #last; #workUntil; #closeUntil; #timer = null; #clockBroken = false;
   #opening = false; #prepared = false; #started = false; #flowPending = false; #execSettled = false;
   #firstFailure = null; #revoked = false; #cleanupError = null; #cleanupExpired = false; #finished = false;
@@ -18,6 +18,9 @@ class AcquisitionCaptureAttempt {
 
   constructor(profile, gate, ports) {
     this.#profile = profile; this.#gate = gate; this.#clock = ports.clock; this.#request = ports.request; this.#fifoPorts = ports.fifo;
+    this.#binding = Object.freeze({ operationId: profile.exec.operationId, containerId: profile.exec.containerId,
+      launcherProfileSha256: profile.launcherProfile.sha256, socket: Object.freeze({ path: profile.exec.socket.path,
+        identity: Object.freeze({ ...profile.exec.socket.identity }) }) });
     this.#origin = BigInt(profile.exec.timing.t0MonotonicNs); this.#last = this.#origin;
     this.#workUntil = BigInt(profile.exec.timing.deadlineNs); this.#closeUntil = this.#workUntil;
     this.#files = createCaptureFiles(profile, this.#dataClock, ports.files, () => this.#fail("CAPTURE_ATTEMPT_DAEMON_OUTPUT"));
@@ -217,6 +220,8 @@ class AcquisitionCaptureAttempt {
   join() { return this.#closed.promise; }
   /** Already copied immutable timing; no input reread, clock sample or I/O. */
   get timing() { return this.#profile.exec.timing; }
+  /** Stable copied identities only; no input reread or operational observation. */
+  get binding() { return this.#binding; }
   snapshot() {
     const files = this.#files.snapshot();
     return Object.freeze({ operationId: this.#profile.exec.operationId, prepared: this.#prepared, opening: this.#opening,

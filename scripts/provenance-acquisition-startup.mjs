@@ -31,6 +31,8 @@ class AcquisitionStartup {
     this.#guardClosed = new Promise(resolve => { this.#resolveClosed = resolve; });
     this.supervisor = Object.freeze({ append: this.#append.bind(this) });
     Object.defineProperty(this, "context", { enumerable: true, value: session.context });
+    Object.defineProperty(this, "caseBinding", { enumerable: true,
+      value: Object.freeze({ root: host.root, case: host.groups.case }) });
   }
 
   #check = () => {

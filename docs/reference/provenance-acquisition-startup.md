@@ -85,6 +85,9 @@ original operation cutoff and root. This cutoff differs from the host's
 earlier work-admission cutoff and guard horizon. The separate
 [Exec adapter](provenance-acquisition-exec.md) uses that binding and observed
 permission; startup itself makes no Docker request or data-provenance claim.
+The passive frozen `caseBinding` exposes the root and case component identities
+from the validated host profile, so an activated caller can reject a different
+placement route before effects. It performs no observation or I/O.
 The [local acquisition caller](provenance-acquisition-attempt.md) joins startup
 with separated program capture, completing capture's final permission check
 before normal finish revokes it.

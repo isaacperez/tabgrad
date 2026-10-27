@@ -3,34 +3,10 @@ import { open, statfs } from "node:fs/promises";
 import { AcquisitionRecordError, requireAcquisition, isAcquisitionUint } from "./provenance-acquisition-record.mjs";
 import { HOST_GROUPS, HOST_ROLES, HOST_READ_LIMITS, copyHostProfile, freezeHostData } from "./provenance-acquisition-host-profile.mjs";
 
-const cgroup2Magic = 0x63677270n;
+import { nativeKey as key, nativeFdPath as fdPath, nativeIdentity, readNativeAscii as readBounded,
+  openNativeDirectory, openNativeRoot as openRoot, CGROUP2_MAGIC } from "./provenance-acquisition-native-path.mjs";
+
 const nativePort = Object.freeze({ open, statfs, constants, platform: process.platform, pid: process.pid });
-const key = stat => `${stat.dev}:${stat.ino}`;
-function fdPath(handle) {
-  requireAcquisition(Number.isSafeInteger(handle.fd) && handle.fd >= 0, "HOST_IDENTITY");
-  return `/proc/self/fd/${handle.fd}`;
-}
-
-function nativeIdentity(stat, expected, directory) {
-  requireAcquisition(typeof stat.dev === "bigint" && typeof stat.ino === "bigint" && stat.ino > 0n
-    && typeof stat.nlink === "bigint" && stat.nlink > 0n && (directory ? stat.isDirectory() : stat.isFile()), "HOST_IDENTITY");
-  if (expected) requireAcquisition(key(stat) === `${expected.dev}:${expected.ino}`, "HOST_IDENTITY");
-  return key(stat);
-}
-
-async function readBounded(handle, limit) {
-  const bytes = Buffer.alloc(limit + 1);
-  let count = 0;
-  while (count < bytes.length) {
-    const r = await handle.read(bytes, count, bytes.length - count, count);
-    requireAcquisition(Number.isInteger(r.bytesRead) && r.bytesRead >= 0 && r.bytesRead <= bytes.length - count, "HOST_READ");
-    if (r.bytesRead === 0) break;
-    count += r.bytesRead;
-  }
-  requireAcquisition(count <= limit && bytes.subarray(0, count).every(b => b === 10 || b >= 32 && b <= 126), "HOST_READ");
-  return bytes.subarray(0, count).toString("ascii");
-}
-
 export function parseHostEvents(text) {
   requireAcquisition(typeof text === "string" && Buffer.byteLength(text) <= HOST_READ_LIMITS.events, "HOST_READ");
   const lines = text.split("\n");
@@ -198,23 +174,6 @@ async function openPreparedHost(profile, role, port, entryClock) {
   }
 }
 
-async function openDirectory(path, expected, port, handles, cgroup) {
-  const c = port.constants;
-  const handle = await port.open(path, c.O_RDONLY | c.O_DIRECTORY | c.O_NOFOLLOW);
-  handles.push(handle);
-  nativeIdentity(await handle.stat({ bigint: true }), expected, true);
-  if (cgroup) requireAcquisition((await port.statfs(fdPath(handle), { bigint: true })).type === cgroup2Magic, "HOST_FILESYSTEM");
-  return handle;
-}
-
-async function openRoot(root, port, handles) {
-  let handle = await openDirectory("/", null, port, handles, false);
-  const parts = root.path.split("/").slice(1);
-  for (let i = 0; i < parts.length; i += 1) handle = await openDirectory(`${fdPath(handle)}/${parts[i]}`,
-    i === parts.length - 1 ? root.identity : null, port, handles, i === parts.length - 1);
-  return handle;
-}
-
 async function openGroups(profile, root, port, handles) {
   const cache = new Map([["", root]]);
   const groups = {};
@@ -226,7 +185,7 @@ async function openGroups(profile, root, port, handles) {
       path += "/" + part.name;
       let handle = cache.get(path);
       if (!handle) {
-        handle = await openDirectory(`${fdPath(parent)}/${part.name}`, part.identity, port, handles, true);
+        handle = await openNativeDirectory(`${fdPath(parent)}/${part.name}`, part.identity, port, handles, CGROUP2_MAGIC);
         cache.set(path, handle);
       } else nativeIdentity(await handle.stat({ bigint: true }), part.identity, true);
       parent = handle;

@@ -74,6 +74,10 @@ Use [Experimental acquisition container activation](provenance-acquisition-activ
 for one separately owned Start under existing permission, with unknown native
 effect and physical placement left to an independently admitted observer.
 
+Use [Experimental Linux acquisition placement](provenance-acquisition-placement.md)
+for retained native process/group identities under the specific prepared
+cgroupfs recipe, conditional local permission and explicit qualification limits.
+
 Use [Experimental acquisition program launcher](provenance-acquisition-launch.md)
 for the canonical program/profile binding, bounded separate control channel and
 single nonprivileged attempt over independently prepared endpoints.
@@ -87,8 +91,8 @@ for nine-file admission, original control persistence and FIFO/Exec coordination
 under borrowed permission, with startup and global acquisition kept by the caller.
 
 Use [Experimental local acquisition attempt](provenance-acquisition-attempt.md)
-for startup/capture ordering and their conservative local join, retaining
-original results without physical observation, custody or release admission.
+for original or activated startup/capture ordering and their conservative local
+join, retaining original observations without custody or release admission.
 
 Use [Python tensor creation, metadata, addition and observation](python-tensors.md) for the
 bounded Python call forms, metadata objects, errors and ownership obligations.

@@ -15,8 +15,10 @@ that case cannot simply be assumed to meet this premise. A separate Start
 phase preserves that initial check: an admitted composition arms controls,
 activates the prepared stopped container, independently observes its placement,
 then permits [Exec](provenance-acquisition-exec.md). HTTP success alone never
-grants that next permission. The existing acquisition coordinator does not
-compose this activation entry or supply its physical observer.
+grants that next permission. The explicit
+[activated attempt](provenance-acquisition-attempt.md#activated-composition)
+composes this entry with the conditional Linux placement owner; it does not
+qualify a native laboratory from a successful HTTP exchange.
 
 Keeping init outside the case and directing Exec to a configured destination
 is a different conditional alternative: it requires demonstrating the effective
@@ -41,6 +43,10 @@ binds each callback to its original receiver. Later input/method replacement
 cannot redirect the attempt. Accessors, symbols, extra fields and exotic input
 prototypes reject. The optional Node request factory is a trusted test seam,
 not an operational plugin. There is no independent clock port.
+
+The passive immutable `binding` getter supplies the same copied
+`{context,containerId,preparedContainerSha256,socket}` identity for composition.
+It observes no clock, input or transport and does not grant permission.
 
 Input has exactly six fields:
 
