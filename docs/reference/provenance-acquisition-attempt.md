@@ -2,8 +2,10 @@
 
 This retained internal caller composes [three-control startup](provenance-acquisition-startup.md)
 with [separated program capture](provenance-acquisition-capture-attempt.md).
-It owns their local execution and join, without another parser, writer,
-supervisor, client or container. Construction/import performs no I/O. It is
+It owns their local execution and join. An explicit activated entry additionally
+composes the existing Start and conditional Linux placement owners through that
+same lifecycle, without another parser, writer, supervisor or container creation.
+Construction/import performs no I/O. It is
 outside the browser package and changes no tensor or release behavior.
 
 ## Entry and ownership
@@ -64,6 +66,47 @@ remain retained. Later completions update fresh observations without changing
 previous snapshots or restoring failed/expired success. A resolved run/join
 does not prove physical shutdown or storage durability.
 
+## Activated composition
+
+`createActivatedAcquisitionAttempt({capture,activation,placement},ports)` uses
+the same startup/capture ports, with an optional trusted `placementIo` syscall
+port for finite tests. The three closed inputs retain their own owners. Copied
+operation/context, container, socket, preparation-reference and launcher-profile
+bindings must match before effects. The existing unactivated entry and raw
+daemon Exec route remain separate.
+
+Open prepares capture and [placement](provenance-acquisition-placement.md).
+Pre-control placement reads borrow the same caller's clock-only observation;
+they cannot grant startup permission. The order is startup ready/initially empty
+→ exact runtime child absent → acknowledged single
+[Start](provenance-acquisition-activation.md) → conditional init placement
+checked → capture/Exec. Neither204 nor a caller-supplied boolean grants Exec.
+Capture's borrowed gate also requires the placement owner's current conditional
+permission. The original bounds are not renewed between phases.
+
+During capture, polling admits at most one placement read. The already
+persisted R/S controls identify the launcher and program for concrete native
+correlation; no new per-spawn ACK or HTTP inspection sequence is inserted.
+Local completion requires both subject observations. A short-lived subject
+missed by observation leaves insufficient evidence. This path is a bounded
+laboratory composition with independently qualified premises, not general Docker
+support or a proof of continuous containment.
+
+Successful capture's final gate observation and subject checks precede normal
+finish, which revokes permission. Failure/stop revoke the owners promptly;
+cleanup does not wait to request the existing containment. The join includes
+activation transport and placement I/O alongside capture and controls, within
+the original local wait. Held/late reads, an acknowledged Start's unknown native
+effect and uncertain physical closure remain separate observations. No local
+result settles future native birth or permits reuse of an uncertain laboratory.
+
+Activated snapshots additionally contain `activation`, `placement`,
+`placementPending` and `auxiliaryClosePending`. Explicit `collectPlacement()`
+copies the currently retained original proc bytes; polling snapshots retain
+metadata/hashes and never recopy those payloads. The method is defined only for
+the activated entry and rejects on the unactivated entry. Collection does not
+authenticate, durably retain or authorize publishing those bytes.
+
 ## Results and limits
 
 Passive frozen snapshots expose `capture` and `controls` current observations,
@@ -81,8 +124,9 @@ All original component diagnostics remain in their own reports. Aggregate
 deadline, stop, capture, controls and cleanup failure without native messages.
 
 `otherInputSeparation`, `payloadOrigin`, `externalClosure`, `clockAdmission`
-and `releaseAdmission` remain `unqualified`. There is no added physical host
-observer, validation, readonly conversion, custody, TUF/client acquisition,
+and `releaseAdmission` remain `unqualified`. The original entry has no physical
+placement owner; the activated entry's conditional native reads are not native
+laboratory qualification. Neither entry adds validation, readonly conversion, custody, TUF/client acquisition,
 CI signing, publication or release admission.
 
 Finite tests exercise the actual startup/process/capture/FIFO/Exec owners with

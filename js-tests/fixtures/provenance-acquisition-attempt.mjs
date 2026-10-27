@@ -63,9 +63,9 @@ export async function attemptFixture(t, options = {}) {
     },
     snapshot() { return { mayStart: ready, finished, firstFailure }; },
   };
-  const create = () => f.create((input, ports) => {
+  const create = (factory = createAcquisitionAttempt) => f.create((input, ports) => {
     const { gate, ...capture } = ports;
-    return createAcquisitionAttempt(input, { startup, ...capture });
+    return factory(input, { startup, ...capture });
   });
   return { ...f, create, startup, state, events, get owner() { return f.owner; }, deny() { ready = false; } };
 }

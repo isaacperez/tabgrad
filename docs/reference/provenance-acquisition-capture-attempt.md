@@ -32,6 +32,11 @@ exactly these six fields:
 | `controlCapture` | `{root,destination}` with one identified 890-byte reserve |
 | `recordCapture` | `{root,destinations}` with header/progress/supervisor/watchdog, for readonly admission checks; their writers stay with the caller |
 
+The passive `binding` getter returns the same immutable copied
+`{operationId,containerId,launcherProfileSha256,socket}` identity. It samples no
+clock and performs no input reread, I/O or admission; composition can compare
+owners without exposing their mutable implementation state.
+
 Destination roots equal the gate's evidence root. Each destination is the
 existing `{name,identity:{dev,ino}}` ordinary-data shape. All nine names and
 identities are distinct; aliases with the known launch profile reject too.

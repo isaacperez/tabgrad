@@ -373,6 +373,11 @@ retained experiments to encoded interfaces and synthetic controls, separate
 from native environment/resource/containment qualification. They create no
 infrastructure and are not signing/publication or library entries.
 
+`scripts/provenance-acquisition-native-path.mjs` owns the retained directory,
+native identity and bounded pseudofile-transfer primitives shared by the host
+and placement I/O owners. It contains no actor, permission, HTTP or retirement
+policy and is not a standalone operational entry.
+
 `scripts/provenance-acquisition-startup.mjs` composes the process session and
 third guard without duplicating record policy or native path/identity ownership.
 Its `-protocol.mjs` owns the closed guard channel, while `-actor.mjs` and
@@ -407,7 +412,16 @@ Start profile and intent identity; `-activation.mjs` owns one Start under the
 original borrowed gate/clock. It shares HTTP lifetime with Exec, not response
 policy, startup or global closure. The [activation reference](reference/provenance-acquisition-activation.md)
 distinguishes protocol completion from unknown native effects and independently
-admitted physical placement; no coordinator or library entry depends on it.
+admitted physical placement. The activated attempt composes it; no library
+entry depends on it.
+
+`scripts/provenance-acquisition-placement-profile.mjs` owns the copied specific
+cgroupfs/proc expectation and parser domains. `-placement-io.mjs` owns retained
+native readings and handle lifetime; `-placement.mjs` derives conditional local
+permission and fixed init/launcher/program observations. The
+[placement reference](reference/provenance-acquisition-placement.md) separates
+this narrow laboratory contract from qualification, retirement and custody.
+It creates no infrastructure and adds no daemon inspection or library entry.
 
 `scripts/provenance-acquisition-launch-profile.mjs` owns the closed program and
 endpoint profile; `-launch-protocol.mjs` owns bounded ASCII control and state
@@ -426,10 +440,11 @@ The [capture-attempt reference](reference/provenance-acquisition-capture-attempt
 keeps preparation, permission, local closure and global acquisition distinct.
 
 `scripts/provenance-acquisition-attempt.mjs` is the concrete caller for startup
-and separated program capture. It reuses their owners, copied timing and
+and separated program capture, with a separate activated entry over Start and
+conditional placement. It reuses those owners, copied bindings/timing and
 existing bounds, preserving original results and local cleanup uncertainty.
 The [attempt reference](reference/provenance-acquisition-attempt.md) specifies
-that ordering/join without physical observation, record-truth upgrades, custody
+that ordering/join without native qualification, record-truth upgrades, custody
 or release admission; it remains experimental tooling outside distribution.
 
 ## Understand the files kept at the root
