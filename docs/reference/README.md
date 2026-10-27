@@ -78,6 +78,10 @@ Use [Experimental Linux acquisition placement](provenance-acquisition-placement.
 for retained native process/group identities under the specific prepared
 cgroupfs recipe, conditional local permission and explicit qualification limits.
 
+Use [Experimental Linux laboratory preparation](provenance-acquisition-lab.md)
+for the closed private-daemon recipe, exterior service ownership, known-prefix
+preservation and conservative retirement, separate from native qualification.
+
 Use [Experimental acquisition program launcher](provenance-acquisition-launch.md)
 for the canonical program/profile binding, bounded separate control channel and
 single nonprivileged attempt over independently prepared endpoints.
