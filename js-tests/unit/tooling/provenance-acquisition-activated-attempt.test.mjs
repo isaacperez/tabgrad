@@ -6,6 +6,7 @@ import { attemptFixture, preparedStartup, observedUtc } from "../../fixtures/pro
 import { until } from "../../fixtures/provenance-acquisition-capture-attempt.mjs";
 import { placementProfile, placementModel } from "../../fixtures/provenance-acquisition-placement.mjs";
 import { execId, jsonReply, inspectBody, upgradeReply } from "../../fixtures/provenance-acquisition-exec.mjs";
+import { labCaseOutcome } from "../../../scripts/provenance-acquisition-lab-case-result.mjs";
 
 function activatedReply(state, options, request, { argv }) {
   if (request.route.includes("/containers/") && request.route.endsWith("/start")) {
@@ -194,4 +195,18 @@ test("actual three-control startup retains conservative original endings on the 
   const w = decodeAcquisitionRecord("watchdog", end.controlsResult.process.parts.watchdog.bytes);
   assert.equal(s.validationState, "not_run"); assert.equal(s.caseClosureState, "unknown");
   assert.equal(w.caseEmptyState, "unknown"); assert.equal(w.lifecycleState, "unknown");
+});
+
+test("diagnostic metadata preserves identified execution before stop without restoring placement permission", async t => {
+  const f = await activatedFixture(t); const owner = f.create();
+  // Retain only R/S so the real flow waits while its concrete placement observation arrives.
+  f.streams.control = [Buffer.from(f.control.toString("utf8").split("\n").slice(0, 2).join("\n") + "\n")];
+  const run = owner.run({ observedUtc }); await until(() => owner.snapshot().placement.executionObserved);
+  owner.stop(); const state = await run;
+  assert.equal(state.placement.executionObserved, false); assert.equal(state.placement.firstFailure, "PLACEMENT_STOPPED");
+  assert.notEqual(state.placement.io.subjects.program.pid, state.placement.sources.S.childPid);
+  const outcome = labCaseOutcome("C", state);
+  assert(outcome.placementObservedBeforeStop); assert(!outcome.expected); assert.equal(outcome.firstFailure, "ACQ_ATTEMPT_STOPPED");
+  const changed = structuredClone(state); changed.placement.io.subjects.program.namespacePids = ["999", "999"];
+  assert(!labCaseOutcome("C", changed).placementObservedBeforeStop);
 });

@@ -35,6 +35,8 @@ class LabBootstrap {
     return this.snapshot();
   }
   close() { this.stop(); return this.#run ?? this.#input.close().then(() => this.snapshot()); }
+  /** Explicit private materialization evidence; it does not imply laboratory success or host admission. */
+  collectInput() { return this.#input.collect(); }
   snapshot() {
     const input = this.#input.snapshot(); const lab = this.#lab?.snapshot() ?? null;
     return freezeHostData({ finished: this.#finished, stopped: this.#stopped,

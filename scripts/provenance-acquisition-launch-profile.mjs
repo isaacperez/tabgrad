@@ -41,6 +41,15 @@ function strings(value) {
   return Object.freeze(result);
 }
 
+/** One owner for the launcher's exact numeric credential/set domain. */
+export function copyLaunchCredentials(value) {
+  fields(value, "uid gid groups"); check(uint32(value.uid) && uint32(value.gid));
+  const groups = strings(value.groups);
+  check(groups.includes(value.gid) && groups.every((g, i) => uint32(g)
+    && (i === 0 || BigInt(groups[i - 1]) < BigInt(g))));
+  return Object.freeze({ uid: value.uid, gid: value.gid, groups });
+}
+
 function identity(value) {
   fields(value, "dev ino");
   check(isAcquisitionUint(value.dev) && isAcquisitionUint(value.ino) && value.ino !== "0");
@@ -63,9 +72,7 @@ function copyData(value) {
   fields(l, "runtimePath runtimeSha256 entryPath entrySha256 uid gid groups");
   check(isAcquisitionHash(l.runtimeSha256) && isAcquisitionHash(l.entrySha256)
     && uint32(l.uid) && uint32(l.gid));
-  const groups = strings(l.groups);
-  check(groups.includes(l.gid) && groups.every((g, i) => uint32(g)
-    && (i === 0 || BigInt(groups[i - 1]) < BigInt(g))));
+  const { groups } = copyLaunchCredentials({ uid: l.uid, gid: l.gid, groups: l.groups });
   const launcher = Object.freeze({ runtimePath: launchPath(l.runtimePath), runtimeSha256: l.runtimeSha256,
     entryPath: launchPath(l.entryPath), entrySha256: l.entrySha256, uid: l.uid, gid: l.gid, groups });
   const p = value.program;

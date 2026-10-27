@@ -398,6 +398,26 @@ clock origin. `-input-entry.mjs` selects explicit observation or preparation;
 without renewing its allowance. Observation does not admit the presented host
 or verify tool hashes a second time.
 
+`scripts/provenance-acquisition-lab-diagnostic-profile.mjs` owns the closed
+diagnostic plan and `-diagnostic-program.mjs` its literal sources/oracles.
+`-container.mjs` owns the concrete stopped-container recipe and metadata checks;
+`-docker.mjs` owns its finite API requests and original responses. `-case-files.mjs`
+owns private case directories/assets/reservations, delegating only FIFO syscalls
+to the prepared `scripts/provenance_case_fifo.py`. `-case-profile.mjs` composes
+the existing codecs and profiles over those observed objects; `-case.mjs` owns
+one attempt and `-case-result.mjs` its separate oracles/joins/prefix projection.
+`-experiment-profile.mjs` binds three independent complete laboratory inputs;
+`-experiment.mjs` owns their exterior sequence, total cutoff and private report,
+and `-experiment-entry.mjs` is its explicit separately authorized command. Their
+[reference](reference/provenance-acquisition-lab-cases.md) separates input
+preparation from producer-domain retirement, native qualification and custody.
+No library or active workflow entry imports them.
+
+`scripts/provenance-acquisition-json.mjs` owns duplicate-key-safe UTF8 metadata
+parsing for Exec and diagnostic preparation, preserving each caller's error
+family. The launch-profile owner also owns the shared exact credential domain;
+preparation does not duplicate either policy.
+
 `scripts/provenance-acquisition-startup.mjs` composes the process session and
 third guard without duplicating record policy or native path/identity ownership.
 Its `-protocol.mjs` owns the closed guard channel, while `-actor.mjs` and

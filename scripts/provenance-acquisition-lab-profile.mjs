@@ -11,7 +11,7 @@ export const LAB_ROOTS = Object.freeze(["cgroup", "proc", "scratch", "evidence",
 export const LAB_GROUPS = Object.freeze(["infra", "case", "supervisor", "watchdog", "guard"]);
 export const LAB_ERRORS = Object.freeze(["LAB_INPUT", "LAB_PLATFORM", "LAB_PROFILE", "LAB_IDENTITY", "LAB_TOOL",
   "LAB_MANAGER", "LAB_PROTOCOL", "LAB_WORKER", "LAB_READ", "LAB_WRITE", "LAB_LIMIT", "LAB_CLOCK", "LAB_DEADLINE",
-  "LAB_STOPPED", "LAB_BUSY", "LAB_CLEANUP", "LAB_PRESERVATION"]);
+  "LAB_STOPPED", "LAB_BUSY", "LAB_CLEANUP", "LAB_PRESERVATION", "LAB_DIAGNOSTIC"]);
 
 const check = value => requireAcquisition(value, "LAB_INPUT");
 const safe = value => Number.isSafeInteger(value) && value > 0;
@@ -46,6 +46,10 @@ function limits(c, l) {
 function toolContent(t) {
   return path(t.path) && path(t.realPath) && safe(t.bytes) && isAcquisitionHash(t.sha256);
 }
+function diagnosticReference(p) {
+  return !Object.hasOwn(p, "diagnostic") || fields(p.diagnostic, ["path", "sha256", "case"])
+    && path(p.diagnostic.path) && isAcquisitionHash(p.diagnostic.sha256) && ["A", "B", "C"].includes(p.diagnostic.case);
+}
 function routes(p) {
   const storage = [p.roots.scratch.path, p.roots.evidence.path, p.roots.tools.path];
   check(storage.every((a, i) => storage.every((b, j) => i === j || a !== b && !a.startsWith(b + "/"))));
@@ -59,7 +63,8 @@ function routes(p) {
 
 /** Expected paths/content and budgets only. Observed inodes/namespaces remain absent, never invented. */
 export function copyLabInputPlan(input) {
-  check(fields(input, ["context", "roots", "slice", "tools", "expected", "limits"])
+  const optional = Object.hasOwn(input ?? {}, "diagnostic") ? ["diagnostic"] : [];
+  check(fields(input, ["context", "roots", "slice", "tools", "expected", "limits", ...optional]) && diagnosticReference(input)
     && fields(input.context, ["operationId", "deadlineNs", "sourceRevision"]) && commonContext(input.context)
     && fields(input.roots, LAB_ROOTS) && Object.values(input.roots).every(r => fields(r, ["path"]) && path(r.path))
     && input.slice === "system.slice" && fields(input.tools, LAB_TOOLS)
@@ -72,7 +77,8 @@ export function copyLabInputPlan(input) {
 
 /** Closed preparation inputs. Valid data never admits tools, a host or privilege. */
 export function copyLabProfile(input) {
-  check(fields(input, ["context", "roots", "slice", "tools", "expected", "limits", "namespaces"])
+  const optional = Object.hasOwn(input ?? {}, "diagnostic") ? ["diagnostic"] : [];
+  check(fields(input, ["context", "roots", "slice", "tools", "expected", "limits", "namespaces", ...optional]) && diagnosticReference(input)
     && fields(input.context, ["operationId", "t0MonotonicNs", "deadlineNs", "sourceRevision"])
     && commonContext(input.context) && isAcquisitionUint(input.context.t0MonotonicNs)
     && fields(input.roots, LAB_ROOTS) && Object.values(input.roots).every(anchor)

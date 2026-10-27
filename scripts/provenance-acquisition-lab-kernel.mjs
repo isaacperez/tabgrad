@@ -152,6 +152,16 @@ export class LabKernel {
     for (const [name, handle] of this.#groups) { check(); const s = await handle.stat({ bigint: true }); check(); result[name] = identity(s); }
     return freezeHostData(result);
   }
+  async caseHierarchy() {
+    await this.group("work");
+    for (const role of ["case", "supervisor", "watchdog", "guard"]) await this.group(role);
+    const ids = await this.identities();
+    const prefix = [{ name: this.#p.slice.name, identity: this.#p.slice.identity },
+      { name: this.#f.unit, identity: ids.unit }, { name: "work", identity: ids.work }];
+    return freezeHostData({ casePath: `${this.#f.group}/work/case`,
+      groups: Object.fromEntries(["case", "supervisor", "watchdog", "guard"].map(role =>
+        [role, [...prefix, { name: role, identity: ids[role] }]])) });
+  }
   snapshot() {
     return freezeHostData({ opened: !!this.#root, unitOpened: this.#groups.has("unit"), entry: this.#entry,
       effects: Object.fromEntries([...this.#effects].map(([k, v]) => [k, { state: v.state, error: v.error }])),
