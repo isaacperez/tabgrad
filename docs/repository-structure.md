@@ -374,9 +374,22 @@ from native environment/resource/containment qualification. They create no
 infrastructure and are not signing/publication or library entries.
 
 `scripts/provenance-acquisition-native-path.mjs` owns the retained directory,
-native identity and bounded pseudofile-transfer primitives shared by the host
-and placement I/O owners. It contains no actor, permission, HTTP or retirement
-policy and is not a standalone operational entry.
+native identity and bounded pseudofile-transfer primitives shared by the host,
+placement and laboratory I/O owners. `provenance-acquisition-process-observation.mjs`
+owns their shared proc/namespace byte observation; consumers own admission policy.
+Neither helper owns actor permission, HTTP or retirement policy or is a standalone
+operational entry.
+
+`scripts/provenance-acquisition-lab.mjs` owns the experimental exterior preparation
+lifecycle and original cutoffs; `-profile.mjs` owns inputs/recipes, `-manager.mjs`
+typed systemd observations, `-daemon.mjs` configuration/API checks, `-kernel.mjs`
+native routes/targets, `-files.mjs` originals/tool readback and `-command.mjs`
+bounded direct children. `-io.mjs` composes exterior/keeper/worker native effects;
+`-entry.mjs` is the explicit separately authorized native command. The prepared
+Python helper `scripts/provenance-containerd-config.py` parses TOML without new
+dependencies. Their [reference](reference/provenance-acquisition-lab.md) separates
+finite local tests from privileged setup/qualification. No browser/package entry
+or automatic workflow imports them.
 
 `scripts/provenance-acquisition-startup.mjs` composes the process session and
 third guard without duplicating record policy or native path/identity ownership.

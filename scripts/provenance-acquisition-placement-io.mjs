@@ -1,13 +1,13 @@
 import { constants } from "node:fs";
 import { open, statfs } from "node:fs/promises";
-import { AcquisitionRecordError, acquisitionSha256, isAcquisitionUint, requireAcquisition } from "./provenance-acquisition-record.mjs";
+import { AcquisitionRecordError, isAcquisitionUint, requireAcquisition } from "./provenance-acquisition-record.mjs";
 import { freezeHostData } from "./provenance-acquisition-host-profile.mjs";
-import { nativeFdPath as fdPath, nativeIdentity, nativeKey, openNativeDirectory, openNativeRoot,
+import { nativeFdPath as fdPath, nativeKey, openNativeDirectory, openNativeRoot, openNativeFile,
   readNativeBytes, readNativeAscii, CGROUP2_MAGIC, PROC_MAGIC } from "./provenance-acquisition-native-path.mjs";
-import { parsePlacementPids, parsePlacementStat, parsePlacementStatus, PLACEMENT_ERRORS } from "./provenance-acquisition-placement-profile.mjs";
+import { parsePlacementPids, PLACEMENT_ERRORS } from "./provenance-acquisition-placement-profile.mjs";
+import { readAcquisitionProcess } from "./provenance-acquisition-process-observation.mjs";
 
 const nativePort = Object.freeze({ open, statfs, constants, platform: process.platform, pid: process.pid });
-const NSFS_MAGIC = 0x6e736673n;
 const names = ["pid", "cgroup", "time"];
 const check = value => requireAcquisition(value, "PLACEMENT_IDENTITY");
 const identity = stat => Object.freeze({ dev: stat.dev.toString(), ino: stat.ino.toString() });
@@ -54,27 +54,7 @@ class PlacementIO {
   }
 
   async #file(parent, name, handles, filesystem) {
-    this.#checkpoint();
-    const h = await this.#port.open(`${fdPath(parent)}/${name}`, this.#port.constants.O_RDONLY | this.#port.constants.O_NOFOLLOW);
-    handles.push(h); this.#checkpoint();
-    const stat = await this.#checked(() => h.stat({ bigint: true })); nativeIdentity(stat, null, false);
-    check(stat.dev === (await this.#checked(() => parent.stat({ bigint: true }))).dev);
-    if (filesystem !== null) check((await this.#checked(() => this.#port.statfs(fdPath(h), { bigint: true }))).type === filesystem);
-    return h;
-  }
-
-  async #namespaces(proc, handles) {
-    const result = {};
-    for (const name of names) {
-      this.#checkpoint();
-      // Deliberately follow only these fixed kernel namespace magic links.
-      const h = await this.#port.open(`${fdPath(proc)}/ns/${name}`, this.#port.constants.O_RDONLY);
-      handles.push(h); this.#checkpoint();
-      const stat = await this.#checked(() => h.stat({ bigint: true })); nativeIdentity(stat, null, false);
-      check((await this.#checked(() => this.#port.statfs(fdPath(h), { bigint: true }))).type === NSFS_MAGIC);
-      result[name] = identity(stat);
-    }
-    return Object.freeze(result);
+    return openNativeFile(parent, name, this.#port, handles, filesystem, this.#checkpoint);
   }
 
   open() {
@@ -149,30 +129,8 @@ class PlacementIO {
   }
 
   async #readProcess(pid) {
-    const handles = [];
-    try {
-      const dir = await openNativeDirectory(`${fdPath(this.#proc)}/${pid}`, null, this.#port, handles, PROC_MAGIC, this.#checkpoint);
-      const stat = await this.#file(dir, "stat", handles, PROC_MAGIC);
-      const status = await this.#file(dir, "status", handles, PROC_MAGIC);
-      const cgroup = await this.#file(dir, "cgroup", handles, PROC_MAGIC);
-      const beforeBytes = await readNativeBytes(stat, this.#p.limits.procBytes, this.#checkpoint);
-      const before = parsePlacementStat(beforeBytes);
-      const statusBytes = await readNativeBytes(status, this.#p.limits.procBytes, this.#checkpoint);
-      const decoded = parsePlacementStatus(statusBytes);
-      const cgroupBytes = await readNativeBytes(cgroup, this.#p.limits.procBytes, this.#checkpoint);
-      const namespaces = await this.#namespaces(dir, handles);
-      const afterBytes = await readNativeBytes(stat, this.#p.limits.procBytes, this.#checkpoint);
-      const after = parsePlacementStat(afterBytes);
-      check(before.pid === pid && decoded.pid === pid && before.pid === after.pid
-        && before.ppid === after.ppid && before.starttime === after.starttime
-        && !["Z", "X", "x"].includes(after.state));
-      const membership = cgroupBytes.toString("latin1");
-      check(cgroupBytes.every(b => b === 10 || b >= 32 && b <= 126) && /^0::\/[^\n]*\n$/.test(membership));
-      const originals = { statBefore: beforeBytes, status: statusBytes, cgroup: cgroupBytes, statAfter: afterBytes };
-      return { handles, dir, originals, data: freezeHostData({ ...after, ...decoded, namespaces,
-        procIdentity: identity(await this.#checked(() => dir.stat({ bigint: true }))), membership: membership.slice(3, -1),
-        sources: Object.fromEntries(Object.entries(originals).map(([k, v]) => [k, { bytes: v.length, sha256: acquisitionSha256(v) }])) }) };
-    } catch (error) { await this.#releaseFailed(handles); throw error; }
+    return readAcquisitionProcess(this.#proc, pid, this.#port, this.#p.limits, this.#checkpoint,
+      handles => this.#releaseFailed(handles));
   }
 
   #checkSubject(data, internalPid, parent) {

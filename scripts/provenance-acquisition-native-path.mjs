@@ -1,9 +1,10 @@
 import { requireAcquisition } from "./provenance-acquisition-record.mjs";
 
-// Internal retained-handle primitives shared by the two Linux observers.
+// Internal retained-handle primitives shared by the Linux observers.
 // Callers own profile validation, encoding, policy and the complete handle set.
 export const CGROUP2_MAGIC = 0x63677270n;
 export const PROC_MAGIC = 0x9fa0n;
+export const NSFS_MAGIC = 0x6e736673n;
 export const nativeKey = stat => `${stat.dev}:${stat.ino}`;
 const noCheckpoint = () => {};
 
@@ -61,4 +62,33 @@ export async function openNativeRoot(root, port, handles, filesystem = CGROUP2_M
   for (let i = 0; i < parts.length; i += 1) handle = await openNativeDirectory(`${nativeFdPath(handle)}/${parts[i]}`,
     i === parts.length - 1 ? root.identity : null, port, handles, i === parts.length - 1 ? filesystem : null, checkpoint);
   return handle;
+}
+
+/** Fixed pseudofile below an already retained directory; adopt before post-await checks. */
+export async function openNativeFile(parent, name, port, handles, filesystem, checkpoint = noCheckpoint) {
+  checkpoint();
+  const handle = await port.open(`${nativeFdPath(parent)}/${name}`, port.constants.O_RDONLY | port.constants.O_NOFOLLOW);
+  handles.push(handle); checkpoint();
+  checkpoint(); const stat = await handle.stat({ bigint: true }); checkpoint(); nativeIdentity(stat, null, false);
+  checkpoint(); const parentStat = await parent.stat({ bigint: true }); checkpoint();
+  requireAcquisition(stat.dev === parentStat.dev, "HOST_IDENTITY");
+  if (filesystem !== null) {
+    checkpoint(); const fs = await port.statfs(nativeFdPath(handle), { bigint: true }); checkpoint();
+    requireAcquisition(fs.type === filesystem, "HOST_IDENTITY");
+  }
+  return handle;
+}
+
+/** Follow only these fixed kernel namespace magic links, checking their actual nsfs identities. */
+export async function readNativeNamespaces(proc, port, handles, checkpoint = noCheckpoint) {
+  const result = {};
+  for (const name of ["pid", "cgroup", "time"]) {
+    checkpoint(); const handle = await port.open(`${nativeFdPath(proc)}/ns/${name}`, port.constants.O_RDONLY);
+    handles.push(handle); checkpoint();
+    checkpoint(); const stat = await handle.stat({ bigint: true }); checkpoint(); nativeIdentity(stat, null, false);
+    checkpoint(); const fs = await port.statfs(nativeFdPath(handle), { bigint: true }); checkpoint();
+    requireAcquisition(fs.type === NSFS_MAGIC, "HOST_IDENTITY");
+    result[name] = Object.freeze({ dev: stat.dev.toString(), ino: stat.ino.toString() });
+  }
+  return Object.freeze(result);
 }
