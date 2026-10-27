@@ -35,6 +35,19 @@ test("failed observation never selects the native laboratory factory", async () 
   } finally { await m.close(); }
 });
 
+test("reentrant stop during laboratory selection revokes the newly constructed owner before preparation", async () => {
+  const m = await inputModel(); let owner; let ports;
+  try {
+    owner = createLabBootstrap(m.plan, { inputIo: m.port, clock: () => 100n, labIo(p, checks) {
+      owner.stop(); ports = labNativePorts(p); return new NativeLabIO(p, checks, ports);
+    } });
+    const result = await owner.run(); assert.equal(result.firstFailure, "LAB_STOPPED");
+    assert(result.stopped); assert(!result.locallyComplete); assert(!result.lab.ready);
+    assert(!ports.calls.some(c => c[0] === "command" || c[0] === "effect"));
+    assert([...m.handles.values()].every(h => h.closed));
+  } finally { await m.close(); }
+});
+
 test("time spent observing inputs consumes preparation, instead of resetting the laboratory clock", async () => {
   const m = await inputModel(); let now = 100n; let ports;
   try {

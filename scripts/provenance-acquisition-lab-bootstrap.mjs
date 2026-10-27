@@ -23,6 +23,8 @@ class LabBootstrap {
         requireAcquisition(input.locallyComplete, input.firstFailure ?? input.cleanupError ?? "LAB_PROFILE");
         const { profile } = this.#input.collect();
         this.#lab = createAcquisitionLab(profile, { io: this.#io, clock: this.#clock });
+        // Selection can reenter stop() before assignment; transfer that revocation to the new owner.
+        if (this.#stopped) this.#lab.stop();
         await this.#lab.run();
       } catch (error) { this.#first ??= labFailureCode(error, "LAB_PROFILE"); }
       this.#finished = true; return this.snapshot();
