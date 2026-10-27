@@ -84,6 +84,55 @@ node scripts/provenance-acquisition-lab-entry.mjs prepare PROFILE_FILE EXPECTED_
 profile copy/hash. Native I/O needs exterior privileged cgroup control;
 delegation to the service does not grant that exterior capability.
 
+### Observing inputs without invented identities
+
+`createLabInputCandidate(plan,{io?,clock?})` accepts an earlier, closed input
+stage: the same expected paths, content hashes, versions and budgets, with no
+T0, namespace identities or device/inode placeholders. `context` contains only
+`operationId`, `deadlineNs` and `sourceRevision`; roots contain only `path`,
+tools omit `identity`, and `slice` is the literal `system.slice`. Other fields
+retain the profile domains above. It does not discover a tool or choose a
+resource allowance.
+
+Explicit `run()` samples one original monotonic T0, opens the presented roots
+through retained routes, observes the slice and its own proc/ns identities,
+and identifies the expected executable files. The presented proc view must
+have one observer PID level. That is a consistency check, not proof of the
+initial host view. Tool sizes/modes/identities are observed; their supplied
+content hashes remain **pending verification by laboratory open**. No tool
+bytes are hashed a second time merely to materialize this stage.
+
+The caller must supply already protected scratch/evidence roots and admitted
+tools/environment. Observation creates no directory, service, cgroup or
+reservation. It publishes exclusive private `input.proc.*` originals,
+`input-profile.json` and `input-report.json` below the existing evidence prefix.
+The canonical profile has its own 32KiB limit; proc/report capacity remains
+independent. The report binds the input-plan hash, observed process and profile
+record. `collect()` is explicit and copies profile bytes only after local work
+and handle cleanup succeed. Snapshots contain metadata and closed error codes.
+Failure preserves originals already published and reports unpreserved records;
+it never overwrites an earlier candidate. A late opening after revocation stays
+owned until its one close settles. A bounded cleanup wait reports pending or
+unknown rather than renewing permission.
+
+`createLabBootstrap(plan,{inputIo?,labIo?,clock?})` composes that stage with the
+existing laboratory prepare/retire owner. It selects laboratory I/O only after
+successful input observation and cleanup. Both stages retain the first T0:
+time spent observing consumes the original preparation allowance. No new
+clock origin or retry is introduced. `stop()` blocks the next stage and
+revokes a laboratory already started. The default native entries are explicit:
+
+```text
+node scripts/provenance-acquisition-lab-input-entry.mjs observe PLAN_FILE EXPECTED_PLAN_SHA256
+node scripts/provenance-acquisition-lab-input-entry.mjs prepare PLAN_FILE EXPECTED_PLAN_SHA256
+```
+
+`observe` writes only the input candidate; `prepare` additionally invokes the
+privileged prepare/retire recipe above. Neither runs acquisition cases. These
+commands require their respective operational authority; import, valid input
+or a local test provides none. `presentedViewAdmission`, `externalClosure`,
+`clockAdmission` and `releaseAdmission` remain `unqualified`.
+
 ## Manager and daemon recipe
 
 The custodian verifies roots/tool hashes, creates exclusive scratch/configuration
@@ -196,6 +245,8 @@ bounded streams and once-only handle close; `lab-files` owns exclusive originals
 tool identity and readback. `lab-kernel` owns retained native routes and three
 retirement targets. `lab-io` composes them for exterior/keeper/worker; `lab` owns
 exterior lifecycle/cutoffs, and `lab-entry` selects fixed explicit roles.
+`lab-input` observes expected inputs into an identified candidate;
+`lab-bootstrap` composes it with preparation without rebasing time.
 The existing path/process observer and payload writer remain shared; placement
 preserves its policy, ordering and error family.
 

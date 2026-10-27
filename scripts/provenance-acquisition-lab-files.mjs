@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { AcquisitionRecordError, acquisitionSha256, requireAcquisition } from "./provenance-acquisition-record.mjs";
 import { identityMatches, ownedRoot } from "./provenance-acquisition-file-io.mjs";
 import { readNativeBytes } from "./provenance-acquisition-native-path.mjs";
-import { copyLabProfile, LAB_PROFILE_BYTES, LAB_TOOLS, labPaths } from "./provenance-acquisition-lab-profile.mjs";
+import { copyLabProfile, copyLabInputPlan, LAB_PROFILE_BYTES, LAB_TOOLS, labPaths } from "./provenance-acquisition-lab-profile.mjs";
 import { LabHandles, labFailureCode } from "./provenance-acquisition-lab-command.mjs";
 
 /** Caller owns these protected originals after service stop; no data-tree deletion. */
@@ -129,17 +129,17 @@ export class LabFiles {
 }
 
 /** Explicit native entry profile reader, never discovery or an authority source. */
-export async function readLabProfile(path, expectedSha256) {
+async function readLabData(path, expectedSha256, parse) {
   const handles = new LabHandles(); let value; let failure;
   try {
-    const h = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW); handles.push(h);
+    const h = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK); handles.push(h);
     const s = await h.stat({ bigint: true });
     requireAcquisition(s.isFile() && s.nlink === 1n && s.size > 0n && s.size <= BigInt(LAB_PROFILE_BYTES), "LAB_PROFILE");
     const bytes = await readNativeBytes(h, LAB_PROFILE_BYTES);
     requireAcquisition(bytes.length === Number(s.size) && acquisitionSha256(bytes) === expectedSha256, "LAB_PROFILE");
     const text = bytes.toString("utf8"); const parsed = JSON.parse(text);
     requireAcquisition(Buffer.from(text).equals(bytes) && JSON.stringify(parsed) === text, "LAB_PROFILE");
-    value = copyLabProfile(parsed);
+    value = parse(parsed);
   } catch (error) { failure = error; }
   const closed = await handles.closeAll();
   if (failure || closed.retained) {
@@ -149,3 +149,8 @@ export async function readLabProfile(path, expectedSha256) {
   }
   return value;
 }
+
+export function readLabProfile(path, expectedSha256) { return readLabData(path, expectedSha256, copyLabProfile); }
+
+/** Expected preparation metadata only; reading it neither admits nor executes native effects. */
+export function readLabInputPlan(path, expectedSha256) { return readLabData(path, expectedSha256, copyLabInputPlan); }

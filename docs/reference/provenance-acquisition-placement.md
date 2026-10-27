@@ -51,13 +51,54 @@ operational plugin or physical evidence.
 | `launcherProfileSha256` | Lowercase64hex identity expected in the persisted launch controls |
 | `hierarchy` | `{root:{path,identity:{dev,ino}},case:[{name,identity},...]}`; canonical cgroup2 mount root, nonaliasing case chain of1..16 components using the existing host component domain |
 | `proc` | `{path,identity:{dev,ino}}` for the independently expected procfs mount |
-| `namespaces` | Exactly `pid`, `cgroup`, `time`, each `{dev,ino}`, identifying the observer's admitted views; subjects must share its time namespace |
+| `namespaces` | Exactly `pid`, `cgroup`, `time`, each `{dev,ino}`, identifying the observer's admitted views; subjects share its time namespace under the default policy |
+| `clockPolicy` | Optional literal `"monotonic_offsets"`; without this field the original strict namespace-identity policy applies |
 | `limits` | Exactly `procsBytes`, `procBytes`, `maxProcesses`: positive safe integers below Node's maximum Buffer length; byte limits include a separate one-byte overflow probe |
 
 Device/inode values are canonical decimal uint64 strings with nonzero inode.
 Paths are well-formed strings, exclude control characters, backslashes and noncanonical components and
 are at most4096 UTF8 bytes. Case names/chain bounds match the prepared host
 profile's domain; this is not arbitrary hierarchy discovery.
+
+### Conditional common monotonic domain
+
+The explicit `monotonic_offsets` policy permits different observer/init time
+namespaces only when retained native originals establish equal monotonic
+offsets. The observer and init each bind active `ns/time` and
+`ns/time_for_children` before and after reading `timens_offsets` from the same
+retained proc directory; both links must identify that subject's active
+namespace. PID, PPID, starttime and nondead state are checked again across that
+observation. Launcher and program still require init's time namespace.
+Missing files, changed associations or unequal offsets reject admission.
+
+For the admitted Node22.12/Linux implementation, `hrtime.bigint()` reads
+CLOCK_MONOTONIC without subtracting a process origin. On the same admitted
+kernel/boot, the counter is global monotonic time plus its namespace's
+monotonic offset. Equal exact offsets support a common counter domain even
+with different namespace inodes; neither zero offsets nor nearby timestamp
+samples are assumed. Linux freezes an entered namespace's offsets. Its proc
+offsets file reports **the namespace for children**, which explains the extra
+active/children association checks. The parser retains separate signed
+monotonic/boottime values using integer nanoseconds. Its 84-byte maximum follows
+the two kernel lines, each with a 10-character name field, signed64 seconds,
+9-digit nanoseconds, spaces and newline; an independent extra byte detects
+overflow. A failed read retains its known prefix and uncertainty.
+
+This is conditional on independently admitted implementations and stable
+trusted participants with no intervening namespace migration. Endpoint samples
+do not exclude ABA or prove continuity. Equal monotonic offsets do not establish
+equal boottime. Proc starttime uses the **reader's** boottime namespace; birth
+comparisons remain in the same stable exterior observer. No timer scheduling,
+precision, physical-deadline or native-qualification guarantee follows.
+
+The [source investigation](https://github.com/isaacperez/tabgrad/issues/314#issuecomment-6441667974)
+and [independent challenge](https://github.com/isaacperez/tabgrad/issues/314#issuecomment-6441671397)
+fix the examined source revisions. Retaining shared namespace identity was
+considered; the examined Docker API offers no host-TimeNS selector. Introducing
+a runtime wrapper would add a privileged tool/recipe boundary. The accepted
+conditional domain avoids that addition while retaining the explicit premises
+and conservative failures above. Reconsider it if implementation, clock source,
+kernel/boot relationship or namespace-migration trust changes.
 
 The closed gate is `{context,observe,check,revoke}` with exactly matching
 context. `observe()` checks the original owner's monotonic clock/cutoff before
@@ -98,7 +139,7 @@ parentheses. Zombie/dead observations reject. Starttime is in ticks since boot,
 not elapsed nanoseconds from the operation's T0. Subject membership must equal
 the exact prepared global leaf path. In this profile NSpid/NStgid contain the
 observer PID and one container PID; init's internal PID is1. A different
-namespace, disappeared candidate, ambiguity or overflow fails conservatively.
+required namespace, disappeared candidate, ambiguity or overflow fails conservatively.
 It never scans the host or searches again until a favorable identity appears.
 
 `observeExecution(observations)` consumes the capture owner's already persisted
@@ -125,7 +166,9 @@ I/O/cleanup state. `mayExec` means the local conditional init check currently
 permits the next phase; it is not a continuously observed lease.
 `executionObserved` requires both fixed launcher/program observations and no
 placement failure. Explicit `collect()` copies the retained original proc bytes;
-snapshots never recopy those payloads. Collection is neither durability nor an
+snapshots never recopy those payloads. In offset mode collection also includes
+the exterior clock observer and a rejected clock observation's partial originals;
+metadata identifies its role and known offset prefix. Collection is neither durability nor an
 authenticated receipt. Inspect originals under the publication policy before
 transmitting them.
 
