@@ -106,6 +106,32 @@ test("successful retirement reuses exactly one launcher collection and original 
   assert.equal(writes.length, 3); assert.equal(new Set(writes.map(c => c[1])).size, 3);
 });
 
+test("launcher and command preservation failures do not suppress other known failure originals", async () => {
+  for (const failed of [`${prefix}.stdout`, "command.failure.first.stdout"]) {
+    const p = labProfile(); let managerCalls = 0;
+    const ports = labNativePorts(p, ({ name, value }) => {
+      if (name === "systemdRun") value.result = Promise.resolve(terminal());
+      if (name === "busctl" && ++managerCalls === 2) value.result = Promise.resolve(terminal({ exitCode: 23 }));
+    });
+    const write = ports.retirementFiles.write;
+    ports.retirementFiles.write = async (label, bytes) => {
+      if (label === failed) throw new AcquisitionRecordError("LAB_WRITE");
+      return write(label, bytes);
+    };
+    const io = new NativeLabIO(p, checks, ports); await io.open(); await io.launch();
+    await assert.rejects(io.readiness(), { code: "LAB_TOOL" });
+    await assert.rejects(io.preserve({}), { code: "LAB_WRITE" });
+    assert(ports.originals.has(`${prefix}.result.json`)); assert(ports.originals.has(`${prefix}.stderr`));
+    if (failed.startsWith(prefix)) {
+      assert.equal(JSON.parse(ports.originals.get("command.failure.first.result.json")).exitCode, 23);
+      assert(ports.originals.has("command.failure.first.stdout")); assert(ports.originals.has("command.failure.first.stderr"));
+    } else assert(ports.originals.has(`${prefix}.stdout`));
+    for (const part of ["result.json", "stdout", "stderr"]) assert(ports.originals.has(`manager.failure.path.${part}`));
+    assert(!ports.originals.has(failed)); assert.equal(io.snapshot().preserved, false);
+    assert.equal(ports.calls.filter(c => c[0] === "effect").length, 0); await io.close();
+  }
+});
+
 test("an unavailable channel stays missing while the independent observed channel is retained", async () => {
   const p = labProfile(); const { ports } = earlyLauncher(p, terminal(), { stdout: Buffer.from("out"), stderr: Buffer.from("err") });
   const command = ports.command; let reads = 0;

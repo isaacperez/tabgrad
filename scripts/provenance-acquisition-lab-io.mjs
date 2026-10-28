@@ -94,22 +94,26 @@ export class NativeLabIO {
       await files.json(`${label}.${name}.result.json`, result.result);
     }
   }
+  async #saveKnownOriginals(publications) {
+    let failure;
+    for (const publish of publications) {
+      try { this.#retire(); await publish(); this.#retire(); }
+      catch (error) { failure ??= error; }
+    }
+    if (failure) throw failure;
+  }
   #saveWaiter(waiter = null) {
-    if (!this.#waiterPreservation) this.#waiterPreservation = (async () => {
-      let failure;
-      const save = async fn => {
-        try { this.#retire(); await fn(); this.#retire(); }
-        catch (error) { failure ??= error; }
-      };
+    if (!this.#waiterPreservation) {
       // The result and each channel are independent known originals. A failed
       // publication must not hide the others or be retried by later preservation.
-      await save(() => this.#retireFiles.json("manager.wait.waiter.result.json", waiter?.result ?? this.#waiterResult));
-      for (const role of ["stdout", "stderr"]) await save(async () => {
-        const bytes = waiter ? waiter[role] : await this.#waiter.collect(role);
-        this.#retire(); await this.#retireFiles.write(`manager.wait.waiter.${role}`, bytes);
-      });
-      if (failure) throw failure;
-    })();
+      this.#waiterPreservation = this.#saveKnownOriginals([
+        () => this.#retireFiles.json("manager.wait.waiter.result.json", waiter?.result ?? this.#waiterResult),
+        ...["stdout", "stderr"].map(role => async () => {
+          const bytes = waiter ? waiter[role] : await this.#waiter.collect(role);
+          this.#retire(); await this.#retireFiles.write(`manager.wait.waiter.${role}`, bytes);
+        }),
+      ]);
+    }
     return this.#waiterPreservation;
   }
   async #readDiagnostic(path) {
@@ -297,12 +301,14 @@ export class NativeLabIO {
   }); }
   preserve(value) { return this.#admit(async () => {
     requireAcquisition(this.#evidenceReady, "LAB_PRESERVATION");
-    if (this.#waiterResult) await this.#saveWaiter();
+    const publications = [];
+    if (this.#waiterResult) publications.push(() => this.#saveWaiter());
     if (this.#failedCommand) {
-      await this.#saveCommands("command.failure", { first: { result: await this.#failedCommand.result,
-        stdout: await this.#failedCommand.collect("stdout"), stderr: await this.#failedCommand.collect("stderr") } });
+      publications.push(async () => this.#saveCommands("command.failure", { first: { result: await this.#failedCommand.result,
+        stdout: await this.#failedCommand.collect("stdout"), stderr: await this.#failedCommand.collect("stderr") } }));
     }
-    if (this.#failedManager) await this.#saveCommands("manager.failure", this.#failedManager);
+    if (this.#failedManager) publications.push(() => this.#saveCommands("manager.failure", this.#failedManager));
+    await this.#saveKnownOriginals(publications);
     requireAcquisition((this.#files.snapshot().unpreservedRecords ?? []).length === 0
       && (this.#retireFiles.snapshot().unpreservedRecords ?? []).length === 0, "LAB_PRESERVATION");
     if (this.#waiter) {

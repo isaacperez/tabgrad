@@ -243,7 +243,8 @@ selects `manager.wait.waiter.result.json` and independent bounded `.stdout` and
 does not need a child close event. An observed empty channel is an empty original;
 an unavailable channel stays missing. Each publication is attempted once under
 the original retirement cutoff, retains its first error, and does not suppress
-the other known originals. Normal retirement reuses that same original set.
+the other known originals, including already observed command/manager failures.
+Normal retirement reuses that same original set.
 These records neither bind a unit nor settle incomplete capture or retirement;
 missing required child evidence still blocks complete preservation and collection.
 
