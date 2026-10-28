@@ -54,7 +54,7 @@ independently expected SHA256; it never discovers configuration.
 | `context` | `{operationId,t0MonotonicNs,deadlineNs,sourceRevision}`; lowercase32hex token, decimal uint64 times, positive millisecond-aligned duration at most2147483647ms, lowercase40hex source identity |
 | `roots` | Exactly `cgroup`, `proc`, `scratch`, `evidence`, `tools`, `pythonEnvironment`, each `{path,identity:{dev,ino}}`; expected distinct directories |
 | `slice` | `{name:"system.slice",identity:{dev,ino}}` below the complete cgroup root |
-| `tools` | Exactly `node`, `python`, `env`, `systemdRun`, `systemctl`, `busctl`, `dockerd`, `containerd`, `shim`, `runc`; each `{path,realPath,identity:{dev,ino},bytes,sha256}` |
+| `tools` | Exactly `node`, `python`, `env`, `systemdRun`, `systemctl`, `busctl`, `journalctl`, `dockerd`, `containerd`, `shim`, `runc`; each `{path,realPath,identity:{dev,ino},bytes,sha256}` |
 | `expected` | Exactly `node`, `python`, `dockerd`, `containerd`, `runc`, `systemd`; version expectations, with Python3.11.patch, Docker29.9.1 and systemd255 fixed to this recipe |
 | `namespaces` | Exactly `pid`, `cgroup`, `time`, each an independently expected `{dev,ino}` |
 | `limits` | Positive safe integer `prepareMs`, `retireMs`, `stopMs`, `pollMs`, `tasks`, `cpuPercent`, `observationBytes`; decimal safe uint64 `memoryBytes`, `swapBytes`, `storageBytes`, allowing zero only for swap |
@@ -277,10 +277,91 @@ daemon output, physical closure, custody or release readiness. First cause and
 cleanup failures remain separate closed codes, without native text or private
 paths in diagnostics. Inspect originals before publication.
 
+### Early startup diagnostics
+
+If the exterior launcher has exited and closed before readiness and preparation
+has failed, preservation requests one diagnostic collection. It does not run
+without a launch, while that launcher remains pending, or after verified
+readiness. The lifecycle has already attempted the authorized containment
+sequence before preservation; diagnostics cannot delay its initiation or grant
+a new target. Repeated preservation reuses the same collection, including its
+failure or pending result, without another query.
+
+`lab-startup.mjs` owns these unbound observations separately from the manager
+observations used for ownership. It requests `GetUnit` for the generated service,
+then `GetAll` Unit and Service using the returned typed object path. Unit `Id`
+must match before requesting Service. These three raw observations are not an
+atomic snapshot or a matching-properties/invocation proof. A missing unit or
+invalid reply stops that sequence without preventing the independent journal
+request. No diagnostic result updates ownership or weakens its checks.
+
+The identified `journalctl` receives exactly:
+
+```text
+--system --boot --unit=tabgrad-lab-OPERATION.service --no-pager --no-tail --output=json
+--output-fields=MESSAGE,PRIORITY,SYSLOG_IDENTIFIER,_PID,_SYSTEMD_UNIT,_SYSTEMD_INVOCATION_ID,UNIT,OBJECT_SYSTEMD_UNIT,COREDUMP_UNIT
+```
+
+`OPERATION` is the profile's lowercase32hex operation, never a pattern or caller
+query. The fixed current-boot/unit selection can include system-manager and
+coredump messages about that service. It is not the program's raw stdout/stderr
+or proof of their producer. JSON also includes the format's mandatory cursor,
+realtime/monotonic timestamps and boot ID. The reader's default long-field
+omission remains in effect; `null`, arrays or a byte-cut JSON prefix are retained
+as received, without interpreting them as complete program text. There is no
+follow, pager, broad fallback, other host, synchronization request or retry.
+An empty, inaccessible, truncated or late answer remains inconclusive.
+
+The four possible commands reuse the command/file owners, with labels
+`startup.path`, `.unit`, `.service`, `.journal`, bounded separate channel files,
+and each settled command's `.result.json`. `startup.json` records a settled
+collection's selection, statuses and command metadata. The returned
+`startupDiagnostics` snapshot also identifies known commands/prefixes when a
+query or publication remains pending. It contains no channel payload. A query
+not started at the original cutoff differs from an initiated operation whose
+result is unknown. Late completion cannot start further reads or publish past
+the original retirement gate. The caller retains responsibility for pending
+native resources and physical host closure.
+
+Known launcher/failure originals are saved independently of this collection;
+failed or pending diagnostics cannot suppress them or replace the first
+preparation cause. A failed diagnostic command still retains available capture
+and terminal metadata; a failed publication remains unpreserved. No incomplete
+collection becomes readiness or successful retirement. The maximum additional
+logical reservation is thirteen observation capacities: two channels plus one
+result record for each of four commands, and one collection record. The caller
+must include that maximum within the already admitted aggregate storage,
+alongside other originals; a per-channel bound alone does not admit that total
+or reserve physical space. No extra storage or time allowance is created.
+
+The reader is an external systemd255 tool, independently admitted and identified
+like the other executables; this module does not discover, install or upgrade
+it. Its [upstream source](https://github.com/systemd/systemd/blob/v255/src/journal/journalctl.c)
+is LGPL-2.1-or-later. Tabgrad invokes the supplied executable and redistributes
+no systemd source or binary. The laboratory maintainer owns its identity,
+compatible invocation and security-updated host admission. The
+[systemd255 journal contract](https://www.freedesktop.org/software/systemd/man/255/journalctl.html)
+defines selection/encoding; actual availability, effective access and usefulness
+need native evidence rather than finite controls. Message contents can include
+private process/path context and remain in the admitted private custody; only
+inspected safe derivatives may be published.
+
+The [accepted diagnostic method](https://github.com/isaacperez/tabgrad/issues/314#issuecomment-6474885574)
+keeps the service's existing descriptors. Direct `--pipe` forwarding would share
+writers with the launcher and require separate pending-prefix/cancellation
+qualification. Service-directed files have their own extent/identity/cutoff
+obligations; launcher verbosity or manager status alone need not contain the
+program's error. The targeted reader avoids that descriptor coupling at the
+cost of an admitted tool and private data source. This choice does not promise
+the earliest error, a native fix, complete diagnostics or producer authentication.
+Reconsider it if the identified reader cannot provide useful bounded observations
+under these constraints; do not silently switch capture methods.
+
 ## Organization and controls
 
 `lab-profile` owns inputs/recipes, `lab-manager` typed D-Bus projection, and
-`lab-daemon` the specific configuration/API checks. `lab-command` owns children,
+`lab-daemon` the specific configuration/API checks. `lab-startup` owns unbound
+early-failure observations through the shared command/file owners. `lab-command` owns children,
 bounded streams and once-only handle close; `lab-files` owns exclusive originals,
 tool identity and readback. `lab-kernel` owns retained native routes and three
 retirement targets. `lab-io` composes them for exterior/keeper/worker; `lab` owns

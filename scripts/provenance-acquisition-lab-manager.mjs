@@ -36,6 +36,11 @@ function property(p, key, type) {
   return v.data;
 }
 
+/** Diagnostic selection only: no invocation, property agreement or ownership proof. */
+export function checkLabUnitName(bytes, expectedName) {
+  check(property(properties(bytes), "Id", "s") === expectedName);
+}
+
 export function parseLabUnit(bytes, expectedName) {
   const p = properties(bytes);
   const id = property(p, "Id", "s"); check(id === expectedName);

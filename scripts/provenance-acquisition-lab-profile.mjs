@@ -6,7 +6,7 @@ import { acquisitionFields as fields, isAcquisitionHash, isAcquisitionToken, isA
 import { freezeHostData } from "./provenance-acquisition-host-profile.mjs";
 
 export const LAB_PROFILE_BYTES = 32 * 1024;
-export const LAB_TOOLS = Object.freeze(["node", "python", "env", "systemdRun", "systemctl", "busctl", "dockerd", "containerd", "shim", "runc"]);
+export const LAB_TOOLS = Object.freeze(["node", "python", "env", "systemdRun", "systemctl", "busctl", "journalctl", "dockerd", "containerd", "shim", "runc"]);
 export const LAB_ROOTS = Object.freeze(["cgroup", "proc", "scratch", "evidence", "tools", "pythonEnvironment"]);
 export const LAB_GROUPS = Object.freeze(["infra", "case", "supervisor", "watchdog", "guard"]);
 export const LAB_ERRORS = Object.freeze(["LAB_INPUT", "LAB_PLATFORM", "LAB_PROFILE", "LAB_IDENTITY", "LAB_TOOL",

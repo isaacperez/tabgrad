@@ -385,6 +385,8 @@ lifecycle and original cutoffs; `-profile.mjs` owns inputs/recipes, `-manager.mj
 typed systemd observations, `-daemon.mjs` configuration/API checks, `-kernel.mjs`
 native routes/targets, `-files.mjs` originals/tool readback and `-command.mjs`
 bounded direct children. `-io.mjs` composes exterior/keeper/worker native effects;
+`-startup.mjs` owns one unbound early-failure manager/journal collection through
+those command/file owners, separately from destructive unit-ownership checks;
 `-entry.mjs` is the explicit separately authorized native command. The prepared
 Python helper `scripts/provenance-containerd-config.py` parses TOML without new
 dependencies. Their [reference](reference/provenance-acquisition-lab.md) separates

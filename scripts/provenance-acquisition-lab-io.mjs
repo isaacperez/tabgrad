@@ -16,6 +16,7 @@ import { AcquisitionHttpTransaction } from "./provenance-acquisition-http-transa
 import { readNativeBytes } from "./provenance-acquisition-native-path.mjs";
 import { LabDiagnosticCase } from "./provenance-acquisition-lab-case.mjs";
 import { ACQUISITION_PAYLOAD_LIMITS } from "./provenance-acquisition-payload.mjs";
+import { LabStartupDiagnostics } from "./provenance-acquisition-lab-startup.mjs";
 
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 const json = bytes => {
@@ -41,6 +42,7 @@ export class NativeLabIO {
   #preservationFailed = false;
   #diagnosticPlan = null; #diagnosticCase = null; #diagnosticResult = null; #readyRecord = null; #diagnosticInputHandles = null;
   #readyHash = null; #diagnosticResultHash = null;
+  #startup;
   constructor(p, checks, ports = {}) {
     this.#p = p; this.#f = labPaths(p); this.#checks = checks;
     const gate = { work: () => this.#work(), retire: () => this.#retire() };
@@ -53,6 +55,8 @@ export class NativeLabIO {
       realpath: ports.filesystem?.realpath?.bind(ports.filesystem) ?? realpath });
     this.#request = ports.request ?? request; this.#pid = ports.pid ?? process.pid;
     this.#profileHash = acquisitionSha256(Buffer.from(JSON.stringify(p)));
+    this.#startup = new LabStartupDiagnostics(p, { command: this.#command.bind(this),
+      files: this.#retireFiles, check: this.#retire });
   }
   #work = () => { requireAcquisition(!this.#revoked && !this.#halted, "LAB_STOPPED"); return this.#checks.work(); };
   #retire = () => { requireAcquisition(!this.#halted, "LAB_STOPPED"); return this.#checks.retire(); };
@@ -308,7 +312,12 @@ export class NativeLabIO {
         stdout: await this.#failedCommand.collect("stdout"), stderr: await this.#failedCommand.collect("stderr") } }));
     }
     if (this.#failedManager) publications.push(() => this.#saveCommands("manager.failure", this.#failedManager));
-    await this.#saveKnownOriginals(publications);
+    const savings = [this.#saveKnownOriginals(publications)];
+    if (value?.ready === false && value.firstFailure && this.#waiterResult?.closed
+      && this.#waiterResult.exited && !this.#workEntryObserved) savings.push(this.#startup.observe());
+    const outcomes = await Promise.allSettled(savings);
+    for (const result of outcomes) if (result.status === "rejected") throw result.reason;
+    await this.#verifyCaptures(this.#startup.snapshot().commands);
     requireAcquisition((this.#files.snapshot().unpreservedRecords ?? []).length === 0
       && (this.#retireFiles.snapshot().unpreservedRecords ?? []).length === 0, "LAB_PRESERVATION");
     if (this.#waiter) {
@@ -358,6 +367,7 @@ export class NativeLabIO {
   }
   snapshot() { return freezeHostData({ launched: !!this.#waiter, bound: !!this.#binding, boundarySaved: !!this.#boundary,
     launcher: this.#waiter ? { settled: this.#waiterResult !== null, command: this.#waiterResult ?? this.#waiter.snapshot() } : null,
+    startupDiagnostics: this.#startup.snapshot(),
     workEntryObserved: this.#workEntryObserved,
     preserved: this.#preserved, registrationCollected: this.#collected, manager: this.#manager,
     pendingOperations: this.#pending.size, activeCommands: this.#commands.size, kernel: this.#kernel.snapshot(),
