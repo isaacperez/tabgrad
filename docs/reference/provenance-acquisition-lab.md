@@ -236,6 +236,14 @@ owns short-write progress, submitted/confirmed counts and incremental hashes.
 Preallocated length or a zero-filled tail cannot reveal written extent.
 Snapshots contain metadata rather than payload copies.
 
+Process originals use the process-role prefix and a lowercase reader-key suffix:
+`statBefore` becomes `statbefore`, `statAfter` becomes `statafter`, while `status`
+and `cgroup` keep their names. Their bytes and publication order are unchanged.
+The process JSON retains the shared reader's original `sources` keys and their
+byte counts/hashes; lowercasing a key locates its corresponding raw file.
+If a later publication fails, earlier originals remain and the process JSON is
+not published as though the complete set had been saved.
+
 Completed worker commands publish result/capture metadata. The ready or partial
 ending identifies worker originals and known command prefixes; the keeper
 identifies the initial worker-launch prefix separately. The exterior verifies
