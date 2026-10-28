@@ -137,7 +137,7 @@ export class NativeLabIO {
     if (failure) throw failure; return bytes;
   }
   async #saveProcess(label, record, files = this.#files) {
-    for (const [key, bytes] of Object.entries(record.originals)) await files.write(`${label}.${key}`, bytes);
+    for (const [key, bytes] of Object.entries(record.originals)) await files.write(`${label}.${key.toLowerCase()}`, bytes);
     await files.json(`${label}.json`, record.data);
   }
   open() { return this.#admit(async () => {
