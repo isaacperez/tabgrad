@@ -10,7 +10,7 @@ const id = (dev, ino) => ({ dev: String(dev), ino: String(ino) });
 
 /** Synthetic admitted inputs only; these paths identify no actual host or deployment. */
 export function labProfile() {
-  const names = ["node", "python", "env", "systemdRun", "systemctl", "busctl", "dockerd", "containerd", "shim", "runc"];
+  const names = ["node", "python", "env", "systemdRun", "systemctl", "busctl", "journalctl", "dockerd", "containerd", "shim", "runc"];
   return { context: { operationId: "1".repeat(32), t0MonotonicNs: "100", deadlineNs: "3000000000", sourceRevision: "a".repeat(40) },
     roots: Object.fromEntries([["cgroup", "/owned", id(1, 1)], ["proc", "/proc", id(2, 80)],
       ["scratch", "/scratch", id(4, 1)], ["evidence", "/evidence", id(4, 2)], ["tools", "/tools", id(4, 3)],
