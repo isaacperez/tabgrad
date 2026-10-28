@@ -236,6 +236,18 @@ owns short-write progress, submitted/confirmed counts and incremental hashes.
 Preallocated length or a zero-filled tail cannot reveal written extent.
 Snapshots contain metadata rather than payload copies.
 
+The exterior launcher retains its settled terminal/capture metadata in the
+`launcher` snapshot even if keeper/readiness evidence never appears. Preservation
+selects `manager.wait.waiter.result.json` and independent bounded `.stdout` and
+`.stderr` originals before requiring child evidence. A settled spawn failure
+does not need a child close event. An observed empty channel is an empty original;
+an unavailable channel stays missing. Each publication is attempted once under
+the original retirement cutoff, retains its first error, and does not suppress
+the other known originals, including already observed command/manager failures.
+Normal retirement reuses that same original set.
+These records neither bind a unit nor settle incomplete capture or retirement;
+missing required child evidence still blocks complete preservation and collection.
+
 Process originals use the process-role prefix and a lowercase reader-key suffix:
 `statBefore` becomes `statbefore`, `statAfter` becomes `statafter`, while `status`
 and `cgroup` keep their names. Their bytes and publication order are unchanged.

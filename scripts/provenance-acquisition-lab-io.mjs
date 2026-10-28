@@ -28,6 +28,7 @@ const equal = (a, b) => a && b && a.dev === b.dev && a.ino === b.ino;
 export class NativeLabIO {
   #p; #f; #checks; #files; #retireFiles; #handles = new LabHandles(); #kernel;
   #commands = new Set(); #waiter = null; #daemon = null; #http = new Set(); #revoked = false; #halted = false;
+  #waiterResult = null; #waiterPreservation = null;
   #profileHash; #manager = null; #binding = null; #boundary = null; #collected = false; #preserved = false;
   #pending = new Set(); #close = null;
   #commandPort; #failedCommand = null; #failedManager = null;
@@ -92,6 +93,28 @@ export class NativeLabIO {
       await files.write(`${label}.${name}.stderr`, result.stderr);
       await files.json(`${label}.${name}.result.json`, result.result);
     }
+  }
+  async #saveKnownOriginals(publications) {
+    let failure;
+    for (const publish of publications) {
+      try { this.#retire(); await publish(); this.#retire(); }
+      catch (error) { failure ??= error; }
+    }
+    if (failure) throw failure;
+  }
+  #saveWaiter(waiter = null) {
+    if (!this.#waiterPreservation) {
+      // The result and each channel are independent known originals. A failed
+      // publication must not hide the others or be retried by later preservation.
+      this.#waiterPreservation = this.#saveKnownOriginals([
+        () => this.#retireFiles.json("manager.wait.waiter.result.json", waiter?.result ?? this.#waiterResult),
+        ...["stdout", "stderr"].map(role => async () => {
+          const bytes = waiter ? waiter[role] : await this.#waiter.collect(role);
+          this.#retire(); await this.#retireFiles.write(`manager.wait.waiter.${role}`, bytes);
+        }),
+      ]);
+    }
+    return this.#waiterPreservation;
   }
   async #readDiagnostic(path) {
     let plan;
@@ -158,6 +181,7 @@ export class NativeLabIO {
   launch() { return this.#admit(async () => {
     this.#work(); requireAcquisition(!this.#waiter, "LAB_BUSY");
     this.#waiter = await this.#command("systemdRun", labManagerArguments(this.#p, this.#profileHash), { retire: true });
+    void this.#waiter.result.then(result => { this.#waiterResult = result; });
     this.#work();
   }); }
   async owned() {
@@ -268,7 +292,7 @@ export class NativeLabIO {
     const waiter = await collectLabCommand(this.#waiter); this.#retire();
     const observation = await this.#managerObservation(); const m = observation.value;
     await this.#saveCommands("manager.retired", observation.originals);
-    await this.#saveCommands("manager.wait", { waiter }); this.#manager = m;
+    await this.#saveWaiter(waiter); this.#manager = m;
     // Boundary samples cannot silently settle an unobserved pre-case worker migration.
     requireAcquisition(this.#workEntryObserved, "LAB_CLEANUP");
     requireAcquisition(m.invocationId === this.#binding.invocationId && m.activeState === "failed" && m.job[0] === 0
@@ -277,11 +301,14 @@ export class NativeLabIO {
   }); }
   preserve(value) { return this.#admit(async () => {
     requireAcquisition(this.#evidenceReady, "LAB_PRESERVATION");
+    const publications = [];
+    if (this.#waiterResult) publications.push(() => this.#saveWaiter());
     if (this.#failedCommand) {
-      await this.#saveCommands("command.failure", { first: { result: await this.#failedCommand.result,
-        stdout: await this.#failedCommand.collect("stdout"), stderr: await this.#failedCommand.collect("stderr") } });
+      publications.push(async () => this.#saveCommands("command.failure", { first: { result: await this.#failedCommand.result,
+        stdout: await this.#failedCommand.collect("stdout"), stderr: await this.#failedCommand.collect("stderr") } }));
     }
-    if (this.#failedManager) await this.#saveCommands("manager.failure", this.#failedManager);
+    if (this.#failedManager) publications.push(() => this.#saveCommands("manager.failure", this.#failedManager));
+    await this.#saveKnownOriginals(publications);
     requireAcquisition((this.#files.snapshot().unpreservedRecords ?? []).length === 0
       && (this.#retireFiles.snapshot().unpreservedRecords ?? []).length === 0, "LAB_PRESERVATION");
     if (this.#waiter) {
@@ -330,6 +357,7 @@ export class NativeLabIO {
     })(); return this.#close;
   }
   snapshot() { return freezeHostData({ launched: !!this.#waiter, bound: !!this.#binding, boundarySaved: !!this.#boundary,
+    launcher: this.#waiter ? { settled: this.#waiterResult !== null, command: this.#waiterResult ?? this.#waiter.snapshot() } : null,
     workEntryObserved: this.#workEntryObserved,
     preserved: this.#preserved, registrationCollected: this.#collected, manager: this.#manager,
     pendingOperations: this.#pending.size, activeCommands: this.#commands.size, kernel: this.#kernel.snapshot(),
