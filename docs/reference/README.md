@@ -46,6 +46,9 @@ Use [Controlled release publication](release-publication.md) for the maintained
 manual workflow, role interfaces, public-clone maintainer procedure, first npm
 bootstrap and failure-preserving continuation.
 
+Use the [0.1.0 source and support record](release-0.1.0.md) for that version's
+API groups, numerical/API limits, environments and qualification boundaries.
+
 Use [Acquisition control record](provenance-acquisition-record.md) for the internal
 experimental JSONL profile, independent file reserves, confirmed prefixes and
 bounded local readback, separate from trust admission and producer proofs.
