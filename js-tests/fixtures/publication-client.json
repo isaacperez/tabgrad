@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "package": "@actions/core",
+  "version": "3.0.1",
+  "license": "MIT",
+  "files": [
+    {
+      "name": "core-3.0.1.tgz",
+      "url": "https://registry.npmjs.org/@actions/core/-/core-3.0.1.tgz",
+      "byteLength": 23250,
+      "sha256": "1c4f1ad94c257df998dec6cf26f0a86b834c16c942dffc7508e445ba7461e084",
+      "kind": "raw"
+    },
+    {
+      "name": "provenance-original.json",
+      "kind": "attestation-envelope",
+      "url": "https://registry.npmjs.org/-/npm/v1/attestations/@actions%2fcore@3.0.1",
+      "maxDownloadBytes": 4194304,
+      "predicateType": "https://slsa.dev/provenance/v1",
+      "byteLength": 10277,
+      "sha256": "e82ae802aaadbc8bdea69c45dc70d74a618419ddcf397c67f758c6ee981e1b87",
+      "baselineEnvelope": {
+        "byteLength": 13969,
+        "sha256": "36a2ed0ec997ba763d9bfa8a52a3ebde3098d5339971be973a6b5b826ea940ab"
+      }
+    }
+  ],
+  "derivedProofSha256": "e82ae802aaadbc8bdea69c45dc70d74a618419ddcf397c67f758c6ee981e1b87",
+  "derivation": "One complete SLSA-v1 bundle; canonical UTF-8 JSON key/layout encoding only. DSSE payload/signature strings, all bundle fields and array order unchanged."
+}

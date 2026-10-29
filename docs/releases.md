@@ -6,6 +6,8 @@ release, and an artifact uploaded from an unverified local tree is not a
 Tabgrad release.
 
 The release maintainer owns these rules and the public human procedure.
+The maintained [publication procedure](reference/release-publication.md) supplies
+the command/role details without replacing the authorization and trust rules here.
 Maintain a separate thin agent adaptation that guides contributors through
 these primary rules and actual documented tools; it must not create another
 policy or grant permission. Human contribution and public-clone use do not

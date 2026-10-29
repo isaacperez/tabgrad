@@ -75,6 +75,8 @@ workflow, not human contribution or public repository checks.
   its post-merge state.
 - Use `$tabgrad-maintenance` when auditing duplication, complexity, obsolete
   code, or other technical debt.
+- Use `$tabgrad-release` to coordinate a requested release under the public
+  release policy and maintained publication procedure.
 
 Use every skill that applies when a task crosses more than one of these
 activities.

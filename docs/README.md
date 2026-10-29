@@ -72,6 +72,7 @@ link to its primary source, but they must not create a competing version.
 | WebAssembly CPU kernel language, binary interface, modules, and memory ownership | [`architecture/webassembly-cpu-backend.md`](architecture/webassembly-cpu-backend.md) |
 | Browser distribution design, module identity, matched assets and packaging alternatives | [`architecture/browser-distribution.md`](architecture/browser-distribution.md) |
 | Browser package entries, offline installation and matched static payload | [`reference/browser-package.md`](reference/browser-package.md) |
+| Controlled publication commands, roles and human procedure | [`reference/release-publication.md`](reference/release-publication.md) |
 | CPU intermediate reuse decision, semantic retention and physical last-use boundary | [`architecture/cpu-intermediate-reuse.md`](architecture/cpu-intermediate-reuse.md) |
 | Persistent same-device updates, alias versions, derivative fidelity and effect ownership | [`architecture/cpu-tensor-updates.md`](architecture/cpu-tensor-updates.md) |
 | Gradient result equivalence, frontend exposure and additional causal obligations | [`architecture/functional-gradient-identity.md`](architecture/functional-gradient-identity.md) |

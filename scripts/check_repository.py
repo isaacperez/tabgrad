@@ -337,6 +337,7 @@ REQUIRED_SKILLS = {
     "tabgrad-implement",
     "tabgrad-issue",
     "tabgrad-maintenance",
+    "tabgrad-release",
     "tabgrad-merge",
     "tabgrad-pull-request",
     "tabgrad-research",
@@ -398,6 +399,18 @@ PROJECT_PROGRESS_PATTERNS = (
 MARKDOWN_LINK = re.compile(r"\[[^\]]+\]\((<[^>]+>|[^)\s]+)")
 FULL_COMMIT_ACTION = re.compile(r"^[^@\s]+@[0-9a-f]{40}$")
 PRODUCER_TRIAL_PATH = Path(".github/workflows/producer-trial.yml")
+PUBLICATION_PATH = Path(".github/workflows/release-publication.yml")
+EXPECTED_PUBLICATION_SHA256 = (
+    "cc0f10a1037f9e2abdc9c701b217d6f2560f606e3b78850995aa8d71077f04c8"
+)
+PUBLICATION_PERMISSIONS = {"contents": "read", "actions": "read", "issues": "read"}
+PUBLICATION_JOB_PERMISSIONS = {
+    **{
+        name: {**PUBLICATION_PERMISSIONS, "contents": "write"}
+        for name in ("admit", "observe", "complete")
+    },
+    "npm": {**PUBLICATION_PERMISSIONS, "id-token": "write"},
+}
 # Canonical parsed JSON, not YAML layout. Updating this requires complete review.
 EXPECTED_PRODUCER_TRIAL_SHA256 = (
     "9e43f39f1af0af055477194d6dc9de24253ebb4b37587a57ddbf62a4aabcc3c0"
@@ -405,6 +418,7 @@ EXPECTED_PRODUCER_TRIAL_SHA256 = (
 APPROVED_WORKFLOW_PATHS = {
     Path(".github/workflows/repository-checks.yml"),
     PRODUCER_TRIAL_PATH,
+    PUBLICATION_PATH,
 }
 CI_INSTALL_COMMAND = (
     "python -m venv .venv && .venv/bin/python -m pip install --only-binary=:all: --require-hashes "
@@ -437,6 +451,19 @@ CI_RUNTIME_SCOPE_REPORT = "node scripts/validation-scope.mjs --report runtime"
 CI_BROWSER_SCOPE_REPORT = "node scripts/validation-scope.mjs --report browser"
 CI_RUNTIME_CONDITION = "needs.repository-consistency.outputs.runtime == 'true'"
 CI_BROWSER_CONDITION = "needs.repository-consistency.outputs.browser == 'true'"
+CI_PUBLICATION_PREPARE_COMMAND = (
+    ".venv/bin/python scripts/prepare_publication_client.py "
+    '"$RUNNER_TEMP/tabgrad-publication-client"'
+)
+CI_PUBLICATION_FIXTURE_COMMAND = (
+    ".venv/bin/python scripts/prepare_publication_client.py --fixtures "
+    '"$RUNNER_TEMP/tabgrad-publication-fixtures"'
+)
+CI_PUBLICATION_QUALIFY_COMMAND = (
+    "node scripts/qualify-publication-client.mjs "
+    '"$RUNNER_TEMP/tabgrad-publication-client" "$TABGRAD_CLIENT_SHA256" '
+    '"$RUNNER_TEMP/tabgrad-publication-fixtures"'
+)
 REQUIRED_CI_COMMANDS = {
     CI_INSTALL_COMMAND,
     CI_FORMAT_COMMAND,
@@ -453,10 +480,14 @@ REQUIRED_CI_COMMANDS = {
     CI_BROWSER_TEST_COMMAND,
     CI_SCOPE_COMMAND,
     CI_SCOPE_TEST_COMMAND,
+    CI_PUBLICATION_PREPARE_COMMAND,
+    CI_PUBLICATION_FIXTURE_COMMAND,
+    CI_PUBLICATION_QUALIFY_COMMAND,
     CI_RUNTIME_SCOPE_REPORT,
     CI_BROWSER_SCOPE_REPORT,
 }
 REPEATABLE_CI_SETUP_COMMANDS = {
+    CI_INSTALL_COMMAND,
     CI_NPM_INSTALL_COMMAND,
     CI_NPM_TOOL_COMMAND,
 }
@@ -481,6 +512,27 @@ PRODUCER_TRIAL_COMMANDS = {
     '"$RUNNER_TEMP/tabgrad-producer-proofs" "$RUNNER_TEMP/tabgrad-producer-client" '
     '"$RUNNER_TEMP/tabgrad-producer-verification"',
 }
+PUBLICATION_COMMANDS = {
+    CI_INSTALL_COMMAND,
+    CI_NPM_INSTALL_COMMAND,
+    CI_NPM_TOOL_COMMAND,
+    CI_PUBLICATION_PREPARE_COMMAND,
+    ".venv/bin/python scripts/prepare_provenance_client.py "
+    '"$RUNNER_TEMP/tabgrad-provenance-client"',
+    *{
+        f"node scripts/release-publication.mjs {role} "
+        '"$RUNNER_TEMP/tabgrad-publication"'
+        for role in (
+            "precheck",
+            "admit",
+            "npm",
+            "bootstrap",
+            "observe",
+            "consume",
+            "complete",
+        )
+    },
+}
 CHECKOUT_ACTION = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
 SETUP_PYTHON_ACTION = "actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97"
 SETUP_NODE_ACTION = "actions/setup-node@820762786026740c76f36085b0efc47a31fe5020"
@@ -492,6 +544,57 @@ APPROVED_ACTIONS = {
     "actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333": "v8.0.2",
     "actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6": "v4.2.2",
 }
+EXPECTED_PUBLICATION_CLIENT_JOB = {
+    "name": "publication-client",
+    "needs": "repository-consistency",
+    "if": "needs.repository-consistency.outputs.runtime == 'true'",
+    "runs-on": "ubuntu-24.04",
+    "timeout-minutes": 10,
+    "steps": [
+        {
+            "name": "Check out the reviewed clients and fixture identities",
+            "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "with": {"persist-credentials": False},
+        },
+        {
+            "name": "Select the controller Node",
+            "uses": "actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+            "with": {"node-version-file": ".node-version", "check-latest": False},
+        },
+        {
+            "name": "Select Python",
+            "uses": "actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+            "with": {"python-version": "3.11.9", "check-latest": False},
+        },
+        {
+            "name": "Prepare locked Python tooling",
+            "run": "python -m venv .venv && .venv/bin/python -m pip install --only-binary=:all: "
+            "--require-hashes -r requirements-dev.lock",
+        },
+        {
+            "name": "Prepare the isolated actual publishing client",
+            "id": "client",
+            "run": ".venv/bin/python scripts/prepare_publication_client.py "
+            '"$RUNNER_TEMP/tabgrad-publication-client"',
+        },
+        {
+            "name": "Acquire identified genuine public fixture originals",
+            "run": ".venv/bin/python scripts/prepare_publication_client.py --fixtures "
+            '"$RUNNER_TEMP/tabgrad-publication-fixtures"',
+        },
+        {
+            "name": "Qualify actual clients with disposable registry endpoints",
+            "env": {
+                "TABGRAD_CLIENT_SHA256": "${{ steps.client.outputs.client_sha256 }}"
+            },
+            "run": "node scripts/qualify-publication-client.mjs "
+            '"$RUNNER_TEMP/tabgrad-publication-client" "$TABGRAD_CLIENT_SHA256" '
+            '"$RUNNER_TEMP/tabgrad-publication-fixtures"',
+        },
+    ],
+}
+
+
 EXPECTED_REPOSITORY_CHECKS_WORKFLOW = {
     "name": "Repository checks",
     "on": {
@@ -674,6 +777,7 @@ EXPECTED_REPOSITORY_CHECKS_WORKFLOW = {
                 },
             ],
         },
+        "publication-client": EXPECTED_PUBLICATION_CLIENT_JOB,
     },
 }
 
@@ -1092,16 +1196,22 @@ def check_workflow_security(state: YamlRepositoryState) -> list[Failure]:
             failures.append(Failure(relative, "must contain a YAML mapping"))
             continue
         is_producer_trial = relative == PRODUCER_TRIAL_PATH
+        is_publication = relative == PUBLICATION_PATH
         expected_permissions = {"contents": "read"}
-        if is_producer_trial:
-            expected_permissions["actions"] = "read"
+        if is_producer_trial or is_publication:
+            expected_permissions = (
+                PUBLICATION_PERMISSIONS
+                if is_publication
+                else {"contents": "read", "actions": "read"}
+            )
             try:
                 definition = json.dumps(
                     document, sort_keys=True, separators=(",", ":"), allow_nan=False
                 ).encode()
-                matches_definition = (
-                    hashlib.sha256(definition).hexdigest()
-                    == EXPECTED_PRODUCER_TRIAL_SHA256
+                matches_definition = hashlib.sha256(definition).hexdigest() == (
+                    EXPECTED_PUBLICATION_SHA256
+                    if is_publication
+                    else EXPECTED_PRODUCER_TRIAL_SHA256
                 )
             except (TypeError, ValueError):
                 matches_definition = False
@@ -1127,6 +1237,13 @@ def check_workflow_security(state: YamlRepositoryState) -> list[Failure]:
         if is_yaml_mapping(jobs):
             for job_name, job in jobs.items():
                 if is_yaml_mapping(job) and "permissions" in job:
+                    if (
+                        is_publication
+                        and isinstance(job_name, str)
+                        and job_name in PUBLICATION_JOB_PERMISSIONS
+                        and job["permissions"] == PUBLICATION_JOB_PERMISSIONS[job_name]
+                    ):
+                        continue
                     if (
                         is_producer_trial
                         and job_name == "sign"
@@ -1184,7 +1301,9 @@ def check_ci_workflow(
     failures.extend(command_failures)
     for workflow_path, command in all_run_commands:
         registered_commands = (
-            PRODUCER_TRIAL_COMMANDS
+            PUBLICATION_COMMANDS
+            if workflow_path == PUBLICATION_PATH
+            else PRODUCER_TRIAL_COMMANDS
             if workflow_path == PRODUCER_TRIAL_PATH
             else REQUIRED_CI_COMMANDS
         )
@@ -1196,7 +1315,8 @@ def check_ci_workflow(
         occurrences = [
             workflow_path
             for workflow_path, candidate in all_run_commands
-            if candidate == command and workflow_path != PRODUCER_TRIAL_PATH
+            if candidate == command
+            and workflow_path not in (PRODUCER_TRIAL_PATH, PUBLICATION_PATH)
         ]
         if len(occurrences) > 1:
             locations = ", ".join(str(location) for location in occurrences)
@@ -1263,7 +1383,9 @@ def check_ci_command_documentation(root: Path) -> list[Failure]:
     }
     missing_commands = sorted(
         command
-        for command in REQUIRED_CI_COMMANDS | PRODUCER_TRIAL_COMMANDS
+        for command in REQUIRED_CI_COMMANDS
+        | PRODUCER_TRIAL_COMMANDS
+        | PUBLICATION_COMMANDS
         if command not in documented_commands
     )
     if not missing_commands:

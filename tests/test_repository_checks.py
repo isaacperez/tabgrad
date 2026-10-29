@@ -72,6 +72,55 @@ class RepositoryCheckTests(unittest.TestCase):
             self.copy_producer_workflow(root)
             self.assertEqual(CHECKS.check_ci_workflow(root), [])
 
+    def test_publication_registers_exact_roles_without_relaxing_other_workflows(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.copy_repository_workflow(root)
+            self.copy_producer_workflow(root)
+            target = root / CHECKS.PUBLICATION_PATH
+            target.write_bytes(
+                (SCRIPT.parents[1] / CHECKS.PUBLICATION_PATH).read_bytes()
+            )
+            self.assertEqual(CHECKS.check_ci_workflow(root), [])
+
+    def test_publication_rejects_changed_admission_permissions_and_handoffs(
+        self,
+    ) -> None:
+        changes = [
+            ("  workflow_dispatch:\n", "  push:\n  workflow_dispatch:\n"),
+            ("cancel-in-progress: false", "cancel-in-progress: true"),
+            (
+                "group: tabgrad-release-publication",
+                "group: arbitrary-${{ github.run_id }}",
+            ),
+            ("vars.TABGRAD_PUBLICATION_ENABLED == 'true'", "true"),
+            ("github.run_attempt == '1'", "true"),
+            ("environment: tabgrad-npm-publication", "environment: other"),
+            ("contents: write", "contents: read"),
+            ("id-token: write", "id-token: read"),
+            ("digest-mismatch: error", "digest-mismatch: warn"),
+            ("overwrite: false", "overwrite: true"),
+            ("retention-days: 90", "retention-days: 1"),
+            ("ref: ${{ github.sha }}", "ref: main"),
+            ("needs.precheck.outputs.data_id", "needs.precheck.outputs.proofs_id"),
+            ("!cancelled() && needs.admit.result == 'success'", "true"),
+            ("3d3c42e5aac5ba805825da76410c181273ba90b1", "main"),
+        ]
+        for original, replacement in changes:
+            with (
+                self.subTest(original=original),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                root = Path(directory)
+                self.copy_repository_workflow(root)
+                target = root / CHECKS.PUBLICATION_PATH
+                text = (SCRIPT.parents[1] / CHECKS.PUBLICATION_PATH).read_text()
+                self.assertIn(original, text)
+                target.write_text(text.replace(original, replacement, 1))
+                self.assertTrue(CHECKS.check_ci_workflow(root))
+
     def test_producer_trial_rejects_changed_authority_source_and_dataflow(self) -> None:
         changes = [
             ("  workflow_dispatch:\n", "  push:\n  workflow_dispatch:\n"),
