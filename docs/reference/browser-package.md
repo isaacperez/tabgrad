@@ -21,6 +21,20 @@ Contributors can [qualify an admitted retained archive](https://github.com/isaac
 without rebuilding it. That check does not publish a package or authenticate
 its producer.
 
+For a version whose public registry delivery has been verified, install its
+exact version rather than relying on a moving channel. For the selected `0.1.0`
+identity, that command is:
+
+```console
+npm install @tabgrad/tabgrad@0.1.0 --ignore-scripts --no-audit --no-fund
+```
+
+This command describes the named installation path; source metadata and local
+candidate tests do not establish registry availability. The
+[0.1.0 source and support record](https://github.com/isaacperez/tabgrad/blob/main/docs/reference/release-0.1.0.md)
+defines its bounded API and evidence. Both installation paths use the same
+matched asset tree and application responsibilities below.
+
 Copy the installed package's complete `dist/` tree into an application-owned
 static directory, such as `/vendor/tabgrad/`. The prepared candidate also
 provides the identical tree at `package/dist/`. Serve JavaScript as modules,
@@ -36,7 +50,7 @@ the tree and update or restore the complete matched set together.
 | `@tabgrad/tabgrad/assets/wasm/*` | CPU binaries |
 | `@tabgrad/tabgrad/assets/python/*` | Python source and installation manifest |
 
-These aliases describe the inspected candidate's development identity. Private
+These aliases identify the package's public entries. Private
 implementation paths and the standalone testing entry are not public entries.
 In plain browser code, use explicit static module URLs or an application
 import map. A package alias alone does not teach a browser to resolve npm names.

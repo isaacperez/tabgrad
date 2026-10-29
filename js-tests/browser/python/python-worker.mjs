@@ -4,6 +4,7 @@ import { selectCpuProfile } from "/helpers/cpu-profile.mjs";
 import { pythonSumGradientAliasChecks, pythonGradientProvenanceChecks, pythonFunctionalIdentityChecks } from "/helpers/functional-gradient-cases.mjs";
 import { pythonBackwardChecks } from "/helpers/backward-cases.mjs";
 import { pythonSGDChecks } from "/helpers/sgd-cases.mjs";
+import { pythonReadmeCheck } from "/helpers/python-readme-case.mjs";
 import { pythonMatrixChecks, pythonMatrixNumericalChecks } from "/helpers/python-matrix-cases.mjs";
 import { pythonViewMetadataChecks, pythonViewBoundaryChecks } from "/helpers/python-view-cases.mjs";
 import { getTestTensorVersion, getTestRuntimeOwnership, getTestRuntimeSemanticOwnership } from "/testing.js";
@@ -82,6 +83,9 @@ else:
       await replacement.runPythonAsync(pythonViewBoundaryChecks());
       await replacement.runPythonAsync(pythonMatrixChecks(backwardOracle));
       await replacement.runPythonAsync(pythonMatrixNumericalChecks());
+      const readmeResponse = await fetch("/helpers/readme-example.py");
+      if (!readmeResponse.ok) throw new Error("README Python example is unavailable");
+      await replacement.runPythonAsync(pythonReadmeCheck(await readmeResponse.text()));
       await replacement.runPythonAsync(pythonFunctionalIdentityChecks(backwardOracle));
       await replacement.runPythonAsync(pythonGradientProvenanceChecks(backwardOracle));
       await replacement.runPythonAsync(pythonSumGradientAliasChecks(backwardOracle));

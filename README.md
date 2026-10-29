@@ -30,17 +30,21 @@ PyTorch imports:
 
 ```python
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
 
-x = torch.tensor([-1.0, 2.0], requires_grad=True)
-y = torch.relu(x)
-y.sum().backward()
+x = torch.tensor([-1.0, 2.0], dtype=torch.float32, requires_grad=True)
+loss = (x * x).sum()
+loss.backward()
+print(x.grad.tolist())  # [-2.0, 4.0]
 ```
 
 In that environment, `torch` refers to Tabgrad's compatibility layer, not to
 the official PyTorch package. Public packages and distributions use the
 Tabgrad name and are not published as `torch`.
+
+The [browser package guide](docs/reference/browser-package.md) explains how to
+install and serve an inspected candidate. The
+[0.1.0 source and support record](docs/reference/release-0.1.0.md) identifies its
+bounded API and qualification; registry availability is verified separately.
 
 ## Execution model
 

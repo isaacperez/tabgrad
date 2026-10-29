@@ -1,7 +1,7 @@
 {
   "name": "@tabgrad/tabgrad",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.1.0",
+  "private": false,
   "description": "An independent browser-native tensor runtime with direct JavaScript and optional Python interfaces.",
   "license": "Apache-2.0",
   "repository": {
@@ -73,5 +73,10 @@
     "pyodide": "314.0.6",
     "pyright": "1.1.413",
     "typescript": "6.0.3"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/",
+    "tag": "latest"
   }
 }
