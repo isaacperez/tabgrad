@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { chmod, cp, mkdir, readFile, writeFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "node:test";
-import { controlledVerifiedResult, provenanceFixture } from "../../fixtures/package-provenance.mjs";
+import { controlledConsumerReport as qualification, controlledVerifiedResult, provenanceFixture } from "../../fixtures/package-provenance.mjs";
 import { hash } from "../../fixtures/package-candidate.mjs";
 import { trialContext, producerSubjects, validateTrialQualification, inspectTrialPacket,
   githubRecord, checkTrialArtifact, checkTrialJobs, retainTrialProofs, verifyTrial, subjects } from "../../../scripts/producer-trial.mjs";
@@ -14,17 +14,6 @@ function environment(source = "a".repeat(40)) {
     GITHUB_SHA: source, TABGRAD_TRIAL_SOURCE: source, GITHUB_RUN_ID: "131",
     GITHUB_WORKFLOW_REF: "example/project/.github/workflows/producer-trial.yml@refs/heads/main",
     TABGRAD_TRIAL_DEADLINE: "2030-01-01T00:00:00.000Z", TABGRAD_TRIAL_TRUST_ROOT: "c".repeat(64) };
-}
-function qualification(candidate, inventoryBytes) {
-  return { status: "passed", input: "supplied-archive", expectedEvidenceSha256: hash(inventoryBytes),
-    requested: { gpu: false, browsers: ["Chrome", "Firefox"], profiles: ["direct", "python", "prerequisite"] },
-    checks: ["archive-identity", "archive-structure", "metadata-and-source", "installed-inventory",
-      "public-entries", "public-types", "cpu-assets", "static-inventory"],
-    profiles: ["Chrome", "Firefox"].flatMap(browser => ["direct", "python", "prerequisite"]
-      .map(mode => ({ browser, mode, status: "passed", version: "finite-fixture" }))),
-    candidate: { name: candidate.name, version: candidate.version, private: candidate.private,
-      sourceRevision: candidate.sourceRevision, files: candidate.files.length,
-      archive: { ...candidate.tarball } } };
 }
 async function packetFixture(t) {
   const f = await provenanceFixture(t);
@@ -275,4 +264,11 @@ test("already received API originals survive a later query failure or metadata r
     await assert.rejects(f.run(), { code: "TRIAL_ARTIFACT" });
     assert.deepEqual(JSON.parse(await readFile(join(f.destination, "api-data.json"))), f.records["/actions/artifacts/71"]);
   });
+});
+
+test("packet original encoding is independent of the consuming plan's identity key order", async t => {
+  const f = await packetFixture(t);
+  const identity = Object.fromEntries(Object.entries(f.context.identity).toSorted(([a], [b]) => a.localeCompare(b)));
+  const result = await inspectTrialPacket(f.directory, { ...f.context, identity });
+  assert.deepEqual(result.producer.identity, f.context.identity);
 });

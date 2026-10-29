@@ -106,6 +106,13 @@ export function validateTrialQualification(report, candidate, inventorySha256) {
   }
 }
 
+// Original producer encoding is fixed independently of a consumer's JSON key
+// order (for example a canonical publication plan). Values are still exact.
+function orderedTrialIdentity(identity) {
+  return Object.fromEntries(["repository", "repositoryId", "ownerId", "sourceRevision", "sourceRef", "workflowPath",
+    "workflowRevision", "signerUri", "signerRevision", "runId", "runAttempt", "event"].map(key => [key, identity[key]]));
+}
+
 async function inspectCandidate(directory, context) {
   const inventory = await original(join(directory, "candidate.json"));
   const candidate = readProducerInventory(inventory);
@@ -122,16 +129,17 @@ async function inspectCandidate(directory, context) {
 export async function inspectTrialPacket(directory, context) {
   const selected = await inspectCandidate(directory, context);
   const qualification = await original(join(directory, "qualification.json"));
-  validateTrialQualification(json(qualification), selected.candidate, hash(selected.inventory));
+  const qualificationReport = json(qualification);
+  validateTrialQualification(qualificationReport, selected.candidate, hash(selected.inventory));
   const raw = await original(join(directory, "producer.json"));
-  const expected = { schemaVersion: 1, identity: context.identity, expiresAt: context.expiresAt,
+  const expected = { schemaVersion: 1, identity: orderedTrialIdentity(context.identity), expiresAt: context.expiresAt,
     inventorySha256: hash(selected.inventory), archiveSha512: selected.subjects.archive.digest.slice(7),
     qualificationSha256: hash(qualification) };
   check(raw.equals(Buffer.from(`${JSON.stringify(expected, null, 2)}\n`)), "TRIAL_PACKET");
   const names = (await readdir(directory)).sort();
   check(JSON.stringify(names) === JSON.stringify([selected.candidate.tarball.path, "candidate.json", "package",
     "producer.json", "qualification.json"].sort()), "TRIAL_PACKET_FILES");
-  return { ...selected, producer: expected };
+  return { ...selected, producer: expected, qualification: qualificationReport };
 }
 
 async function prepare(directory, context) {

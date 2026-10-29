@@ -310,6 +310,19 @@ Git transport, object creation and readback. These contributor tools never enter
 library builds or signing inputs; their [reference](reference/release-record.md)
 links to the release policy's separate operational trust requirements.
 
+`scripts/release-publication.mjs` binds the manual publication roles to actual
+GitHub context and admitted configuration; its workflow owns job order and
+permissions. `publication-plan.mjs` owns the closed plan and effect identities;
+`publication-authority.mjs` owns live admission; `publication-admission.mjs` and
+`publication-evidence.mjs` compose existing producer proofs and conserved
+originals. `publication-record.mjs` and `publication-controller.mjs` bind those
+plans to the existing record and exact handoffs. The effects owner sequences
+calls; the separate GitHub, registry, npm and human adapters own their transports
+and credential boundaries. The client profile, Python setup and actual-client
+qualification are optional release tooling, outside library distribution.
+The [publication reference](reference/release-publication.md) describes these
+interfaces and the maintainer procedure; the release policy remains primary.
+
 `scripts/package-artifact.mjs` separately owns admitted archive/evidence and
 complete installed/static inventory checks; it neither builds nor launches a
 profile. The package-application fixture uses that owner for retained input,

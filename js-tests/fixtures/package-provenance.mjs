@@ -10,6 +10,20 @@ export function producerIdentity() {
     signerRevision: "b".repeat(40), runId: "131", runAttempt: "2", event: "workflow_dispatch" };
 }
 
+/** Controlled report data only; it does not assert that a browser was executed. */
+export function controlledConsumerReport(candidate, inventoryBytes, { input = "supplied-archive", gpu = false,
+  browsers = gpu ? ["Chrome"] : ["Chrome", "Firefox"] } = {}) {
+  const profiles = gpu ? ["gpu", "origin"] : ["direct", "python", "prerequisite"];
+  return { schemaVersion: 1, status: "passed", input, expectedEvidenceSha256: hash(inventoryBytes),
+    requested: { gpu, browsers, profiles },
+    checks: ["archive-identity", "archive-structure", "metadata-and-source", "installed-inventory",
+      "public-entries", "public-types", "cpu-assets", "static-inventory",
+      ...(input === "registry-version" ? ["supplied-archive-installation"] : [])],
+    profiles: browsers.flatMap(browser => profiles.map(mode => ({ browser, mode, status: "passed", version: "finite-fixture" }))),
+    candidate: { name: candidate.name, version: candidate.version, private: candidate.private,
+      sourceRevision: candidate.sourceRevision, files: candidate.files.length, archive: { ...candidate.tarball } } };
+}
+
 export function controlledVerifiedResult(identity, subject) {
   const repository = `https://github.com/${identity.repository}`;
   const invocation = `${repository}/actions/runs/${identity.runId}/attempts/${identity.runAttempt}`;

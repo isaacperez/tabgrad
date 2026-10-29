@@ -19,7 +19,7 @@ absent from [`dependencies.md`](dependencies.md).
 ## Repository consistency workflow
 
 `.github/workflows/repository-checks.yml` runs on pull requests, pushes to
-`main`, and manual dispatch. It has read-only repository permission and three
+`main`, and manual dispatch. It has read-only repository permission and four
 job definitions. The browser matrix expands its definition into independent
 Chrome and Firefox jobs.
 
@@ -277,3 +277,33 @@ attempt happens to pass.
 After changing CI or a ruleset, test pull-request and default-branch behavior.
 Confirm that untrusted pull requests receive no secrets or write permission and
 that the intended required-check names match GitHub's actual branch settings.
+
+## Controlled publication workflow
+
+The manually dispatched `.github/workflows/release-publication.yml` is inert
+without separately admitted configuration and the exact enable/confirmation.
+Its complete parsed definition is registered by canonical SHA-256, alongside
+its exact commands and per-role permission policy. The maintained
+[publication reference](reference/release-publication.md) owns its role inputs,
+public human procedure and recovery. Source registration neither enrolls service
+settings nor authorizes dispatch or actual publication.
+
+Default permissions are Contents/Actions/Issues-read. Only `admit`, `observe`
+and `complete` have Contents-write; only `npm` has OIDC-write, retaining
+Contents-read. No job has Attestations-write. Build/signing code and npm identity
+are absent from the trusted record/GitHub writers. The producer is a separately
+reviewed workflow. Its three exact identified artifacts are downloaded with
+fatal digest mismatch. A read-only precheck verifies the actual environment
+before the protected admission job can name it. One fixed noncanceling group
+spans the whole publication window; the separate durable record still guards
+unknown/competing effects.
+
+The consistency workflow also has a `publication-client` job, selected for
+runtime-affecting changes and every main/manual run. It explicitly prepares
+hash-pinned isolated publishing tools and genuine public fixture originals,
+then runs the documented actual-client qualification with disposable local
+endpoints and fake credentials. Public TUF reads are explicit; it has no real
+npm identity, write permission or signature operation. A skipped job on a
+reviewed unaffected PR is not evidence of client execution. Its stable name is
+`Repository checks / publication-client`; it is not made a required ruleset
+check by this document. The four existing stable checks retain their meaning.

@@ -42,6 +42,10 @@ proof verification using ordinary hosted jobs.
 Use [Release record tooling](release-record.md) for enrolled Git history,
 bounded event data, exact intent/observation relationships and recorder commands.
 
+Use [Controlled release publication](release-publication.md) for the maintained
+manual workflow, role interfaces, public-clone maintainer procedure, first npm
+bootstrap and failure-preserving continuation.
+
 Use [Acquisition control record](provenance-acquisition-record.md) for the internal
 experimental JSONL profile, independent file reserves, confirmed prefixes and
 bounded local readback, separate from trust admission and producer proofs.
