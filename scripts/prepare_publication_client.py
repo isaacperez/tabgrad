@@ -10,7 +10,7 @@ import shutil
 import sys
 import tarfile
 from pathlib import Path, PurePosixPath
-from typing import TypedDict
+from typing import TypedDict, TypeGuard
 from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 
@@ -247,7 +247,57 @@ def prepare_client(output: Path) -> dict[str, object]:
     return install_client(node_raw, npm_raw, output, profile)
 
 
-def prepare_fixtures(output: Path) -> None:
+def json_object(value: object) -> TypeGuard[dict[str, object]]:
+    """A JSON-decoded object has string keys; this checks the mapping boundary."""
+    return isinstance(value, dict)
+
+
+def json_array(value: object) -> TypeGuard[list[object]]:
+    return isinstance(value, list)
+
+
+def fixture_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    value: dict[str, object] = {}
+    for key, item in pairs:
+        if key in value:
+            raise PublicationPreparationError("PUBLICATION_FIXTURE_ENVELOPE")
+        value[key] = item
+    return value
+
+
+def fixture_bundle(raw: bytes, predicate_type: str) -> bytes:
+    """Canonicalize the complete selected bundle, never its signed strings."""
+    try:
+        envelope: object = json.loads(raw, object_pairs_hook=fixture_object)
+        if not json_object(envelope):
+            raise PublicationPreparationError("PUBLICATION_FIXTURE_ENVELOPE")
+        attestations = envelope.get("attestations")
+        if not json_array(attestations):
+            raise PublicationPreparationError("PUBLICATION_FIXTURE_ENVELOPE")
+        bundles = [
+            value.get("bundle")
+            for value in attestations
+            if json_object(value) and value.get("predicateType") == predicate_type
+        ]
+        if len(bundles) != 1 or not json_object(bundles[0]):
+            raise PublicationPreparationError("PUBLICATION_FIXTURE_ENVELOPE")
+        return (
+            json.dumps(
+                bundles[0],
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+                allow_nan=False,
+            )
+            + "\n"
+        ).encode()
+    except (ValueError, UnicodeError) as error:
+        if isinstance(error, PublicationPreparationError):
+            raise
+        raise PublicationPreparationError("PUBLICATION_FIXTURE_ENVELOPE") from error
+
+
+def prepare_fixtures(output: Path) -> list[dict[str, str | int | bool]]:
     """Acquire identified public originals; never execute the package or sign."""
     manifest = json.loads(
         (
@@ -256,10 +306,32 @@ def prepare_fixtures(output: Path) -> None:
         ).read_text(encoding="utf-8")
     )
     output.mkdir(mode=0o700)
+    observations: list[dict[str, str | int | bool]] = []
     try:
         for entry in manifest["files"]:
+            observation: dict[str, str | int | bool] = {}
             try:
-                raw = download(entry["url"], entry["byteLength"])
+                if entry["kind"] == "raw":
+                    raw = download(entry["url"], entry["byteLength"])
+                elif entry["kind"] == "attestation-envelope":
+                    envelope = download(entry["url"], entry["maxDownloadBytes"])
+                    observation = {
+                        "input": entry["name"],
+                        "envelopeBytes": len(envelope),
+                        "envelopeSha256": hashlib.sha256(envelope).hexdigest(),
+                    }
+                    observation["baselineEnvelope"] = (
+                        "exact"
+                        if observation["envelopeBytes"]
+                        == entry["baselineEnvelope"]["byteLength"]
+                        and observation["envelopeSha256"]
+                        == entry["baselineEnvelope"]["sha256"]
+                        else "different"
+                    )
+                    observations.append(observation)
+                    raw = fixture_bundle(envelope, entry["predicateType"])
+                else:
+                    raise PublicationPreparationError("PUBLICATION_FIXTURE_PROFILE")
                 if len(raw) != entry["byteLength"]:
                     raise PublicationPreparationError(
                         "PUBLICATION_FIXTURE_SIZE", {"observedBytes": len(raw)}
@@ -270,11 +342,13 @@ def prepare_fixtures(output: Path) -> None:
                         {"observedSha256": hashlib.sha256(raw).hexdigest()},
                     )
             except PublicationPreparationError as error:
+                error.details.update(observation)
                 error.details["input"] = entry["name"]
                 raise
             path = output / entry["name"]
             path.write_bytes(raw)
             path.chmod(0o600)
+        return observations
     except BaseException as error:
         try:
             shutil.rmtree(output)
@@ -309,9 +383,15 @@ def preparation_failure(error: BaseException) -> dict[str, object]:
 if __name__ == "__main__":
     try:
         if len(sys.argv) == 3 and sys.argv[1] == "--fixtures":
-            prepare_fixtures(Path(sys.argv[2]))
+            observations = prepare_fixtures(Path(sys.argv[2]))
             print(
-                json.dumps({"status": "prepared", "input": "original-public-fixtures"})
+                json.dumps(
+                    {
+                        "status": "prepared",
+                        "input": "original-public-fixtures",
+                        "observations": observations,
+                    }
+                )
             )
             raise SystemExit(0)
         if len(sys.argv) != 2:

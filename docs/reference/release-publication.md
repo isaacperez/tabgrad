@@ -66,6 +66,15 @@ executes actual clients with genuine original proof fixtures, and exercises
 local disposable endpoints with fictitious credentials. Its public TUF reads
 are explicit; this is not an offline or real-provider qualification.
 
+For the foreign signed fixture, acquisition bounds the registry API envelope
+before parsing and records its observed size/hash and comparison with the
+identified baseline. It selects exactly one SLSA-v1 bundle and checks the entire
+canonical UTF-8 JSON object against an independently pinned size/hash. Only JSON
+key/layout encoding changes: DSSE payload/signature strings, array order and all
+bundle fields, including unknown fields, remain identified. Changed, missing or
+extra bundle data fails. This fixture rule does not canonicalize or replace the
+original proof bytes admitted for an actual Tabgrad publication.
+
 ```console
 .venv/bin/python scripts/prepare_publication_client.py NEW_CLIENT_DIRECTORY
 .venv/bin/python scripts/prepare_publication_client.py --fixtures NEW_FIXTURE_DIRECTORY

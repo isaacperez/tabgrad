@@ -211,6 +211,7 @@ class PublicationPreparationTests(unittest.TestCase):
             "files": [
                 {
                     "name": key,
+                    "kind": "raw",
                     "url": "https://example.invalid/" + key,
                     "byteLength": len(raw),
                     "sha256": hashlib.sha256(raw).hexdigest(),
@@ -283,6 +284,123 @@ class PublicationPreparationTests(unittest.TestCase):
             CLIENT.preparation_failure(OSError("PRIVATE path")),
             {"status": "failed", "code": "PUBLICATION_CLIENT_PREPARATION_FAILED"},
         )
+
+    def test_download_bounds_body_before_json_parsing_and_refuses_redirects(
+        self,
+    ) -> None:
+        response = mock.MagicMock()
+        response.__enter__.return_value = response
+        response.status = 200
+        response.geturl.return_value = "https://example.invalid/original"
+        response.read.return_value = b"x" * 11
+        with mock.patch.object(CLIENT, "urlopen", return_value=response):
+            with self.assertRaisesRegex(
+                CLIENT.PublicationPreparationError, "PUBLICATION_DOWNLOAD_SIZE"
+            ):
+                CLIENT.download("https://example.invalid/original", 10)
+        response.read.assert_called_once_with(11)
+        response.read.reset_mock()
+        response.geturl.return_value = "https://example.invalid/other"
+        with mock.patch.object(CLIENT, "urlopen", return_value=response):
+            with self.assertRaisesRegex(
+                CLIENT.PublicationPreparationError, "PUBLICATION_DOWNLOAD"
+            ):
+                CLIENT.download("https://example.invalid/original", 10)
+        response.read.assert_not_called()
+
+    def test_attestation_fixture_pins_the_complete_bundle_independently_of_envelope_layout(
+        self,
+    ) -> None:
+        bundle = {
+            "z": "retained",
+            "dsseEnvelope": {
+                "payload": "b3JpZ2luYWw=",
+                "signatures": [{"sig": "ZXhhY3Q="}],
+            },
+            "verificationMaterial": {
+                "chain": ["first", "second"],
+                "unknownRetainedField": 1,
+            },
+        }
+        expected = (
+            json.dumps(bundle, sort_keys=True, separators=(",", ":")) + "\n"
+        ).encode()
+        selected_attestation = {"predicateType": "v1", "bundle": bundle}
+        envelope: dict[str, object] = {
+            "attestations": [
+                {"predicateType": "other", "bundle": {}},
+                selected_attestation,
+            ]
+        }
+        compact = json.dumps(envelope).encode()
+        pretty = json.dumps(envelope, indent=4).encode()
+        self.assertGreater(len(pretty), len(compact))
+        self.assertEqual(CLIENT.fixture_bundle(compact, "v1"), expected)
+        self.assertEqual(CLIENT.fixture_bundle(pretty, "v1"), expected)
+        profile = {
+            "files": [
+                {
+                    "name": "proof.json",
+                    "kind": "attestation-envelope",
+                    "url": "https://example.invalid/original",
+                    "maxDownloadBytes": 4194304,
+                    "predicateType": "v1",
+                    "byteLength": len(expected),
+                    "sha256": hashlib.sha256(expected).hexdigest(),
+                    "baselineEnvelope": {
+                        "byteLength": len(compact),
+                        "sha256": hashlib.sha256(compact).hexdigest(),
+                    },
+                }
+            ]
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "original"
+            with (
+                mock.patch.object(Path, "read_text", return_value=json.dumps(profile)),
+                mock.patch.object(CLIENT, "download", return_value=pretty) as get,
+            ):
+                observed = CLIENT.prepare_fixtures(target)
+                self.assertEqual(get.call_args.args[1], 4194304)
+                self.assertEqual(observed[0]["baselineEnvelope"], "different")
+                self.assertEqual(
+                    observed[0]["envelopeSha256"], hashlib.sha256(pretty).hexdigest()
+                )
+            self.assertEqual((target / "proof.json").read_bytes(), expected)
+            for name in ("extra", "missing", "changed", "reordered", "signed"):
+                value = json.loads(json.dumps(envelope))
+                selected = value["attestations"][1]["bundle"]
+                if name == "extra":
+                    selected["unexpected"] = 1
+                elif name == "missing":
+                    del selected["verificationMaterial"]["unknownRetainedField"]
+                elif name == "changed":
+                    selected["verificationMaterial"]["unknownRetainedField"] = 2
+                elif name == "reordered":
+                    selected["verificationMaterial"]["chain"].reverse()
+                else:
+                    selected["dsseEnvelope"]["payload"] = "Y2hhbmdlZA=="
+                failed = Path(directory) / name
+                with (
+                    mock.patch.object(
+                        Path, "read_text", return_value=json.dumps(profile)
+                    ),
+                    mock.patch.object(
+                        CLIENT, "download", return_value=json.dumps(value).encode()
+                    ),
+                    self.assertRaises(CLIENT.PublicationPreparationError),
+                ):
+                    CLIENT.prepare_fixtures(failed)
+                self.assertFalse(failed.exists())
+        for bad in (
+            b"[]",
+            b"{}",
+            b"not-json",
+            b'{"attestations":[{"predicateType":"v1","bundle":{"x":1,"x":1}}]}',
+            json.dumps({"attestations": [selected_attestation] * 2}).encode(),
+        ):
+            with self.assertRaises(CLIENT.PublicationPreparationError):
+                CLIENT.fixture_bundle(bad, "v1")
 
 
 if __name__ == "__main__":

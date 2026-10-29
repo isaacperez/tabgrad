@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -28,10 +29,7 @@ export async function qualifyPublicationClient({ clientDirectory, clientSha256, 
       requirePublication(raw.length === file.byteLength && sha256(raw) === file.sha256, "PUBLICATION_FIXTURE_CHANGED");
       originals.set(file.name, raw);
     }
-    const envelope = JSON.parse(originals.get("attestations-original.json"));
-    const matches = envelope.attestations.filter(a => a.predicateType === "https://slsa.dev/provenance/v1");
-    requirePublication(matches.length === 1, "PUBLICATION_FIXTURE_CHANGED");
-    const proof = Buffer.from(`${JSON.stringify(matches[0].bundle)}\n`);
+    const proof = originals.get("provenance-original.json");
     requirePublication(sha256(proof) === manifest.derivedProofSha256, "PUBLICATION_FIXTURE_CHANGED");
     report.checks.push({ name: "independently-identified-original-inputs", status: "passed" });
     const originalArchive = originals.get("core-3.0.1.tgz");
@@ -114,9 +112,8 @@ export async function qualifyPublicationClient({ clientDirectory, clientSha256, 
         assert.deepEqual(delivered, bundle);
         assert.equal(delivered.dsseEnvelope.payload, bundle.dsseEnvelope.payload);
         assert.deepEqual(delivered.dsseEnvelope.signatures, bundle.dsseEnvelope.signatures);
-        const metadata = JSON.parse(originals.get("metadata-original.json"));
         const plan = { operation: "f".repeat(64), candidate: { name: manifest.package, version: manifest.version,
-          archiveSha512: Buffer.from(metadata.dist.integrity.slice(7), "base64").toString("hex") },
+          archiveSha512: createHash("sha512").update(originalArchive).digest("hex") },
         publisher: { clientSha256 } };
         const handoff = { call: "a".repeat(64), effect: "b".repeat(64) };
         const receipt = npmCallReceipt(plan, handoff, client, result);
