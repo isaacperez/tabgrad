@@ -119,7 +119,10 @@ also finishes at managed entry completion. Host-ready sources can publish
 logically without an upload; this does not promise residency. Every observation
 still uses the selected device. Connected zero derivatives stay on that device.
 [Backward gradient slots](backward-gradients.md) use these same mandatory
-effects on GPU; GPU SGD remains excluded.
+effects on GPU. [Basic SGD](sgd.md) also supports enabled WebGPU parameters
+and same-device gradients within its
+[qualified GPU environment](../compatibility.md#gpu-sgd-evidence). Broader
+optimizer options and modes retain the exclusions in the SGD reference.
 
 Each gradient result also carries the captured root, traversed-history and
 explicit-seed outcomes, even when its numbers are a constant zero or a cutoff

@@ -191,8 +191,10 @@ does not require a local Promise callback to advance the calculation. GPU
 addition, [multiplication](tensor-multiplication.md), total sum, shape-only views
 and functional gradients share the ordinary runtime path.
 [Backward and persistent gradient slots](backward-gradients.md) use that same
-path, including immediate ordinary Python observation. Dimensional reduction
-and GPU optimizers remain outside their declared domains.
+path, including immediate ordinary Python observation. [Basic SGD](sgd.md)
+supports enabled WebGPU parameters and same-device gradients within its
+[qualified GPU environment](../compatibility.md#gpu-sgd-evidence). Dimensional
+reduction and broader optimizer options and modes remain outside the declared domains.
 Missing backend or unsupported computation is an explicit capability error,
 not implicit CPU execution.
 
