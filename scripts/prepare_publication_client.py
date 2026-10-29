@@ -11,6 +11,7 @@ import sys
 import tarfile
 from pathlib import Path, PurePosixPath
 from typing import TypedDict
+from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 
 # This is reviewed source configuration, not a caller-supplied setup profile.
@@ -43,6 +44,13 @@ NODE_ARCHIVES: dict[str, NodeArchive] = PROFILE["node"]["archives"]
 
 class PublicationPreparationError(ValueError):
     """Safe setup failure; caller paths and transport diagnostics stay private."""
+
+    def __init__(
+        self, code: str, details: dict[str, str | int | bool] | None = None
+    ) -> None:
+        super().__init__(code)
+        self.code = code
+        self.details = {} if details is None else details
 
 
 def identified_bytes(raw: bytes, algorithm: str, expected: str) -> None:
@@ -196,10 +204,23 @@ def install_client(
 
 
 def download(url: str, limit: int) -> bytes:
-    with urlopen(url, timeout=60) as response:
-        if response.status != 200 or response.geturl() != url:
-            raise PublicationPreparationError("PUBLICATION_DOWNLOAD")
-        raw = response.read(limit + 1)
+    try:
+        with urlopen(url, timeout=60) as response:
+            if response.status != 200 or response.geturl() != url:
+                raise PublicationPreparationError(
+                    "PUBLICATION_DOWNLOAD",
+                    {
+                        "httpStatus": response.status,
+                        "redirected": response.geturl() != url,
+                    },
+                )
+            raw = response.read(limit + 1)
+    except HTTPError as error:
+        raise PublicationPreparationError(
+            "PUBLICATION_HTTP_RESPONSE", {"httpStatus": error.code}
+        ) from error
+    except URLError as error:
+        raise PublicationPreparationError("PUBLICATION_NETWORK") from error
     if len(raw) > limit:
         raise PublicationPreparationError("PUBLICATION_DOWNLOAD_SIZE")
     return raw
@@ -237,10 +258,20 @@ def prepare_fixtures(output: Path) -> None:
     output.mkdir(mode=0o700)
     try:
         for entry in manifest["files"]:
-            raw = download(entry["url"], entry["byteLength"])
-            if len(raw) != entry["byteLength"]:
-                raise PublicationPreparationError("PUBLICATION_FIXTURE_SIZE")
-            identified_bytes(raw, "sha256", entry["sha256"])
+            try:
+                raw = download(entry["url"], entry["byteLength"])
+                if len(raw) != entry["byteLength"]:
+                    raise PublicationPreparationError(
+                        "PUBLICATION_FIXTURE_SIZE", {"observedBytes": len(raw)}
+                    )
+                if hashlib.sha256(raw).hexdigest() != entry["sha256"]:
+                    raise PublicationPreparationError(
+                        "PUBLICATION_FIXTURE_IDENTITY",
+                        {"observedSha256": hashlib.sha256(raw).hexdigest()},
+                    )
+            except PublicationPreparationError as error:
+                error.details["input"] = entry["name"]
+                raise
             path = output / entry["name"]
             path.write_bytes(raw)
             path.chmod(0o600)
@@ -268,6 +299,13 @@ def preparation_receipt(output: Path) -> dict[str, str]:
     }
 
 
+def preparation_failure(error: BaseException) -> dict[str, object]:
+    """Only codes and public-source observations; never raw exceptions or paths."""
+    if isinstance(error, PublicationPreparationError):
+        return {"status": "failed", "code": error.code, "observation": error.details}
+    return {"status": "failed", "code": "PUBLICATION_CLIENT_PREPARATION_FAILED"}
+
+
 if __name__ == "__main__":
     try:
         if len(sys.argv) == 3 and sys.argv[1] == "--fixtures":
@@ -281,6 +319,6 @@ if __name__ == "__main__":
         output = Path(sys.argv[1])
         prepare_client(output)
         print(json.dumps(preparation_receipt(output)))
-    except (ValueError, OSError, EOFError, tarfile.TarError):
-        print("PUBLICATION_CLIENT_PREPARATION_FAILED", file=sys.stderr)
+    except (ValueError, OSError, EOFError, tarfile.TarError) as error:
+        print(json.dumps(preparation_failure(error)), file=sys.stderr)
         raise SystemExit(1) from None

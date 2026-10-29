@@ -4,6 +4,7 @@ import json
 import tarfile
 import tempfile
 import unittest
+from email.message import Message
 from pathlib import Path
 from typing import Literal
 from unittest import mock
@@ -258,6 +259,30 @@ class PublicationPreparationTests(unittest.TestCase):
             self.assertEqual(result_path.read_text(), f"client_sha256={expected}\n")
             self.assertEqual(receipt["clientSha256"], expected)
             self.assertNotIn(str(directory), json.dumps(receipt))
+
+    def test_download_failures_preserve_safe_categories_without_transport_payload(
+        self,
+    ) -> None:
+        for error, expected in [
+            (
+                CLIENT.HTTPError(
+                    "https://example.invalid/private", 429, "PRIVATE", Message(), None
+                ),
+                "PUBLICATION_HTTP_RESPONSE",
+            ),
+            (CLIENT.URLError("PRIVATE transport diagnostics"), "PUBLICATION_NETWORK"),
+        ]:
+            with mock.patch.object(CLIENT, "urlopen", side_effect=error):
+                with self.assertRaises(CLIENT.PublicationPreparationError) as caught:
+                    CLIENT.download("https://example.invalid/original", 10)
+            receipt = CLIENT.preparation_failure(caught.exception)
+            self.assertEqual(receipt["code"], expected)
+            self.assertNotIn("PRIVATE", json.dumps(receipt))
+            self.assertNotIn("example.invalid", json.dumps(receipt))
+        self.assertEqual(
+            CLIENT.preparation_failure(OSError("PRIVATE path")),
+            {"status": "failed", "code": "PUBLICATION_CLIENT_PREPARATION_FAILED"},
+        )
 
 
 if __name__ == "__main__":
