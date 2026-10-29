@@ -117,9 +117,11 @@ separately authorized main source and first attempt. Its default permissions
 are `contents: read` and `actions: read`, needed for exact artifact downloads
 and service corroboration. Only its `sign` job adds `id-token: write` and
 `attestations: write`, after successful consumer qualification and a protected
-environment approval. No other job may override permissions. It has no npm
-publish or Contents-write capability. Its fixed commands belong to this
-workflow only; reusing existing setup commands here is not duplicate execution
+environment approval. No other job may override permissions. It invokes no npm
+publication, supplies no npm credentials and has no Contents-write token.
+Actual isolation of OIDC identities from the publisher depends on separately
+admitted provider bindings, not absence of a publish command. Its fixed commands
+belong to this workflow only; reusing existing setup commands here is not duplicate execution
 of the ordinary required checks.
 
 The maintainer must admit the environment's actual protection and reviewers,

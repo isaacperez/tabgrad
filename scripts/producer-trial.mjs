@@ -186,10 +186,11 @@ export function checkTrialArtifact(artifact, context, kind, expectedId, expected
     && artifact.workflow_run.head_branch === "main", "TRIAL_ARTIFACT");
 }
 
-async function observeArtifact(context, kind, environment, token, fetcher = fetch) {
+async function observeArtifact(context, kind, environment, token, fetcher = fetch, destination) {
   const id = environment[`TABGRAD_TRIAL_${kind.toUpperCase()}_ID`];
   check(idPattern.test(id ?? ""), "TRIAL_ARTIFACT");
   const observed = await githubRecord(context, `/actions/artifacts/${id}`, token, fetcher);
+  if (destination) await writeFile(join(destination, `api-${kind}.json`), observed.raw, { flag: "wx", mode: 0o600 });
   checkTrialArtifact(observed.value, context, kind, id, environment[`TABGRAD_TRIAL_${kind.toUpperCase()}_DIGEST`]);
   return observed;
 }
@@ -202,9 +203,10 @@ async function announce(directory, context, environment) {
       data: { id: artifact.value.id, digest: artifact.value.digest, expiresAt: artifact.value.expires_at } }, null, 2)}\n\`\`\`\n`);
 }
 
-async function subjects(directory, context, environment) {
-  await observeArtifact(context, "data", environment, environment.GH_TOKEN);
+export async function subjects(directory, context, environment, fetcher = fetch) {
+  await observeArtifact(context, "data", environment, environment.GH_TOKEN, fetcher);
   const packet = await inspectTrialPacket(directory, context);
+  check(Date.parse(context.expiresAt) > Date.now(), "TRIAL_DEADLINE_OR_ROOT");
   await outputs({ archive_subject: packet.subjects.archive.name, archive_digest: packet.subjects.archive.digest,
     inventory_subject: packet.subjects.inventory.name, inventory_digest: packet.subjects.inventory.digest });
 }
@@ -249,13 +251,12 @@ export async function verifyTrial(directory, proofs, clientDirectory, destinatio
   await mkdir(destination, { mode: 0o700 }); let failure;
   try {
     const packet = await inspectTrialPacket(directory, context);
-    const dataArtifact = await observeArtifact(context, "data", environment, environment.GH_TOKEN, fetcher);
-    const proofArtifact = await observeArtifact(context, "proofs", environment, environment.GH_TOKEN, fetcher);
+    await observeArtifact(context, "data", environment, environment.GH_TOKEN, fetcher, destination);
+    await observeArtifact(context, "proofs", environment, environment.GH_TOKEN, fetcher, destination);
     const run = await githubRecord(context, `/actions/runs/${context.identity.runId}`, environment.GH_TOKEN, fetcher);
+    await writeFile(join(destination, "api-run.json"), run.raw, { flag: "wx", mode: 0o600 });
     const jobs = await githubRecord(context, `/actions/runs/${context.identity.runId}/attempts/1/jobs?per_page=100`, environment.GH_TOKEN, fetcher);
-    for (const [name, observation] of [["run", run], ["jobs", jobs], ["data", dataArtifact], ["proofs", proofArtifact]]) {
-      await writeFile(join(destination, `api-${name}.json`), observation.raw, { flag: "wx", mode: 0o600 });
-    }
+    await writeFile(join(destination, "api-jobs.json"), jobs.raw, { flag: "wx", mode: 0o600 });
     checkTrialJobs(run.value, jobs.value, context);
     const proofReport = json(await original(join(proofs, "proofs.json")));
     check(proofReport.complete === true

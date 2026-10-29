@@ -5,7 +5,7 @@ import { test } from "node:test";
 import { controlledVerifiedResult, provenanceFixture } from "../../fixtures/package-provenance.mjs";
 import { hash } from "../../fixtures/package-candidate.mjs";
 import { trialContext, producerSubjects, validateTrialQualification, inspectTrialPacket,
-  githubRecord, checkTrialArtifact, checkTrialJobs, retainTrialProofs, verifyTrial } from "../../../scripts/producer-trial.mjs";
+  githubRecord, checkTrialArtifact, checkTrialJobs, retainTrialProofs, verifyTrial, subjects } from "../../../scripts/producer-trial.mjs";
 
 function environment(source = "a".repeat(40)) {
   return { TABGRAD_TRIAL_ENABLED: "true", TABGRAD_TRIAL_CONFIRMATION: "producer-trial",
@@ -120,6 +120,17 @@ test("artifact identity, content, source, run, repository and expiry vary indepe
   }
 });
 
+test("a deadline expiring during first-signature prechecks prevents subject delivery", async t => {
+  const f = await packetFixture(t); let requests = 0;
+  const env = { GH_TOKEN: "synthetic-read-token", TABGRAD_TRIAL_DATA_ID: "71", TABGRAD_TRIAL_DATA_DIGEST: "d".repeat(64) };
+  await assert.rejects(subjects(f.directory, f.context, env, async () => {
+    requests++;
+    t.mock.method(Date, "now", () => Date.parse("2031-01-01T00:00:00.000Z"));
+    return new Response(JSON.stringify(artifact(f.context)));
+  }), { code: "TRIAL_DEADLINE_OR_ROOT" });
+  assert.equal(requests, 1);
+});
+
 test("CI corroboration requires actual completed prepare and signer jobs for the selected source", () => {
   const c = trialContext(environment()); const run = { id: 131, head_sha: c.identity.sourceRevision,
     head_branch: "main", event: "workflow_dispatch", run_attempt: 1,
@@ -207,8 +218,8 @@ async function verificationFixture(t) {
     return new Response(`${JSON.stringify(records[path])}\n`);
   };
   const destination = join(f.rootDirectory, "verification");
-  return { ...f, proofs, client, records, calls, destination,
-    run: () => verifyTrial(f.directory, proofs, client, destination, f.context, environment, fetcher) };
+  return { ...f, proofs, client, records, calls, destination, fetcher,
+    run: (selectedFetch = fetcher) => verifyTrial(f.directory, proofs, client, destination, f.context, environment, selectedFetch) };
 }
 
 test("hosted composition uses original handoffs and service observations with the existing offline policy", async t => {
@@ -244,5 +255,24 @@ test("hosted composition preserves failures instead of admitting changed API, ro
     assert.equal(failure.status, "failed"); assert.equal(failure.code, code);
     assert.equal(failure.releaseAdmission, "unqualified");
     await assert.rejects(readFile(join(f.destination, "verification.json")), { code: "ENOENT" });
+  });
+});
+
+test("already received API originals survive a later query failure or metadata rejection", async t => {
+  for (const failedRequest of [2, 3, 4]) await t.test(`query ${failedRequest}`, async t => {
+    const f = await verificationFixture(t); let requests = 0;
+    await assert.rejects(f.run(async (url, options) => {
+      if (++requests === failedRequest) return new Response("unavailable", { status: 503 });
+      return f.fetcher(url, options);
+    }), { code: "TRIAL_CI_RESPONSE" });
+    assert.equal(requests, failedRequest);
+    for (const name of ["data", "proofs", "run"].slice(0, failedRequest - 1)) {
+      assert.ok((await readFile(join(f.destination, `api-${name}.json`))).length > 0);
+    }
+  });
+  await t.test("rejected artifact metadata", async t => {
+    const f = await verificationFixture(t); f.records["/actions/artifacts/71"].expired = true;
+    await assert.rejects(f.run(), { code: "TRIAL_ARTIFACT" });
+    assert.deepEqual(JSON.parse(await readFile(join(f.destination, "api-data.json"))), f.records["/actions/artifacts/71"]);
   });
 });

@@ -62,15 +62,19 @@ work already running.
    `attestations: write`; all jobs have only Contents/Actions read otherwise.
    After receiving and rechecking the exact data, `actions/attest` produces
    separate proofs for the npm PURL/SHA-512 archive subject and the
-   `candidate.json`/SHA-256 inventory subject. Neither job can publish npm or
-   write repository contents. Attestation service writes and possible public
+   `candidate.json`/SHA-256 inventory subject. The recipe invokes no npm
+   publication and supplies no npm credentials; its token cannot write
+   repository contents. Effective isolation from a publisher identity also
+   depends on provider OIDC bindings and remains separately unqualified.
+   Attestation service writes and possible public
    transparency entries are real effects requiring prior authorization.
 3. **`verify-retained-proofs`**, without signing permissions, receives both
    artifacts by exact numeric IDs and checks digests. It corroborates the
    repository, source, event, run, attempt and completed producer/signer jobs
-   through authenticated GitHub API reads. It retains the original JSON
-   observations, checks both raw proof hashes, obtains the independently
-   admitted root bytes and composes the existing offline verifier. Its original
+   through authenticated GitHub API reads. It retains each original JSON
+   observation before validating it or making the next query, checks both raw
+   proof hashes, obtains the independently admitted root bytes and composes the
+   existing offline verifier. Its original
    inputs, plan and verification/failure report form a separate diagnostic
    artifact, not a third candidate handoff or a release record.
 
