@@ -35,6 +35,10 @@ archives or exact registry installations, shared consumers and JSON reports.
 Use [Verifying retained producer proofs](package-provenance.md) for offline
 signature, identity, claim and original-candidate verification under admitted trust.
 
+Use [Experimental hosted producer trial](producer-trial.md) for the inert manual
+recipe that separates candidate qualification, protected signing and retained
+proof verification using ordinary hosted jobs.
+
 Use [Release record tooling](release-record.md) for enrolled Git history,
 bounded event data, exact intent/observation relationships and recorder commands.
 

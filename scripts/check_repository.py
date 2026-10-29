@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 import sys
 import tomllib
@@ -395,8 +397,14 @@ PROJECT_PROGRESS_PATTERNS = (
 )
 MARKDOWN_LINK = re.compile(r"\[[^\]]+\]\((<[^>]+>|[^)\s]+)")
 FULL_COMMIT_ACTION = re.compile(r"^[^@\s]+@[0-9a-f]{40}$")
+PRODUCER_TRIAL_PATH = Path(".github/workflows/producer-trial.yml")
+# Canonical parsed JSON, not YAML layout. Updating this requires complete review.
+EXPECTED_PRODUCER_TRIAL_SHA256 = (
+    "9e43f39f1af0af055477194d6dc9de24253ebb4b37587a57ddbf62a4aabcc3c0"
+)
 APPROVED_WORKFLOW_PATHS = {
     Path(".github/workflows/repository-checks.yml"),
+    PRODUCER_TRIAL_PATH,
 }
 CI_INSTALL_COMMAND = (
     "python -m venv .venv && .venv/bin/python -m pip install --only-binary=:all: --require-hashes "
@@ -452,6 +460,27 @@ REPEATABLE_CI_SETUP_COMMANDS = {
     CI_NPM_INSTALL_COMMAND,
     CI_NPM_TOOL_COMMAND,
 }
+PRODUCER_TRIAL_COMMANDS = {
+    CI_INSTALL_COMMAND,
+    CI_NPM_INSTALL_COMMAND,
+    CI_NPM_TOOL_COMMAND,
+    CI_RUST_BUILD_INSTALL_COMMAND,
+    'test "$TABGRAD_TRIAL_ENABLED" = true && test "$TABGRAD_TRIAL_CONFIRMATION" '
+    '= producer-trial && test "$GITHUB_EVENT_NAME" = workflow_dispatch && '
+    'test "$GITHUB_REF" = refs/heads/main && test "$GITHUB_RUN_ATTEMPT" = 1 && '
+    'test "$TABGRAD_TRIAL_SOURCE" = "$GITHUB_SHA"',
+    'node scripts/producer-trial.mjs prepare "$RUNNER_TEMP/tabgrad-producer-data"',
+    'node scripts/producer-trial.mjs announce "$RUNNER_TEMP/tabgrad-producer-data"',
+    'node scripts/producer-trial.mjs subjects "$RUNNER_TEMP/tabgrad-producer-data"',
+    "node scripts/producer-trial.mjs admit",
+    'node scripts/producer-trial.mjs retain "$ARCHIVE_PROOF" "$INVENTORY_PROOF" '
+    '"$RUNNER_TEMP/tabgrad-producer-proofs"',
+    ".venv/bin/python scripts/prepare_provenance_client.py "
+    '"$RUNNER_TEMP/tabgrad-producer-client"',
+    'node scripts/producer-trial.mjs verify "$RUNNER_TEMP/tabgrad-producer-data" '
+    '"$RUNNER_TEMP/tabgrad-producer-proofs" "$RUNNER_TEMP/tabgrad-producer-client" '
+    '"$RUNNER_TEMP/tabgrad-producer-verification"',
+}
 CHECKOUT_ACTION = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
 SETUP_PYTHON_ACTION = "actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97"
 SETUP_NODE_ACTION = "actions/setup-node@820762786026740c76f36085b0efc47a31fe5020"
@@ -459,6 +488,9 @@ APPROVED_ACTIONS = {
     CHECKOUT_ACTION: "v7.0.1",
     SETUP_PYTHON_ACTION: "v7.0.0",
     SETUP_NODE_ACTION: "v7.0.0",
+    "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9": "v7.0.2",
+    "actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333": "v8.0.2",
+    "actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6": "v4.2.2",
 }
 EXPECTED_REPOSITORY_CHECKS_WORKFLOW = {
     "name": "Repository checks",
@@ -1059,11 +1091,32 @@ def check_workflow_security(state: YamlRepositoryState) -> list[Failure]:
         if not is_yaml_mapping(document):
             failures.append(Failure(relative, "must contain a YAML mapping"))
             continue
-        if document.get("permissions") != {"contents": "read"}:
+        is_producer_trial = relative == PRODUCER_TRIAL_PATH
+        expected_permissions = {"contents": "read"}
+        if is_producer_trial:
+            expected_permissions["actions"] = "read"
+            try:
+                definition = json.dumps(
+                    document, sort_keys=True, separators=(",", ":"), allow_nan=False
+                ).encode()
+                matches_definition = (
+                    hashlib.sha256(definition).hexdigest()
+                    == EXPECTED_PRODUCER_TRIAL_SHA256
+                )
+            except (TypeError, ValueError):
+                matches_definition = False
+            if not matches_definition:
+                failures.append(
+                    Failure(
+                        relative,
+                        "must match the complete reviewed executable workflow definition",
+                    )
+                )
+        if document.get("permissions") != expected_permissions:
             failures.append(
                 Failure(
                     relative,
-                    "must grant only read access to repository contents",
+                    "must grant only read access under its registered workflow policy",
                 )
             )
         if "pull_request_target" in workflow_trigger_names(document.get("on")):
@@ -1072,8 +1125,20 @@ def check_workflow_security(state: YamlRepositoryState) -> list[Failure]:
             )
         jobs = document.get("jobs")
         if is_yaml_mapping(jobs):
-            for job in jobs.values():
+            for job_name, job in jobs.items():
                 if is_yaml_mapping(job) and "permissions" in job:
+                    if (
+                        is_producer_trial
+                        and job_name == "sign"
+                        and job["permissions"]
+                        == {
+                            "contents": "read",
+                            "actions": "read",
+                            "id-token": "write",
+                            "attestations": "write",
+                        }
+                    ):
+                        continue
                     failures.append(
                         Failure(
                             relative,
@@ -1118,7 +1183,12 @@ def check_ci_workflow(
     all_run_commands, command_failures = collect_workflow_run_commands(root, state)
     failures.extend(command_failures)
     for workflow_path, command in all_run_commands:
-        if command not in REQUIRED_CI_COMMANDS:
+        registered_commands = (
+            PRODUCER_TRIAL_COMMANDS
+            if workflow_path == PRODUCER_TRIAL_PATH
+            else REQUIRED_CI_COMMANDS
+        )
+        if command not in registered_commands:
             failures.append(
                 Failure(workflow_path, f"uses an unregistered command: {command}")
             )
@@ -1126,7 +1196,7 @@ def check_ci_workflow(
         occurrences = [
             workflow_path
             for workflow_path, candidate in all_run_commands
-            if candidate == command
+            if candidate == command and workflow_path != PRODUCER_TRIAL_PATH
         ]
         if len(occurrences) > 1:
             locations = ", ".join(str(location) for location in occurrences)
@@ -1193,7 +1263,7 @@ def check_ci_command_documentation(root: Path) -> list[Failure]:
     }
     missing_commands = sorted(
         command
-        for command in REQUIRED_CI_COMMANDS
+        for command in REQUIRED_CI_COMMANDS | PRODUCER_TRIAL_COMMANDS
         if command not in documented_commands
     )
     if not missing_commands:
