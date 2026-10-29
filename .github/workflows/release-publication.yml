@@ -136,6 +136,9 @@ jobs:
     - name: Run the maintained publication role
       id: role
       run: node scripts/release-publication.mjs admit "$RUNNER_TEMP/tabgrad-publication"
+      env:
+        TABGRAD_RECORD_INPUT: ${{ runner.temp }}/tabgrad-publication/initial-history
+        TABGRAD_PROVENANCE_CLIENT: ${{ runner.temp }}/tabgrad-provenance-client/gh
     - name: Preserve admission and available original history
       id: retained
       if: ${{ always() && steps.role.outcome != 'skipped' }}
@@ -148,8 +151,6 @@ jobs:
         retention-days: 90
     env:
       GH_TOKEN: ${{ github.token }}
-      TABGRAD_RECORD_INPUT: ${{ runner.temp }}/tabgrad-publication/initial-history
-      TABGRAD_PROVENANCE_CLIENT: ${{ runner.temp }}/tabgrad-provenance-client/gh
     environment: tabgrad-npm-publication
     permissions:
       contents: write
@@ -220,6 +221,9 @@ jobs:
     - name: Run the maintained publication role
       id: role
       run: node scripts/release-publication.mjs npm "$RUNNER_TEMP/tabgrad-publication"
+      env:
+        TABGRAD_RECORD_INPUT: ${{ runner.temp }}/tabgrad-publication/admission/evidence
+        TABGRAD_PUBLICATION_CLIENT: ${{ runner.temp }}/tabgrad-publication-client
     - name: Preserve the sanitized npm call outcome
       id: retained
       if: ${{ always() && steps.role.outcome != 'skipped' }}
@@ -235,8 +239,6 @@ jobs:
       TABGRAD_ADMISSION_ID: ${{ needs.admit.outputs.artifact_id }}
       TABGRAD_ADMISSION_DIGEST: ${{ needs.admit.outputs.digest }}
       TABGRAD_ADMISSION_SHA256: ${{ needs.admit.outputs.admission_sha }}
-      TABGRAD_RECORD_INPUT: ${{ runner.temp }}/tabgrad-publication/admission/evidence
-      TABGRAD_PUBLICATION_CLIENT: ${{ runner.temp }}/tabgrad-publication-client
     if: ${{ needs.precheck.outputs.mode == 'oidc' }}
     permissions:
       contents: read
@@ -355,6 +357,8 @@ jobs:
     - name: Run the maintained publication role
       id: role
       run: node scripts/release-publication.mjs observe "$RUNNER_TEMP/tabgrad-publication"
+      env:
+        TABGRAD_RECORD_INPUT: ${{ runner.temp }}/tabgrad-publication/admission/evidence
     - name: Preserve the recorded outcome and original history
       id: retained
       if: ${{ always() && steps.role.outcome != 'skipped' }}
@@ -370,7 +374,6 @@ jobs:
       TABGRAD_ADMISSION_ID: ${{ needs.admit.outputs.artifact_id }}
       TABGRAD_ADMISSION_DIGEST: ${{ needs.admit.outputs.digest }}
       TABGRAD_ADMISSION_SHA256: ${{ needs.admit.outputs.admission_sha }}
-      TABGRAD_RECORD_INPUT: ${{ runner.temp }}/tabgrad-publication/admission/evidence
       TABGRAD_NPM_RESULT_ID: ${{ needs.npm.outputs.artifact_id || needs.bootstrap.outputs.artifact_id }}
       TABGRAD_NPM_RESULT_DIGEST: ${{ needs.npm.outputs.digest || needs.bootstrap.outputs.digest }}
       TABGRAD_NPM_JOB_RESULT: ${{ needs.precheck.outputs.mode == 'bootstrap' && needs.bootstrap.result || needs.npm.result }}
@@ -525,6 +528,8 @@ jobs:
     - name: Run the maintained publication role
       id: role
       run: node scripts/release-publication.mjs complete "$RUNNER_TEMP/tabgrad-publication"
+      env:
+        TABGRAD_RECORD_INPUT: ${{ runner.temp }}/tabgrad-publication/observed/evidence
     - name: Preserve final or partial completion and original history
       id: retained
       if: ${{ always() && steps.role.outcome != 'skipped' }}
@@ -540,7 +545,6 @@ jobs:
       TABGRAD_ADMISSION_ID: ${{ needs.admit.outputs.artifact_id }}
       TABGRAD_ADMISSION_DIGEST: ${{ needs.admit.outputs.digest }}
       TABGRAD_ADMISSION_SHA256: ${{ needs.admit.outputs.admission_sha }}
-      TABGRAD_RECORD_INPUT: ${{ runner.temp }}/tabgrad-publication/observed/evidence
       TABGRAD_CONSUMERS_ID: ${{ needs.consume.outputs.artifact_id }}
       TABGRAD_CONSUMERS_DIGEST: ${{ needs.consume.outputs.digest }}
     permissions:
