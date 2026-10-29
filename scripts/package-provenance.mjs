@@ -13,7 +13,7 @@ const sha512 = /^[0-9a-f]{128}$/;
 const repositoryName = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 const workflowPath = /^\.github\/workflows\/[A-Za-z0-9_-][A-Za-z0-9_.-]*\.ya?ml$/;
 const predicateType = "https://slsa.dev/provenance/v1";
-const buildType = "https://slsa-framework.github.io/github-actions-buildtypes/workflow/v1";
+const buildType = "https://actions.github.io/buildtypes/workflow/v1";
 
 function exactKeys(value, keys) {
   return value !== null && typeof value === "object" && !Array.isArray(value)
@@ -106,8 +106,8 @@ export function verifyProducerCiEvidence(bytes, plan, candidate) {
   "CI_EVIDENCE_INVALID", "The admitted CI evidence does not corroborate this producer and qualified candidate.");
 }
 
-/** Validate required certificate-bound values separately from signed workflow claims. */
-export function verifyProducerIdentity(result, identity, subject) {
+/** Shared invariants; build format expectations belong to the trusted caller, never the proof. */
+export function verifyProducerIdentityClaims(result, identity, subject, expectedBuildType, expectedBuilder) {
   requireProof(result?.mediaType === "application/vnd.dev.sigstore.verificationresult+json;version=0.1"
     && Array.isArray(result.verifiedTimestamps) && result.verifiedTimestamps.length > 0
     && result.verifiedTimestamps.every(x => x !== null && typeof x === "object" && ["Tlog", "TimestampAuthority"].includes(x.type)
@@ -130,15 +130,24 @@ export function verifyProducerIdentity(result, identity, subject) {
     && isDeepStrictEqual(statement.subject, [subject]),
   "SUBJECT_MISMATCH", "The verified statement has a different type or exact subject.");
   const build = statement.predicate?.buildDefinition;
-  requireProof(build?.buildType === buildType && isDeepStrictEqual(build.externalParameters?.workflow,
+  requireProof(build?.buildType === expectedBuildType && isDeepStrictEqual(build.externalParameters?.workflow,
     { path: identity.workflowPath, ref: identity.sourceRef, repository })
     && build.internalParameters?.github?.repository_id === identity.repositoryId
     && build.internalParameters?.github?.repository_owner_id === identity.ownerId
     && build.internalParameters?.github?.event_name === identity.event
     && isDeepStrictEqual(build.resolvedDependencies, [{ digest: { gitCommit: identity.sourceRevision },
       uri: `git+${repository}@${identity.sourceRef}` }])
-    && statement.predicate.runDetails?.builder?.id === "https://github.com/actions/runner/github-hosted"
+    && statement.predicate.runDetails?.builder?.id === expectedBuilder
     && statement.predicate.runDetails?.metadata?.invocationId === invocation,
+  "CLAIMS_MISMATCH", "Workflow-controlled claims do not agree with authenticated identity and trusted CI evidence.");
+  return build;
+}
+
+/** Candidate policy: current Actions format, admitted signer and closed external parameters. */
+export function verifyProducerIdentity(result, identity, subject) {
+  const build = verifyProducerIdentityClaims(result, identity, subject, buildType, identity.signerUri);
+  requireProof(exactKeys(build.externalParameters, ["workflow"])
+    && build.internalParameters.github.runner_environment === result.signature.certificate.runnerEnvironment,
   "CLAIMS_MISMATCH", "Workflow-controlled claims do not agree with authenticated identity and trusted CI evidence.");
 }
 

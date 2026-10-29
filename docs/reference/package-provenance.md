@@ -134,8 +134,11 @@ exactly one npm PURL/SHA-512 subject; leading `@` in scoped names becomes `%40`,
 as in the selected npm publication client's PURL construction. The other
 statement identifies the plan's inventory subject name and original SHA-256.
 
-The profile requires in-toto Statement v1, SLSA provenance v1 and the GitHub
-Actions workflow build type v1. Certificate issuer, SAN, signer URI/digest,
+The candidate profile requires in-toto Statement v1, SLSA provenance v1 and the
+exact Actions workflow build type
+`https://actions.github.io/buildtypes/workflow/v1`. Its
+[format specification](https://github.com/actions/buildtypes/blob/055cb51e699272e4928520287e99d91fd8e9cca2/workflow/v1/README.md)
+defines the builder as the signing workflow. Certificate issuer, SAN, signer URI/digest,
 repository URI/immutable IDs, source digest/ref, workflow configuration/digest,
 event, hosted runner and run/attempt must exactly match policy. Authenticated
 time evidence must be present. The two proofs must identify the same admitted
@@ -143,7 +146,12 @@ producer execution and signer policy.
 
 Workflow-controlled predicate fields are then compared separately: source
 workflow path/ref/repository, IDs/event, the one qualified resolved-source
-dependency, builder and invocation. The original inventory's source/tools,
+dependency, builder and invocation. The builder must equal the independently
+admitted `signerUri`, including when the signer is a reusable workflow in
+another repository. Signed `runner_environment` must agree with the
+certificate's required `github-hosted` runner. External parameters contain
+only `workflow`, with exactly `path`, `ref` and `repository`; unknown parameters
+are rejected. The original inventory's source/tools,
 certificate-bound source/run, signed claims and independently admitted CI
 record must agree. A signature authenticates the selected workflow's claim;
 it does not independently prove a build happened or a test was adequate.
@@ -190,10 +198,24 @@ source/ref case, signer-prefix lookalikes, missing trusted authorities and
 independently changed expected IDs/run/attempt/subject name. Its fixed
 local-control bounds are not release-run bounds.
 
+These identified upstream fixtures use the older build type
+`https://slsa-framework.github.io/github-actions-buildtypes/workflow/v1` and
+builder `https://github.com/actions/runner/github-hosted`, without the signed
+runner field required for candidates. Only the fixture qualifier selects that
+fixed mapping. It shares certificate, time, subject and common claim checks
+with the candidate verifier; it does not provide a candidate fallback or a
+profile selector in the plan. Candidate and fixture policies reject each
+other's build-type/builder pair.
+
 Default Node tests separately use clearly synthetic, unsigned envelopes and a
 controlled adapter for project-policy, original-byte, error and composition
-controls. These two kinds of evidence do not constitute a real Tabgrad
+controls. Modeled fixture-policy tests characterize the legacy mapping without
+repeating actual-client qualification. These kinds of evidence do not constitute a real Tabgrad
 Actions-signed archive/inventory round trip. Client/platform/fixture/schema
 changes require affected requalification. Actual generator claims, protected
 handoffs, root freshness/enrollment, npm bundle acceptance and publication still
 need their separately authorized operational evidence under the release policy.
+An offline replay of retained genuine proofs establishes only the checks it
+actually completes. Preserve failed CI records and original plans separately;
+a corrected replay does not turn a failed historical CI job into a successful
+one or admit a release.

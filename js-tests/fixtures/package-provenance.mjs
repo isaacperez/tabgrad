@@ -25,12 +25,12 @@ export function controlledVerifiedResult(identity, subject) {
       buildConfigDigest: identity.workflowRevision, buildTrigger: identity.event, runInvocationURI: invocation } },
     verifiedTimestamps: [{ type: "Tlog", timestamp: "2026-01-01T00:00:00Z" }],
     statement: { _type: "https://in-toto.io/Statement/v1", subject: [subject], predicateType: "https://slsa.dev/provenance/v1",
-      predicate: { buildDefinition: { buildType: "https://slsa-framework.github.io/github-actions-buildtypes/workflow/v1",
+      predicate: { buildDefinition: { buildType: "https://actions.github.io/buildtypes/workflow/v1",
         externalParameters: { workflow: { path: identity.workflowPath, ref: identity.sourceRef, repository } },
         internalParameters: { github: { repository_id: identity.repositoryId, repository_owner_id: identity.ownerId,
-          event_name: identity.event } },
+          event_name: identity.event, runner_environment: "github-hosted" } },
         resolvedDependencies: [{ digest: { gitCommit: identity.sourceRevision }, uri: `git+${repository}@${identity.sourceRef}` }] },
-      runDetails: { builder: { id: "https://github.com/actions/runner/github-hosted" }, metadata: { invocationId: invocation } } } } };
+      runDetails: { builder: { id: identity.signerUri }, metadata: { invocationId: invocation } } } } };
 }
 
 const adapterSource = `#!NODE
