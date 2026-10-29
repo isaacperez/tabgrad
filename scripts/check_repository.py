@@ -398,10 +398,11 @@ PROJECT_PROGRESS_PATTERNS = (
 )
 MARKDOWN_LINK = re.compile(r"\[[^\]]+\]\((<[^>]+>|[^)\s]+)")
 FULL_COMMIT_ACTION = re.compile(r"^[^@\s]+@[0-9a-f]{40}$")
+DIRECT_RUNNER_CONTEXT = re.compile(r"\$\{\{\s*runner\s*(?:\.|\[)")
 PRODUCER_TRIAL_PATH = Path(".github/workflows/producer-trial.yml")
 PUBLICATION_PATH = Path(".github/workflows/release-publication.yml")
 EXPECTED_PUBLICATION_SHA256 = (
-    "cc0f10a1037f9e2abdc9c701b217d6f2560f606e3b78850995aa8d71077f04c8"
+    "5c9ec3c3c23d239f7102167baf91204731167ba69a7512d2b66cf8dfa98df128"
 )
 PUBLICATION_PERMISSIONS = {"contents": "read", "actions": "read", "issues": "read"}
 PUBLICATION_JOB_PERMISSIONS = {
@@ -1184,6 +1185,22 @@ def workflow_trigger_names(triggers: object) -> set[str]:
     return set()
 
 
+def check_job_runner_environment(
+    path: Path, job_name: object, job: Mapping[object, object]
+) -> list[Failure]:
+    """Reject direct runner paths before assignment to a runner, even if registered."""
+    environment = job.get("env")
+    if not is_yaml_mapping(environment):
+        return []
+    return [
+        Failure(
+            path, f"job {job_name} environment {name} must not use the runner context"
+        )
+        for name, value in environment.items()
+        if isinstance(value, str) and DIRECT_RUNNER_CONTEXT.search(value)
+    ]
+
+
 def check_workflow_security(state: YamlRepositoryState) -> list[Failure]:
     failures: list[Failure] = []
     documents = repository_workflow_documents(state)
@@ -1236,6 +1253,10 @@ def check_workflow_security(state: YamlRepositoryState) -> list[Failure]:
         jobs = document.get("jobs")
         if is_yaml_mapping(jobs):
             for job_name, job in jobs.items():
+                if is_yaml_mapping(job):
+                    failures.extend(
+                        check_job_runner_environment(relative, job_name, job)
+                    )
                 if is_yaml_mapping(job) and "permissions" in job:
                     if (
                         is_publication

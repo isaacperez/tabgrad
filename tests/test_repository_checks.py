@@ -1,4 +1,6 @@
 import ast
+import hashlib
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -120,6 +122,58 @@ class RepositoryCheckTests(unittest.TestCase):
                 self.assertIn(original, text)
                 target.write_text(text.replace(original, replacement, 1))
                 self.assertTrue(CHECKS.check_ci_workflow(root))
+
+    def test_registered_workflow_rejects_runner_paths_in_job_environment(self) -> None:
+        for expression in ("${{ runner.temp }}", "${{ runner [ 'temp' ] }}"):
+            with self.subTest(expression=expression):
+                document = {
+                    "permissions": CHECKS.PUBLICATION_PERMISSIONS,
+                    "jobs": {"example": {"env": {"INPUT": expression}}},
+                }
+                registered = hashlib.sha256(
+                    json.dumps(
+                        document, sort_keys=True, separators=(",", ":"), allow_nan=False
+                    ).encode()
+                ).hexdigest()
+                state = CHECKS.YamlRepositoryState(
+                    True, {CHECKS.PUBLICATION_PATH: document}, frozenset(), ()
+                )
+                with mock.patch.object(
+                    CHECKS, "EXPECTED_PUBLICATION_SHA256", registered
+                ):
+                    failures = CHECKS.check_workflow_security(state)
+                self.assertEqual(
+                    [failure.message for failure in failures],
+                    ["job example environment INPUT must not use the runner context"],
+                )
+
+    def test_registered_workflow_preserves_job_inputs_and_step_runner_paths(
+        self,
+    ) -> None:
+        document = {
+            "permissions": CHECKS.PUBLICATION_PERMISSIONS,
+            "jobs": {
+                "example": {
+                    "env": {
+                        "INPUT": "${{ vars.INPUT }}",
+                        "RUN": "${{ github.run_id }}",
+                    },
+                    "steps": [
+                        {"env": {"INPUT": "${{ runner.temp }}/input"}, "run": "command"}
+                    ],
+                }
+            },
+        }
+        registered = hashlib.sha256(
+            json.dumps(
+                document, sort_keys=True, separators=(",", ":"), allow_nan=False
+            ).encode()
+        ).hexdigest()
+        state = CHECKS.YamlRepositoryState(
+            True, {CHECKS.PUBLICATION_PATH: document}, frozenset(), ()
+        )
+        with mock.patch.object(CHECKS, "EXPECTED_PUBLICATION_SHA256", registered):
+            self.assertEqual(CHECKS.check_workflow_security(state), [])
 
     def test_producer_trial_rejects_changed_authority_source_and_dataflow(self) -> None:
         changes = [
