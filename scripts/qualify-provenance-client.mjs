@@ -5,7 +5,14 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { qualifiedProvenanceClient, identifyProvenanceClient, verifyProvenanceBundle, provenanceDigest as hash,
   ProvenanceError, requireProvenance as requireProof } from "./provenance-client.mjs";
-import { verifyOriginalProof, verifyProducerIdentity } from "./package-provenance.mjs";
+import { verifyOriginalProof, verifyProducerIdentityClaims } from "./package-provenance.mjs";
+
+/** Fixed mapping of the identified upstream fixtures; not a candidate policy fallback. */
+export function verifyClientFixtureIdentity(result, identity, subject) {
+  verifyProducerIdentityClaims(result, identity, subject,
+    "https://slsa-framework.github.io/github-actions-buildtypes/workflow/v1",
+    "https://github.com/actions/runner/github-hosted");
+}
 
 async function checkRejection(client, options, mutate, name, report, privateEvidence) {
   const changed = await mutate({ ...options, identity: structuredClone(options.identity) });
@@ -54,14 +61,14 @@ export async function qualifyProvenanceClient({ clientPath, clientSha256, fixtur
       const result = await verifyProvenanceBundle(client, options);
       const original = await readFile(options.bundle);
       verifyOriginalProof(original, result);
-      verifyProducerIdentity(result, entry.identity, entry.subject);
+      verifyClientFixtureIdentity(result, entry.identity, entry.subject);
       report.checks.push({ name: `${entry.name}-actual-signature-and-policy-mapping`, status: "passed" });
       for (const [field, value] of [["repositoryId", "1"], ["ownerId", "1"], ["runId", "1"], ["runAttempt", "999"]]) {
-        assert.throws(() => verifyProducerIdentity(result, { ...entry.identity, [field]: value }, entry.subject),
+        assert.throws(() => verifyClientFixtureIdentity(result, { ...entry.identity, [field]: value }, entry.subject),
           { code: "IDENTITY_MISMATCH" });
         report.checks.push({ name: `${entry.name}-independent-${field}`, status: "rejected-as-required" });
       }
-      assert.throws(() => verifyProducerIdentity(result, entry.identity, { ...entry.subject, name: "unapproved-subject" }),
+      assert.throws(() => verifyClientFixtureIdentity(result, entry.identity, { ...entry.subject, name: "unapproved-subject" }),
         { code: "SUBJECT_MISMATCH" });
       report.checks.push({ name: `${entry.name}-exact-subject-name`, status: "rejected-as-required" });
       await checkRejection(client, options, async value => {

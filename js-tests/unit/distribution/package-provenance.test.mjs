@@ -8,6 +8,7 @@ import { hash } from "../../fixtures/package-candidate.mjs";
 import { validateProvenancePlan, readProducerInventory, verifyProducerIdentity, verifyOriginalProof,
   verifyPackageProvenance } from "../../../scripts/package-provenance.mjs";
 import { provenanceEnvironment } from "../../../scripts/provenance-client.mjs";
+import { verifyClientFixtureIdentity } from "../../../scripts/qualify-provenance-client.mjs";
 
 test("controlled adapter composes exact retained bytes, two proofs and policy without executing the package", async context => {
   const f = await provenanceFixture(context);
@@ -50,6 +51,60 @@ test("attempt and separately trusted signer revision cannot be inferred from cla
   const result = controlledVerifiedResult(identity, subject);
   assert.throws(() => verifyProducerIdentity(result, { ...identity, runAttempt: "3" }, subject), { code: "IDENTITY_MISMATCH" });
   assert.throws(() => verifyProducerIdentity(result, { ...identity, signerRevision: identity.sourceRevision }, subject), { code: "IDENTITY_MISMATCH" });
+});
+
+test("candidate builder identifies the separately admitted signer, including a reusable workflow", () => {
+  const identity = producerIdentity(); const subject = { name: "candidate.json", digest: { sha256: "a".repeat(64) } };
+  const result = controlledVerifiedResult(identity, subject);
+  assert.notEqual(identity.signerUri, result.signature.certificate.buildConfigURI);
+  verifyProducerIdentity(result, identity, subject);
+  result.statement.predicate.runDetails.builder.id = result.signature.certificate.buildConfigURI;
+  assert.throws(() => verifyProducerIdentity(result, identity, subject), { code: "CLAIMS_MISMATCH" });
+});
+
+for (const [name, mutate] of [
+  ["missing build type", s => { delete s.predicate.buildDefinition.buildType; }],
+  ["unknown build type", s => { s.predicate.buildDefinition.buildType = "https://example.invalid/type"; }],
+  ["legacy build type", s => { s.predicate.buildDefinition.buildType = "https://slsa-framework.github.io/github-actions-buildtypes/workflow/v1"; }],
+  ["missing builder", s => { delete s.predicate.runDetails.builder; }],
+  ["legacy builder", s => { s.predicate.runDetails.builder.id = "https://github.com/actions/runner/github-hosted"; }],
+  ["legacy type and builder", s => {
+    s.predicate.buildDefinition.buildType = "https://slsa-framework.github.io/github-actions-buildtypes/workflow/v1";
+    s.predicate.runDetails.builder.id = "https://github.com/actions/runner/github-hosted";
+  }],
+  ["missing signed runner", s => { delete s.predicate.buildDefinition.internalParameters.github.runner_environment; }],
+  ["self-hosted signed runner", s => { s.predicate.buildDefinition.internalParameters.github.runner_environment = "self-hosted"; }],
+  ["unknown signed runner", s => { s.predicate.buildDefinition.internalParameters.github.runner_environment = "unknown"; }],
+  ["unknown external parameter", s => { s.predicate.buildDefinition.externalParameters.extra = true; }],
+  ["unknown workflow parameter", s => { s.predicate.buildDefinition.externalParameters.workflow.extra = true; }],
+]) test(`candidate rejects ${name} without choosing a fallback policy`, () => {
+  const identity = producerIdentity(); const subject = { name: "candidate.json", digest: { sha256: "a".repeat(64) } };
+  const result = controlledVerifiedResult(identity, subject); mutate(result.statement);
+  assert.throws(() => verifyProducerIdentity(result, identity, subject), { code: "CLAIMS_MISMATCH" });
+});
+
+test("modeled upstream fixtures retain their caller-owned legacy mapping and common invariants", async () => {
+  const manifest = JSON.parse(await readFile(new URL("../../fixtures/provenance-client.json", import.meta.url), "utf8"));
+  for (const { identity, subject } of manifest.cases) {
+    // Characterization of policy roles, not a cryptographic fixture qualification.
+    const result = controlledVerifiedResult(identity, structuredClone(subject));
+    assert.throws(() => verifyClientFixtureIdentity(result, identity, subject), { code: "CLAIMS_MISMATCH" });
+    result.statement.predicate.buildDefinition.buildType = "https://slsa-framework.github.io/github-actions-buildtypes/workflow/v1";
+    result.statement.predicate.runDetails.builder.id = "https://github.com/actions/runner/github-hosted";
+    delete result.statement.predicate.buildDefinition.internalParameters.github.runner_environment;
+    verifyClientFixtureIdentity(result, identity, subject);
+    assert.throws(() => verifyProducerIdentity(result, identity, subject), { code: "CLAIMS_MISMATCH" });
+    for (const [mutate, code] of [
+      [r => { r.signature.certificate.sourceRepositoryIdentifier = "1"; }, "IDENTITY_MISMATCH"],
+      [r => { r.verifiedTimestamps = []; }, "CLIENT_RESULT_INVALID"],
+      [r => { r.statement.subject[0].name = "changed"; }, "SUBJECT_MISMATCH"],
+      [r => { r.statement.predicate.buildDefinition.internalParameters.github.repository_id = "1"; }, "CLAIMS_MISMATCH"],
+      [r => { r.statement.predicate.buildDefinition.resolvedDependencies = []; }, "CLAIMS_MISMATCH"],
+    ]) {
+      const changed = structuredClone(result); mutate(changed);
+      assert.throws(() => verifyClientFixtureIdentity(changed, identity, subject), { code });
+    }
+  }
 });
 
 for (const [name, mutate] of [
