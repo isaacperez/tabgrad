@@ -85,6 +85,15 @@ export function readProducerInventory(bytes) {
   return expected;
 }
 
+/** The generator and verifier use the same two subject identities. */
+export function producerProofSubjects(candidate, inventoryBytes, inventorySubject = "candidate.json") {
+  return {
+    archive: { name: `pkg:npm/${candidate.name.replace(/^@/, "%40")}@${candidate.version}`,
+      digest: { sha512: Buffer.from(candidate.tarball.integrity.slice(7), "base64").toString("hex") } },
+    inventory: { name: inventorySubject, digest: { sha256: hash(inventoryBytes) } },
+  };
+}
+
 /** The caller admits this original CI evidence separately; this tool does not fetch/authenticate it. */
 export function verifyProducerCiEvidence(bytes, plan, candidate) {
   requireProof(hash(bytes) === plan.ciEvidenceSha256, "CI_EVIDENCE_MISMATCH", "CI evidence differs from its admitted identity.");
@@ -194,11 +203,12 @@ export async function verifyPackageProvenance({ plan: input, archive, inventory,
     const client = await identifyProvenanceClient(plan.client, plan.limits, directory);
     report.client = { version: client.version, sha256: client.sha256 };
     report.checks.push("admitted-qualified-client");
+    const subjects = producerProofSubjects(candidate, rawInventory, plan.inventorySubject);
     for (const [kind, artifact, bundle, original, algorithm, subject] of [
       ["archive", staged.tarball, join(directory, "archive-proof.json"), archiveProof, "sha512",
-        { name: `pkg:npm/${candidate.name.replace(/^@/, "%40")}@${candidate.version}`, digest: { sha512: archiveDigest } }],
+        subjects.archive],
       ["inventory", join(directory, "inventory.json"), join(directory, "inventory-proof.json"), inventoryProof, "sha256",
-        { name: plan.inventorySubject, digest: { sha256: hash(rawInventory) } }],
+        subjects.inventory],
     ]) {
       report.phase = `${kind}-proof`;
       validateProvenancePlan(plan);

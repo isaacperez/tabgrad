@@ -71,10 +71,10 @@ The runtime job installs the exact npm resolution,
 selected Rust toolchain, and direct tools recorded in
 [`dependencies.md`](dependencies.md). The repository validator rejects a
 workflow until its path has been registered as reviewed. It checks every
-workflow for read-only repository permission, job-level permission overrides,
+workflow for its registered permission policy, unauthorized job-level overrides,
 `pull_request_target`, and actions that are unregistered or are not pinned to a
 full commit. It also rejects undocumented shell commands. Validation commands
-may appear only once; exact, idempotent environment-setup commands may repeat
+may appear only once within the consistency workflow; exact, idempotent environment-setup commands may repeat
 where isolated jobs require the same toolchain. The test runner fails when
 discovery finds zero tests. An empty suite is not a successful check.
 
@@ -101,6 +101,36 @@ checkout credentials, uses an explicit runner and Python version, limits job
 time, grants only `contents: read`, and cancels superseded runs for the same
 reference. Treat every workflow as executable code with access to the
 permissions stated in its file.
+
+## Experimental producer workflow
+
+The manually dispatched `.github/workflows/producer-trial.yml` is a separately
+registered experimental recipe, described in the
+[hosted trial reference](reference/producer-trial.md). Its complete parsed
+definition is pinned by a canonical JSON SHA-256 in the validator; changing a
+gate, input, step, job, command or permission requires review and registration
+of the whole definition. This does not weaken the consistency workflow's
+existing definition or register arbitrary workflows/commands.
+
+It is inert without the exact repository enable variable and admits only a
+separately authorized main source and first attempt. Its default permissions
+are `contents: read` and `actions: read`, needed for exact artifact downloads
+and service corroboration. Only its `sign` job adds `id-token: write` and
+`attestations: write`, after successful consumer qualification and a protected
+environment approval. No other job may override permissions. It invokes no npm
+publication, supplies no npm credentials and has no Contents-write token.
+Actual isolation of OIDC identities from the publisher depends on separately
+admitted provider bindings, not absence of a publish command. Its fixed commands
+belong to this workflow only; reusing existing setup commands here is not duplicate execution
+of the ordinary required checks.
+
+The maintainer must admit the environment's actual protection and reviewers,
+repository variables, intended outputs/readers, cost and trust inputs before
+enabling or dispatching it. A source merge neither configures nor proves those
+service settings, and an environment name alone does not enforce approval.
+Trial jobs and artifacts are specialized qualification evidence, not required
+PR checks or an authorization to publish. Tests of source and finite adapters
+leave the real producer/service mechanism unqualified.
 
 ## Select CI execution by impact
 

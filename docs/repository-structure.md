@@ -334,6 +334,16 @@ outside candidate generation, browser imports and privileged signing/publication
 The [producer-proof reference](reference/package-provenance.md) owns these commands
 and their explicit operational limits.
 
+`scripts/producer-trial.mjs` composes those existing package/consumer/proof owners
+with exact hosted-run context and authenticated service observations. The
+manual `.github/workflows/producer-trial.yml` owns the experimental job order,
+artifact handoffs and isolated signing role; it does not enter default PR CI.
+`scripts/prepare_provenance_client.py` owns only explicit fixed Linux client
+setup for that recipe. Distribution unit tests and native installer/CI policy
+tests cover finite adapters and failures. The
+[hosted trial reference](reference/producer-trial.md) separates this experiment
+from effective service admission, publication and the acquisition laboratory.
+
 `scripts/provenance-acquisition-record.mjs` owns the separate internal experimental
 acquisition record format and structural association; its `-io.mjs` companion
 owns effective file identity, independent logical reserves, positional transfers

@@ -56,6 +56,80 @@ class RepositoryCheckTests(unittest.TestCase):
         workflow.write_text(body, encoding="utf-8")
         return workflow
 
+    def copy_producer_workflow(self, root: Path) -> Path:
+        workflow = root / CHECKS.PRODUCER_TRIAL_PATH
+        workflow.parent.mkdir(parents=True, exist_ok=True)
+        source = SCRIPT.parents[1] / CHECKS.PRODUCER_TRIAL_PATH
+        workflow.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+        return workflow
+
+    def test_producer_trial_keeps_existing_ci_and_registers_only_its_signer(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.copy_repository_workflow(root)
+            self.copy_producer_workflow(root)
+            self.assertEqual(CHECKS.check_ci_workflow(root), [])
+
+    def test_producer_trial_rejects_changed_authority_source_and_dataflow(self) -> None:
+        changes = [
+            ("  workflow_dispatch:\n", "  push:\n  workflow_dispatch:\n"),
+            ("vars.TABGRAD_PRODUCER_TRIAL_ENABLED == 'true'", "true"),
+            ("github.run_attempt == '1'", "true"),
+            ("inputs.source_revision == github.sha", "true"),
+            ("    needs: prepare\n", "    needs: []\n"),
+            ("    environment: tabgrad-producer-signing\n", ""),
+            ("  actions: read\n", "  actions: write\n"),
+            ("      attestations: write\n", "      attestations: read\n"),
+            (
+                "    name: prepare-and-qualify\n",
+                "    name: prepare-and-qualify\n    permissions: write-all\n",
+            ),
+            (
+                "    name: verify-retained-proofs\n",
+                "    name: verify-retained-proofs\n    permissions: write-all\n",
+            ),
+            ("          ref: ${{ github.sha }}\n", "          ref: main\n"),
+            ("          digest-mismatch: error\n", "          digest-mismatch: warn\n"),
+            ("          overwrite: false\n", "          overwrite: true\n"),
+            ("          retention-days: 90\n", "          retention-days: 1\n"),
+            (
+                "          push-to-registry: false\n",
+                "          push-to-registry: true\n",
+            ),
+            (
+                "        run: node scripts/producer-trial.mjs admit\n",
+                "        run: echo unchecked\n",
+            ),
+            ("    timeout-minutes: 20\n", "    timeout-minutes: 200\n"),
+            (
+                "          artifact-ids: ${{ needs.prepare.outputs.data_id }}\n",
+                "          name: latest\n",
+            ),
+            ("1e69f48acb82d1966a394da916b4c1698aa569d6", "main"),
+        ]
+        for original, replacement in changes:
+            with (
+                self.subTest(original=original),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                root = Path(directory)
+                self.copy_repository_workflow(root)
+                workflow = self.copy_producer_workflow(root)
+                text = workflow.read_text(encoding="utf-8")
+                self.assertIn(original, text)
+                workflow.write_text(
+                    text.replace(original, replacement, 1), encoding="utf-8"
+                )
+                failures = CHECKS.check_ci_workflow(root)
+                self.assertTrue(
+                    any(
+                        "complete reviewed executable" in item.message
+                        for item in failures
+                    )
+                )
+
     def assert_workflow_mutation_rejected(
         self, original: str, replacement: str
     ) -> None:

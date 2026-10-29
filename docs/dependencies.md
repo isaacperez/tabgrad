@@ -93,6 +93,14 @@ The dependency record must always describe the repository that exists. Do not
 keep a planned dependency in a manifest, and do not omit a tool that is needed
 to reproduce a required check or release.
 
+The optional hosted trial's Linux x86-64 client setup selects the official
+`gh_2.102.0_linux_amd64.tar.gz` archive: 15,319,960 compressed bytes, SHA-256
+`bb766f710eef8ede859c18578c72c327597cd4c8a85b06001b1f3843c6019386`, from
+the [upstream release](https://github.com/cli/cli/releases/tag/v2.102.0).
+This archive identity is distinct from the selected binary's recorded hash.
+Local synthetic setup tests do not qualify that binary or its hosted platform;
+see the [trial boundary](reference/producer-trial.md#transfer-client-and-failures).
+
 ## Direct third-party tools
 
 | Dependency | Purpose and environment | Selected version | Source and license |
@@ -100,10 +108,13 @@ to reproduce a required check or release.
 | `actions/checkout` | Read-only repository checkout in GitHub Actions | Commit `3d3c42e5aac5ba805825da76410c181273ba90b1`, release `v7.0.1` | Official `actions/checkout` repository, MIT License |
 | `actions/setup-python` | Provide the exact Python interpreter used by repository checks | Commit `5fda3b95a4ea91299a34e894583c3862153e4b97`, release `v7.0.0` | Official `actions/setup-python` repository, MIT License |
 | `actions/setup-node` | Provide Node.js selected by `.node-version` in the runtime CI job | Commit `820762786026740c76f36085b0efc47a31fe5020`, release `v7.0.0` | Official `actions/setup-node` repository, MIT License |
+| `actions/upload-artifact` | Immutable retained handoffs and diagnostics in the optional producer trial | Commit `cf430e030ddbb5b0abf93d22962f4752f3646cd9`, release `v7.0.2` | Official `actions/upload-artifact` repository, MIT License |
+| `actions/download-artifact` | Receive exact trial artifact IDs with fatal digest mismatch | Commit `9000827ccba6bdab643e8b6fd33ac0654aef8333`, release `v8.0.2` | Official `actions/download-artifact` repository, MIT License |
+| `actions/attest` | Optional separately authorized producer signatures, isolated from building and publication | Commit `1e69f48acb82d1966a394da916b4c1698aa569d6`, release `v4.2.2` | Official `actions/attest` repository, MIT License |
 | `PyYAML` | Parse repository YAML during local and continuous-integration checks; development only | `6.0.3`, with accepted artifact hashes in `requirements-dev.lock` | Python Package Index and `yaml/pyyaml`, MIT License |
 | `Ruff` | Format and lint maintained Python compatibility source, repository tooling and tests; development only | `0.16.5`, with accepted artifact hashes in `requirements-dev.lock` | Python Package Index and `astral-sh/ruff`, MIT License |
 | Node.js | Run TypeScript compilation, build scripts, tests, and bounded measurements; development and release time only | `22.12.0`, selected by `.node-version` | Official Node.js distribution, MIT License |
-| GitHub CLI (`gh`) | Optional offline producer-proof verification and specialized actual-client qualification; release tooling only, outside runtime/build/default CI setup | `2.102.0`; exact prepared binary SHA-256 is separately admitted in the private plan, with no PATH/version-only substitution | Official `cli/cli` commit `fc4b137cdef0a6bd28fd461b7cf9c84a5812a8cd`, MIT License |
+| GitHub CLI (`gh`) | Optional offline producer-proof verification, root acquisition and specialized actual-client qualification; release tooling only, outside runtime/build/default CI setup | `2.102.0`; exact prepared binary SHA-256 is explicitly recorded/admitted, with no PATH/version-only substitution | Official `cli/cli` commit `fc4b137cdef0a6bd28fd461b7cf9c84a5812a8cd`, MIT License |
 | npm | Resolve the JavaScript development dependency and run package scripts; development and release time only | `11.1.0`, selected by `packageManager` in `package.json` | Official npm CLI distribution, Artistic License 2.0 |
 | TypeScript | Type-check and compile the browser-side semantic runtime and WebAssembly adapter; build time only | `6.0.3`, with registry URL and integrity in `package-lock.json` | npm registry and `microsoft/TypeScript`, Apache License 2.0 |
 | Pyodide | Execute Python in the host-owned browser interpreter; installed for development integration checks, not bundled into the direct JavaScript entry | `314.0.6`, with registry URL and integrity in `package-lock.json` | Official `pyodide/pyodide` distribution on npm; Mozilla Public License 2.0, with separate notices for included CPython and other components |

@@ -1,0 +1,225 @@
+name: Producer trial
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_revision:
+        description: Exact approved main commit, equal to the workflow revision
+        required: true
+        type: string
+      expires_at:
+        description: Approved finite UTC deadline, including milliseconds and Z
+        required: true
+        type: string
+      trusted_root_sha256:
+        description: Independently admitted original trusted-root JSONL SHA-256
+        required: true
+        type: string
+      confirmation:
+        description: Enter producer-trial after separate operational authorization
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: producer-trial
+  cancel-in-progress: false
+
+env:
+  TABGRAD_TRIAL_ENABLED: ${{ vars.TABGRAD_PRODUCER_TRIAL_ENABLED }}
+  TABGRAD_TRIAL_CONFIRMATION: ${{ inputs.confirmation }}
+  TABGRAD_TRIAL_SOURCE: ${{ inputs.source_revision }}
+  TABGRAD_TRIAL_DEADLINE: ${{ inputs.expires_at }}
+  TABGRAD_TRIAL_TRUST_ROOT: ${{ inputs.trusted_root_sha256 }}
+
+jobs:
+  prepare:
+    name: prepare-and-qualify
+    if: >-
+      ${{ vars.TABGRAD_PRODUCER_TRIAL_ENABLED == 'true' &&
+          github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' &&
+          github.run_attempt == '1' && inputs.source_revision == github.sha &&
+          inputs.confirmation == 'producer-trial' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    outputs:
+      qualified: ${{ steps.prepare.outputs.qualified }}
+      data_id: ${{ steps.data.outputs.artifact-id }}
+      data_digest: ${{ steps.data.outputs.artifact-digest }}
+    steps:
+      - name: Admit exact context before checkout
+        run: test "$TABGRAD_TRIAL_ENABLED" = true && test "$TABGRAD_TRIAL_CONFIRMATION" = producer-trial && test "$GITHUB_EVENT_NAME" = workflow_dispatch && test "$GITHUB_REF" = refs/heads/main && test "$GITHUB_RUN_ATTEMPT" = 1 && test "$TABGRAD_TRIAL_SOURCE" = "$GITHUB_SHA"
+      - name: Check out the workflow source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Select Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          check-latest: false
+      - name: Select npm
+        run: npm install --global npm@11.1.0 --ignore-scripts --no-audit --no-fund
+      - name: Install locked development dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Prepare the Rust build target
+        run: rustup toolchain install 1.98.1 --profile minimal --target wasm32-unknown-unknown
+      - name: Prepare and qualify one retained candidate
+        id: prepare
+        run: node scripts/producer-trial.mjs prepare "$RUNNER_TEMP/tabgrad-producer-data"
+      - name: Retain preparation data or observed partial data
+        id: data
+        if: ${{ always() && steps.prepare.outputs.data_exists == 'true' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: tabgrad-producer-data-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/tabgrad-producer-data
+          overwrite: false
+          if-no-files-found: error
+          retention-days: 90
+      - name: Identify the frozen handoff for signing approval
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TABGRAD_TRIAL_DATA_ID: ${{ steps.data.outputs.artifact-id }}
+          TABGRAD_TRIAL_DATA_DIGEST: ${{ steps.data.outputs.artifact-digest }}
+        run: node scripts/producer-trial.mjs announce "$RUNNER_TEMP/tabgrad-producer-data"
+
+  sign:
+    name: sign-qualified-candidate
+    needs: prepare
+    if: ${{ needs.prepare.result == 'success' && needs.prepare.outputs.qualified == 'true' && vars.TABGRAD_PRODUCER_TRIAL_ENABLED == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: tabgrad-producer-signing
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+      attestations: write
+    env:
+      TABGRAD_TRIAL_DATA_ID: ${{ needs.prepare.outputs.data_id }}
+      TABGRAD_TRIAL_DATA_DIGEST: ${{ needs.prepare.outputs.data_digest }}
+    outputs:
+      proofs_id: ${{ steps.proofs.outputs.artifact-id }}
+      proofs_digest: ${{ steps.proofs.outputs.artifact-digest }}
+    steps:
+      - name: Check out the same reviewed recipe
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Select Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          check-latest: false
+      - name: Receive this run's frozen data
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.prepare.outputs.data_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/tabgrad-producer-data
+          digest-mismatch: error
+      - name: Recheck data, deadline and exact subjects before signing
+        id: subjects
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/producer-trial.mjs subjects "$RUNNER_TEMP/tabgrad-producer-data"
+      - name: Attest the original npm-compatible archive
+        id: archive
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ steps.subjects.outputs.archive_subject }}
+          subject-digest: ${{ steps.subjects.outputs.archive_digest }}
+          push-to-registry: false
+      - name: Recheck authority before the second signature
+        run: node scripts/producer-trial.mjs admit
+      - name: Attest the original canonical inventory
+        id: inventory
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ steps.subjects.outputs.inventory_subject }}
+          subject-digest: ${{ steps.subjects.outputs.inventory_digest }}
+          push-to-registry: false
+      - name: Preserve original proof bytes including partial progress
+        id: retain
+        if: ${{ always() }}
+        env:
+          ARCHIVE_PROOF: ${{ steps.archive.outputs.bundle-path }}
+          INVENTORY_PROOF: ${{ steps.inventory.outputs.bundle-path }}
+        run: node scripts/producer-trial.mjs retain "$ARCHIVE_PROOF" "$INVENTORY_PROOF" "$RUNNER_TEMP/tabgrad-producer-proofs"
+      - name: Retain the proof result
+        id: proofs
+        if: ${{ always() && steps.retain.outcome != 'skipped' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: tabgrad-producer-proofs-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/tabgrad-producer-proofs
+          overwrite: false
+          if-no-files-found: error
+          retention-days: 90
+
+  verify:
+    name: verify-retained-proofs
+    needs: [prepare, sign]
+    if: ${{ needs.prepare.result == 'success' && needs.sign.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      TABGRAD_TRIAL_DATA_ID: ${{ needs.prepare.outputs.data_id }}
+      TABGRAD_TRIAL_DATA_DIGEST: ${{ needs.prepare.outputs.data_digest }}
+      TABGRAD_TRIAL_PROOFS_ID: ${{ needs.sign.outputs.proofs_id }}
+      TABGRAD_TRIAL_PROOFS_DIGEST: ${{ needs.sign.outputs.proofs_digest }}
+    steps:
+      - name: Check out the same verification source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Select Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          check-latest: false
+      - name: Select Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.11.9'
+          check-latest: false
+      - name: Prepare the locked tooling environment
+        run: >-
+          python -m venv .venv && .venv/bin/python -m pip install --only-binary=:all: --require-hashes -r requirements-dev.lock
+      - name: Prepare the fixed optional verification client
+        run: .venv/bin/python scripts/prepare_provenance_client.py "$RUNNER_TEMP/tabgrad-producer-client"
+      - name: Receive the original candidate data
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.prepare.outputs.data_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/tabgrad-producer-data
+          digest-mismatch: error
+      - name: Receive the original proof bytes
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.sign.outputs.proofs_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/tabgrad-producer-proofs
+          digest-mismatch: error
+      - name: Corroborate this run and verify both retained proofs
+        id: verify
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/producer-trial.mjs verify "$RUNNER_TEMP/tabgrad-producer-data" "$RUNNER_TEMP/tabgrad-producer-proofs" "$RUNNER_TEMP/tabgrad-producer-client" "$RUNNER_TEMP/tabgrad-producer-verification"
+      - name: Retain the bounded verification result
+        if: ${{ always() && steps.verify.outcome != 'skipped' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: tabgrad-producer-verification-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/tabgrad-producer-verification
+          overwrite: false
+          if-no-files-found: error
+          retention-days: 90
