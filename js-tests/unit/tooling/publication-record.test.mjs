@@ -92,6 +92,9 @@ test("actual Git: new explicit continuation preserves a known npm success withou
   plan.continuation = { operation: f.plan.operation, evidenceSha256: sha256(canonicalBytes(closure)) };
   plan.window.deadline = new Date(f.now + 40 * 60 * 1000).toISOString();
   plan.producer.verification.expiresAt = new Date(f.now + 50 * 60 * 1000).toISOString();
+  const wrongClosure = structuredClone(plan); wrongClosure.continuation.evidenceSha256 = f.plan.owner;
+  await assert.rejects(publicationRecord({ ...approvedPlan(f, wrongClosure), config: first.config, expectedHead: first.head }),
+    { code: "PUBLICATION_CONTINUATION_UNPROVEN" });
   const continued = await publicationRecord({ ...approvedPlan(f, plan), config: first.config, expectedHead: first.head });
   assert.equal(continued.complete.has(effect.identity), true);
   await assert.rejects(continued.intent(effect), { code: "PUBLICATION_EFFECT_ALREADY_COMPLETE" });

@@ -8,6 +8,7 @@ import { identifyPublicationClient, publicationEnvironment, runPublicationProces
 import { inspectBootstrapNamespace, prepareNpmRole, publishNpmArchive } from "./publication-npm.mjs";
 import { canonicalBytes, sha256 } from "./release-record-data.mjs";
 import { requirePublication } from "./publication-plan.mjs";
+import { npmCallReceipt, requireNpmCallReceipt } from "./publication-effects.mjs";
 
 /** Actual selected npm, original public signature, local registry and fake auth. */
 export async function qualifyPublicationClient({ clientDirectory, clientSha256, fixturesDirectory }) {
@@ -113,6 +114,15 @@ export async function qualifyPublicationClient({ clientDirectory, clientSha256, 
         assert.deepEqual(delivered, bundle);
         assert.equal(delivered.dsseEnvelope.payload, bundle.dsseEnvelope.payload);
         assert.deepEqual(delivered.dsseEnvelope.signatures, bundle.dsseEnvelope.signatures);
+        const metadata = JSON.parse(originals.get("metadata-original.json"));
+        const plan = { operation: "f".repeat(64), candidate: { name: manifest.package, version: manifest.version,
+          archiveSha512: Buffer.from(metadata.dist.integrity.slice(7), "base64").toString("hex") },
+        publisher: { clientSha256 } };
+        const handoff = { call: "a".repeat(64), effect: "b".repeat(64) };
+        const receipt = npmCallReceipt(plan, handoff, client, result);
+        requireNpmCallReceipt(plan, handoff, receipt);
+        assert.equal(receipt.outcome, "verified-effect");
+        report.checks.push({ name: `${name}-actual-client-success-receipt`, status: "passed" });
         if (name === "oidc-exchange") {
           assert.equal(calls.filter(call => call.path.startsWith("/fixture-id-token?")).length, 1);
           assert.equal(calls.filter(call => call.path.startsWith("/-/npm/v1/oidc/token/exchange/")).length, 1);

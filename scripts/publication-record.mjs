@@ -70,6 +70,7 @@ export async function publicationRecord({ config, expectedHead, policy, plan, au
   if (continuation !== null) {
     const old = replay.operations.find(operation => operation.operation === continuation.operation);
     requirePublication(old?.closure && old.closure.result === "abandoned"
+      && old.closure.evidence === continuation.evidenceSha256
       && config.evidence[continuation.evidenceSha256] !== undefined,
     "PUBLICATION_CONTINUATION_UNPROVEN");
     requirePublication(sha256(await readFile(config.evidence[continuation.evidenceSha256])) === continuation.evidenceSha256,
