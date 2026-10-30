@@ -377,6 +377,23 @@ fallback. Use an interactive terminal:
 node scripts/release-publication.mjs human ABSOLUTE_OWNED_ROOT
 ```
 
+Keep stdin, stdout and stderr attached to the real terminal through both human
+launch layers. Redirecting any of them rejects before the publication process
+is spawned. npm presents its own supported second-factor prompt or browser
+flow; never disable MFA to compensate for a missing terminal.
+
+The human call uses the explicit `human-terminal-exit` confirmation method.
+Its private original records the observed status, signal, dispatch and
+`outputMode: "inherited-terminal"`; stdout/stderr are `null`, meaning not
+captured. A zero exit, no signal and no controller error from that admitted
+call produce `PUBLICATION_NPM_HUMAN_PROCESS_SUCCESS`. This is client call
+evidence, not a retained JSON response or complete terminal transcript. There
+is no automatic capture-byte limit on inherited terminal output. CI keeps its
+captured JSON method and output limits. A terminal marker or destination
+match alone cannot select human confirmation or settle a failed/unobserved
+call. Subsequent exact registry/provenance/consumer verification is still
+required before GitHub completion.
+
 After the actual child finishes its qualified namespace reads, the same live
 parent creates `public-output/readiness-comment.txt` and waits. The admitted
 maintainer, or its separately authorized coordinator, inspects and posts that

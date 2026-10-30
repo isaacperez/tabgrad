@@ -4,7 +4,7 @@ import { lstat, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { publicationEnvironment, identifyPublicationClient } from "./publication-client.mjs";
+import { publicationEnvironment, identifyPublicationClient, publicationTerminalStdio } from "./publication-client.mjs";
 import { inspectBootstrapNamespace, prepareNpmRole, publishNpmArchive } from "./publication-npm.mjs";
 import { publicationFile } from "./publication-admission.mjs";
 import { npmCallReceipt, requireNpmCallReceipt, requireNpmIntent } from "./publication-effects.mjs";
@@ -14,7 +14,7 @@ import { claimGateSession } from "./publication-gate.mjs";
 
 function launchHumanClient({ root, environment }) {
   return fork(fileURLToPath(import.meta.url), ["--client"], { execPath: process.execPath, cwd: root,
-    execArgv: [], env: environment, stdio: ["inherit", "ignore", "inherit", "ipc"] });
+    execArgv: [], env: environment, stdio: [...publicationTerminalStdio(), "ipc"] });
 }
 
 /**
@@ -176,7 +176,7 @@ export async function runHumanClient(message, { identifyClient = identifyPublica
       signal: controller.signal });
   } catch (error) { failure = error; if (!called) failure.dispatched = false; }
   clearTimeout(readerTimer);
-  const receipt = npmCallReceipt(plan, admission.handoff, client, result, failure);
+  const receipt = npmCallReceipt(plan, admission.handoff, client, result, failure, "human-terminal-exit");
   try {
     await mkdir(join(message.root, "private"), { recursive: true, mode: 0o700 });
     await writeFile(join(message.root, "private/npm-call.json"), canonicalBytes(result ?? failure?.privateClientEvidence ?? { code: failure?.code }),

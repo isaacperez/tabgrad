@@ -56,6 +56,37 @@ test("missing publication executable is a known no-dispatch failure", async t =>
     { code: "PUBLICATION_CLIENT_FAILED", dispatched: false });
 });
 
+test("interactive publication refuses missing terminal streams before dispatch", {
+  skip: Boolean(process.stdin.isTTY && process.stdout.isTTY && process.stderr.isTTY),
+}, async t => {
+  const options = await fixture(t);
+  await assert.rejects(runPublicationProcess(process.execPath, ["-e", "process.exit(0)"], { ...options, interactive: true }),
+    { code: "PUBLICATION_INTERACTIVE_REQUIRED", dispatched: false });
+});
+
+test("genuine terminal failures retain observed close and dispatched uncertainty without captured output", {
+  skip: !process.stdin.isTTY || !process.stdout.isTTY || !process.stderr.isTTY,
+}, async t => {
+  const options = await fixture(t);
+  for (const [source, changes, code] of [
+    ["process.exitCode=2", {}, "PUBLICATION_CLIENT_REJECTED"],
+    ["process.kill(process.pid, 'SIGTERM')", {}, "PUBLICATION_CLIENT_REJECTED"],
+    ["setInterval(() => {}, 1000)", { timeoutMs: 75 }, "PUBLICATION_CLIENT_TIMEOUT"],
+  ]) {
+    await assert.rejects(runPublicationProcess(process.execPath, ["-e", source], { ...options, ...changes, interactive: true }), error => {
+      assert.equal(error.code, code); assert.equal(error.dispatched, true);
+      assert.equal(error.privateClientEvidence.outputMode, "inherited-terminal");
+      assert.equal(error.privateClientEvidence.stdout, null); assert.equal(error.privateClientEvidence.stderr, null);
+      assert.ok(error.privateClientEvidence.status !== null || error.privateClientEvidence.signal !== null); return true;
+    });
+  }
+  const controller = new AbortController();
+  const pending = runPublicationProcess(process.execPath, ["-e", "setInterval(() => {}, 1000)"],
+    { ...options, interactive: true, signal: controller.signal });
+  controller.abort();
+  await assert.rejects(pending, { code: "PUBLICATION_CLIENT_CANCELLED", dispatched: true });
+});
+
 test("human controller rejects live authority before touching private configuration or spawning", async () => {
   let calls = 0;
   await assert.rejects(runHumanPublisher({ root: "/nonexistent", plan: {}, admission: {}, environment: {}, fresh: async () => {

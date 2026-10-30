@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
+import childProcess from "node:child_process";
 import { lstat, readFile, writeFile } from "node:fs/promises";
+import { syncBuiltinESMExports } from "node:module";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import test from "node:test";
 import { humanPublicationFixture } from "../../fixtures/publication-human.mjs";
@@ -8,6 +11,35 @@ import { publicationNamespaceService } from "../../fixtures/publication-namespac
 import { runHumanPublisher } from "../../../scripts/publication-human.mjs";
 
 async function trace(f) { return (await readFile(join(f.root, "trace.txt"), "utf8")).trim().split("\n"); }
+
+test("genuine terminal crosses the default human launcher and reaches the pinned npm challenge", {
+  skip: !process.env.TABGRAD_COMPOSITION_CLIENT || !process.stdin.isTTY || !process.stdout.isTTY || !process.stderr.isTTY,
+  timeout: 60000,
+}, async t => {
+  const f = await humanPublicationFixture(t, { terminal: true, windowMs: 30000, clientDirectory: process.env.TABGRAD_COMPOSITION_CLIENT,
+    clientSha256: process.env.TABGRAD_COMPOSITION_CLIENT_SHA256 });
+  const original = childProcess.fork;
+  // Keep the production launcher's options and real fork. Only external effects
+  // are replaced by the existing child fixture; the TTY chain is not mocked.
+  const fork = t.mock.method(childProcess, "fork", (module, args, options) => {
+    assert.equal(module, fileURLToPath(new URL("../../../scripts/publication-human.mjs", import.meta.url)));
+    return original(fileURLToPath(new URL("../../fixtures/publication-human-client.mjs", import.meta.url)), [], options);
+  });
+  syncBuiltinESMExports();
+  try {
+    const result = await runHumanPublisher({ ...f, launch: undefined, fresh: async () => {},
+      authorizeReady: async () => ({ permissionSha256: "e".repeat(64) }) });
+    const observed = JSON.parse(await readFile(join(f.root, "terminal-result.json")));
+    t.diagnostic(JSON.stringify(observed));
+    assert.deepEqual(observed, {
+      terminal: { stdin: true, stdout: true, stderr: true }, calls: 2, status: "passed", registryRequests: 0,
+    });
+    assert.equal(result.status, "completed");
+    assert.equal(result.receipt.outcome, "verified-effect");
+    assert.equal(result.receipt.code, "PUBLICATION_NPM_HUMAN_PROCESS_SUCCESS");
+    assert.equal(result.receipt.cleanup, "completed");
+  } finally { fork.mock.restore(); syncBuiltinESMExports(); }
+});
 
 test("actual parent/child: namespace finishes before nonce-bound approval and one simulated call", async t => {
   const f = await humanPublicationFixture(t); let approved = 0;

@@ -27,21 +27,27 @@ export function checkPublicationGithubState(plan, state, complete, notes) {
   requirePublication(!done("github-public") || r.immutable === true, "PUBLICATION_RELEASE_NOT_FROZEN");
 }
 
-export function npmCallReceipt(plan, handoff, client, result, error) {
+/** Confirmation is selected by the admitted call owner, never by client output. */
+export function npmCallReceipt(plan, handoff, client, result, error, confirmation = "npm-json") {
   const raw = canonicalBytes(result ?? error?.privateClientEvidence ?? { dispatched: false, code: error?.code ?? "LOCAL_FAILURE" });
   let verified = false;
-  if (!error && result?.status === 0) {
+  if (!error && result?.status === 0 && confirmation === "human-terminal-exit") {
+    verified = plan.npm.mode === "bootstrap" && result.signal === null && result.dispatched === true
+      && result.outputMode === "inherited-terminal" && result.stdout === null && result.stderr === null;
+  } else if (!error && result?.status === 0 && confirmation === "npm-json") {
     try {
       const body = JSON.parse(result.stdout)[plan.candidate.name];
       verified = body.name === plan.candidate.name && body.version === plan.candidate.version
         && Buffer.from(body.integrity.slice(7), "base64").toString("hex") === plan.candidate.archiveSha512;
     } catch { /* An unrecognized success response remains unknown. */ }
   }
+  const confirmedCode = confirmation === "human-terminal-exit"
+    ? "PUBLICATION_NPM_HUMAN_PROCESS_SUCCESS" : "PUBLICATION_NPM_CLIENT_SUCCESS";
   return { schemaVersion: 1, status: "failed", cleanup: "unobserved", operation: plan.operation, planSha256: sha256(canonicalBytes(plan)),
     call: handoff.call, effect: handoff.effect, clientSha256: client.manifestSha256,
     dispatched: result?.dispatched ?? error?.dispatched ?? false,
     outcome: verified ? "verified-effect" : error?.dispatched === false ? "verified-no-effect" : "unknown",
-    receiptSha256: sha256(raw), code: verified ? "PUBLICATION_NPM_CLIENT_SUCCESS" : error?.code ?? "PUBLICATION_NPM_OUTCOME_UNKNOWN" };
+    receiptSha256: sha256(raw), code: verified ? confirmedCode : error?.code ?? "PUBLICATION_NPM_OUTCOME_UNKNOWN" };
 }
 
 export function requireNpmCallReceipt(plan, handoff, receipt) {
@@ -55,6 +61,7 @@ export function requireNpmCallReceipt(plan, handoff, receipt) {
     && [true, false, null].includes(receipt.dispatched) && (receipt.outcome !== "verified-effect" || receipt.dispatched === true)
     && (receipt.outcome !== "verified-no-effect" || receipt.dispatched === false)
     && typeof receipt.code === "string" && /^[A-Z][A-Z0-9_]*$/.test(receipt.code)
+    && (receipt.code !== "PUBLICATION_NPM_HUMAN_PROCESS_SUCCESS" || plan.npm.mode === "bootstrap")
     && typeof receipt.receiptSha256 === "string" && /^[0-9a-f]{64}$/.test(receipt.receiptSha256),
   "PUBLICATION_NPM_RECEIPT_INVALID");
 }
