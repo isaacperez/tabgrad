@@ -3,7 +3,7 @@ import { PublicationError, requirePublication } from "./publication-plan.mjs";
 
 /** Fixed-origin, no-retry GitHub transport. Injectable origin is only a fixture seam. */
 export function publicationGithub({ repository, token, origin = "https://api.github.com", fetcher = fetch,
-  timeoutMs = 30000, maxResponseBytes = 4 * 1024 * 1024, readOnly = false }) {
+  timeoutMs = 30000, maxResponseBytes = 4 * 1024 * 1024, readOnly = false, draftVisibility = null, signal }) {
   requirePublication(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)
     && repository.split("/").every(part => part !== "." && part !== "..")
     && typeof token === "string" && token.length > 0, "PUBLICATION_GITHUB_ACCESS");
@@ -17,7 +17,7 @@ export function publicationGithub({ repository, token, origin = "https://api.git
   let checkedWorkflowPair;
 
   async function request(route, { method = "GET", body, binary = false, absent = false,
-    upload = false, maxBytes = maxResponseBytes } = {}) {
+    upload = false, maxBytes = maxResponseBytes, signal: requestSignal } = {}) {
     requirePublication(typeof route === "string" && (route === "" || route.startsWith("/"))
       && !route.includes("..") && !route.includes("#") && !route.includes("\\"), "PUBLICATION_GITHUB_ROUTE");
     requirePublication(!readOnly || method === "GET", "PUBLICATION_GITHUB_READ_ONLY");
@@ -26,7 +26,8 @@ export function publicationGithub({ repository, token, origin = "https://api.git
     const headers = { Authorization: `Bearer ${token}`, Accept: binary ? "application/octet-stream" : "application/vnd.github+json",
       "X-GitHub-Api-Version": "2022-11-28" };
     if (body !== undefined) headers["Content-Type"] = upload ? "application/octet-stream" : "application/json";
-    const options = { method, headers, redirect: "manual", signal: AbortSignal.timeout(timeoutMs),
+    const signals = [AbortSignal.timeout(timeoutMs), signal, requestSignal].filter(value => value !== undefined);
+    const options = { method, headers, redirect: "manual", signal: AbortSignal.any(signals),
       ...(body === undefined ? {} : { body: upload ? body : JSON.stringify(body) }) };
     let response, dispatched = false;
     try {
@@ -61,7 +62,9 @@ export function publicationGithub({ repository, token, origin = "https://api.git
       if (response.status === 204) return null;
       return JSON.parse(raw);
     } catch (cause) {
-      const error = new PublicationError(cause.code ?? "PUBLICATION_GITHUB_REQUEST", { cause });
+      const code = typeof cause.code === "string" && /^[A-Z][A-Z0-9_]*$/.test(cause.code)
+        ? cause.code : "PUBLICATION_GITHUB_REQUEST";
+      const error = new PublicationError(code, { cause });
       error.dispatched = dispatched;
       error.privateHttpEvidence = { route, method, status: response?.status, responseDigest: observations.at(-1) };
       throw error;
@@ -81,7 +84,11 @@ export function publicationGithub({ repository, token, origin = "https://api.git
 
   async function visibility() {
     const repo = await request("");
-    requirePublication(repo.full_name === repository && repo.permissions?.push === true && repo.archived === false
+    // Only the admitted, qualified workflow's writer roles may make this claim.
+    // Repository permission projections do not prove a token's effective view;
+    // an arbitrary reader cannot turn an inaccessible draft/listing into absence.
+    requirePublication(draftVisibility === "qualified-workflow-writer" && !readOnly
+      && repo.full_name === repository && repo.archived === false
       && repo.disabled === false, "PUBLICATION_GITHUB_VISIBILITY");
     return repo;
   }
@@ -140,7 +147,7 @@ export function publicationGithub({ repository, token, origin = "https://api.git
   }
 
   async function state(plan, expectedAssets = new Map(), { forceAssetReads = false } = {}) {
-    await visibility(); // Authenticated push visibility precedes interpreting absent drafts/tags.
+    await visibility(); // Qualified role precedes interpreting absent drafts/tags.
     const tagRevision_ = await tagRevision(plan.github.tag);
     const matches = (await pages("/releases")).filter(release => release.tag_name === plan.github.tag);
     requirePublication(matches.length <= 1, "PUBLICATION_RELEASE_CONFLICT");

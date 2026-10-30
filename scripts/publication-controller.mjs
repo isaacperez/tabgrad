@@ -107,14 +107,18 @@ export async function pendingPublicationObservation({ api, context, policy, plan
   // An authenticated maintainer publishes the safe receipt only after reviewing
   // the actual human client's originals; a destination match is insufficient.
   requirePublication(typeof issue === "string" && /^[1-9][0-9]*$/.test(issue), "PUBLICATION_BOOTSTRAP_RECEIPT_LOCATION");
-  requirePublication(["bootstrap", "gpu-consumers"].includes(kind), "PUBLICATION_OBSERVATION_KIND");
+  requirePublication(["bootstrap", "bootstrap-ready", "gpu-consumers"].includes(kind), "PUBLICATION_OBSERVATION_KIND");
   const prefix = `tabgrad-release-${kind} ${planSha256} ${plan.operation} ${context.runId}/${context.attempt}\n`;
   while (clock() < Date.parse(plan.window.deadline)) {
     const matches = (await api.pages(`/issues/${issue}/comments`)).filter(comment => comment.body?.startsWith(prefix)
       && policy.maintainers.some(actor => actor.ownerSha256 === plan.owner && actor.id === String(comment.user?.id))
       && Date.parse(comment.updated_at) >= Date.parse(plan.window.start) && Date.parse(comment.updated_at) < Date.parse(plan.window.deadline));
     requirePublication(matches.length <= 1, "PUBLICATION_BOOTSTRAP_RECEIPT_CONFLICT");
-    if (matches.length === 1) return { receipt: JSON.parse(matches[0].body.slice(prefix.length)), original: matches[0] };
+    if (matches.length === 1) {
+      const raw = Buffer.from(matches[0].body.slice(prefix.length));
+      requirePublication(raw.length <= 65536, "PUBLICATION_OBSERVATION_LIMIT");
+      return { value: JSON.parse(raw), raw, original: matches[0] };
+    }
     await pause(Math.min(15000, Math.max(1, Date.parse(plan.window.deadline) - clock())));
   }
   throw new PublicationError("PUBLICATION_BOOTSTRAP_DEADLINE");

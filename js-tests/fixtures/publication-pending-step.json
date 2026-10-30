@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "derivation": "Only client job status/conclusion and readiness/wait step status, number, conclusion and unresolved expression retained. IDs, role, source and resolved digest replaced; other jobs/fields omitted. Different observer/client observations are NOT proof of one observer seeing both states.",
+  "records": [
+    {
+      "observedBy": "observer",
+      "response": {
+        "total_count": 1,
+        "jobs": [
+          {
+            "id": 11,
+            "run_id": 301,
+            "head_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "name": "publish-approved-npm",
+            "status": "in_progress",
+            "conclusion": null,
+            "steps": [
+              {
+                "name": "Readiness SHA256 ${{ steps.prepare.outputs.ready_sha }}",
+                "number": 5,
+                "status": "pending",
+                "conclusion": null
+              },
+              {
+                "name": "Await observed permission",
+                "number": 8,
+                "status": "pending",
+                "conclusion": null
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "observedBy": "client",
+      "response": {
+        "total_count": 1,
+        "jobs": [
+          {
+            "id": 11,
+            "run_id": 301,
+            "head_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "name": "publish-approved-npm",
+            "status": "in_progress",
+            "conclusion": null,
+            "steps": [
+              {
+                "name": "Readiness SHA256 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "number": 5,
+                "status": "completed",
+                "conclusion": "success"
+              },
+              {
+                "name": "Await observed permission",
+                "number": 8,
+                "status": "in_progress",
+                "conclusion": null
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

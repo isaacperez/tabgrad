@@ -19,8 +19,9 @@ A queued slot is not evidence that another actor has stopped: the enrolled
 | --- | --- |
 | Precheck | Read actual repository/run/environment and enrolled history metadata before the environment job can be created; no approval or write |
 | Admission | Protected environment approval with an exact plan/run comment; verify original producer data/proofs, open the plan and confirm npm intent with Contents-write; no npm identity |
-| npm | Contents/Actions/Issues-read and OIDC only; publish the original archive with its original producer proof using the identified separate client; no standing-token fallback |
-| Human bootstrap observer | Read-only wait for the admitted maintainer's explicit original-call reconciliation; no npm identity |
+| npm | Contents/Actions/Issues-read and OIDC only; prepare/read registry state, announce readiness, authenticate the late observer and publish the original archive/proof; no standing-token fallback |
+| Human bootstrap relay | Read-only reception of attributed readiness and original-call reconciliation; no npm identity |
+| Late GitHub observer | Qualified Contents-write view, no npm/OIDC identity or package execution; check current intent/authority/destinations after readiness and emit the bound permission |
 | Outcome recorder | Contents-write, no npm identity; record actual or unknown outcome, including after the original publication deadline |
 | Consumers | Read-only registry and external application execution with build/consumer Node/npm; separately supplied physical GPU report when claimed |
 | GitHub completion | Contents-write, no npm identity or consumer execution; verify current handoffs/destinations, then conditionally create tag, draft, assets and public release |
@@ -34,9 +35,10 @@ Before enabling anything, separately authorize and qualify the actual workflow
 queue/approval/handoffs in disposable service fixtures, without an npm publisher
 or publishing identity. Admit protections, reviewers/bypasses, writer identity,
 control root and prior-effects reconciliation, public outputs/readers, cost and
-artifact custody. Verify that the read-only npm job can observe required draft
-state; lack of visibility fails closed and must not be fixed by giving it
-Contents-write. Qualify immutable releases before relying on their final freeze.
+artifact custody. Verify the late observer's actual sufficient draft view under
+its exact recipe/job grant; an arbitrary reader cannot infer absence from an
+empty listing or repository permission flags. Denied observations fail closed,
+without giving npm Contents-write. Qualify immutable releases before relying on their final freeze.
 The first useful npm OIDC publication is a later evidence boundary.
 
 Private configuration consists of separately admitted
@@ -258,8 +260,10 @@ The recorder transfers only hash-named public-safe originals from the admitted
 initial history, confirms the current root/head and records the full plan,
 authenticated execution observation and intended npm call. Each subsequent
 recorder output preserves available originals for the next identified handoff.
-The npm role rechecks authority, intent and destination state immediately before
-one bounded SDK invocation; a response loss is unknown, not absence or a retry.
+The npm role prepares its identified client and registry reads, then announces
+readiness and waits while the separate observer checks GitHub. It authenticates
+the completed permission and rechecks authority, intent, current client and
+expiry before one bounded SDK invocation. A response loss is unknown, not absence or a retry.
 SDK diagnostics remain outside public artifact paths, for the VM lifetime only;
 sanitized receipts separately state remote outcome, local success and cleanup.
 
@@ -280,12 +284,61 @@ substitute for dispatch or permission to improvise credentials:
 ```console
 node scripts/release-publication.mjs precheck ABSOLUTE_OWNED_ROOT
 node scripts/release-publication.mjs admit ABSOLUTE_OWNED_ROOT
+node scripts/release-publication.mjs npm-prepare ABSOLUTE_OWNED_ROOT
+node scripts/release-publication.mjs select-ready ABSOLUTE_OWNED_ROOT
+node scripts/release-publication.mjs permit ABSOLUTE_OWNED_ROOT
+node scripts/release-publication.mjs select-permission ABSOLUTE_OWNED_ROOT
 node scripts/release-publication.mjs npm ABSOLUTE_OWNED_ROOT
+node scripts/release-publication.mjs bootstrap-ready ABSOLUTE_OWNED_ROOT
 node scripts/release-publication.mjs bootstrap ABSOLUTE_OWNED_ROOT
 node scripts/release-publication.mjs observe ABSOLUTE_OWNED_ROOT
 node scripts/release-publication.mjs consume ABSOLUTE_OWNED_ROOT
 node scripts/release-publication.mjs complete ABSOLUTE_OWNED_ROOT
 ```
+
+## Readiness and permission handoff
+
+The client or human relay and `observe-ready-publication` start after admission.
+The observer is not a dependency preventing the client from preparing. Readiness
+is uploaded before the client's `Await observed permission` step; the observer
+requires that wait to be active, performs its checks and completes its permission
+upload. The client authenticates the completed observer job before dispatch.
+Outcome recording still handles failed actors; consumers precede GitHub completion.
+
+The closed canonical UTF-8 packets have `schemaVersion: 1`, `kind` (`ready` or
+`permission`), `scope` and a 32-byte hexadecimal session `nonce`. Scope binds the
+plan SHA-256, exact execution context, original npm handoff, mode and approved
+window. The handoff retains operation, plan, call, effect and record-head identity.
+Permission adds only `readySha256`; its bytes are deterministic from the admitted
+scope and readiness, not from a caller-provided assertion of successful checks.
+The trusted observer emits those bytes only after its checks. The window and
+causal order apply; no independent maximum-age or atomic-destination guarantee
+is inferred from a diagnostic timestamp.
+
+Admission requires one exact role in at most 100 listed jobs/artifacts. The
+upload step's resolved `Readiness SHA256 ...` or `Permission SHA256 ...` name
+must have completed successfully in the exact run/attempt/source. Pending names
+are awaited; completed invalid, failing or ambiguous names reject. Artifact
+metadata must match the independently selected ID/name/digest/context, be live,
+fit the 2 MiB gate profile and outlast the window. CI uses the pinned
+`download-artifact` with `digest-mismatch: error`, followed by revalidation of
+that selection and exactly one regular `ready.json` or `permission.json` member
+of at most 65,536 bytes and its separate raw SHA-256. These are admission bounds;
+they do not bound the SDK's transient download/extraction before rejection.
+
+The observer and human relay consume the authenticated admission, notes when
+needed, and control history; they do not download or execute candidate payloads.
+The npm actor still rechecks transported candidate/proof bytes before its call.
+Repeated commands reuse only byte-identical staged inputs. Local preparation and
+call claims remain for the owned session; moving diagnostic files does not renew
+them. An unavailable or repeated claim stays unknown, even if a later wait fails.
+
+The public-safe gate evidence is distinct from private client diagnostics and
+controller observations. The receipt binds its retained call/controller original;
+inspect and conserve those private originals separately. CI-private diagnostics
+have only their VM lifetime unless separately conserved. A destination match
+does not replace the actual call result, and a successful local test does not
+qualify provider attribution, transfer, permissions or protections.
 
 ## First absent-package publication
 
@@ -314,12 +367,42 @@ fallback. Use an interactive terminal:
 node scripts/release-publication.mjs human ABSOLUTE_OWNED_ROOT
 ```
 
+After the actual child finishes its qualified namespace reads, the same live
+parent creates `public-output/readiness-comment.txt` and waits. The admitted
+maintainer, or its separately authorized coordinator, inspects and posts that
+exact public-safe file in the approved issue using its GitHub identity:
+
+```text
+tabgrad-release-bootstrap-ready PLAN_SHA256 OPERATION RUN_ID/ATTEMPT
+{the exact canonical ready packet, including its final newline}
+```
+
+Keep the parent and child alive while conveying that file. Never manufacture it
+from a previous process or normalize/rebuild its body when posting. The CI relay
+checks the actual authenticated maintainer ID, current window and unique comment,
+then publishes that readiness and remains waiting for the outcome. The separate
+GitHub observer checks current state and completes its bound permission. The
+parent authenticates that emission before approving the child; the child
+reidentifies its client files and checks the reader/window again before dispatch.
+The child receives npm-only authentication, never a GitHub writer token.
+
+The human parent derives the deterministic permission bytes independently from
+its admitted scope and live readiness. It compares their exact SHA-256 with the
+completed observer upload step and corroborated artifact metadata, retaining
+those expected bytes and the provider association in `gate-evidence.json` and
+the private controller original. This profile does **not** download or verify
+the remote ZIP and does not call those bytes a captured remote original. It is
+not a shortcut for signed proofs, trust roots or archives whose originals are
+required. The CI client instead transfers and admits the actual permission file.
+
 The human root has the same `data/`, `proofs/`, `verification/`, approved `input/`
 and authenticated `admission/admission.json` as the current CI run. Supply the
 canonical plan digest through `TABGRAD_PUBLICATION_PLAN_SHA256`; omit the dispatch
 JSON environment inputs when reading those local files. The human path has a
-local one-use marker, finite approval/reader deadlines, cancellation and observed
-child close. A second invocation at the same root is refused. This is not an
+local one-use claim, finite approval/reader deadlines, cancellation and observed
+child close. The parent owns the child's private working directory and removes
+it after close even if the child must be killed. A second invocation at the same
+root is refused. Retain that claim for the session lifetime; this is not an
 exactly-once or remote-cancellation guarantee.
 
 Review the original client result and private diagnostics. An admitted maintainer

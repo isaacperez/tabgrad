@@ -406,13 +406,13 @@ EXPECTED_HISTORY_SHA256 = (
     "1233f7d445d7d5d2c6aac157c75c9e2cb1cb34a81b3aac6b4864ec057c1226cb"
 )
 EXPECTED_PUBLICATION_SHA256 = (
-    "f3e795ff724cff6b9b8b3302bf3d610b814ebfb3bf7e59005dd16161278a9ad9"
+    "1c35366274124803c641f3e886734385432b3881c6a511efcb8ef1057d4c04c7"
 )
 PUBLICATION_PERMISSIONS = {"contents": "read", "actions": "read", "issues": "read"}
 PUBLICATION_JOB_PERMISSIONS = {
     **{
         name: {**PUBLICATION_PERMISSIONS, "contents": "write"}
-        for name in ("admit", "observe", "complete")
+        for name in ("admit", "gate", "observe", "complete")
     },
     "npm": {**PUBLICATION_PERMISSIONS, "id-token": "write"},
 }
@@ -426,7 +426,12 @@ PUBLICATION_ROLE_COMMANDS = {
     for role in (
         "precheck",
         "admit",
+        "npm-prepare",
+        "select-ready",
+        "select-permission",
+        "permit",
         "npm",
+        "bootstrap-ready",
         "bootstrap",
         "observe",
         "consume",

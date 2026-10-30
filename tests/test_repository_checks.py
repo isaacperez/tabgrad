@@ -87,6 +87,53 @@ class RepositoryCheckTests(unittest.TestCase):
             )
             self.assertEqual(CHECKS.check_ci_workflow(root), [])
 
+    def test_publication_observer_starts_with_clients_and_cannot_publish_npm(
+        self,
+    ) -> None:
+        document = yaml.safe_load(
+            (SCRIPT.parents[1] / CHECKS.PUBLICATION_PATH).read_text()
+        )
+        jobs = document["jobs"]
+        for name in ("npm", "bootstrap", "gate"):
+            self.assertEqual(set(jobs[name]["needs"]), {"precheck", "admit"})
+        self.assertNotIn("id-token", jobs["gate"]["permissions"])
+        self.assertEqual(jobs["gate"]["permissions"]["contents"], "write")
+        self.assertEqual(jobs["npm"]["permissions"]["contents"], "read")
+        self.assertEqual(jobs["npm"]["permissions"]["id-token"], "write")
+        for name in ("gate", "bootstrap"):
+            downloads = [
+                step["with"]
+                for step in jobs[name]["steps"]
+                if "actions/download-artifact@" in step.get("uses", "")
+            ]
+            self.assertTrue(downloads)
+            for settings in downloads:
+                self.assertEqual(settings["digest-mismatch"], "error")
+                self.assertNotIn("producer_run", str(settings))
+            self.assertFalse(
+                any(
+                    "prepare_publication_client" in step.get("run", "")
+                    for step in jobs[name]["steps"]
+                )
+            )
+        for name in ("npm", "bootstrap"):
+            steps = jobs[name]["steps"]
+            readiness = next(
+                i
+                for i, step in enumerate(steps)
+                if step["name"].startswith("Readiness SHA256 ")
+            )
+            waiting = next(
+                i
+                for i, step in enumerate(steps)
+                if step["name"] == "Await observed permission"
+            )
+            self.assertLess(readiness, waiting)
+        self.assertEqual(
+            jobs["gate"]["steps"][-1]["name"],
+            "Permission SHA256 ${{ steps.permission.outputs.permission_sha }}",
+        )
+
     def test_initial_history_registers_only_its_read_only_inert_delivery(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -212,7 +259,12 @@ class RepositoryCheckTests(unittest.TestCase):
         for role in (
             "precheck",
             "admit",
+            "npm-prepare",
+            "select-ready",
+            "select-permission",
+            "permit",
             "npm",
+            "bootstrap-ready",
             "bootstrap",
             "observe",
             "consume",
