@@ -302,6 +302,12 @@ its exact commands and per-role permission policy. The maintained
 public human procedure and recovery. Source registration neither enrolls service
 settings nor authorizes dispatch or actual publication.
 
+Private publication configuration is delivered from repository secrets only to
+the maintained role command steps. Its transport, output limits and provider
+qualification belong to the
+[publication reference](reference/release-publication.md); source registration
+does not demonstrate log confidentiality.
+
 Default permissions are Contents/Actions/Issues-read. Only `admit`, `observe`
 and `complete` have Contents-write; only `npm` has OIDC-write, retaining
 Contents-read. No job has Attestations-write. Build/signing code and npm identity

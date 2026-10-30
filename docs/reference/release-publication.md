@@ -44,7 +44,23 @@ Private configuration consists of separately admitted
 `TABGRAD_RELEASE_QUALIFICATION_JSON` matching the policy's operational evidence
 hash. These are repository configuration, not dispatch authority. Keep actual
 identities, policy originals, authentication and destinations out of issues and
-source. The policy parser is closed; it binds repository/owner IDs, exact recipe,
+source. Install the three values as repository **secrets**, not configuration
+variables. The workflow delivers them only through the environment of each
+maintained publication-role command, excluding checkout, setup and transfer
+actions. Registering a mask inside that command is too late to protect the
+runner's preceding environment header.
+
+Secret masking registers whole values for redaction; do not rely on it to redact
+arbitrary nested fields, reformatted JSON, substrings or derived outputs.
+Keep command errors and retained results bounded and inspect the actual first
+header, subsequent steps and failure logs with synthetic inputs before admitting
+private configuration. Source checks alone do not qualify that provider behavior.
+GitHub's [per-secret limit](https://docs.github.com/en/actions/reference/security/secrets#limits-for-secrets)
+is 48 KB, distinct from the local policy parser's
+65,536-byte ceiling. A locally valid document may therefore be too large for
+this CI transport; do not split, truncate or substitute its admitted bytes.
+
+The policy parser is closed; it binds repository/owner IDs, exact recipe,
 opaque responsible-owner mappings, environment snapshot, finite operational
 qualification, optional human-controller binary identity, enrolled Git control
 location/root/writer and an identified initial history artifact. Its `history`

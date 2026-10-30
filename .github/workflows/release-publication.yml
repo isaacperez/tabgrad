@@ -41,9 +41,6 @@ env:
   TABGRAD_PUBLICATION_NOTES: ${{ inputs.notes }}
   TABGRAD_PUBLICATION_QUALIFICATION_JSON: ${{ inputs.qualification_json }}
   TABGRAD_RECEIPT_ISSUE: ${{ inputs.receipt_issue }}
-  TABGRAD_RELEASE_POLICY_JSON: ${{ vars.TABGRAD_RELEASE_POLICY_JSON }}
-  TABGRAD_RELEASE_POLICY_SHA256: ${{ vars.TABGRAD_RELEASE_POLICY_SHA256 }}
-  TABGRAD_RELEASE_QUALIFICATION_JSON: ${{ vars.TABGRAD_RELEASE_QUALIFICATION_JSON }}
 jobs:
   precheck:
     name: precheck-publication
@@ -63,6 +60,10 @@ jobs:
     - name: Run the maintained publication role
       id: role
       run: node scripts/release-publication.mjs precheck "$RUNNER_TEMP/tabgrad-publication"
+      env:
+        TABGRAD_RELEASE_POLICY_JSON: ${{ secrets.TABGRAD_RELEASE_POLICY_JSON }}
+        TABGRAD_RELEASE_POLICY_SHA256: ${{ secrets.TABGRAD_RELEASE_POLICY_SHA256 }}
+        TABGRAD_RELEASE_QUALIFICATION_JSON: ${{ secrets.TABGRAD_RELEASE_QUALIFICATION_JSON }}
     env:
       GH_TOKEN: ${{ github.token }}
     if: ${{ vars.TABGRAD_PUBLICATION_ENABLED == 'true' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.run_attempt == '1' && inputs.confirmation == 'release-publication' }}
@@ -137,6 +138,9 @@ jobs:
       id: role
       run: node scripts/release-publication.mjs admit "$RUNNER_TEMP/tabgrad-publication"
       env:
+        TABGRAD_RELEASE_POLICY_JSON: ${{ secrets.TABGRAD_RELEASE_POLICY_JSON }}
+        TABGRAD_RELEASE_POLICY_SHA256: ${{ secrets.TABGRAD_RELEASE_POLICY_SHA256 }}
+        TABGRAD_RELEASE_QUALIFICATION_JSON: ${{ secrets.TABGRAD_RELEASE_QUALIFICATION_JSON }}
         TABGRAD_RECORD_INPUT: ${{ runner.temp }}/tabgrad-publication/initial-history
         TABGRAD_PROVENANCE_CLIENT: ${{ runner.temp }}/tabgrad-provenance-client/gh
     - name: Preserve admission and available original history
@@ -222,6 +226,9 @@ jobs:
       id: role
       run: node scripts/release-publication.mjs npm "$RUNNER_TEMP/tabgrad-publication"
       env:
+        TABGRAD_RELEASE_POLICY_JSON: ${{ secrets.TABGRAD_RELEASE_POLICY_JSON }}
+        TABGRAD_RELEASE_POLICY_SHA256: ${{ secrets.TABGRAD_RELEASE_POLICY_SHA256 }}
+        TABGRAD_RELEASE_QUALIFICATION_JSON: ${{ secrets.TABGRAD_RELEASE_QUALIFICATION_JSON }}
         TABGRAD_RECORD_INPUT: ${{ runner.temp }}/tabgrad-publication/admission/evidence
         TABGRAD_PUBLICATION_CLIENT: ${{ runner.temp }}/tabgrad-publication-client
     - name: Preserve the sanitized npm call outcome
@@ -300,6 +307,10 @@ jobs:
     - name: Run the maintained publication role
       id: role
       run: node scripts/release-publication.mjs bootstrap "$RUNNER_TEMP/tabgrad-publication"
+      env:
+        TABGRAD_RELEASE_POLICY_JSON: ${{ secrets.TABGRAD_RELEASE_POLICY_JSON }}
+        TABGRAD_RELEASE_POLICY_SHA256: ${{ secrets.TABGRAD_RELEASE_POLICY_SHA256 }}
+        TABGRAD_RELEASE_QUALIFICATION_JSON: ${{ secrets.TABGRAD_RELEASE_QUALIFICATION_JSON }}
     - name: Preserve the attributed human reconciliation
       id: retained
       if: ${{ always() && steps.role.outcome != 'skipped' }}
@@ -358,6 +369,9 @@ jobs:
       id: role
       run: node scripts/release-publication.mjs observe "$RUNNER_TEMP/tabgrad-publication"
       env:
+        TABGRAD_RELEASE_POLICY_JSON: ${{ secrets.TABGRAD_RELEASE_POLICY_JSON }}
+        TABGRAD_RELEASE_POLICY_SHA256: ${{ secrets.TABGRAD_RELEASE_POLICY_SHA256 }}
+        TABGRAD_RELEASE_QUALIFICATION_JSON: ${{ secrets.TABGRAD_RELEASE_QUALIFICATION_JSON }}
         TABGRAD_RECORD_INPUT: ${{ runner.temp }}/tabgrad-publication/admission/evidence
     - name: Preserve the recorded outcome and original history
       id: retained
@@ -442,6 +456,10 @@ jobs:
     - name: Run the maintained publication role
       id: role
       run: node scripts/release-publication.mjs consume "$RUNNER_TEMP/tabgrad-publication"
+      env:
+        TABGRAD_RELEASE_POLICY_JSON: ${{ secrets.TABGRAD_RELEASE_POLICY_JSON }}
+        TABGRAD_RELEASE_POLICY_SHA256: ${{ secrets.TABGRAD_RELEASE_POLICY_SHA256 }}
+        TABGRAD_RELEASE_QUALIFICATION_JSON: ${{ secrets.TABGRAD_RELEASE_QUALIFICATION_JSON }}
     - name: Preserve actual registry and consumer checks
       id: retained
       if: ${{ always() && steps.role.outcome != 'skipped' }}
@@ -529,6 +547,9 @@ jobs:
       id: role
       run: node scripts/release-publication.mjs complete "$RUNNER_TEMP/tabgrad-publication"
       env:
+        TABGRAD_RELEASE_POLICY_JSON: ${{ secrets.TABGRAD_RELEASE_POLICY_JSON }}
+        TABGRAD_RELEASE_POLICY_SHA256: ${{ secrets.TABGRAD_RELEASE_POLICY_SHA256 }}
+        TABGRAD_RELEASE_QUALIFICATION_JSON: ${{ secrets.TABGRAD_RELEASE_QUALIFICATION_JSON }}
         TABGRAD_RECORD_INPUT: ${{ runner.temp }}/tabgrad-publication/observed/evidence
     - name: Preserve final or partial completion and original history
       id: retained
