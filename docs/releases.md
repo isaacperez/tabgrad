@@ -346,6 +346,19 @@ Human bootstrap does not qualify later CI authentication. Coordinate trusted
 publisher setup with its first useful authorized CI publication and the
 provider's documented first-success deadline; a settings save is not success.
 
+Human publication preserves the real terminal through the controller and npm
+child so that npm owns its MFA interaction. Its identified, archive-bound call
+is confirmed by an observed zero process exit without a signal or controller
+failure. This deliberately avoids a second terminal transport and transcript
+parser; the npm JSON metadata is not an independent server receipt. CI retains
+its captured package-specific JSON confirmation. Exact registry, provenance
+and consumer checks remain separate and mandatory before GitHub completion.
+Nonzero exit, timeout, cancellation or lost observation stays uncertain even
+when a later destination read matches. The human terminal output is not
+automatically retained or subject to a capture-byte limit; the
+[maintained procedure](reference/release-publication.md#first-absent-package-publication)
+defines the retained process evidence and its limits.
+
 ### Complete npm before making GitHub public
 
 After the approved npm action, install the documented exact package version

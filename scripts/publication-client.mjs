@@ -133,16 +133,21 @@ export function publicationEnvironment(directory, input = process.env) {
     GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null", GIT_ALLOW_PROTOCOL: "" };
 }
 
+/** Both human launch layers preserve a genuine terminal; no stream is captured. */
+export function publicationTerminalStdio() {
+  check(process.stdin.isTTY && process.stdout.isTTY && process.stderr.isTTY, "PUBLICATION_INTERACTIVE_REQUIRED");
+  return ["inherit", "inherit", "inherit"];
+}
+
 /** Owned child completion is observed; a failed dispatched write remains uncertain. */
 export async function runPublicationProcess(executable, arguments_, { directory, environment, timeoutMs, maxOutputBytes,
   interactive = false, signal }) {
   check(isAbsolute(executable) && Number.isSafeInteger(timeoutMs) && timeoutMs > 0 && timeoutMs <= 2147483647
     && Number.isSafeInteger(maxOutputBytes) && maxOutputBytes > 0, "PUBLICATION_CLIENT_BOUNDS");
-  check(!interactive || (process.stdin.isTTY && process.stderr.isTTY), "PUBLICATION_INTERACTIVE_REQUIRED");
+  const stdio = interactive ? publicationTerminalStdio() : ["ignore", "pipe", "pipe"];
   check(!signal?.aborted, "PUBLICATION_CLIENT_CANCELLED");
   return new Promise((resolve, reject) => {
-    const child = spawn(executable, arguments_, { cwd: directory, env: environment,
-      stdio: interactive ? ["inherit", "pipe", "inherit"] : ["ignore", "pipe", "pipe"] });
+    const child = spawn(executable, arguments_, { cwd: directory, env: environment, stdio });
     const stdout = [], stderr = [];
     let count = 0, failure;
     const timer = setTimeout(() => {
@@ -164,8 +169,9 @@ export async function runPublicationProcess(executable, arguments_, { directory,
     child.once("close", (status, exitSignal) => {
       clearTimeout(timer);
       signal?.removeEventListener("abort", cancel);
-      const result = { status, signal: exitSignal, stdout: Buffer.concat(stdout).toString("utf8"),
-        stderr: Buffer.concat(stderr).toString("utf8"), dispatched: child.pid !== undefined };
+      const result = { status, signal: exitSignal, stdout: interactive ? null : Buffer.concat(stdout).toString("utf8"),
+        stderr: interactive ? null : Buffer.concat(stderr).toString("utf8"), dispatched: child.pid !== undefined };
+      if (interactive) result.outputMode = "inherited-terminal";
       if (failure || status !== 0) {
         const error = new PublicationClientError(failure ?? "PUBLICATION_CLIENT_REJECTED", result.dispatched,
           { cause: child.privateCause });

@@ -143,3 +143,40 @@ test("all effective package overrides are admitted before publication", () => {
     assert.throws(() => admitNpmManifest({ ...manifest, publishConfig: config }, plan), { code: "PUBLICATION_NPM_OVERRIDE" });
   }
 });
+
+function fixture() {
+  const { publicationPlan: plan } = publicationPlanFixture();
+  return { plan, handoff: { call: "b".repeat(64), effect: "c".repeat(64) }, client: { manifestSha256: plan.publisher.clientSha256 } };
+}
+
+test("human confirmation is explicitly selected and requires the complete observed terminal result", () => {
+  const { plan, handoff, client } = fixture();
+  const result = { status: 0, signal: null, dispatched: true, stdout: null, stderr: null, outputMode: "inherited-terminal" };
+  const human = npmCallReceipt(plan, handoff, client, result, undefined, "human-terminal-exit");
+  assert.equal(human.outcome, "verified-effect");
+  assert.equal(human.code, "PUBLICATION_NPM_HUMAN_PROCESS_SUCCESS");
+  assert.doesNotThrow(() => requireNpmCallReceipt(plan, handoff, human));
+  assert.equal(npmCallReceipt(plan, handoff, client, result).outcome, "unknown");
+  for (const changed of [{ status: 1 }, { signal: "SIGKILL" }, { dispatched: false }, { outputMode: "captured" },
+    { stdout: "" }, { stderr: "" }]) {
+    assert.notEqual(npmCallReceipt(plan, handoff, client, { ...result, ...changed }, undefined, "human-terminal-exit").outcome,
+      "verified-effect");
+  }
+  const error = Object.assign(new Error("deadline"), { code: "PUBLICATION_CLIENT_TIMEOUT", dispatched: true, privateClientEvidence: result });
+  assert.equal(npmCallReceipt(plan, handoff, client, undefined, error, "human-terminal-exit").outcome, "unknown");
+  plan.npm.mode = "publish";
+  assert.equal(npmCallReceipt(plan, handoff, client, result, undefined, "human-terminal-exit").outcome, "unknown");
+  assert.throws(() => requireNpmCallReceipt(plan, handoff, human), { code: "PUBLICATION_NPM_RECEIPT_INVALID" });
+});
+
+test("CI keeps package-specific JSON confirmation and rejects empty or substituted output", () => {
+  const { plan, handoff, client } = fixture();
+  const body = { name: plan.candidate.name, version: plan.candidate.version,
+    integrity: `sha512-${Buffer.from(plan.candidate.archiveSha512, "hex").toString("base64")}` };
+  const result = { status: 0, signal: null, dispatched: true, stdout: JSON.stringify({ [body.name]: body }), stderr: "" };
+  assert.equal(npmCallReceipt(plan, handoff, client, result).outcome, "verified-effect");
+  for (const stdout of ["", "{", JSON.stringify({ [body.name]: { ...body, version: "9.9.9" } }),
+    JSON.stringify({ [body.name]: { ...body, integrity: "sha512-d3JvbmctYnl0ZXM=" } })]) {
+    assert.equal(npmCallReceipt(plan, handoff, client, { ...result, stdout }).outcome, "unknown");
+  }
+});
