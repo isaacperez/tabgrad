@@ -31,10 +31,20 @@ import { claimGateSession, consumeGatePermission, corroborateExpectedPermission,
 
 const repository = fileURLToPath(new URL("..", import.meta.url));
 const producerWorkflow = ".github/workflows/producer-trial.yml";
-const roleNames = { admit: "admit-publication", npm: gateRoles.client, bootstrap: gateRoles.bootstrap,
+const roleNames = { precheck: "precheck-publication", admit: "admit-publication", npm: gateRoles.client, bootstrap: gateRoles.bootstrap,
   observe: "record-npm-outcome", consume: "verify-published-consumers", complete: "complete-github-release" };
+const commandRoles = { ...roleNames, "npm-prepare": roleNames.npm, human: roleNames.bootstrap,
+  "bootstrap-ready": roleNames.bootstrap, "select-ready": gateRoles.observer,
+  "select-permission": roleNames.npm, permit: gateRoles.observer };
 const metadataCommands = ["select-ready", "select-permission", "permit", "bootstrap-ready", "bootstrap"];
 const commands = ["precheck", "admit", "npm-prepare", "npm", "observe", "consume", "complete", "human", ...metadataCommands];
+
+/** Role-local execution proof stays separate from the shared client/observer gate context. */
+export function publicationRoleJob(command) {
+  const name = commandRoles[command];
+  requirePublication(typeof name === "string", "PUBLICATION_ROLE_CONTEXT");
+  return name;
+}
 
 async function output(values, environment) {
   if (!environment.GITHUB_OUTPUT) return;
@@ -96,18 +106,19 @@ async function request(root, environment, human = false, conservation = false, c
   const writer = !human && trustedJob !== undefined && environment.GITHUB_JOB === trustedJob;
   requirePublication(trustedJob === undefined || writer, "PUBLICATION_ROLE_CONTEXT");
   const observationController = new AbortController();
+  const activeJobName = publicationRoleJob(command);
   const api = publicationGithub({ repository: plan.publisher.repository, token: environment.GH_TOKEN,
     readOnly: !writer, draftVisibility: writer ? "qualified-workflow-writer" : null, signal: observationController.signal });
   const fresh = async () => {
-    const result = await observePublicationAuthority({ api, plan, planSha256, policy, context });
+    const result = await observePublicationAuthority({ api, plan, planSha256, policy, context, activeJobName });
     await observePublicationProducer(api, plan);
     await api.prerequisites(plan);
     requirePublication(Date.now() < Date.parse(plan.window.deadline), "PUBLICATION_WINDOW_EXPIRED");
     return result;
   };
-  return { plan, planSha256, policy, context, api, fresh,
+  return { plan, planSha256, policy, context, activeJobName, api, fresh,
     cancelObservations: () => observationController.abort(),
-    conserve: () => observePublicationConservation({ api, plan, policy, context }) };
+    conserve: () => observePublicationConservation({ api, plan, policy, context, activeJobName }) };
 }
 
 async function stageRequest(root, environment, plan) {
