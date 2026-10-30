@@ -280,6 +280,20 @@ that the intended required-check names match GitHub's actual branch settings.
 
 ## Controlled publication workflow
 
+The separate manually dispatched `.github/workflows/release-history.yml`
+delivers the initial public-safe original evidence needed before publication
+admission. It is inert without its exact enable/confirmation and main/source/
+attempt checks. Its complete definition and commands are registered; the one
+15-minute job has only Contents/Actions-read and existing pinned actions.
+It validates data and the full dispatch budget before writing owned files,
+uploads one identified nonoverwriting artifact with 90 days requested, then
+observes actual metadata. It has no Git-write, npm, OIDC or signing identity
+and executes no package/data. The
+[initial-handoff procedure](reference/release-publication.md#prepare-the-initial-history-handoff)
+owns preparation, public-original inspection, separately authorized activation,
+metadata readback, custody and failure recovery. This source recipe does not
+qualify the service or authorize a transfer.
+
 The manually dispatched `.github/workflows/release-publication.yml` is inert
 without separately admitted configuration and the exact enable/confirmation.
 Its complete parsed definition is registered by canonical SHA-256, alongside

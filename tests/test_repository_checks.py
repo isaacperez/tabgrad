@@ -87,6 +87,62 @@ class RepositoryCheckTests(unittest.TestCase):
             )
             self.assertEqual(CHECKS.check_ci_workflow(root), [])
 
+    def test_initial_history_registers_only_its_read_only_inert_delivery(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.copy_repository_workflow(root)
+            target = root / CHECKS.HISTORY_PATH
+            target.write_bytes((SCRIPT.parents[1] / CHECKS.HISTORY_PATH).read_bytes())
+            self.assertEqual(CHECKS.check_ci_workflow(root), [])
+
+    def test_initial_history_rejects_changed_entry_privileges_and_transport(
+        self,
+    ) -> None:
+        changes = [
+            ("  workflow_dispatch:\n", "  push:\n  workflow_dispatch:\n"),
+            ("vars.TABGRAD_PUBLICATION_HISTORY_ENABLED == 'true'", "true"),
+            ("github.ref == 'refs/heads/main'", "true"),
+            ("github.run_attempt == '1'", "true"),
+            ("inputs.source_revision == github.sha", "true"),
+            ("inputs.confirmation == 'release-history'", "true"),
+            (
+                "TABGRAD_HISTORY_DEADLINE: ${{ inputs.expires_at }}",
+                "TABGRAD_HISTORY_DEADLINE: never",
+            ),
+            ("contents: read", "contents: write"),
+            ("  actions: read", "  actions: read\n  id-token: write"),
+            (
+                "    timeout-minutes: 15",
+                "    timeout-minutes: 15\n    permissions:\n      contents: write",
+            ),
+            ("ref: ${{ github.sha }}", "ref: main"),
+            ("persist-credentials: false", "persist-credentials: true"),
+            ("overwrite: false", "overwrite: true"),
+            ("retention-days: 90", "retention-days: 1"),
+            ("if-no-files-found: error", "if-no-files-found: warn"),
+            (
+                "path: ${{ runner.temp }}/tabgrad-initial-history",
+                "path: ${{ github.workspace }}",
+            ),
+            (
+                "node scripts/release-history.mjs materialize",
+                "node scripts/release-publication.mjs npm",
+            ),
+            ("3d3c42e5aac5ba805825da76410c181273ba90b1", "main"),
+        ]
+        for original, replacement in changes:
+            with (
+                self.subTest(original=original),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                root = Path(directory)
+                self.copy_repository_workflow(root)
+                target = root / CHECKS.HISTORY_PATH
+                text = (SCRIPT.parents[1] / CHECKS.HISTORY_PATH).read_text()
+                self.assertIn(original, text)
+                target.write_text(text.replace(original, replacement, 1))
+                self.assertTrue(CHECKS.check_ci_workflow(root))
+
     def test_publication_rejects_changed_admission_permissions_and_handoffs(
         self,
     ) -> None:
