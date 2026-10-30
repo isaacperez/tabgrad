@@ -308,8 +308,8 @@ qualification belong to the
 [publication reference](reference/release-publication.md); source registration
 does not demonstrate log confidentiality.
 
-Default permissions are Contents/Actions/Issues-read. Only `admit`, `observe`
-and `complete` have Contents-write; only `npm` has OIDC-write, retaining
+Default permissions are Contents/Actions/Issues-read. Only `admit`, `gate`,
+`observe` and `complete` have Contents-write; only `npm` has OIDC-write, retaining
 Contents-read. No job has Attestations-write. Build/signing code and npm identity
 are absent from the trusted record/GitHub writers. The producer is a separately
 reviewed workflow. Its three exact identified artifacts are downloaded with
@@ -317,6 +317,14 @@ fatal digest mismatch. A read-only precheck verifies the actual environment
 before the protected admission job can name it. One fixed noncanceling group
 spans the whole publication window; the separate durable record still guards
 unknown/competing effects.
+
+After admission, the prepared npm client or human-readiness relay runs alongside
+`gate`, the separate qualified GitHub observer. The observer receives only the
+admission and selected readiness; it does not execute candidate payloads or use
+npm identity. Its completed permission is authenticated before the npm call.
+The [publication reference](reference/release-publication.md#readiness-and-permission-handoff)
+defines the exact job/step/artifact and raw-packet association. This source graph
+does not establish the provider's real handoff behavior.
 
 The consistency workflow also has a `publication-client` job, selected for
 runtime-affecting changes and every main/manual run. It explicitly prepares
