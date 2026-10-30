@@ -53,6 +53,94 @@ The metadata reader checks that artifact's repository, original run/source,
 digest, size, expiry and name before transfer. Configuration hashes alone do not
 authenticate the party which installed them.
 
+## Prepare the initial history handoff
+
+The first publication needs original evidence before its own recorder can
+upload anything. Enrollment still belongs to
+[`release-record.mjs`](release-record.md); the separate
+`.github/workflows/release-history.yml` only delivers already inspected data.
+It neither enrolls a root nor authenticates the evidence's claims.
+
+Select the complete initial originals required by the admitted Git record,
+including its location, writer-policy and prior-effects evidence. The directory
+contains only SHA256-named `.json` files under the existing history reader.
+Inspect **every original for the public artifact audience** before transfer.
+Hash filenames and base64 do not hide contents; even location evidence reveals
+its URL/reference. Configuration, the private operational policy, credentials
+and additional private dossiers stay outside this directory. If a required
+original cannot be public, stop: do not omit, redact or replace its bound bytes.
+
+With prepared repository Node, pack that selected directory locally:
+
+```console
+node scripts/release-history.mjs prepare ABSOLUTE_ORIGINALS SOURCE_REVISION EXPIRES_AT ABSOLUTE_NEW_OUTPUT
+```
+
+`SOURCE_REVISION` is the exact approved main recipe; `EXPIRES_AT` is a finite
+canonical UTC deadline. The new owned output contains `history.json` and the
+complete REST `dispatch.json`; stdout identifies their packet hash, file count
+and request size without printing originals or local paths. This preparation
+uses no network or credentials and changes no source or originals. Inspect the
+files before authorizing any service use. Keep output outside the originals,
+source and distribution; preparation rejects a destination inside its originals.
+These local outputs are not committed generated files. The packet is needed to supply the
+first runner files; it is not another record or a general evidence bundle.
+
+This finite profile accepts only initial evidence whose **entire serialized
+dispatch request** fits 65,535 ASCII characters, including packet encoding,
+escaping, names, digest, source, deadline and confirmation. This conservative
+count includes more than GitHub's
+[aggregate inputs budget](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#providing-inputs);
+its five inputs are below the platform's 25-property limit. The history reader's
+larger per-file/aggregate bounds do not guarantee dispatch capacity. Oversize
+fails locally without output or transfer. There is no splitting, truncation or
+redaction; originals remain exact opaque bytes inside the canonical packet.
+
+Actual activation and dispatch require separate operational authorization,
+including the exact files, readers, cost, source/deadline and conservation.
+Only then set the separately admitted enable variable
+`TABGRAD_PUBLICATION_HISTORY_ENABLED` to exactly `true` and submit the inspected
+request to the selected repository:
+
+```console
+gh api --method POST repos/OWNER/REPOSITORY/actions/workflows/release-history.yml/dispatches --input ABSOLUTE_NEW_OUTPUT/dispatch.json
+```
+
+The manual-only workflow checks exact main/source/attempt/confirmation before
+checkout, selects the existing controller Node, and rechecks context, deadline,
+the complete input budget, packet and original hashes before materialization.
+Its sole job has only Contents/Actions-read, no npm, OIDC, signing or Git-write
+identity, and a 15-minute job timeout. It does not install a publishing client,
+build a candidate or execute received data. An invalid input cannot enable the
+subsequent upload. Local output is a new owned directory; failed writes attempt
+only its cleanup and report uncertain cleanup separately.
+
+The one upload preserves only the hash-named originals, uses a run/attempt name,
+forbids overwrite and requests 90 days. Hosted transfer/SDK behavior is a trusted
+boundary; job/deadline checks do not guarantee physical cancellation or remote
+completion before that instant. The final read-only `observe` command checks
+the upload's actual metadata and writes the six `history` values to stdout and
+the job summary: `id`, `sha256`, `expiresAt`, `runId`, `revision`, `name`.
+Here `sha256` is the **artifact transport digest**, not the packet hash, and
+`expiresAt` comes from the API, never from adding 90 days. `revision` identifies
+this artifact-producing recipe, not a candidate chosen later.
+
+Independently retain/check the original artifact metadata, packet and exact
+originals before installing those six values in private admitted policy.
+Observed metadata supplies no approval. Conserve an independent copy before
+effective expiry; temporary Actions retention is not permanent custody. The
+artifact remains subject to the publisher's existing metadata, digest and
+history admission on receipt. Keep actual settings and authority evidence
+outside issues/source.
+
+If upload or metadata readback fails, inspect the same original run and artifact
+before another action. Failure can leave an existing or unknown artifact; never
+rerun automatically, infer absence or reset the Git root. A late readback can
+conserve facts, but cannot authorize another upload. Local checks establish this
+source/profile, not actual service protections, queue/approval/HTTPS/draft
+visibility/immutable behavior or useful publication; those retain their separate
+qualification and approval.
+
 ## Prepare tools and candidate inputs
 
 Build and named-registry consumer pins remain Node22.12.0/npm11.1.0. The

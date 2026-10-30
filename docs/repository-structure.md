@@ -320,6 +320,11 @@ plans to the existing record and exact handoffs. The effects owner sequences
 calls; the separate GitHub, registry, npm and human adapters own their transports
 and credential boundaries. The client profile, Python setup and actual-client
 qualification are optional release tooling, outside library distribution.
+`scripts/release-history.mjs` prepares a bounded initial-evidence packet offline
+and materializes only inspected original bytes in its separate read-only manual
+workflow. It shares the existing history reader, not a second record or trust
+admission. Its artifact-metadata observation supplies the existing publication
+handoff fields; service use remains separately authorized.
 The [publication reference](reference/release-publication.md) describes these
 interfaces and the maintainer procedure; the release policy remains primary.
 

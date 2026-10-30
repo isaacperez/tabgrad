@@ -1,0 +1,78 @@
+name: Initial publication history
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_revision:
+        description: Exact approved main revision, equal to the workflow source
+        required: true
+        type: string
+      expires_at:
+        description: Finite approved UTC deadline in canonical ISO format
+        required: true
+        type: string
+      history_json:
+        description: Exact canonical packet of separately inspected public-safe originals
+        required: true
+        type: string
+      history_sha256:
+        description: Independently inspected SHA-256 of the original packet bytes
+        required: true
+        type: string
+      confirmation:
+        description: Enter release-history after separate operational authorization
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  TABGRAD_HISTORY_ENABLED: ${{ vars.TABGRAD_PUBLICATION_HISTORY_ENABLED }}
+  TABGRAD_HISTORY_CONFIRMATION: ${{ inputs.confirmation }}
+  TABGRAD_HISTORY_SOURCE: ${{ inputs.source_revision }}
+  TABGRAD_HISTORY_DEADLINE: ${{ inputs.expires_at }}
+  TABGRAD_HISTORY_JSON: ${{ inputs.history_json }}
+  TABGRAD_HISTORY_SHA256: ${{ inputs.history_sha256 }}
+
+jobs:
+  deliver:
+    name: deliver-initial-history
+    if: >-
+      ${{ vars.TABGRAD_PUBLICATION_HISTORY_ENABLED == 'true' &&
+          github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' &&
+          github.run_attempt == '1' && inputs.source_revision == github.sha &&
+          inputs.confirmation == 'release-history' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Admit exact context before checkout
+        run: test "$TABGRAD_HISTORY_ENABLED" = true && test "$TABGRAD_HISTORY_CONFIRMATION" = release-history && test "$GITHUB_EVENT_NAME" = workflow_dispatch && test "$GITHUB_REF" = refs/heads/main && test "$GITHUB_RUN_ATTEMPT" = 1 && test "$TABGRAD_HISTORY_SOURCE" = "$GITHUB_SHA"
+      - name: Check out the reviewed recipe
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Select the controller Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          check-latest: false
+      - name: Validate and materialize only the inspected original bytes
+        run: node scripts/release-history.mjs materialize "$RUNNER_TEMP/tabgrad-initial-history"
+      - name: Deliver this run's immutable artifact
+        id: history
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: tabgrad-publication-history-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/tabgrad-initial-history
+          overwrite: false
+          if-no-files-found: error
+          retention-days: 90
+      - name: Observe actual artifact metadata for independent inspection
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TABGRAD_HISTORY_ARTIFACT_ID: ${{ steps.history.outputs.artifact-id }}
+          TABGRAD_HISTORY_ARTIFACT_DIGEST: ${{ steps.history.outputs.artifact-digest }}
+        run: node scripts/release-history.mjs observe

@@ -401,6 +401,10 @@ FULL_COMMIT_ACTION = re.compile(r"^[^@\s]+@[0-9a-f]{40}$")
 DIRECT_RUNNER_CONTEXT = re.compile(r"\$\{\{\s*runner\s*(?:\.|\[)")
 PRODUCER_TRIAL_PATH = Path(".github/workflows/producer-trial.yml")
 PUBLICATION_PATH = Path(".github/workflows/release-publication.yml")
+HISTORY_PATH = Path(".github/workflows/release-history.yml")
+EXPECTED_HISTORY_SHA256 = (
+    "1233f7d445d7d5d2c6aac157c75c9e2cb1cb34a81b3aac6b4864ec057c1226cb"
+)
 EXPECTED_PUBLICATION_SHA256 = (
     "5c9ec3c3c23d239f7102167baf91204731167ba69a7512d2b66cf8dfa98df128"
 )
@@ -420,6 +424,7 @@ APPROVED_WORKFLOW_PATHS = {
     Path(".github/workflows/repository-checks.yml"),
     PRODUCER_TRIAL_PATH,
     PUBLICATION_PATH,
+    HISTORY_PATH,
 }
 CI_INSTALL_COMMAND = (
     "python -m venv .venv && .venv/bin/python -m pip install --only-binary=:all: --require-hashes "
@@ -512,6 +517,14 @@ PRODUCER_TRIAL_COMMANDS = {
     'node scripts/producer-trial.mjs verify "$RUNNER_TEMP/tabgrad-producer-data" '
     '"$RUNNER_TEMP/tabgrad-producer-proofs" "$RUNNER_TEMP/tabgrad-producer-client" '
     '"$RUNNER_TEMP/tabgrad-producer-verification"',
+}
+HISTORY_COMMANDS = {
+    'test "$TABGRAD_HISTORY_ENABLED" = true && test "$TABGRAD_HISTORY_CONFIRMATION" '
+    '= release-history && test "$GITHUB_EVENT_NAME" = workflow_dispatch && '
+    'test "$GITHUB_REF" = refs/heads/main && test "$GITHUB_RUN_ATTEMPT" = 1 && '
+    'test "$TABGRAD_HISTORY_SOURCE" = "$GITHUB_SHA"',
+    'node scripts/release-history.mjs materialize "$RUNNER_TEMP/tabgrad-initial-history"',
+    "node scripts/release-history.mjs observe",
 }
 PUBLICATION_COMMANDS = {
     CI_INSTALL_COMMAND,
@@ -1214,8 +1227,9 @@ def check_workflow_security(state: YamlRepositoryState) -> list[Failure]:
             continue
         is_producer_trial = relative == PRODUCER_TRIAL_PATH
         is_publication = relative == PUBLICATION_PATH
+        is_history = relative == HISTORY_PATH
         expected_permissions = {"contents": "read"}
-        if is_producer_trial or is_publication:
+        if is_producer_trial or is_publication or is_history:
             expected_permissions = (
                 PUBLICATION_PERMISSIONS
                 if is_publication
@@ -1226,7 +1240,9 @@ def check_workflow_security(state: YamlRepositoryState) -> list[Failure]:
                     document, sort_keys=True, separators=(",", ":"), allow_nan=False
                 ).encode()
                 matches_definition = hashlib.sha256(definition).hexdigest() == (
-                    EXPECTED_PUBLICATION_SHA256
+                    EXPECTED_HISTORY_SHA256
+                    if is_history
+                    else EXPECTED_PUBLICATION_SHA256
                     if is_publication
                     else EXPECTED_PRODUCER_TRIAL_SHA256
                 )
@@ -1322,7 +1338,9 @@ def check_ci_workflow(
     failures.extend(command_failures)
     for workflow_path, command in all_run_commands:
         registered_commands = (
-            PUBLICATION_COMMANDS
+            HISTORY_COMMANDS
+            if workflow_path == HISTORY_PATH
+            else PUBLICATION_COMMANDS
             if workflow_path == PUBLICATION_PATH
             else PRODUCER_TRIAL_COMMANDS
             if workflow_path == PRODUCER_TRIAL_PATH
@@ -1337,7 +1355,8 @@ def check_ci_workflow(
             workflow_path
             for workflow_path, candidate in all_run_commands
             if candidate == command
-            and workflow_path not in (PRODUCER_TRIAL_PATH, PUBLICATION_PATH)
+            and workflow_path
+            not in (PRODUCER_TRIAL_PATH, PUBLICATION_PATH, HISTORY_PATH)
         ]
         if len(occurrences) > 1:
             locations = ", ".join(str(location) for location in occurrences)
@@ -1407,6 +1426,7 @@ def check_ci_command_documentation(root: Path) -> list[Failure]:
         for command in REQUIRED_CI_COMMANDS
         | PRODUCER_TRIAL_COMMANDS
         | PUBLICATION_COMMANDS
+        | HISTORY_COMMANDS
         if command not in documented_commands
     )
     if not missing_commands:

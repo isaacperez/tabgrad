@@ -6,17 +6,19 @@ import { PublicationError, requirePublication } from "./publication-plan.mjs";
 import { publicationFile } from "./publication-admission.mjs";
 import { requireNpmCallReceipt, requireNpmIntent } from "./publication-effects.mjs";
 
+export const publicationHistoryLimits = Object.freeze({ files: 10000, fileBytes: 65536, bytes: 128 * 1024 * 1024 });
+
 /** Data-only original evidence; never check out the control branch or execute it. */
-async function publicationHistoryFiles(directory) {
+export async function publicationHistoryFiles(directory) {
   const evidence = {};
   let bytes = 0;
   const names = await readdir(directory);
-  requirePublication(names.length <= 10000, "PUBLICATION_HISTORY_LIMIT");
+  requirePublication(names.length <= publicationHistoryLimits.files, "PUBLICATION_HISTORY_LIMIT");
   for (const name of names) {
     requirePublication(/^[0-9a-f]{64}\.json$/.test(name), "PUBLICATION_HISTORY_NAME");
-    const path = join(directory, name), raw = await publicationFile(path, 65536);
+    const path = join(directory, name), raw = await publicationFile(path, publicationHistoryLimits.fileBytes);
     bytes += raw.length;
-    requirePublication(bytes <= 128 * 1024 * 1024 && sha256(raw) === name.slice(0, 64), "PUBLICATION_HISTORY_CHANGED");
+    requirePublication(bytes <= publicationHistoryLimits.bytes && sha256(raw) === name.slice(0, 64), "PUBLICATION_HISTORY_CHANGED");
     evidence[name.slice(0, 64)] = path;
   }
   return evidence;
