@@ -41,9 +41,6 @@ env:
   TABGRAD_PUBLICATION_NOTES: ${{ inputs.notes }}
   TABGRAD_PUBLICATION_QUALIFICATION_JSON: ${{ inputs.qualification_json }}
   TABGRAD_RECEIPT_ISSUE: ${{ inputs.receipt_issue }}
-  TABGRAD_RELEASE_POLICY_JSON: ${{ vars.TABGRAD_RELEASE_POLICY_JSON }}
-  TABGRAD_RELEASE_POLICY_SHA256: ${{ vars.TABGRAD_RELEASE_POLICY_SHA256 }}
-  TABGRAD_RELEASE_QUALIFICATION_JSON: ${{ vars.TABGRAD_RELEASE_QUALIFICATION_JSON }}
 jobs:
   precheck:
     name: precheck-publication
@@ -63,6 +60,10 @@ jobs:
     - name: Run the maintained publication role
       id: role
       run: node scripts/release-publication.mjs precheck "$RUNNER_TEMP/tabgrad-publication"
+      env:
+        TABGRAD_RELEASE_POLICY_JSON: ${{ secrets.TABGRAD_RELEASE_POLICY_JSON }}
+        TABGRAD_RELEASE_POLICY_SHA256: ${{ secrets.TABGRAD_RELEASE_POLICY_SHA256 }}
+        TABGRAD_RELEASE_QUALIFICATION_JSON: ${{ secrets.TABGRAD_RELEASE_QUALIFICATION_JSON }}
     env:
       GH_TOKEN: ${{ github.token }}
     if: ${{ vars.TABGRAD_PUBLICATION_ENABLED == 'true' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.run_attempt == '1' && inputs.confirmation == 'release-publication' }}
@@ -137,6 +138,9 @@ jobs:
       id: role
       run: node scripts/release-publication.mjs admit "$RUNNER_TEMP/tabgrad-publication"
       env:
+        TABGRAD_RELEASE_POLICY_JSON: ${{ secrets.TABGRAD_RELEASE_POLICY_JSON }}
+        TABGRAD_RELEASE_POLICY_SHA256: ${{ secrets.TABGRAD_RELEASE_POLICY_SHA256 }}
+        TABGRAD_RELEASE_QUALIFICATION_JSON: ${{ secrets.TABGRAD_RELEASE_QUALIFICATION_JSON }}
         TABGRAD_RECORD_INPUT: ${{ runner.temp }}/tabgrad-publication/initial-history
         TABGRAD_PROVENANCE_CLIENT: ${{ runner.temp }}/tabgrad-provenance-client/gh
     - name: Preserve admission and available original history
@@ -218,15 +222,50 @@ jobs:
         github-token: ${{ github.token }}
         path: ${{ runner.temp }}/tabgrad-publication/admission
         digest-mismatch: error
+    - name: Prepare the admitted npm client and namespace
+      id: prepared
+      run: node scripts/release-publication.mjs npm-prepare "$RUNNER_TEMP/tabgrad-publication"
+      env:
+        TABGRAD_RELEASE_POLICY_JSON: ${{ secrets.TABGRAD_RELEASE_POLICY_JSON }}
+        TABGRAD_RELEASE_POLICY_SHA256: ${{ secrets.TABGRAD_RELEASE_POLICY_SHA256 }}
+        TABGRAD_RELEASE_QUALIFICATION_JSON: ${{ secrets.TABGRAD_RELEASE_QUALIFICATION_JSON }}
+        TABGRAD_RECORD_INPUT: ${{ runner.temp }}/tabgrad-publication/admission/evidence
+        TABGRAD_PUBLICATION_CLIENT: ${{ runner.temp }}/tabgrad-publication-client
+    - name: Readiness SHA256 ${{ steps.prepared.outputs.ready_sha }}
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      with:
+        name: publication-ready-${{ github.run_id }}-${{ steps.prepared.outputs.ready_sha }}
+        path: ${{ runner.temp }}/tabgrad-publication/public-output/ready.json
+        overwrite: false
+        if-no-files-found: error
+        retention-days: 90
+    - name: Await observed permission
+      id: selected
+      run: node scripts/release-publication.mjs select-permission "$RUNNER_TEMP/tabgrad-publication"
+      env:
+        TABGRAD_RELEASE_POLICY_JSON: ${{ secrets.TABGRAD_RELEASE_POLICY_JSON }}
+        TABGRAD_RELEASE_POLICY_SHA256: ${{ secrets.TABGRAD_RELEASE_POLICY_SHA256 }}
+        TABGRAD_RELEASE_QUALIFICATION_JSON: ${{ secrets.TABGRAD_RELEASE_QUALIFICATION_JSON }}
+        TABGRAD_RECORD_INPUT: ${{ runner.temp }}/tabgrad-publication/admission/evidence
+    - name: Receive the exact observer permission
+      uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      with:
+        artifact-ids: ${{ steps.selected.outputs.packet_id }}
+        github-token: ${{ github.token }}
+        path: ${{ runner.temp }}/tabgrad-publication/received-permission
+        digest-mismatch: error
     - name: Run the maintained publication role
       id: role
       run: node scripts/release-publication.mjs npm "$RUNNER_TEMP/tabgrad-publication"
       env:
+        TABGRAD_RELEASE_POLICY_JSON: ${{ secrets.TABGRAD_RELEASE_POLICY_JSON }}
+        TABGRAD_RELEASE_POLICY_SHA256: ${{ secrets.TABGRAD_RELEASE_POLICY_SHA256 }}
+        TABGRAD_RELEASE_QUALIFICATION_JSON: ${{ secrets.TABGRAD_RELEASE_QUALIFICATION_JSON }}
         TABGRAD_RECORD_INPUT: ${{ runner.temp }}/tabgrad-publication/admission/evidence
         TABGRAD_PUBLICATION_CLIENT: ${{ runner.temp }}/tabgrad-publication-client
     - name: Preserve the sanitized npm call outcome
       id: retained
-      if: ${{ always() && steps.role.outcome != 'skipped' }}
+      if: ${{ always() && (steps.prepared.outcome != 'skipped' || steps.role.outcome != 'skipped') }}
       uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
       with:
         name: tabgrad-publication-npm-${{ github.run_id }}-${{ github.run_attempt }}
@@ -266,30 +305,6 @@ jobs:
       with:
         node-version-file: .node-version
         check-latest: false
-    - name: Receive identified producer data
-      uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-      with:
-        artifact-ids: ${{ needs.precheck.outputs.data_id }}
-        github-token: ${{ github.token }}
-        path: ${{ runner.temp }}/tabgrad-publication/data
-        digest-mismatch: error
-        run-id: ${{ needs.precheck.outputs.producer_run }}
-    - name: Receive original producer proofs
-      uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-      with:
-        artifact-ids: ${{ needs.precheck.outputs.proofs_id }}
-        github-token: ${{ github.token }}
-        path: ${{ runner.temp }}/tabgrad-publication/proofs
-        digest-mismatch: error
-        run-id: ${{ needs.precheck.outputs.producer_run }}
-    - name: Receive original producer corroboration
-      uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-      with:
-        artifact-ids: ${{ needs.precheck.outputs.verification_id }}
-        github-token: ${{ github.token }}
-        path: ${{ runner.temp }}/tabgrad-publication/verification
-        digest-mismatch: error
-        run-id: ${{ needs.precheck.outputs.producer_run }}
     - name: Receive admitted publication input
       uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
       with:
@@ -297,12 +312,32 @@ jobs:
         github-token: ${{ github.token }}
         path: ${{ runner.temp }}/tabgrad-publication/admission
         digest-mismatch: error
-    - name: Run the maintained publication role
+    - name: Receive readiness from the admitted human controller
+      id: prepared
+      run: node scripts/release-publication.mjs bootstrap-ready "$RUNNER_TEMP/tabgrad-publication"
+      env:
+        TABGRAD_RELEASE_POLICY_JSON: ${{ secrets.TABGRAD_RELEASE_POLICY_JSON }}
+        TABGRAD_RELEASE_POLICY_SHA256: ${{ secrets.TABGRAD_RELEASE_POLICY_SHA256 }}
+        TABGRAD_RELEASE_QUALIFICATION_JSON: ${{ secrets.TABGRAD_RELEASE_QUALIFICATION_JSON }}
+        TABGRAD_RECORD_INPUT: ${{ runner.temp }}/tabgrad-publication/admission/evidence
+    - name: Readiness SHA256 ${{ steps.prepared.outputs.ready_sha }}
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      with:
+        name: publication-ready-${{ github.run_id }}-${{ steps.prepared.outputs.ready_sha }}
+        path: ${{ runner.temp }}/tabgrad-publication/public-output/ready.json
+        overwrite: false
+        if-no-files-found: error
+        retention-days: 90
+    - name: Await observed permission
       id: role
       run: node scripts/release-publication.mjs bootstrap "$RUNNER_TEMP/tabgrad-publication"
+      env:
+        TABGRAD_RELEASE_POLICY_JSON: ${{ secrets.TABGRAD_RELEASE_POLICY_JSON }}
+        TABGRAD_RELEASE_POLICY_SHA256: ${{ secrets.TABGRAD_RELEASE_POLICY_SHA256 }}
+        TABGRAD_RELEASE_QUALIFICATION_JSON: ${{ secrets.TABGRAD_RELEASE_QUALIFICATION_JSON }}
     - name: Preserve the attributed human reconciliation
       id: retained
-      if: ${{ always() && steps.role.outcome != 'skipped' }}
+      if: ${{ always() && (steps.prepared.outcome != 'skipped' || steps.role.outcome != 'skipped') }}
       uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
       with:
         name: tabgrad-publication-npm-${{ github.run_id }}-${{ github.run_attempt }}
@@ -319,6 +354,72 @@ jobs:
     outputs:
       artifact_id: ${{ steps.retained.outputs.artifact-id }}
       digest: ${{ steps.retained.outputs.artifact-digest }}
+  gate:
+    name: observe-ready-publication
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    needs:
+    - precheck
+    - admit
+    steps:
+    - name: Check out the reviewed recipe
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        ref: ${{ github.sha }}
+        persist-credentials: false
+    - name: Select the controller Node
+      uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      with:
+        node-version-file: .node-version
+        check-latest: false
+    - name: Receive admitted publication input
+      uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      with:
+        artifact-ids: ${{ needs.admit.outputs.artifact_id }}
+        github-token: ${{ github.token }}
+        path: ${{ runner.temp }}/tabgrad-publication/admission
+        digest-mismatch: error
+    - name: Select the prepared client readiness
+      id: selected
+      run: node scripts/release-publication.mjs select-ready "$RUNNER_TEMP/tabgrad-publication"
+      env:
+        TABGRAD_RELEASE_POLICY_JSON: ${{ secrets.TABGRAD_RELEASE_POLICY_JSON }}
+        TABGRAD_RELEASE_POLICY_SHA256: ${{ secrets.TABGRAD_RELEASE_POLICY_SHA256 }}
+        TABGRAD_RELEASE_QUALIFICATION_JSON: ${{ secrets.TABGRAD_RELEASE_QUALIFICATION_JSON }}
+        TABGRAD_RECORD_INPUT: ${{ runner.temp }}/tabgrad-publication/admission/evidence
+    - name: Receive the exact prepared readiness
+      uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      with:
+        artifact-ids: ${{ steps.selected.outputs.packet_id }}
+        github-token: ${{ github.token }}
+        path: ${{ runner.temp }}/tabgrad-publication/received-ready
+        digest-mismatch: error
+    - name: Check current destinations and issue the bound permission
+      id: permission
+      run: node scripts/release-publication.mjs permit "$RUNNER_TEMP/tabgrad-publication"
+      env:
+        TABGRAD_RELEASE_POLICY_JSON: ${{ secrets.TABGRAD_RELEASE_POLICY_JSON }}
+        TABGRAD_RELEASE_POLICY_SHA256: ${{ secrets.TABGRAD_RELEASE_POLICY_SHA256 }}
+        TABGRAD_RELEASE_QUALIFICATION_JSON: ${{ secrets.TABGRAD_RELEASE_QUALIFICATION_JSON }}
+        TABGRAD_RECORD_INPUT: ${{ runner.temp }}/tabgrad-publication/admission/evidence
+    - name: Permission SHA256 ${{ steps.permission.outputs.permission_sha }}
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      with:
+        name: publication-permission-${{ github.run_id }}-${{ steps.permission.outputs.permission_sha }}
+        path: ${{ runner.temp }}/tabgrad-publication/public-output/permission.json
+        overwrite: false
+        if-no-files-found: error
+        retention-days: 90
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TABGRAD_ADMISSION_ID: ${{ needs.admit.outputs.artifact_id }}
+      TABGRAD_ADMISSION_DIGEST: ${{ needs.admit.outputs.digest }}
+      TABGRAD_ADMISSION_SHA256: ${{ needs.admit.outputs.admission_sha }}
+    if: ${{ needs.precheck.outputs.mode != 'observe' }}
+    permissions:
+      contents: write
+      actions: read
+      issues: read
   observe:
     name: record-npm-outcome
     runs-on: ubuntu-24.04
@@ -358,6 +459,9 @@ jobs:
       id: role
       run: node scripts/release-publication.mjs observe "$RUNNER_TEMP/tabgrad-publication"
       env:
+        TABGRAD_RELEASE_POLICY_JSON: ${{ secrets.TABGRAD_RELEASE_POLICY_JSON }}
+        TABGRAD_RELEASE_POLICY_SHA256: ${{ secrets.TABGRAD_RELEASE_POLICY_SHA256 }}
+        TABGRAD_RELEASE_QUALIFICATION_JSON: ${{ secrets.TABGRAD_RELEASE_QUALIFICATION_JSON }}
         TABGRAD_RECORD_INPUT: ${{ runner.temp }}/tabgrad-publication/admission/evidence
     - name: Preserve the recorded outcome and original history
       id: retained
@@ -442,6 +546,10 @@ jobs:
     - name: Run the maintained publication role
       id: role
       run: node scripts/release-publication.mjs consume "$RUNNER_TEMP/tabgrad-publication"
+      env:
+        TABGRAD_RELEASE_POLICY_JSON: ${{ secrets.TABGRAD_RELEASE_POLICY_JSON }}
+        TABGRAD_RELEASE_POLICY_SHA256: ${{ secrets.TABGRAD_RELEASE_POLICY_SHA256 }}
+        TABGRAD_RELEASE_QUALIFICATION_JSON: ${{ secrets.TABGRAD_RELEASE_QUALIFICATION_JSON }}
     - name: Preserve actual registry and consumer checks
       id: retained
       if: ${{ always() && steps.role.outcome != 'skipped' }}
@@ -529,6 +637,9 @@ jobs:
       id: role
       run: node scripts/release-publication.mjs complete "$RUNNER_TEMP/tabgrad-publication"
       env:
+        TABGRAD_RELEASE_POLICY_JSON: ${{ secrets.TABGRAD_RELEASE_POLICY_JSON }}
+        TABGRAD_RELEASE_POLICY_SHA256: ${{ secrets.TABGRAD_RELEASE_POLICY_SHA256 }}
+        TABGRAD_RELEASE_QUALIFICATION_JSON: ${{ secrets.TABGRAD_RELEASE_QUALIFICATION_JSON }}
         TABGRAD_RECORD_INPUT: ${{ runner.temp }}/tabgrad-publication/observed/evidence
     - name: Preserve final or partial completion and original history
       id: retained

@@ -27,9 +27,9 @@ async function service(context, handler, options = {}) {
 }
 const json = (res, status, value) => res.writeHead(status, { "content-type": "application/json" }).end(JSON.stringify(value));
 
-test("actual HTTP: push visibility is required before interpreting absence", async context => {
+for (const push of [false, true]) test(`actual HTTP: unqualified reader cannot infer absence from push=${push}`, async context => {
   const f = await service(context, (req, res) => json(res, 200, {
-    full_name: "example/project", permissions: { push: false }, archived: false, disabled: false }));
+    full_name: "example/project", permissions: { push }, archived: false, disabled: false }));
   await assert.rejects(f.api.state(f.plan), { code: "PUBLICATION_GITHUB_VISIBILITY" });
   assert.equal(f.calls.length, 1);
 });
@@ -40,7 +40,7 @@ test("actual HTTP: tag resolution, paginated drafts and full original asset byte
   const f = await service(context, (req, res) => {
     const route = req.url.slice(`/repos/${fixture.plan.github.repository}`.length);
     if (route === "") return json(res, 200, { full_name: fixture.plan.github.repository,
-      permissions: { push: true }, archived: false, disabled: false });
+      permissions: { push: false }, archived: false, disabled: false });
     if (route.startsWith("/git/ref/")) return json(res, 200, { ref: `refs/tags/${fixture.plan.github.tag}`,
       object: { type: "tag", sha: "1".repeat(40) } });
     if (route.startsWith("/git/tags/")) return json(res, 200, { object: { type: "commit", sha: fixture.plan.candidate.sourceRevision } });
@@ -51,12 +51,45 @@ test("actual HTTP: tag resolution, paginated drafts and full original asset byte
       [{ id: 7, name: "payload.bin", state: "uploaded", size: raw.length }]);
     if (route === "/releases/assets/7") return res.writeHead(200).end(raw);
     return json(res, 404, { error: "missing fixture route" });
-  });
+  }, { draftVisibility: "qualified-workflow-writer" });
   fixture = f;
   const state = await f.api.state(f.plan, new Map([["payload.bin", { byteLength: raw.length, sha256: sha256(raw) }]]));
   assert.equal(state.tagRevision, f.plan.candidate.sourceRevision);
   assert.deepEqual(state.assets, [{ id: "7", name: "payload.bin", byteLength: raw.length, sha256: sha256(raw) }]);
   assert.ok(f.calls.some(call => call.path.endsWith("page=2")));
+});
+
+test("qualified writer view still fails closed on an inaccessible draft listing", async () => {
+  const { publicationPlan: plan } = publicationPlanFixture();
+  const api = publicationGithub({ repository: plan.github.repository, token: "fixture-not-a-credential",
+    draftVisibility: "qualified-workflow-writer", fetcher: async url => {
+      if (url.pathname === "/repos/example/project") return new Response(JSON.stringify({ full_name: "example/project",
+        permissions: { push: false }, archived: false, disabled: false }));
+      if (url.pathname.includes("/git/ref/")) return new Response("{}", { status: 404 });
+      return new Response("[]", { status: 403 });
+    } });
+  await assert.rejects(api.state(plan), { code: "PUBLICATION_GITHUB_RESPONSE" });
+  assert.equal(api.observations.at(-1).status, 403);
+});
+
+test("read-only profile cannot acquire draft visibility by naming a writer role", async () => {
+  const { publicationPlan: plan } = publicationPlanFixture();
+  const api = publicationGithub({ repository: plan.github.repository, token: "fixture-not-a-credential", readOnly: true,
+    draftVisibility: "qualified-workflow-writer", fetcher: async () => new Response(JSON.stringify({ full_name: "example/project",
+      permissions: { push: true }, archived: false, disabled: false })) });
+  await assert.rejects(api.state(plan), { code: "PUBLICATION_GITHUB_VISIBILITY" });
+  await assert.rejects(api.request("/releases", { method: "POST", body: {} }), { code: "PUBLICATION_GITHUB_READ_ONLY" });
+});
+
+test("canceled observation interrupts owned requests and preserves a closed public error code", async () => {
+  const controller = new AbortController(); let called = 0;
+  const api = publicationGithub({ repository: "example/project", token: "fixture-not-a-credential", signal: controller.signal,
+    fetcher: async (_url, options) => {
+      called++;
+      return new Promise((_resolve, reject) => options.signal.addEventListener("abort", () => reject(options.signal.reason), { once: true }));
+    } });
+  const pending = api.request("/actions/runs/301"); controller.abort();
+  await assert.rejects(pending, { code: "PUBLICATION_GITHUB_REQUEST" }); assert.equal(called, 1);
 });
 
 test("actual HTTP: write bodies bind exact tag, metadata and opaque asset bytes", async context => {

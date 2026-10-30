@@ -87,6 +87,53 @@ class RepositoryCheckTests(unittest.TestCase):
             )
             self.assertEqual(CHECKS.check_ci_workflow(root), [])
 
+    def test_publication_observer_starts_with_clients_and_cannot_publish_npm(
+        self,
+    ) -> None:
+        document = yaml.safe_load(
+            (SCRIPT.parents[1] / CHECKS.PUBLICATION_PATH).read_text()
+        )
+        jobs = document["jobs"]
+        for name in ("npm", "bootstrap", "gate"):
+            self.assertEqual(set(jobs[name]["needs"]), {"precheck", "admit"})
+        self.assertNotIn("id-token", jobs["gate"]["permissions"])
+        self.assertEqual(jobs["gate"]["permissions"]["contents"], "write")
+        self.assertEqual(jobs["npm"]["permissions"]["contents"], "read")
+        self.assertEqual(jobs["npm"]["permissions"]["id-token"], "write")
+        for name in ("gate", "bootstrap"):
+            downloads = [
+                step["with"]
+                for step in jobs[name]["steps"]
+                if "actions/download-artifact@" in step.get("uses", "")
+            ]
+            self.assertTrue(downloads)
+            for settings in downloads:
+                self.assertEqual(settings["digest-mismatch"], "error")
+                self.assertNotIn("producer_run", str(settings))
+            self.assertFalse(
+                any(
+                    "prepare_publication_client" in step.get("run", "")
+                    for step in jobs[name]["steps"]
+                )
+            )
+        for name in ("npm", "bootstrap"):
+            steps = jobs[name]["steps"]
+            readiness = next(
+                i
+                for i, step in enumerate(steps)
+                if step["name"].startswith("Readiness SHA256 ")
+            )
+            waiting = next(
+                i
+                for i, step in enumerate(steps)
+                if step["name"] == "Await observed permission"
+            )
+            self.assertLess(readiness, waiting)
+        self.assertEqual(
+            jobs["gate"]["steps"][-1]["name"],
+            "Permission SHA256 ${{ steps.permission.outputs.permission_sha }}",
+        )
+
     def test_initial_history_registers_only_its_read_only_inert_delivery(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -202,6 +249,112 @@ class RepositoryCheckTests(unittest.TestCase):
                     [failure.message for failure in failures],
                     ["job example environment INPUT must not use the runner context"],
                 )
+
+    def test_publication_consumers_require_every_exact_private_secret(self) -> None:
+        names = (
+            "TABGRAD_RELEASE_POLICY_JSON",
+            "TABGRAD_RELEASE_POLICY_SHA256",
+            "TABGRAD_RELEASE_QUALIFICATION_JSON",
+        )
+        for role in (
+            "precheck",
+            "admit",
+            "npm-prepare",
+            "select-ready",
+            "select-permission",
+            "permit",
+            "npm",
+            "bootstrap-ready",
+            "bootstrap",
+            "observe",
+            "consume",
+            "complete",
+        ):
+            command = (
+                f"node scripts/release-publication.mjs {role} "
+                '"$RUNNER_TEMP/tabgrad-publication"'
+            )
+            for name in names:
+                for replacement in (
+                    None,
+                    "synthetic-literal",
+                    f"${{{{ vars.{name} }}}}",
+                    "${{ secrets.UNRELATED }}",
+                ):
+                    with self.subTest(role=role, name=name, replacement=replacement):
+                        environment = {
+                            key: f"${{{{ secrets.{key} }}}}" for key in names
+                        }
+                        if replacement is None:
+                            del environment[name]
+                        else:
+                            environment[name] = replacement
+                        document: dict[object, object] = {
+                            "jobs": {
+                                "example": {
+                                    "steps": [{"run": command, "env": environment}]
+                                }
+                            }
+                        }
+                        failures = CHECKS.check_publication_private_inputs(
+                            CHECKS.PUBLICATION_PATH, document
+                        )
+                        self.assertEqual(len(failures), 1)
+                        self.assertIn(name, failures[0].message)
+
+    def test_publication_private_inputs_cannot_reach_other_steps_or_broader_scopes(
+        self,
+    ) -> None:
+        for name in (
+            "TABGRAD_RELEASE_POLICY_JSON",
+            "TABGRAD_RELEASE_POLICY_SHA256",
+            "TABGRAD_RELEASE_QUALIFICATION_JSON",
+        ):
+            for source in ("vars", "secrets"):
+                environment = {name: f"${{{{ {source}.{name} }}}}"}
+                documents: tuple[dict[object, object], ...] = (
+                    {"env": environment},
+                    {"jobs": {"example": {"env": environment}}},
+                    {
+                        "jobs": {
+                            "example": {
+                                "steps": [{"run": "other command", "env": environment}]
+                            }
+                        }
+                    },
+                    {
+                        "jobs": {
+                            "example": {
+                                "steps": [{"uses": "some/action", "env": environment}]
+                            }
+                        }
+                    },
+                )
+                for index, document in enumerate(documents):
+                    with self.subTest(name=name, source=source, scope=index):
+                        failures = CHECKS.check_publication_private_inputs(
+                            CHECKS.PUBLICATION_PATH, document
+                        )
+                        self.assertEqual(len(failures), 1)
+                        self.assertIn(name, failures[0].message)
+
+    def test_registered_definition_does_not_waive_private_input_policy(self) -> None:
+        document = {
+            "permissions": CHECKS.PUBLICATION_PERMISSIONS,
+            "env": {"TABGRAD_RELEASE_POLICY_JSON": "${{ vars.PRIVATE_POLICY }}"},
+        }
+        registered = hashlib.sha256(
+            json.dumps(
+                document, sort_keys=True, separators=(",", ":"), allow_nan=False
+            ).encode()
+        ).hexdigest()
+        state = CHECKS.YamlRepositoryState(
+            True, {CHECKS.PUBLICATION_PATH: document}, frozenset(), ()
+        )
+        with mock.patch.object(CHECKS, "EXPECTED_PUBLICATION_SHA256", registered):
+            failures = CHECKS.check_workflow_security(state)
+        self.assertEqual(len(failures), 1)
+        self.assertIn("must not receive private publication input", failures[0].message)
 
     def test_registered_workflow_preserves_job_inputs_and_step_runner_paths(
         self,

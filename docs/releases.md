@@ -241,6 +241,36 @@ to create. After waiting/approval and immediately before each relevant effect,
 revalidate current authority/expiry, handoff identity, expected destination
 state and mutable prerequisites; reuse still-applicable immutable evidence.
 
+Keep GitHub draft inspection outside the npm identity. After the client has
+prepared its exact inputs and read its registry/namespace state, a separate
+qualified GitHub writer role checks current authority, the original intent/head
+and the GitHub destination. The client authenticates that observer's permission
+for its exact readiness, plan, call, source, run/attempt and window before
+dispatch. Repository permission projections, a packet's claimed issuer or an
+empty listing from an arbitrary reader do not establish sufficient draft view.
+Qualify the writer role's actual view; denied or unknown observations fail closed
+without upgrading the npm role or substituting an earlier successful check.
+
+The existing call and record protocol remain unchanged. Bind a packet's canonical
+SHA-256 to the exact provider job and its successfully completed upload step;
+pending step metadata supplies no completed proof. Corroborate artifact identity
+separately and verify transported bytes. Independently held exact expected bytes
+may instead be matched to that authenticated emission; distinguish them from
+downloaded originals. The human controller conveys its actual child's readiness
+through the admitted maintainer-attributed channel, retaining the trust in that
+maintainer/controller rather than treating a comment as mechanical proof of
+local execution. The [publication reference](reference/release-publication.md)
+defines the concrete profiles and evidence.
+
+Claim the owned execution session before waiting or checks can conceal a previous
+attempt. An unavailable or repeated session is unknown, including when its
+permission disappears, authority is revoked or the window expires. Only a sole
+admitted attempt can establish its own failure before dispatch. Preserve that
+claim for the session lifetime; copying inputs or losing local state supplies
+no distributed exactly-once guarantee. The human parent owns the child's private
+working directory and retires it after observing child close, including forced
+termination; abrupt loss of the parent or host still needs explicit recovery.
+
 Use one fixed repository-wide concurrency group across versions, channels and
 completion/resumption requests, held from admission through final inspection
 without release between npm and GitHub jobs. Do not cancel an active publisher
@@ -451,6 +481,15 @@ support these boundaries. The material alternatives have different costs:
   final immutable assets conserve the approved release afterward. This requires
   two checked transfers and accepts early public metadata without promising
   permanent availability.
+- A late GitHub observer preserves the required check after client readiness
+  while separating npm and GitHub-write authority. It adds coordination and
+  retained handoff evidence; an earlier snapshot is simpler but can discover
+  changes only after npm. Binding emission through completed job/step metadata
+  preserves existing intent/call semantics; anchoring the grant in the record
+  would change intent timing and require different custody, while reading logs
+  needs its own availability/parser contract. None creates an atomic transaction
+  across providers or establishes a temporal advantage. The accepted comparison
+  and bounded evidence are recorded in [#355](https://github.com/isaacperez/tabgrad/issues/355).
 
 Reconsider an affected mechanism when its actual client, claims, permissions,
 retention or recovery behavior cannot meet this contract, or when a support or

@@ -406,15 +406,37 @@ EXPECTED_HISTORY_SHA256 = (
     "1233f7d445d7d5d2c6aac157c75c9e2cb1cb34a81b3aac6b4864ec057c1226cb"
 )
 EXPECTED_PUBLICATION_SHA256 = (
-    "5c9ec3c3c23d239f7102167baf91204731167ba69a7512d2b66cf8dfa98df128"
+    "1c35366274124803c641f3e886734385432b3881c6a511efcb8ef1057d4c04c7"
 )
 PUBLICATION_PERMISSIONS = {"contents": "read", "actions": "read", "issues": "read"}
 PUBLICATION_JOB_PERMISSIONS = {
     **{
         name: {**PUBLICATION_PERMISSIONS, "contents": "write"}
-        for name in ("admit", "observe", "complete")
+        for name in ("admit", "gate", "observe", "complete")
     },
     "npm": {**PUBLICATION_PERMISSIONS, "id-token": "write"},
+}
+PUBLICATION_PRIVATE_INPUTS = (
+    "TABGRAD_RELEASE_POLICY_JSON",
+    "TABGRAD_RELEASE_POLICY_SHA256",
+    "TABGRAD_RELEASE_QUALIFICATION_JSON",
+)
+PUBLICATION_ROLE_COMMANDS = {
+    f'node scripts/release-publication.mjs {role} "$RUNNER_TEMP/tabgrad-publication"'
+    for role in (
+        "precheck",
+        "admit",
+        "npm-prepare",
+        "select-ready",
+        "select-permission",
+        "permit",
+        "npm",
+        "bootstrap-ready",
+        "bootstrap",
+        "observe",
+        "consume",
+        "complete",
+    )
 }
 # Canonical parsed JSON, not YAML layout. Updating this requires complete review.
 EXPECTED_PRODUCER_TRIAL_SHA256 = (
@@ -533,19 +555,7 @@ PUBLICATION_COMMANDS = {
     CI_PUBLICATION_PREPARE_COMMAND,
     ".venv/bin/python scripts/prepare_provenance_client.py "
     '"$RUNNER_TEMP/tabgrad-provenance-client"',
-    *{
-        f"node scripts/release-publication.mjs {role} "
-        '"$RUNNER_TEMP/tabgrad-publication"'
-        for role in (
-            "precheck",
-            "admit",
-            "npm",
-            "bootstrap",
-            "observe",
-            "consume",
-            "complete",
-        )
-    },
+    *PUBLICATION_ROLE_COMMANDS,
 }
 CHECKOUT_ACTION = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
 SETUP_PYTHON_ACTION = "actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97"
@@ -1214,6 +1224,62 @@ def check_job_runner_environment(
     ]
 
 
+def check_publication_input_environment(
+    path: Path, scope: str, environment: object, *, consumer: bool = False
+) -> list[Failure]:
+    """Keep private input bindings on their exact consuming command steps."""
+    values: Mapping[object, object] = (
+        environment if is_yaml_mapping(environment) else {}
+    )
+    failures: list[Failure] = []
+    for name in PUBLICATION_PRIVATE_INPUTS:
+        if consumer:
+            if values.get(name) != f"${{{{ secrets.{name} }}}}":
+                failures.append(
+                    Failure(
+                        path, f"{scope} must receive {name} from its repository secret"
+                    )
+                )
+        elif name in values:
+            failures.append(
+                Failure(
+                    path, f"{scope} must not receive private publication input {name}"
+                )
+            )
+    return failures
+
+
+def check_publication_private_inputs(
+    path: Path, document: Mapping[object, object]
+) -> list[Failure]:
+    failures = check_publication_input_environment(
+        path, "workflow", document.get("env")
+    )
+    jobs = document.get("jobs")
+    if not is_yaml_mapping(jobs):
+        return failures
+    for name, job in jobs.items():
+        if not is_yaml_mapping(job):
+            continue
+        failures.extend(
+            check_publication_input_environment(path, f"job {name}", job.get("env"))
+        )
+        steps = job.get("steps")
+        if not is_yaml_list(steps):
+            continue
+        for index, step in enumerate(steps):
+            if not is_yaml_mapping(step):
+                continue
+            command = step.get("run")
+            consumer = isinstance(command, str) and command in PUBLICATION_ROLE_COMMANDS
+            failures.extend(
+                check_publication_input_environment(
+                    path, f"job {name} step {index}", step.get("env"), consumer=consumer
+                )
+            )
+    return failures
+
+
 def check_workflow_security(state: YamlRepositoryState) -> list[Failure]:
     failures: list[Failure] = []
     documents = repository_workflow_documents(state)
@@ -1228,6 +1294,8 @@ def check_workflow_security(state: YamlRepositoryState) -> list[Failure]:
         is_producer_trial = relative == PRODUCER_TRIAL_PATH
         is_publication = relative == PUBLICATION_PATH
         is_history = relative == HISTORY_PATH
+        if is_publication:
+            failures.extend(check_publication_private_inputs(relative, document))
         expected_permissions = {"contents": "read"}
         if is_producer_trial or is_publication or is_history:
             expected_permissions = (
