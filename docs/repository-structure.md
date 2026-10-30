@@ -318,7 +318,10 @@ permissions. `publication-plan.mjs` owns the closed plan and effect identities;
 originals. `publication-record.mjs` and `publication-controller.mjs` bind those
 plans to the existing record and exact handoffs. The effects owner sequences
 calls; the separate GitHub, registry, npm and human adapters own their transports
-and credential boundaries. The client profile, Python setup and actual-client
+and credential boundaries. `publication-gate.mjs` owns scoped readiness and
+permission packets, provider job/step/artifact association and local session
+claims; it neither publishes nor replaces the record. The client profile,
+Python setup and actual-client
 qualification are optional release tooling, outside library distribution.
 `scripts/release-history.mjs` prepares a bounded initial-evidence packet offline
 and materializes only inspected original bytes in its separate read-only manual

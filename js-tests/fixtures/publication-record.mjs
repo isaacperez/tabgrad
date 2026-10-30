@@ -41,4 +41,3 @@ export async function publicationRecordFixture(context) {
   return { directory, config, policy, authorityObservation, expectedHead: root.head, plan: f.publicationPlan, clock: () => f.now,
     now: f.now };
 }
-
