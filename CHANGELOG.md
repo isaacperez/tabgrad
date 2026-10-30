@@ -28,6 +28,8 @@ established by the corresponding verified release record.
 
 - The root Python example now uses available operations and explicit float32;
   browser checks execute that exact snippet in the attached interpreter.
+- Publication admission can corroborate an exact active role when GitHub reports
+  its aggregate run as queued, and rechecks authority expiry after provider reads.
 
 The [0.1.0 source and support record](docs/reference/release-0.1.0.md) defines
 signatures, supported domains, intentional differences, environment evidence

@@ -3,7 +3,7 @@ import test from "node:test";
 import { publicationPlanFixture } from "../../fixtures/publication.mjs";
 import { canonicalBytes, sha256 } from "../../../scripts/release-record-data.mjs";
 import { admitPublicationPolicy, observePublicationAuthority, observePublicationPrecheck, observePublicationProducer,
-  publicationApprovalComment, publicationEnvironmentSnapshot } from "../../../scripts/publication-authority.mjs";
+  observePublicationConservation, publicationApprovalComment, publicationEnvironmentSnapshot } from "../../../scripts/publication-authority.mjs";
 
 /** Provider-policy model; actual HTTP/client and live-service qualification are distinct. */
 function fixture() {
@@ -39,6 +39,75 @@ function fixture() {
   const api = { request: async route => { requests.push(route); assert.ok(values.has(route), route); return structuredClone(values.get(route)); } };
   return { ...f, plan, policy, context, values, requests, api };
 }
+
+function queuedRole(f, name = "admit-publication") {
+  f.activeJobName = name;
+  f.values.get("/actions/runs/301").status = "queued";
+  const job = { id: 91, run_id: 301, run_attempt: 1, head_sha: f.context.revision,
+    name, status: "in_progress", conclusion: null };
+  const jobs = { total_count: 1, jobs: [job] };
+  f.values.set("/actions/runs/301/attempts/1/jobs?per_page=100", jobs);
+  return { job, jobs };
+}
+
+test("queued aggregate needs the exact active role before the actual review can grant authority", async () => {
+  const f = fixture(); queuedRole(f);
+  const authority = await observePublicationAuthority(f);
+  assert.equal(authority.approved, true);
+  assert.ok(f.requests.includes("/actions/runs/301/attempts/1/jobs?per_page=100"));
+  assert.ok(f.requests.indexOf("/actions/runs/301/attempts/1/jobs?per_page=100")
+    < f.requests.indexOf("/actions/runs/301/approvals"));
+  f.values.set("/actions/runs/301/approvals", []);
+  await assert.rejects(observePublicationAuthority(f), { code: "PUBLICATION_ENVIRONMENT_REVIEW_INVALID" });
+});
+
+for (const [name, change] of [
+  ["missing selected role", f => { delete f.activeJobName; }],
+  ["another role", (_f, job) => { job.name = "precheck-publication"; }],
+  ["foreign run", (_f, job) => { job.run_id = 302; }],
+  ["another attempt", (_f, job) => { job.run_attempt = 2; }],
+  ["foreign source", (_f, job) => { job.head_sha = "a".repeat(40); }],
+  ["unidentified job", (_f, job) => { job.id = 0; }],
+  ["queued job", (_f, job) => { job.status = "queued"; }],
+  ["completed job", (_f, job) => { job.status = "completed"; job.conclusion = "success"; }],
+  ["conflicting conclusion", (_f, job) => { job.conclusion = "failure"; }],
+  ["ambiguous role", (_f, job, jobs) => { jobs.jobs.push({ ...job, id: 92 }); jobs.total_count++; }],
+  ["incomplete job page", (_f, _job, jobs) => { jobs.total_count++; }],
+  ["terminal aggregate", f => { f.values.get("/actions/runs/301").status = "completed"; }],
+]) test(`queued aggregate cannot borrow ${name} as execution proof`, async () => {
+  const f = fixture(), { job, jobs } = queuedRole(f); change(f, job, jobs);
+  await assert.rejects(observePublicationAuthority(f), { code: "PUBLICATION_RUN_INVALID" });
+  assert.equal(f.requests.includes("/actions/runs/301/approvals"), false);
+});
+
+test("queued precheck remains unapproved and conservation keeps its separate time boundary", async () => {
+  const precheck = fixture(); queuedRole(precheck, "precheck-publication");
+  assert.deepEqual(await observePublicationPrecheck(precheck), { schemaVersion: 1, status: "unapproved-precheck" });
+  assert.equal(precheck.requests.includes("/actions/runs/301/approvals"), false);
+  const conservation = fixture(); queuedRole(conservation, "record-npm-outcome");
+  conservation.clock = () => Date.parse(conservation.plan.window.deadline) + 1;
+  assert.deepEqual(await observePublicationConservation(conservation), { schemaVersion: 1, status: "conservation-only" });
+  assert.equal(conservation.requests.includes("/actions/runs/301/approvals"), false);
+});
+
+for (const [name, command, route, expires] of [
+  ["role evidence crosses the window", observePublicationAuthority, "/actions/runs/301/attempts/1/jobs?per_page=100", "window"],
+  ["review crosses the window", observePublicationAuthority, "/actions/runs/301/approvals", "window"],
+  ["history read crosses the window", observePublicationPrecheck, "/actions/artifacts/201", "window"],
+  ["conservation crosses qualification expiry", observePublicationConservation,
+    "/actions/runs/301/attempts/1/jobs?per_page=100", "qualification"],
+]) test(`decision time rejects when ${name}`, async () => {
+  const f = fixture();
+  if (route.includes("/jobs?")) queuedRole(f);
+  let now = f.now; f.clock = () => now;
+  const request = f.api.request;
+  f.api.request = async key => {
+    const value = await request(key);
+    if (key === route) now = Date.parse(expires === "window" ? f.plan.window.deadline : f.policy.operationalEvidence.expiresAt);
+    return value;
+  };
+  await assert.rejects(command(f), { code: "PUBLICATION_CONTEXT_INVALID" });
+});
 
 test("provider model: precheck never produces an approved observation", async () => {
   const f = fixture();

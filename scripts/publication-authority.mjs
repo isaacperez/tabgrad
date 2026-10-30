@@ -54,14 +54,40 @@ export function publicationApprovalComment(plan, planSha256, context) {
   return `tabgrad-release-approve ${planSha256} ${plan.operation} ${context.runId}/${context.attempt}`;
 }
 
-async function checkPublicationControl({ api, plan, policy, context, now = Date.now() }, conservation = false) {
+/** Read again at the decision boundary; an earlier asynchronous read is not a clock. */
+function requireObservationTime(parameters, conservation = false) {
+  const { plan, policy } = parameters;
+  const now = parameters.clock ? parameters.clock() : parameters.now ?? Date.now();
+  requirePublication(Number.isFinite(now)
+    && (conservation || (Date.parse(plan.window.start) <= now && now < Date.parse(plan.window.deadline)))
+    && now < Date.parse(policy.operationalEvidence.expiresAt), "PUBLICATION_CONTEXT_INVALID");
+  return now;
+}
+
+/** Aggregate queued metadata is insufficient; the selected current role must be active. */
+async function requireActivePublicationRun(run, { api, context, activeJobName }) {
+  if (run.status === "in_progress") return;
+  requirePublication(run.status === "queued" && typeof activeJobName === "string" && activeJobName.length > 0,
+    "PUBLICATION_RUN_INVALID");
+  const result = await api.request(`/actions/runs/${context.runId}/attempts/${context.attempt}/jobs?per_page=100`);
+  requirePublication(Number.isSafeInteger(result?.total_count) && result.total_count >= 0 && result.total_count <= 100
+    && Array.isArray(result.jobs) && result.jobs.length === result.total_count, "PUBLICATION_RUN_INVALID");
+  const matches = result.jobs.filter(job => job?.name === activeJobName);
+  requirePublication(matches.length === 1, "PUBLICATION_RUN_INVALID");
+  const job = matches[0];
+  requirePublication(Number.isSafeInteger(job.id) && job.id > 0 && String(job.run_id) === context.runId
+    && job.run_attempt === Number(context.attempt) && job.head_sha === context.revision
+    && job.status === "in_progress" && job.conclusion === null, "PUBLICATION_RUN_INVALID");
+}
+
+async function checkPublicationControl(parameters, conservation = false) {
+  const { api, plan, policy, context } = parameters;
   requirePublication(context.event === "workflow_dispatch" && context.ref === "refs/heads/main"
     && context.attempt === "1" && identifier.test(context.runId)
     && context.workflowRef === `${plan.publisher.repository}/${policy.workflow}@refs/heads/main`
     && context.revision === plan.publisher.revision && policy.recipeRevision === plan.publisher.revision
-    && policy.workflow === plan.publisher.workflow
-    && (conservation || (Date.parse(plan.window.start) <= now && now < Date.parse(plan.window.deadline)))
-    && now < Date.parse(policy.operationalEvidence.expiresAt), "PUBLICATION_CONTEXT_INVALID");
+    && policy.workflow === plan.publisher.workflow, "PUBLICATION_CONTEXT_INVALID");
+  requireObservationTime(parameters, conservation);
   const repo = await api.request("");
   requirePublication(String(repo.id) === policy.repositoryId && String(repo.owner?.id) === policy.ownerId
     && repo.full_name === plan.publisher.repository && repo.default_branch === "main"
@@ -70,9 +96,11 @@ async function checkPublicationControl({ api, plan, policy, context, now = Date.
   const run = await api.request(`/actions/runs/${context.runId}`);
   requirePublication(String(run.id) === context.runId && run.run_attempt === 1 && run.event === context.event
     && run.head_sha === context.revision && run.head_branch === "main" && run.path === policy.workflow
-    && run.status === "in_progress" && run.conclusion === null
+    && run.conclusion === null
     && String(run.repository?.id) === policy.repositoryId && String(run.head_repository?.id) === policy.repositoryId,
   "PUBLICATION_RUN_INVALID");
+  await requireActivePublicationRun(run, parameters);
+  requireObservationTime(parameters, conservation);
   const environment = await api.request(`/environments/${policy.environment.name}`);
   const branchResult = await api.request(`/environments/${policy.environment.name}/deployment-branch-policies?per_page=100&page=1`);
   const branches = branchResult.branch_policies;
@@ -87,6 +115,7 @@ async function checkPublicationControl({ api, plan, policy, context, now = Date.
         && policy.maintainers.some(actor => actor.id === String(reviewer.reviewer?.id))))
     && sha256(canonicalBytes(publicationEnvironmentSnapshot(environment, branches))) === policy.environment.snapshotSha256,
   "PUBLICATION_PROTECTION_INVALID");
+  requireObservationTime(parameters, conservation);
 }
 
 /** Runs before naming the environment in a job; missing protection cannot auto-create it. */
@@ -102,6 +131,7 @@ export async function observePublicationPrecheck(parameters) {
     && artifact.workflow_run.head_sha === policy.history.revision
     && new Date(artifact.expires_at).toISOString() === policy.history.expiresAt
     && Date.parse(plan.window.deadline) <= Date.parse(policy.history.expiresAt), "PUBLICATION_HISTORY_HANDOFF_INVALID");
+  requireObservationTime(parameters);
   return { schemaVersion: 1, status: "unapproved-precheck" };
 }
 
@@ -112,7 +142,7 @@ export async function observePublicationConservation(parameters) {
 }
 
 export async function observePublicationAuthority(parameters) {
-  const { api, plan, planSha256, policy, context, now = Date.now() } = parameters;
+  const { api, plan, planSha256, policy, context } = parameters;
   await checkPublicationControl(parameters);
   const reviews = await api.request(`/actions/runs/${context.runId}/approvals`);
   requirePublication(Array.isArray(reviews) && reviews.some(review => review.state === "approved"
@@ -124,7 +154,7 @@ export async function observePublicationAuthority(parameters) {
   const observation = { schemaVersion: 1, planSha256, authority: plan.authority, owner: plan.owner,
     window: plan.window, writerPolicySha256: policy.writerPolicySha256, repository: plan.publisher.repository,
     workflow: policy.workflow, revision: context.revision, runId: context.runId, runAttempt: context.attempt, approved: true };
-  verifyPublicationAuthority(plan, planSha256, observation, policy.writerPolicySha256, now);
+  verifyPublicationAuthority(plan, planSha256, observation, policy.writerPolicySha256, requireObservationTime(parameters));
   return observation;
 }
 

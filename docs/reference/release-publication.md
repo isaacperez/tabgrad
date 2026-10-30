@@ -15,6 +15,16 @@ concurrency group spans approval, npm, consumer checks and GitHub completion.
 A queued slot is not evidence that another actor has stopped: the enrolled
 [control record](release-record.md) must also admit every call.
 
+The aggregate run response can report `queued` while a job executes. That value
+alone grants no authority. In that case the controller additionally requires
+one authenticated active job for its exact eligible role, run, attempt and
+source; missing, ambiguous, foreign or nonactive evidence rejects. The human
+controller's eligible job is its live bootstrap relay. This role evidence is
+separate from the common client/observer gate context. Control observations
+recheck the publication window and operational qualification at decision time,
+including after asynchronous reads; conservation retains its separate
+existing-call-only time boundary.
+
 | Role | Authority and responsibility |
 | --- | --- |
 | Precheck | Read actual repository/run/environment and enrolled history metadata before the environment job can be created; no approval or write |
