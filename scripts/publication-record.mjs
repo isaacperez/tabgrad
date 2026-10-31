@@ -3,7 +3,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { releaseRecord } from "./release-record.mjs";
-import { canonicalBytes, planBytes, sha256 } from "./release-record-data.mjs";
+import { blockingRecordCalls, canonicalBytes, planBytes, sha256 } from "./release-record-data.mjs";
 import { publicationAuthorityDocument, publicationCandidateIdentity, publicationEffects, requirePublication,
   validatePublicationPlan, verifyPublicationAuthority } from "./publication-plan.mjs";
 import { requireEnrolledRecord } from "./publication-authority.mjs";
@@ -18,7 +18,7 @@ export async function publicationRecord({ config, expectedHead, policy, plan, au
   const at = () => new Date(clock()).toISOString();
   const read = () => protocol({ command: "read", config, expectedHead: head, clock });
   let replay = await read();
-  requirePublication(replay.checkpoint.unresolvedCalls === 0 && replay.checkpoint.conflictingCalls === 0,
+  requirePublication(blockingRecordCalls(replay) === 0 && replay.checkpoint.conflictingCalls === 0,
     "PUBLICATION_RECORD_UNSETTLED");
   for (const operation of replay.operations) {
     const original = await readFile(config.evidence[operation.admission.authority]);
@@ -36,7 +36,8 @@ export async function publicationRecord({ config, expectedHead, policy, plan, au
       && operation.admission.owner === old.owner && isDeepStrictEqual(operation.admission.window, old.window)
       && operation.admission.effects.every(identity => publicationEffects(old).some(effect => effect.identity === identity)),
     "PUBLICATION_HISTORY_AUTHORITY_INVALID");
-    verifyPublicationAuthority(old, document.publicationPlanSha256, document.execution, policy.writerPolicySha256,
+    verifyPublicationAuthority(old, document.publicationPlanSha256, document.execution,
+      operation.writerPolicyAtAdmission ?? ((replay.recordVersion ?? 1) === 1 ? policy.writerPolicySha256 : null),
       Date.parse(old.window.start));
   }
 
@@ -100,7 +101,7 @@ export async function publicationRecord({ config, expectedHead, policy, plan, au
   admission.plan = await retain(journalPlan);
   const active = replay.operations.find(operation => operation.operation === plan.operation);
   if (active) {
-    requirePublication(active.closure === null && replay.checkpoint.activeOperation === plan.operation
+    requirePublication(active.closure === null && !active.retirement && replay.checkpoint.activeOperation === plan.operation
       && active.admission.plan === admission.plan, "PUBLICATION_RECORD_OPERATION_CHANGED");
   } else {
     requirePublication(remaining.length > 0, "PUBLICATION_ALREADY_COMPLETE");

@@ -485,6 +485,21 @@ remain unknown; unknown/conflicting writes block later admission. Abrupt run
 cancellation can prevent that recorder from running; inspect the original run,
 record and actual call evidence under separately authorized recovery.
 
+The narrow [administrative retirement/policy handoff](release-record.md#apply-an-explicit-administrative-recovery)
+can admit forward progress only after exact current maintainer approval. It
+preserves historical UNKNOWN and the original grant. Publisher guards use the
+complete reader's **blocking** count; historical unresolved totals remain visible.
+Old authorities are validated under their operation's admission policy; current
+approval must name the effective policy. A retired operation/candidate cannot
+continue, and changed unknown observations or new conflicts block again. This
+exception does not turn a matching manual delivery into an old CI success.
+An authenticated existing-call report can still be conserved after another
+call becomes blocking or an operation retires. Conservation binds the original
+intent commit, plan, authority, call and effect; it grants no new intent and
+does not require the current head to equal that old intent head. The actual
+current head remains the recorder's expected-head lease. A substituted intent
+commit fails. Preserve contrary facts through the ordinary conflict semantics.
+
 For a known partial completion, explicitly close the original operation as
 abandoned only after every call is settled. A new independently approved plan
 must name that closure as its continuation, use a new operation/window and
@@ -500,3 +515,56 @@ and all applicable repository/runtime/browser families. Models, local Git writes
 actual client fixture requests, service qualification and useful real publication
 are different evidence. No source test establishes live protections, universal
 compatibility, exactly-once effects or timing/resource guarantees.
+
+## Release an existing public package
+
+Use this path when the package exists and the useful selected next version has
+never been used. Ordinary delivery starts by manual dispatch of the existing
+workflow; a public GitHub release must not trigger another npm publisher.
+
+1. Select version/channel under the [release policy](../releases.md). Integrate
+   metadata, notes, compatibility/support claims and required corrections through
+   reviewed main. Do not manufacture a version only to test authentication.
+2. Prepare the selected public candidate through the
+   [producer](producer-trial.md). Admit actual source/recipe, exact archive and
+   inventory, original two proofs, CI corroboration and declared external CPU/GPU
+   qualification. Publishing never rebuilds or repacks those bytes.
+3. Inspect the complete enrolled record and all retained originals. A free
+   concurrency slot or matching destination does not settle an earlier call.
+   Apply only explicitly admitted recovery when required. Supply the complete
+   current history handoff, including later facts; an old artifact may omit them.
+4. Admit current private operational policy/qualification for the reviewed
+   recipe, environment, writer, history and finite window. Recheck mutable
+   protections, actors and destinations. Copying old files does not renew their
+   expiry or approval. Reuse applicable immutable qualification; a new version
+   alone does not justify repeating an acquisition laboratory.
+5. Construct and independently inspect the ordinary plan with
+   `node scripts/prepare-publication-plan.mjs INPUT_DIRECTORY NEW_OUTPUT_DIRECTORY`.
+   Use `npm.mode=oidc`, `npm.before.package=existing`, an absent unused version
+   and the observed starting channel. Pin producer artifact identities, original
+   proofs, qualification, notes, six assets and current source/clients.
+6. For the first useful OIDC delivery, coordinate trusted-publisher registration
+   with that approved version/window. Bind the exact authorized repository,
+   workflow filename and environment, and explicitly permit direct publication
+   under the provider's current rules. Respect its documented first-success
+   deadline. Keep settings/authentication private. A saved binding, `npm whoami`,
+   source tests or human bootstrap do not establish effective OIDC. Use no
+   standing-token fallback or dummy publication. See
+   [npm's trusted-publisher procedure](https://docs.npmjs.com/trusted-publishers/).
+7. Under concrete publication authorization, enable and dispatch the existing
+   release-publication workflow with inspected plan/hash, exact notes,
+   qualification, receipt issue and confirmation. Review the protected job's
+   exact approval comment. CI performs readiness, separate late GitHub permission,
+   one identified npm invocation, outcome recording, registry/external consumers,
+   then conditional immutable GitHub completion. Supply authenticated physical
+   GPU evidence when declared; a hosted fallback is not that evidence.
+8. Verify installed version/channel/bytes/provenance, all six downloaded GitHub
+   assets, tag/source, type/latest and immutable protection. Conserve complete
+   originals before expiry, restore reserved switches to their admitted inert
+   state and reconcile work records. Claim first useful OIDC only from its
+   successful actual receipt and corresponding completed flow.
+
+A failed, missing or unknown effect retains its original evidence. Inspect the
+identified call and destination before continuation; rerunning a job or freeing
+its slot grants no retry authority. Follow separately admitted recovery without
+resetting history, replacing an archive or extending an expired window.

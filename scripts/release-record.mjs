@@ -6,7 +6,8 @@ import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ReleaseRecordError, RECORD_LIMIT, applyEvent, canonicalBytes, digest, emptyReplay,
-  frameEvent, inputEvent, publicReplay, requireRecord, sha256 } from "./release-record-data.mjs";
+  frameEvent, inputEvent, publicReplay, readCanonical, requireRecord, sha256,
+  validateRecoveryApproval, validateWriterRolePolicy } from "./release-record-data.mjs";
 
 const oidPattern = /^[0-9a-f]{40}$/;
 const refPattern = /^refs\/heads\/[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -85,12 +86,13 @@ class GitStore {
       requireRecord(Number.isSafeInteger(size) && size <= RECORD_LIMIT, "RECORD_TOO_LARGE");
       const bytes = Buffer.from(this.run(["cat-file", "blob", match[1]]));
       const frame = frameEvent(bytes);
-      const checkpoint = applyEvent(state, frame.event);
+      const checkpoint = applyEvent(state, frame.event, { previousHead: prior, root: this.config.root, commit });
+      requireRecord(frame.schemaVersion === state.recordVersion, "VERSION_UNSUPPORTED");
       requireRecord(canonicalBytes(checkpoint).equals(canonicalBytes(frame.checkpoint)), "CHECKPOINT_INVALID");
       prior = commit;
     }
     requireRecord(state.root && state.root.location === locationIdentity(this.config)
-      && state.root.writerPolicy === this.config.writerPolicy, "ENROLLMENT_MISMATCH");
+      && state.writerPolicy === this.config.writerPolicy, "ENROLLMENT_MISMATCH");
     return state;
   }
 
@@ -143,17 +145,49 @@ function validateConfig(config, command) {
   }
 }
 
-async function retainedEvidence(identities, config) {
+function recoveryChecks(state) {
+  const checks = new Map();
+  for (const event of state.handoffs) {
+    for (const [identity, kind] of [[sha256(canonicalBytes(event.decision)), "decision"],
+      [event.approval, "approval"], [event.decision.nextWriterPolicy, "policy"]]) {
+      const group = checks.get(identity) ?? [];
+      group.push({ kind, event }); checks.set(identity, group);
+    }
+  }
+  return checks;
+}
+
+function validateRecoveryOriginal(bytes, checks, location) {
+  const value = readCanonical(bytes);
+  for (const { kind, event } of checks) {
+    if (kind === "decision") requireRecord(canonicalBytes(value).equals(canonicalBytes(event.decision)), "RECOVERY_DECISION_CHANGED");
+    else if (kind === "approval") validateRecoveryApproval(value, event);
+    else validateWriterRolePolicy(value, location);
+  }
+}
+
+async function retainedEvidence(state, config) {
+  const checks = recoveryChecks(state);
+  const identities = state.evidence;
   for (const identity of identities) {
     const path = config.evidence[identity];
     requireRecord(typeof path === "string", "EVIDENCE_UNAVAILABLE");
     const hash = createHash("sha256");
+    const chunks = []; let size = 0;
     try {
-      for await (const bytes of createReadStream(path)) hash.update(bytes);
-    } catch {
+      for await (const bytes of createReadStream(path)) {
+        hash.update(bytes);
+        if (checks.has(identity)) {
+          size += bytes.length;
+          requireRecord(size <= RECORD_LIMIT, "RECORD_TOO_LARGE"); chunks.push(bytes);
+        }
+      }
+    } catch (error) {
+      if (error instanceof ReleaseRecordError) throw error;
       throw new ReleaseRecordError("EVIDENCE_UNAVAILABLE");
     }
     requireRecord(hash.digest("hex") === identity, "EVIDENCE_CHANGED");
+    if (checks.has(identity)) validateRecoveryOriginal(Buffer.concat(chunks), checks.get(identity), state.root.location);
   }
 }
 
@@ -163,11 +197,14 @@ function admitTime(state, event, now) {
     const window = event.type === "open" ? event.window : state.operations.get(event.operation)?.admission.window;
     requireRecord(window && Date.parse(window.start) <= now && now < Date.parse(window.deadline), "WINDOW_EXPIRED");
   }
+  if (event.type === "handoff") {
+    requireRecord(Date.parse(event.decision.window.start) <= now && now < Date.parse(event.decision.window.deadline), "WINDOW_EXPIRED");
+  }
 }
 
 /** Local protocol, not service protection, producer authentication or publication admission. */
 export async function releaseRecord({ command, config, expectedHead, inputBytes, inspected,
-  gitExecutable = "git", timeoutMs = 30000, clock = Date.now }) {
+  gitExecutable = "git", timeoutMs = 30000, clock = Date.now, authenticateRecovery }) {
   requireRecord(["enroll", "read", "append"].includes(command), "COMMAND_INVALID");
   config = structuredClone(config);
   validateConfig(config, command);
@@ -178,6 +215,7 @@ export async function releaseRecord({ command, config, expectedHead, inputBytes,
     requireRecord(inputBytes instanceof Uint8Array && sha256(inputBytes) === inspected, "INSPECTION_MISMATCH");
     event = inputEvent(Buffer.from(inputBytes));
     requireRecord((event.type === "enroll") === (command === "enroll"), "COMMAND_INVALID");
+    requireRecord(event.type !== "handoff" || typeof authenticateRecovery === "function", "RECOVERY_COMMAND_REQUIRED");
   }
   const directory = await mkdtemp(join(tmpdir(), "tabgrad-release-record-"));
   let receipt;
@@ -194,15 +232,23 @@ export async function releaseRecord({ command, config, expectedHead, inputBytes,
       requireRecord(store.head() === prior, "STALE_HEAD");
     }
     if (command === "read") {
-      await retainedEvidence(state.evidence, config);
+      await retainedEvidence(state, config);
       receipt = { status: "observed", head: prior, root: config.root, ...publicReplay(state) };
     } else {
       admitTime(state, event, clock());
-      const checkpoint = applyEvent(state, event);
+      const recoveryContext = event.type === "handoff" ? { event, head: prior, root: config.root, replay: publicReplay(state) } : null;
+      if (recoveryContext) await authenticateRecovery(recoveryContext);
+      const checkpoint = applyEvent(state, event, { previousHead: prior, root: config.root });
       requireRecord(state.root.location === locationIdentity(config)
-        && state.root.writerPolicy === config.writerPolicy, "ENROLLMENT_MISMATCH");
-      await retainedEvidence(state.evidence, config);
-      const commit = store.create({ schemaVersion: 1, event, checkpoint }, prior);
+        && (event.type === "handoff" ? event.decision.previousWriterPolicy : state.writerPolicy) === config.writerPolicy,
+      "ENROLLMENT_MISMATCH");
+      await retainedEvidence(state, config);
+      const commit = store.create({ schemaVersion: state.recordVersion, event, checkpoint }, prior);
+      if (event.type === "intent") state.calls.get(event.call).intentCommit = commit;
+      if (recoveryContext) {
+        await authenticateRecovery(recoveryContext);
+        await retainedEvidence(state, config);
+      }
       admitTime(state, event, clock());
       const pushed = store.write(commit, prior);
       receipt = { status: "unconfirmed", attemptedCommit: commit, priorHead: prior,
@@ -212,11 +258,14 @@ export async function releaseRecord({ command, config, expectedHead, inputBytes,
         // A fresh store is unnecessary: fetch into a separate local snapshot ref.
         store.run(["update-ref", "-d", "refs/heads/snapshot"]);
         store.fetch(commit);
-        const readback = new GitStore(directory, { ...config, root: config.root ?? commit }, gitExecutable, timeoutMs);
+        const readback = new GitStore(directory, { ...config, root: config.root ?? commit,
+          writerPolicy: state.writerPolicy }, gitExecutable, timeoutMs);
         const observed = readback.replay(commit);
         requireRecord(canonicalBytes(publicReplay(state)).equals(canonicalBytes(publicReplay(observed))), "READBACK_MISMATCH");
         requireRecord(store.head() === commit, "READBACK_MISMATCH");
-        receipt = { ...receipt, status: "confirmed", head: commit, root: config.root ?? commit, checkpoint };
+        await retainedEvidence(observed, config);
+        receipt = { ...receipt, status: "confirmed", head: commit, root: config.root ?? commit, checkpoint,
+          ...(state.recordVersion === 2 ? { effectiveWriterPolicy: state.writerPolicy } : {}) };
       } catch (error) {
         throw new ReleaseRecordError("WRITE_UNCONFIRMED", { cause: error });
       }
