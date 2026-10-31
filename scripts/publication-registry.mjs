@@ -3,6 +3,20 @@ import { publicationFile, validatePublicationQualification } from "./publication
 import { requirePublication } from "./publication-plan.mjs";
 import { sha256 } from "./release-record-data.mjs";
 
+/** Omitted/empty protobuf JSON defaults only; retain every other field and input. */
+function withoutEmptySigstoreDefaults(bundle) {
+  const comparable = structuredClone(bundle);
+  const signatures = comparable?.dsseEnvelope?.signatures;
+  if (Array.isArray(signatures)) {
+    for (const signature of signatures) if (signature?.keyid === "") delete signature.keyid;
+  }
+  const timestamps = comparable?.verificationMaterial?.timestampVerificationData;
+  if (Array.isArray(timestamps?.rfc3161Timestamps) && timestamps.rfc3161Timestamps.length === 0) {
+    delete timestamps.rfc3161Timestamps;
+  }
+  return comparable;
+}
+
 /** Public, credential-free registry observations; no 404-to-absence inference. */
 export function publicationRegistry({ registry = "https://registry.npmjs.org/", fetcher = fetch,
   timeoutMs = 30000, maxBytes = 4 * 1024 * 1024 } = {}) {
@@ -61,9 +75,12 @@ export function publicationRegistry({ registry = "https://registry.npmjs.org/", 
     const proofBytes = await publicationFile(proofPath, 16 * 1024 * 1024);
     const original = JSON.parse(proofBytes);
     requirePublication(sha256(proofBytes) === plan.producer.archiveProofSha256
-      && result.status === 200 && Array.isArray(result.value.attestations)
-      && result.value.attestations.filter(value => value.predicateType === "https://slsa.dev/provenance/v1"
-        && isDeepStrictEqual(value.bundle, original)).length === 1, "PUBLICATION_REGISTRY_PROVENANCE_MISMATCH");
+      && result.status === 200 && Array.isArray(result.value.attestations), "PUBLICATION_REGISTRY_PROVENANCE_MISMATCH");
+    // Avoid a whole-schema round trip: protobuf codecs discard unknown fields.
+    const comparableOriginal = withoutEmptySigstoreDefaults(original);
+    requirePublication(result.value.attestations.filter(value => value.predicateType === "https://slsa.dev/provenance/v1"
+      && isDeepStrictEqual(withoutEmptySigstoreDefaults(value.bundle), comparableOriginal)).length === 1,
+    "PUBLICATION_REGISTRY_PROVENANCE_MISMATCH");
     return { status: "passed", originalProofSha256: plan.producer.archiveProofSha256,
       associatedEnvelopeSha256: observations.at(-1).sha256 };
   }

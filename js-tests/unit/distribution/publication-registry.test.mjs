@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -16,6 +16,89 @@ function fixture() {
   } });
   return { plan, pack, requests, registry };
 }
+
+async function associationFixture(t, original) {
+  const directory = await mkdtemp(join(tmpdir(), "tabgrad-publication-association-test-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const f = fixture(), raw = Buffer.from(JSON.stringify(original));
+  f.plan.producer.archiveProofSha256 = sha256(raw);
+  const path = join(directory, "proof.json"); await writeFile(path, raw);
+  f.pack.versions[f.plan.candidate.version] = { name: f.plan.candidate.name, version: f.plan.candidate.version, dist: {
+    integrity: `sha512-${Buffer.from(f.plan.candidate.archiveSha512, "hex").toString("base64")}`,
+    attestations: { url: "https://registry.npmjs.org/-/npm/v1/attestations/fixture" },
+  } };
+  f.pack["dist-tags"].latest = f.plan.candidate.version;
+  const state = { bundle: structuredClone(original), predicateType: "https://slsa.dev/provenance/v1" };
+  const registry = publicationRegistry({ fetcher: async url => new Response(JSON.stringify(url.pathname.startsWith("/-/")
+    ? { attestations: (state.bundles ?? [state.bundle]).map(bundle => ({ predicateType: state.predicateType, bundle })) } : f.pack)) });
+  return { ...f, raw, path, state, registry };
+}
+
+// Structural association controls only; these are not cryptographic proofs.
+function syntheticBundle(defaults = 0) {
+  const bundle = { mediaType: "application/vnd.dev.sigstore.bundle.v0.3+json",
+    dsseEnvelope: { payloadType: "application/vnd.in-toto+json", payload: "cGF5bG9hZA==", signatures: [{ sig: "c2ln" }] },
+    verificationMaterial: { certificate: { rawBytes: "Y2VydA==" }, tlogEntries: [{ logIndex: "1" }], timestampVerificationData: {} },
+    unknownField: { preserved: true } };
+  if (defaults & 1) bundle.dsseEnvelope.signatures[0].keyid = "";
+  if (defaults & 2) bundle.verificationMaterial.timestampVerificationData.rfc3161Timestamps = [];
+  return bundle;
+}
+
+for (let original = 0; original < 4; original++) for (let received = 0; received < 4; received++) {
+  test(`association preserves known empty defaults (${original}/${received}) and original bytes`, async t => {
+    const f = await associationFixture(t, syntheticBundle(original));
+    f.state.bundle = syntheticBundle(received);
+    const before = structuredClone(f.state.bundle);
+    const report = await f.registry.associateOriginalProof(f.plan, f.path);
+    assert.equal(report.status, "passed"); assert.equal(report.originalProofSha256, sha256(f.raw));
+    assert.deepEqual(await readFile(f.path), f.raw); assert.deepEqual(f.state.bundle, before);
+  });
+}
+
+for (const [name, change] of [
+  ["nonempty key id", b => { b.dsseEnvelope.signatures[0].keyid = "another-key"; }],
+  ["nonempty timestamp", b => { b.verificationMaterial.timestampVerificationData.rfc3161Timestamps = [{ signedTimestamp: "b3RoZXI=" }]; }],
+  ["null key id", b => { b.dsseEnvelope.signatures[0].keyid = null; }],
+  ["null timestamps", b => { b.verificationMaterial.timestampVerificationData.rfc3161Timestamps = null; }],
+  ["signed payload", b => { b.dsseEnvelope.payload = "b3RoZXI="; }],
+  ["payload type", b => { b.dsseEnvelope.payloadType = "other"; }],
+  ["signature", b => { b.dsseEnvelope.signatures[0].sig = "b3RoZXI="; }],
+  ["certificate", b => { b.verificationMaterial.certificate.rawBytes = "b3RoZXI="; }],
+  ["transparency material", b => { b.verificationMaterial.tlogEntries[0].logIndex = "2"; }],
+  ["unknown empty field", b => { b.extraUnknown = []; }],
+  ["removed unknown field", b => { delete b.unknownField; }],
+  ["changed unknown field", b => { b.unknownField.preserved = false; }],
+  ["absent message", b => { delete b.verificationMaterial.timestampVerificationData; }],
+  ["signature cardinality", b => { b.dsseEnvelope.signatures.push({ sig: "b3RoZXI=" }); }],
+  ["malformed signatures", b => { b.dsseEnvelope.signatures = null; }],
+]) test(`association rejects changed ${name}`, async t => {
+  const f = await associationFixture(t, syntheticBundle()); change(f.state.bundle);
+  await assert.rejects(f.registry.associateOriginalProof(f.plan, f.path), { code: "PUBLICATION_REGISTRY_PROVENANCE_MISMATCH" });
+});
+
+test("association preserves exact nonempty and unknown values", async t => {
+  const original = syntheticBundle(); original.dsseEnvelope.signatures[0].keyid = "same-key";
+  original.verificationMaterial.timestampVerificationData.rfc3161Timestamps = [{ signedTimestamp: "c2FtZQ==" }];
+  const f = await associationFixture(t, original);
+  assert.equal((await f.registry.associateOriginalProof(f.plan, f.path)).status, "passed");
+});
+
+test("association preserves transparency array ordering", async t => {
+  const original = syntheticBundle(); original.verificationMaterial.tlogEntries.push({ logIndex: "2" });
+  const f = await associationFixture(t, original); f.state.bundle.verificationMaterial.tlogEntries.reverse();
+  await assert.rejects(f.registry.associateOriginalProof(f.plan, f.path), { code: "PUBLICATION_REGISTRY_PROVENANCE_MISMATCH" });
+});
+
+test("association rejects ambiguous normalized matches, wrong predicate and changed original bytes", async t => {
+  const f = await associationFixture(t, syntheticBundle()); f.state.bundles = [syntheticBundle(), syntheticBundle(3)];
+  await assert.rejects(f.registry.associateOriginalProof(f.plan, f.path), { code: "PUBLICATION_REGISTRY_PROVENANCE_MISMATCH" });
+  delete f.state.bundles; f.state.predicateType = "https://example.invalid/other";
+  await assert.rejects(f.registry.associateOriginalProof(f.plan, f.path), { code: "PUBLICATION_REGISTRY_PROVENANCE_MISMATCH" });
+  f.state.predicateType = "https://slsa.dev/provenance/v1";
+  await writeFile(f.path, Buffer.concat([f.raw, Buffer.from("\n")]));
+  await assert.rejects(f.registry.associateOriginalProof(f.plan, f.path), { code: "PUBLICATION_REGISTRY_PROVENANCE_MISMATCH" });
+});
 
 test("public registry observation has no credentials, redirects or writes", async () => {
   const f = fixture(); await f.registry.inspect(f.plan, "before");

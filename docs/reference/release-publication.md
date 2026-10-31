@@ -287,6 +287,15 @@ complete the exact tag, draft, notes and six assets and make the release public.
 Final inspection requires the expected latest designation and immutable freeze.
 Failure after npm preserves a partial release and never repacks or republishes.
 
+Archive-proof association compares all bundle fields, including unknown fields.
+It treats omitted versus explicitly empty signature `keyid` and
+`timestampVerificationData.rfc3161Timestamps` as the same Sigstore JSON defaults,
+within their existing messages. It preserves nonempty values, message presence,
+array order/cardinality and all signed material exactly; it does not round-trip
+the bundle through a schema codec. Original file bytes and their admitted hash
+remain unchanged, and cryptographic verification remains independent. The
+inventory proof has its own verification, not a registry association.
+
 All role commands have the form below; running one locally requires its actual
 admitted context, configured permissions and input handoffs. They are not a
 substitute for dispatch or permission to improvise credentials:
