@@ -480,7 +480,7 @@ test("a zero result cannot establish EOF while its sentinel close is retained", 
   const end = await draining; assert.equal(end.state, "complete");
 });
 
-test("raw writer composition keeps persistence and finishing with the borrowed sink owner", async t => {
+test("raw writer composition keeps persistence and finishing with the borrowed sink owner", { timeout: 10000 }, async t => {
   const root = await realpath(await mkdtemp(join(tmpdir(), "tabgrad-fifo-payload-")));
   const input = { root, destinations: {}, t0MonotonicNs: "100", deadlineNs: "2000000000" };
   for (const role of ["stdout", "stderr"]) {
@@ -492,9 +492,16 @@ test("raw writer composition keeps persistence and finishing with the borrowed s
   const stdout = Buffer.from([1, 0, 0, 0, 255, 255, 255, 255, 128]); const stderr = Buffer.from([255, 0, 10]);
   const f = fixture(t, { streams: { stdout: [stdout], stderr: [stderr] } });
   await f.owner.open();
-  const draining = f.owner.drain({ stdout: b => payload.write("stdout", b), stderr: b => payload.write("stderr", b), control: () => {} });
-  await until(() => payload.snapshot().channels.stdout.confirmedBytes === stdout.length
-    && payload.snapshot().channels.stderr.confirmedBytes === stderr.length);
+  const stdoutWritten = deferred(), stderrWritten = deferred();
+  const draining = f.owner.drain({
+    stdout: bytes => { const pending = payload.write("stdout", bytes); stdoutWritten.resolve(pending); return pending; },
+    stderr: bytes => { const pending = payload.write("stderr", bytes); stderrWritten.resolve(pending); return pending; },
+    control: () => {},
+  });
+  // Real file completion is independent of the number of event-loop turns.
+  await Promise.all([stdoutWritten.promise, stderrWritten.promise]);
+  assert.equal(payload.snapshot().channels.stdout.confirmedBytes, stdout.length);
+  assert.equal(payload.snapshot().channels.stderr.confirmedBytes, stderr.length);
   await f.owner.releaseSentinels(); assert.equal((await draining).state, "complete");
   assert.equal(payload.snapshot().state, "pending"); // FIFO owner never finishes or closes a sink.
   payload.finish("stdout"); const end = payload.finish("stderr"); assert.equal(end.state, "complete");
