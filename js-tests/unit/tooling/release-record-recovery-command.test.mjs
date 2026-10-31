@@ -146,7 +146,7 @@ test("malformed provider JSON is not approval", async context => {
   { code: "PUBLICATION_GITHUB_REQUEST" });
 });
 
-test("failed local receipt conservation after append retains the committed head and forbids repeat", async context => {
+for (const failFailure of [false, true]) test(`failed receipt conservation retains head and forbids repeat; failure file unavailable=${failFailure}`, async context => {
   const f = await commandFixture(context);
   const output = join(f.directory, "apply-output");
   let receipt;
@@ -154,13 +154,17 @@ test("failed local receipt conservation after append retains the committed head 
     const result = await releaseRecord(request);
     if (request.command === "append") {
       receipt = result; await mkdir(join(output, "receipt.json"));
+      if (failFailure) await mkdir(join(output, "failure.json"));
     }
     return result;
   } }), error => {
-    assert.equal(error.code, "EEXIST"); assert.equal(error.receipt.head, receipt.head); return true;
+    assert.equal(error.code, "EEXIST"); assert.equal(error.receipt.head, receipt.head);
+    assert.equal(error.conservationFailed === true, failFailure); return true;
   });
-  const failure = JSON.parse(await readFile(join(output, "failure.json")));
-  assert.equal(failure.receipt.status, "confirmed");
+  if (!failFailure) {
+    const failure = JSON.parse(await readFile(join(output, "failure.json")));
+    assert.equal(failure.receipt.status, "confirmed");
+  }
   const config = { ...structuredClone(f.config), writerPolicy: f.nextWriterPolicy };
   for (const name of await readdir(join(output, "public-evidence"))) config.evidence[name.slice(0, 64)] = join(output, "public-evidence", name);
   const replay = await releaseRecord({ command: "read", config, expectedHead: receipt.head });
@@ -173,6 +177,6 @@ test("real source identity and CLI refuse an unrelated revision or incomplete in
     nodeSha256: sha256(await readFile(process.execPath)) }), { code: "RECOVERY_SOURCE_CHANGED" });
   const result = spawnSync(process.execPath, ["scripts/release-record-recovery.mjs", "apply"], { encoding: "utf8" });
   assert.equal(result.status, 1);
-  assert.deepEqual(JSON.parse(result.stdout), { status: "failed", code: "COMMAND_INVALID" });
+  assert.deepEqual(JSON.parse(result.stdout), { status: "failed", code: "COMMAND_INVALID", conservationFailed: false });
   assert.equal(result.stderr, "");
 });

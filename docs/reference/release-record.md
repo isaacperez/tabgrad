@@ -291,6 +291,8 @@ the same root and the new effective policy, including all old/new evidence paths
 Combine only inspected hash-named public originals for the next history handoff.
 On failure, preserve `failure.json` and any attempted/prior heads. A push may
 already have committed, including when local receipt/config conservation fails.
+If even the failure file cannot be written, the bounded CLI failure still emits
+the known receipt with `conservationFailed:true`; retain it independently.
 Inspect the actual head and originals before another action; never automatically
 retry, enroll or reset. The command issues no npm/GitHub distribution effects.
 

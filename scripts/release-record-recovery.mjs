@@ -153,6 +153,12 @@ async function reauthenticateRecovery(parameters, context, event, attribution, c
   recoveryTime(parameters.profile, parameters.decision, parameters.clock);
 }
 
+function recoveryFailure(error) {
+  return { status: "failed", code:
+    typeof error.code === "string" && /^[A-Z][A-Z0-9_]*$/.test(error.code) ? error.code : "LOCAL_FAILURE",
+    ...(error.receipt ? { receipt: error.receipt } : {}), conservationFailed: error.conservationFailed === true };
+}
+
 /** One owned output, no service retry/reset; API/source ports are isolated test seams. */
 export async function recoverReleaseRecord({ command, profileBytes, profileSha256, config, decisionBytes,
   decisionSha256, qualificationBytes, output, commentId, token, api, checkSource = checkRecoverySource,
@@ -206,9 +212,8 @@ export async function recoverReleaseRecord({ command, profileBytes, profileSha25
     return receipt;
   } catch (error) {
     error.receipt ??= attemptedReceipt;
-    await writeFile(join(output, "failure.json"), canonicalBytes({ status: "failed",
-      code: typeof error.code === "string" && /^[A-Z][A-Z0-9_]*$/.test(error.code) ? error.code : "LOCAL_FAILURE",
-      ...(error.receipt ? { receipt: error.receipt } : {}) }), { flag: "wx", mode: 0o600 });
+    try { await writeFile(join(output, "failure.json"), canonicalBytes(recoveryFailure(error)), { flag: "wx", mode: 0o600 }); }
+    catch (cause) { error.conservationFailed = true; error.conservationCause = cause; }
     throw error;
   }
 }
@@ -233,8 +238,7 @@ async function main() {
       output: resolve(options["--output"]), commentId: options["--comment"], token: process.env.GH_TOKEN });
     process.stdout.write(`${JSON.stringify(receipt)}\n`);
   } catch (error) {
-    process.stdout.write(`${JSON.stringify({ status: "failed", code:
-      typeof error.code === "string" && /^[A-Z][A-Z0-9_]*$/.test(error.code) ? error.code : "LOCAL_FAILURE" })}\n`);
+    process.stdout.write(`${JSON.stringify(recoveryFailure(error))}\n`);
     process.exitCode = 1;
   }
 }
