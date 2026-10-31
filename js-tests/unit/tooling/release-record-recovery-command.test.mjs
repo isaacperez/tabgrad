@@ -161,7 +161,7 @@ test("failed local receipt conservation after append retains the committed head 
   });
   const failure = JSON.parse(await readFile(join(output, "failure.json")));
   assert.equal(failure.receipt.status, "confirmed");
-  const config = { ...f.config, writerPolicy: f.nextWriterPolicy };
+  const config = { ...structuredClone(f.config), writerPolicy: f.nextWriterPolicy };
   for (const name of await readdir(join(output, "public-evidence"))) config.evidence[name.slice(0, 64)] = join(output, "public-evidence", name);
   const replay = await releaseRecord({ command: "read", config, expectedHead: receipt.head });
   assert.equal(replay.checkpoint.sequence, f.decision.sequence + 1);
