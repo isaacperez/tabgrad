@@ -12,6 +12,46 @@ import { runHumanPublisher } from "../../../scripts/publication-human.mjs";
 
 async function trace(f) { return (await readFile(join(f.root, "trace.txt"), "utf8")).trim().split("\n"); }
 
+for (const [windowMs, readerWindowMs] of [[180000, 240000], [240000, 180000]]) {
+  test(`human publish uses remaining plan/reader deadlines (${windowMs}/${readerWindowMs})`, async t => {
+    const f = await humanPublicationFixture(t, { windowMs, readerWindowMs, captureBudget: true });
+    const reader = JSON.parse(await readFile(join(f.root, "reader.json")));
+    const deadline = Math.min(Date.parse(f.plan.window.deadline), Date.parse(reader.expiresAt));
+    const before = Date.now();
+    const result = await runHumanPublisher({ ...f, fresh: async () => {},
+      authorizeReady: async () => ({ permissionSha256: "e".repeat(64) }) });
+    const after = Date.now(), budget = JSON.parse(await readFile(join(f.root, "budget.json")));
+    assert.equal(result.status, "completed");
+    assert.ok(budget.timeoutMs >= deadline - after && budget.timeoutMs <= deadline - before,
+      `forwarded budget ${budget.timeoutMs} must follow the earlier remaining deadline`);
+    assert.ok(budget.timeoutMs > 120000);
+  });
+}
+
+test("genuine terminal shows the pinned npm web link without Enter or browser launch", {
+  skip: !process.env.TABGRAD_COMPOSITION_CLIENT || !process.stdin.isTTY || !process.stdout.isTTY || !process.stderr.isTTY,
+  timeout: 60000,
+}, async t => {
+  const f = await humanPublicationFixture(t, { webTerminal: true, windowMs: 30000,
+    clientDirectory: process.env.TABGRAD_COMPOSITION_CLIENT, clientSha256: process.env.TABGRAD_COMPOSITION_CLIENT_SHA256 });
+  const original = childProcess.fork;
+  const fork = t.mock.method(childProcess, "fork", (module, args, options) => {
+    assert.equal(module, fileURLToPath(new URL("../../../scripts/publication-human.mjs", import.meta.url)));
+    return original(fileURLToPath(new URL("../../fixtures/publication-human-client.mjs", import.meta.url)), [], options);
+  });
+  syncBuiltinESMExports();
+  try {
+    const result = await runHumanPublisher({ ...f, launch: undefined, fresh: async () => {},
+      authorizeReady: async () => ({ permissionSha256: "e".repeat(64) }) });
+    const observed = JSON.parse(await readFile(join(f.root, "terminal-result.json")));
+    t.diagnostic(JSON.stringify(observed));
+    assert.deepEqual(observed, { terminal: { stdin: true, stdout: true, stderr: true }, json: false, browser: false,
+      standardLinks: 1, bufferedLinks: 0, inputRequests: 0, registryRequests: 0 });
+    assert.equal(result.status, "completed");
+    assert.equal(result.receipt.code, "PUBLICATION_NPM_HUMAN_PROCESS_SUCCESS");
+  } finally { fork.mock.restore(); syncBuiltinESMExports(); }
+});
+
 test("genuine terminal crosses the default human launcher and reaches the pinned npm challenge", {
   skip: !process.env.TABGRAD_COMPOSITION_CLIENT || !process.stdin.isTTY || !process.stdout.isTTY || !process.stderr.isTTY,
   timeout: 60000,

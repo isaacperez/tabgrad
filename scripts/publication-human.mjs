@@ -4,7 +4,7 @@ import { lstat, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { publicationEnvironment, identifyPublicationClient, publicationTerminalStdio } from "./publication-client.mjs";
+import { publicationEnvironment, identifyPublicationClient, publicationProcessMaxTimeoutMs, publicationTerminalStdio } from "./publication-client.mjs";
 import { inspectBootstrapNamespace, prepareNpmRole, publishNpmArchive } from "./publication-npm.mjs";
 import { publicationFile } from "./publication-admission.mjs";
 import { npmCallReceipt, requireNpmCallReceipt, requireNpmIntent } from "./publication-effects.mjs";
@@ -172,7 +172,8 @@ export async function runHumanClient(message, { identifyClient = identifyPublica
     requirePublication(!controller.signal.aborted, "PUBLICATION_HUMAN_CANCELED");
     called = true;
     result = await publish({ client, role, archive: archivePath, proof: proofPath, channel: plan.npm.channel,
-      timeoutMs: Math.min(120000, Date.parse(plan.window.deadline) - Date.now(), Date.parse(reader.expiresAt) - Date.now()),
+      timeoutMs: Math.min(publicationProcessMaxTimeoutMs,
+        Math.min(Date.parse(plan.window.deadline), Date.parse(reader.expiresAt)) - Date.now()),
       signal: controller.signal });
   } catch (error) { failure = error; if (!called) failure.dispatched = false; }
   clearTimeout(readerTimer);

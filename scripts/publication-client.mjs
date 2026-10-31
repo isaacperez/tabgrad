@@ -7,6 +7,8 @@ import { isAbsolute, join, posix } from "node:path";
 // Reviewed internal pin data is shared by acquisition and admission, never read from a proof.
 const profile = JSON.parse(await readFile(new URL("./publication-client-profile.json", import.meta.url), "utf8"));
 export const publicationVersions = Object.freeze({ node: profile.node.version, npm: profile.npm.version });
+// Keep callers within Node's supported timer range instead of overflowing to 1ms.
+export const publicationProcessMaxTimeoutMs = 2147483647;
 const digest = (bytes, algorithm = "sha256") => createHash(algorithm).update(bytes).digest("hex");
 const sha256 = /^[0-9a-f]{64}$/;
 const matches = (pattern, value) => typeof value === "string" && pattern.test(value);
@@ -142,7 +144,7 @@ export function publicationTerminalStdio() {
 /** Owned child completion is observed; a failed dispatched write remains uncertain. */
 export async function runPublicationProcess(executable, arguments_, { directory, environment, timeoutMs, maxOutputBytes,
   interactive = false, signal }) {
-  check(isAbsolute(executable) && Number.isSafeInteger(timeoutMs) && timeoutMs > 0 && timeoutMs <= 2147483647
+  check(isAbsolute(executable) && Number.isSafeInteger(timeoutMs) && timeoutMs > 0 && timeoutMs <= publicationProcessMaxTimeoutMs
     && Number.isSafeInteger(maxOutputBytes) && maxOutputBytes > 0, "PUBLICATION_CLIENT_BOUNDS");
   const stdio = interactive ? publicationTerminalStdio() : ["ignore", "pipe", "pipe"];
   check(!signal?.aborted, "PUBLICATION_CLIENT_CANCELLED");

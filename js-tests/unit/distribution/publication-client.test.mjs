@@ -3,14 +3,42 @@ import test from "node:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { publicationEnvironment, runPublicationProcess } from "../../../scripts/publication-client.mjs";
 import { runHumanPublisher } from "../../../scripts/publication-human.mjs";
+import { prepareNpmRole, publishNpmArchive } from "../../../scripts/publication-npm.mjs";
 
 async function fixture(t) {
   const directory = await mkdtemp(join(tmpdir(), "tabgrad-publication-process-test-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
   return { directory, environment: publicationEnvironment(directory), timeoutMs: 2000, maxOutputBytes: 1024 };
 }
+
+test("publication process accepts its native maximum delay and rejects out-of-range budgets before dispatch", async t => {
+  const options = await fixture(t);
+  const result = await runPublicationProcess(process.execPath, ["-e", "process.exit(0)"], { ...options, timeoutMs: 2147483647 });
+  assert.equal(result.status, 0);
+  for (const timeoutMs of [0, -1, 2147483648]) {
+    await assert.rejects(runPublicationProcess(process.execPath, ["-e", "process.exit(0)"], { ...options, timeoutMs }),
+      { code: "PUBLICATION_CLIENT_BOUNDS", dispatched: false });
+  }
+});
+
+test("namespace arguments and automated publication retain captured JSON", async t => {
+  const options = await fixture(t);
+  const role = await prepareNpmRole({ directory: options.directory, registry: "http://127.0.0.1:9/", authentication: { kind: "fixture" } });
+  const original = [...role.arguments];
+  const result = await publishNpmArchive({ client: { executable: process.execPath,
+    npmEntry: fileURLToPath(new URL("../../fixtures/publication-npm-arguments.mjs", import.meta.url)) },
+    role, archive: "/synthetic/archive.tgz", proof: "/synthetic/proof.json", channel: "latest", ...options,
+    maxOutputBytes: 16384 });
+  const arguments_ = JSON.parse(result.stdout).arguments;
+  assert.equal(arguments_.filter(argument => argument === "--json").length, 1);
+  assert.equal(arguments_.includes("--json=false"), false);
+  assert.equal(arguments_.includes("--browser=false"), false);
+  assert.deepEqual(role.arguments, original);
+  assert.equal(result.outputMode, undefined);
+});
 
 test("publication child receives a closed environment and observes exit", async t => {
   const options = await fixture(t);

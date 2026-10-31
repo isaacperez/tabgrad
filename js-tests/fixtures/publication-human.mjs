@@ -37,7 +37,8 @@ export async function humanPublicationFixture(t, config = {}) {
   const admission = { handoff, journal, authorityObservation: authority,
     candidate: { tarball: { path: "candidate.tgz", byteLength: archive.length } } };
   const reader = { schemaVersion: 1, scope: "example", username: "fixture-owner", namespaceVisibility: "qualified-owner",
-    expiresAt: plan.window.deadline, evidenceSha256: "f".repeat(64) };
+    expiresAt: config.readerWindowMs ? new Date(Date.now() + config.readerWindowMs).toISOString() : plan.window.deadline,
+    evidenceSha256: "f".repeat(64) };
   for (const [path, raw] of [["input/plan.json", canonicalBytes(plan)], ["admission/admission.json", canonicalBytes(admission)],
     ["data/candidate.tgz", archive], ["proofs/archive-proof.json", proof], ["reader.json", canonicalBytes(reader)],
     ["fixture.json", canonicalBytes(config)], ["synthetic.npmrc", Buffer.from("//registry.npmjs.org/:_authToken=fixture-only-not-a-credential\n")]]) {

@@ -1,11 +1,11 @@
 /** Controlled external effects around the actual human child implementation. */
 import assert from "node:assert/strict";
-import { appendFile, readFile } from "node:fs/promises";
+import { appendFile, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { runHumanClient } from "../../scripts/publication-human.mjs";
 import { identifyPublicationClient, runPublicationProcess } from "../../scripts/publication-client.mjs";
 import { fileURLToPath } from "node:url";
-import { inspectBootstrapNamespace, prepareNpmRole } from "../../scripts/publication-npm.mjs";
+import { inspectBootstrapNamespace, prepareNpmRole, publishNpmArchive } from "../../scripts/publication-npm.mjs";
 import { npmCallReceipt } from "../../scripts/publication-effects.mjs";
 
 const root = process.cwd();
@@ -43,7 +43,7 @@ process.once("message", async message => {
           });
           if (changed) throw Object.assign(new Error("synthetic client changed while waiting"), { code: "PUBLICATION_CLIENT_CHANGED" });
         }
-        return config.actual || config.terminal ? identifyPublicationClient(...args) : { manifestSha256: plan.publisher.clientSha256 };
+        return config.actual || config.terminal || config.webTerminal ? identifyPublicationClient(...args) : { manifestSha256: plan.publisher.clientSha256 };
       },
       prepareRole: options => prepareNpmRole({ ...options, registry: config.registry ?? "http://127.0.0.1:9/",
         authentication: { kind: "fixture" } }),
@@ -56,12 +56,22 @@ process.once("message", async message => {
       publish: async options => {
         assert.equal(options.signal.aborted, false);
         await trace("publish");
+        if (config.captureBudget) await writeFile(join(root, "budget.json"), JSON.stringify({ timeoutMs: options.timeoutMs }));
         if (config.mode === "output-lost") throw Object.assign(new Error("synthetic response lost"),
           { code: "SYNTHETIC_RESPONSE_LOST", dispatched: true });
         if (config.terminal) return runPublicationProcess(options.client.executable,
           [fileURLToPath(new URL("./publication-terminal-npm.mjs", import.meta.url)), config.clientDirectory, join(root, "terminal-result.json")],
           { directory: options.role.directory, environment: options.role.environment, timeoutMs: options.timeoutMs,
             maxOutputBytes: 1024 * 1024, signal: options.signal, interactive: true });
+        if (config.webTerminal) {
+          const arguments_ = [...options.role.arguments];
+          const observed = await publishNpmArchive({ ...options,
+            client: { ...options.client, npmEntry: fileURLToPath(new URL("./publication-terminal-npm.mjs", import.meta.url)) },
+            role: { ...options.role, authentication: "human", environment: { ...options.role.environment,
+              TABGRAD_TEST_CLIENT: config.clientDirectory, TABGRAD_TEST_REPORT: join(root, "terminal-result.json") } } });
+          assert.deepEqual(options.role.arguments, arguments_);
+          return observed;
+        }
         return result();
       },
     });
