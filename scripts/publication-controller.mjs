@@ -4,7 +4,7 @@ import { canonicalBytes, sha256 } from "./release-record-data.mjs";
 import { releaseRecord } from "./release-record.mjs";
 import { PublicationError, requirePublication } from "./publication-plan.mjs";
 import { publicationFile } from "./publication-admission.mjs";
-import { requireNpmCallReceipt, requireNpmIntent } from "./publication-effects.mjs";
+import { requireNpmCallReceipt, requireNpmConservationCall } from "./publication-effects.mjs";
 
 export const publicationHistoryLimits = Object.freeze({ files: 10000, fileBytes: 65536, bytes: 128 * 1024 * 1024 });
 
@@ -58,7 +58,7 @@ export async function recordNpmPublication({ plan, config, expectedHead, handoff
   await authenticateReceipt(receipt);
   requireNpmCallReceipt(plan, handoff, receipt);
   const replay = await protocol({ command: "read", config, expectedHead, clock });
-  requireNpmIntent(plan, replay, handoff, authorityObservation);
+  requireNpmConservationCall(plan, replay, handoff, authorityObservation);
   const evidenceBytes = canonicalBytes(receipt), evidence = sha256(evidenceBytes);
   const path = join(directory, `${evidence}.json`);
   await writeFile(path, evidenceBytes, { flag: "wx", mode: 0o600 });

@@ -1,4 +1,4 @@
-import { canonicalBytes, sha256 } from "./release-record-data.mjs";
+import { blockingRecordCalls, canonicalBytes, sha256 } from "./release-record-data.mjs";
 import { isDeepStrictEqual } from "node:util";
 import { exactPublicationKeys, publicationAuthorityDocument, publicationCandidateIdentity, publicationEffects, requirePublication } from "./publication-plan.mjs";
 
@@ -80,15 +80,32 @@ export async function prepareNpmCall({ plan, record, fresh, inspectNpm, inspectG
     call, effect: effect.identity, recordHead: record.head };
 }
 
-export function requirePublicationRecordAdmission(plan, replay, authorityObservation) {
+function publicationRecordOperation(plan, replay, authorityObservation) {
   const operation = replay.operations.find(value => value.operation === plan.operation);
   requirePublication(authorityObservation?.planSha256 === sha256(canonicalBytes(plan)), "PUBLICATION_RECORD_ADMISSION_INVALID");
   const authority = sha256(canonicalBytes(publicationAuthorityDocument(plan, authorityObservation)));
-  requirePublication(operation && operation.closure === null && replay.checkpoint.activeOperation === plan.operation
-    && operation.admission.authority === authority && operation.admission.owner === plan.owner
+  requirePublication(operation && operation.admission.authority === authority && operation.admission.owner === plan.owner
     && operation.admission.candidate === publicationCandidateIdentity(plan)
     && isDeepStrictEqual(operation.admission.window, plan.window), "PUBLICATION_RECORD_ADMISSION_INVALID");
   return operation;
+}
+
+export function requirePublicationRecordAdmission(plan, replay, authorityObservation) {
+  const operation = publicationRecordOperation(plan, replay, authorityObservation);
+  requirePublication(operation.closure === null && !operation.retirement && replay.checkpoint.activeOperation === plan.operation,
+    "PUBLICATION_RECORD_ADMISSION_INVALID");
+  return operation;
+}
+
+/** An authenticated existing-call fact can be conserved despite later blockers. */
+export function requireNpmConservationCall(plan, replay, handoff, authorityObservation) {
+  const effect = publicationEffects(plan).find(value => value.kind === "npm-publish");
+  const operation = publicationRecordOperation(plan, replay, authorityObservation);
+  const call = operation.calls.find(value => value.call === handoff?.call);
+  requirePublication(handoff?.schemaVersion === 1 && handoff.operation === plan.operation
+    && handoff.planSha256 === sha256(canonicalBytes(plan)) && handoff.effect === effect.identity
+    && call?.intent.effect === effect.identity && typeof call.intentCommit === "string"
+    && call.intentCommit === handoff.recordHead, "PUBLICATION_NPM_INTENT_INVALID");
 }
 
 /** The writer is launched only after its separate recorder's confirmed intent. */
@@ -99,7 +116,7 @@ export function requireNpmIntent(plan, replay, handoff, authorityObservation) {
   requirePublication(handoff?.schemaVersion === 1 && handoff.operation === plan.operation
     && handoff.planSha256 === sha256(canonicalBytes(plan)) && handoff.effect === effect.identity
     && replay.head === handoff.recordHead && replay.checkpoint.activeOperation === plan.operation
-    && replay.checkpoint.unresolvedCalls === 1 && replay.checkpoint.conflictingCalls === 0
+    && blockingRecordCalls(replay) === 1 && replay.checkpoint.conflictingCalls === 0
     && call?.intent.effect === effect.identity && call.outcome === "unknown" && call.observations === 0,
   "PUBLICATION_NPM_INTENT_INVALID");
 }

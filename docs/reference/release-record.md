@@ -25,12 +25,14 @@ The private JSON configuration has exactly these fields:
 | `ref` | Dedicated `refs/heads/` name containing lowercase letters/digits and single hyphens; `main` and `master` are refused |
 | `protocol` | Exactly `file` or `https`; Git is restricted to this transport |
 | `root` | Independently enrolled 40-character SHA-1 Git commit; `null` only for explicit enrollment |
-| `writerPolicy` | SHA-256 of the retained writer-authority/protection record |
+| `writerPolicy` | SHA-256 of the retained **effective** writer-authority/protection record; initially the enrollment policy |
 | `evidence` | Object mapping SHA-256 identities to retained original files; relative paths resolve against this configuration |
 
 The location evidence is the exact canonical encoding of
 `{location, ref, protocol}`. Its SHA-256 is the root event's `location`.
-Changing that binding, the enrolled root or writer-policy identity fails.
+Changing that binding or the enrolled root fails. A different writer policy
+requires the explicit versioned handoff below; configuration alone cannot
+substitute one.
 This binds supplied configuration bytes; it does not authenticate an endpoint,
 resolve malicious redirection or establish effective branch protection.
 
@@ -53,7 +55,8 @@ requires inspection/reconciliation, never another automatic enrollment/reset.
 
 ## Prepare and inspect bounded public data
 
-All event inputs have exactly `{schemaVersion: 1, event}`. Encode using the
+Ordinary event inputs have exactly `{schemaVersion: 1, event}`; the explicit
+`handoff` input uses `schemaVersion: 2`. Encode using the
 exported `canonicalBytes`: sorted object keys, unchanged array order, UTF-8 JSON
 and one final newline. Noncanonical bytes, duplicate keys, malformed UTF-8 and
 unknown fields/versions fail. An input or stored frame is at most 65,536 bytes;
@@ -66,12 +69,15 @@ Digest identifiers can still disclose identifying metadata: inspect the entire
 input and its meaning under the publication policy. Schema validation or the
 `inspect` command is not human approval or producer authentication.
 
-Every event has `type` and `at`, plus the fields below. All identifier fields
-are lowercase 64-character SHA-256 strings. `operation` and `call` are unique
+Every event has `type` and `at`, plus the fields below. Digest identifier fields
+are lowercase 64-character SHA-256 strings; the recovery decision separately
+names its 40-character Git identities. `operation` and `call` are unique
 opaque identifiers; they are never reused. Other digests identify exact retained
 documents. Evidence is streamed and checked before a write or successful read;
-missing/changed originals fail. No original document contents enter new Git
-objects. A matching digest proves bytes, not their authority or truth.
+missing/changed originals fail. Only admitted event data, including the inline
+public recovery decision, enters new Git objects; separately retained originals
+are not copied wholesale. A matching digest proves bytes, not their authority
+or truth.
 
 | Type | Additional fields and meaning |
 | --- | --- |
@@ -80,6 +86,7 @@ objects. A matching digest proves bytes, not their authority or truth.
 | `intent` | `operation`, `call`, `effect`: new call attempt bound to one admitted effect |
 | `observe` | `operation`, `call`, `outcome`, `basis`, `evidence`: identified observation of that call |
 | `close` | `operation`, `result`, `evidence`: completed or abandoned operation, with retained evidence |
+| `handoff` | `decision`, `approval`: frozen administrative decision and retained authenticated-approval attribution digest; only through the recovery command |
 
 The plan identity is SHA-256 of the canonical `planBytes(openEvent)` encoding:
 `{schemaVersion: 1, operation, candidate, authority, owner, window, effects}`.
@@ -93,8 +100,9 @@ the separately trusted actor must validate their actual meaning and authority.
 ## Replay preserves uncertainty
 
 Only one operation may be active. Opening requires the preceding operation to
-be closed and no unresolved call anywhere in the history. An intent starts
-`unknown`. No next call or closure is admitted while any call is unresolved.
+be closed or explicitly retired, with no blocking unresolved call anywhere in
+history. An intent starts `unknown` and blocks by default. No next call or
+closure is admitted while any blocking unresolved call remains.
 An intent must fall within its operation's window, and the writer's current
 clock must still be within that window; backdating cannot renew it. Observations
 and closure may follow the deadline. Event instants never go backwards.
@@ -116,7 +124,16 @@ Neither result grants permission to reuse a registry version or retry effects.
 
 Each commit contains exactly one regular `checkpoint.json`: schema version,
 one event and a small derived checkpoint (sequence, event digest, active
-operation and unresolved/conflict counts). The root is parentless; every later
+operation and unresolved/conflict counts). Legacy frames/checkpoints stay
+version 1 byte-for-byte. The handoff and every subsequent stored frame use
+version 2, adding `blockingUnresolvedCalls` and `effectiveWriterPolicy` to the
+checkpoint. Total unresolved calls still include retired UNKNOWNs. The reader
+derives both counts, each operation's `writerPolicyAtAdmission` and retirement,
+each call's actual `intentCommit`, and the effective policy from complete
+history. `intentCommit` is reader-derived Git identity, not a caller field. It rejects premature version 2,
+downgrades and checkpoint substitutions. Incompatible version-1 readers reject
+the handoff; do not send them the new history as if it were compatible.
+The root is parentless; every later
 commit has exactly its preceding commit as parent. The reader replays complete
 history from the pinned root, checks every frame/checkpoint and retains call
 and operation identities. It does not trust only the latest checkpoint, merge
@@ -182,6 +199,110 @@ The imported tooling API retains underlying process/system failures in the
 error's `cause` for private diagnosis. Do not publish that object or raw stack;
 the CLI deliberately emits only the bounded result above. The transport has a
 finite per-command timeout, not a guarantee of server-side cancellation.
+
+## Apply an explicit administrative recovery
+
+`scripts/release-record-recovery.mjs` owns exceptional preparation/application;
+the ordinary publisher never retires an operation automatically. Generic
+`release-record.mjs append` refuses `handoff`: an input claiming approval is
+insufficient. The imported protocol accepts an authentication callback only
+from its separately trusted controller, not as a public authorization claim.
+
+The canonical decision has exactly these fields:
+
+| Field | Binding |
+| --- | --- |
+| `schemaVersion` | `1` |
+| `root`, `expectedHead` | Exact 40-character Git identities |
+| `prefixSha256`, `sequence` | Complete replay prefix: start with SHA256 of canonical `{schemaVersion:1}`, then hash canonical `{previous: PREFIX, event}` for each event |
+| `operation`, `candidate` | Exact expired operation and candidate identities |
+| `calls` | Nonempty call-sorted unique `{call, intentSha256, observationSha256}` list covering **all** its unknown calls; an unobserved intent cannot be retired |
+| `previousWriterPolicy`, `nextWriterPolicy` | Exact prior and prospective authority identities |
+| `window` | New canonical `{start, deadline}`, beginning after the old operation expires |
+| `evidence` | Nonempty unique list of retained, inspected public-safe document digests supporting recovery |
+| `risk` | Exactly `late-shared-effects` |
+
+Use `prepareRecoveryDecision` on the complete reader result to construct these
+bytes; preparation below checks them against the actual current prefix again.
+No self-asserted field authenticates its evidence. An operation containing a
+conflict fails; a changed prefix or full observation needs another decision.
+
+The prospective policy is a closed canonical document:
+`{schemaVersion:2, kind:"release-recorder-role", location, writer,
+mainRulesSha256, recordRulesSha256, bypassAllowed:false, writerExcludedFrom,
+sourceAdmission}`. `location` is the existing location identity; `writer` is
+`qualified-publication-record-role`, `writerExcludedFrom` is exactly
+`["build","consumer","npm","signing"]`, and `sourceAdmission` is
+`exact-qualified-approved-recipe`. The two rules hashes identify the canonical
+parsed active GitHub ruleset responses with no bypass actors. Exact recipe
+admission stays in each run's private policy/qualification, outside this stable
+role descriptor. Qualification of real enforcement is still required.
+
+Separately inspect/admit a **private canonical profile** and its SHA-256. Its
+closed fields are `schemaVersion:1`, `repository`, numeric-string `repositoryId`,
+`ownerId`, `issue`, `maintainer:{id,ownerSha256}`, `sourceRevision`, exact
+`nodeVersion`/`nodeSha256`, `configSha256` (canonical configuration),
+`nextWriterPolicy`, `rules:{main,record}` (numeric-string ruleset IDs),
+`qualification:{sha256,expiresAt}`, and the exact decision `window`. The owner
+must match the retired admission. The finite qualification original and admitted
+profile are trusted inputs under the release policy, not facts proven by a
+local hash. They cannot install/extend their own grant. Keep configuration paths
+absolute in this command. The CLI requires its exact clean maintained checkout,
+current GitHub main/source, active rulesets, repository IDs, qualification bytes
+and window. It never changes settings or credentials.
+
+With the existing qualified Git writer/helper and explicit `GH_TOKEN` available
+only to the maintainer controller, run:
+
+```console
+node scripts/release-record-recovery.mjs prepare --profile PRIVATE_PROFILE --profile-sha256 PROFILE_SHA256 --config PRIVATE_CONFIG --decision DECISION --decision-sha256 DECISION_SHA256 --qualification PRIVATE_QUALIFICATION --output NEW_PRIVATE_PREPARATION
+```
+
+Inspect the prepared decision and exact approval text:
+`tabgrad-release-recovery DECISION_SHA256 ROOT/EXPECTED_HEAD`. The designated
+maintainer posts precisely that text to the admitted issue within the new
+window. Issue/repository selection and credential use require their operational
+authorization; preparation is not approval. Use the numeric comment ID only as
+a locator:
+
+```console
+node scripts/release-record-recovery.mjs apply --profile PRIVATE_PROFILE --profile-sha256 PROFILE_SHA256 --config PRIVATE_CONFIG --decision DECISION --decision-sha256 DECISION_SHA256 --qualification PRIVATE_QUALIFICATION --output NEW_PRIVATE_APPLICATION --comment COMMENT_ID
+```
+
+The existing bounded fixed-origin GET transport checks the actual comment's
+repository/issue, exact body, stable author ID, current admin/maintain permission
+and timestamps. Source/protections/qualification/time are checked again around
+authenticated reads; approval is rechecked before object creation and before
+the leased update. A changed/denied/missing response fails closed. This is not
+an atomic snapshot or a signature of the maintainer; it retains the trusted
+controller and service assumptions. It does not revive the old CI run.
+
+Each attempt claims a new private output directory; an existing one is refused.
+It conserves the exact profile and qualification plus authenticated **parsed**
+provider responses and approval body in `private/`, never claiming raw HTTP
+preservation. Only canonical decision/enum/digest attribution documents go in
+`public-evidence/`. The holder binds decision/profile/comment/actor/permission
+digests, source and observation/expiry instants; it cannot authenticate itself.
+Keep private originals available independently; never copy the whole output into
+public history. Inspect new public originals before any later public transfer.
+
+On confirmed readback, retain `receipt.json` and adopt `next-config.json` with
+the same root and the new effective policy, including all old/new evidence paths.
+Combine only inspected hash-named public originals for the next history handoff.
+On failure, preserve `failure.json` and any attempted/prior heads. A push may
+already have committed, including when local receipt/config conservation fails.
+If even the failure file cannot be written, the bounded CLI failure still emits
+the known receipt with `conservationFailed:true`; retain it independently.
+Inspect the actual head and originals before another action; never automatically
+retry, enroll or reset. The command issues no npm/GitHub distribution effects.
+
+Replay retires the operation/candidate and its uncertain effect identities,
+clearing only that operation's active slot. Its UNKNOWNs remain visible.
+Repeated identical accepted observations remain nonblocking; a later changed
+unknown observation (even with the same evidence), conflict or fresh intent
+blocks. A different release still uses the ordinary current approval, unused
+version and destination checks. Accepted risk is limited to the exact frozen
+facts, not future shared-channel drift or a general waiver.
 
 ## Qualify the remaining operational boundary
 

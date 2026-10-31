@@ -330,6 +330,54 @@ resistance to all privileged host/admin changes. The recorder's own writes
 have their own authority and readback boundary; do not create recursive intents
 for every journal write.
 
+### Admit a forward recovery without erasing uncertainty
+
+An expired call with an unknown outcome normally blocks further publication.
+A matching package or a separate successful manual delivery does not establish
+the outcome of that original call. Preserve its intent, observations, UNKNOWN
+and original writer grant. Do not reset the root, rewrite frames, invent a
+successful closure or reuse the expired operation/candidate.
+
+A maintainer may explicitly accept a narrow administrative retirement and
+prospective writer-policy handoff. The canonical decision binds the exact
+root/head and replay-prefix digest/sequence, operation/candidate, each unknown
+call's intent and **complete last observation** digests, old/new writer policies,
+finite new administrative window, retained evidence and accepted risk of late
+shared effects. An authenticated current maintainer approval must name that
+exact document digest. The [recovery command](reference/release-record.md#apply-an-explicit-administrative-recovery)
+checks current source, qualification, protections, attribution and prefix before
+the existing leased Git append. An approval flag, old run/environment approval
+or destination read cannot replace those checks.
+
+Retirement changes the blocking disposition of only those exact unknown
+observations; it never changes their outcomes. The retired operation/candidate
+and uncertain effect identities cannot be reused. A different useful release
+needs its own current plan/window, unused registry version, producer evidence,
+approval and destination checks. A new UNKNOWN, conflict or changed unknown
+observation becomes blocking, including the same evidence under changed
+observation context. Conserve late authenticated facts; retirement is not
+permission to ignore them. Genuine causal settlement keeps its ordinary meaning.
+
+Keep the enrollment writer policy as the initial authority epoch. Record the
+explicit effective policy for later operations and validate each old authority
+under its admission epoch. A stable qualified recorder-role/protection grant
+may outlive a recipe revision; each new run must still pin and qualify its exact
+current source, tools and authority separately. A policy handoff does not
+qualify a new credential, extend an old window or grant unattended publication.
+
+This accepts residual risk: an old provider request could affect shared channel
+metadata later. Fresh destination checks detect observed drift but cannot prove
+provider quiescence or atomicity across npm and GitHub. Reassess changed facts
+under a new explicit decision; never retry an uncertain append automatically.
+The maintained command and local Git tests do not perform or qualify a live
+migration. Actual service changes/publication retain their concrete authorization.
+
+Keeping the old blanket block would prevent forward progress without stronger
+causal evidence. A new root would fragment history; relabeling the call would
+assert an unproved result. The append-only disposition preserves that evidence
+and admits only the separately accepted risk, at the cost of versioned readers,
+policy epochs, retained approval originals and an exceptional administrative step.
+
 ### Authenticate each actor
 
 Use restricted CI OpenID Connect identity for ordinary npm publishing, without

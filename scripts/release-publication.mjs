@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { canonicalBytes, sha256 } from "./release-record-data.mjs";
+import { blockingRecordCalls, canonicalBytes, sha256 } from "./release-record-data.mjs";
 import { releaseRecord } from "./release-record.mjs";
 import { publicationGithub } from "./publication-github.mjs";
 import { publicationRegistry, admitPublishedConsumers } from "./publication-registry.mjs";
@@ -420,7 +420,7 @@ async function observeNpmRole(root, state, admission, environment) {
   if (plan.npm.mode === "observe") {
     const replay = await releaseRecord({ command: "read", ...base });
     requirePublicationRecordAdmission(plan, replay, admission.authorityObservation);
-    requirePublication(replay.checkpoint.unresolvedCalls === 0 && replay.checkpoint.conflictingCalls === 0
+    requirePublication(blockingRecordCalls(replay) === 0 && replay.checkpoint.conflictingCalls === 0
       && knownEffects(replay).has(publicationEffects(plan)[0].identity), "PUBLICATION_NPM_OUTCOME_UNPROVEN");
     return { status: "verified-existing-npm" };
   }
