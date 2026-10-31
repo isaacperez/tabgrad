@@ -21,7 +21,15 @@ export async function humanPublicationFixture(t, config = {}) {
   });
   for (const name of ["input", "admission", "data", "proofs", "public-output"]) await mkdir(join(root, name));
   const { publicationPlan: plan, authority } = publicationPlanFixture();
-  if (config.windowMs) plan.window.deadline = new Date(Date.now() + config.windowMs).toISOString();
+  if (config.windowMs) {
+    plan.window.deadline = new Date(Date.now() + config.windowMs).toISOString();
+    // Long synthetic windows need equally valid dependent fixture evidence.
+    if (Date.parse(plan.window.deadline) > Date.parse(plan.producer.verification.expiresAt)) {
+      plan.producer.verification.expiresAt = plan.window.deadline;
+      plan.producer.signingDeadline = plan.window.deadline;
+      for (const output of [plan.producer.data, plan.producer.proofs, plan.producer.corroboration]) output.expiresAt = plan.window.deadline;
+    }
+  }
   if (config.clientSha256) plan.publisher.clientSha256 = config.clientSha256;
   const archive = Buffer.from("synthetic-archive-not-published"), proof = Buffer.from('{"synthetic":"not-a-proof"}\n');
   plan.candidate.archiveSha512 = createHash("sha512").update(archive).digest("hex");
