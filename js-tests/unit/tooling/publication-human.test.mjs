@@ -28,6 +28,20 @@ for (const [windowMs, readerWindowMs] of [[180000, 240000], [240000, 180000]]) {
   });
 }
 
+for (const windowMs of [2147483647 + 60000, 2147483647 - 1000]) {
+  test(`human session and close grace do not overflow the native timer (${windowMs})`, async t => {
+    const f = await humanPublicationFixture(t, { windowMs,
+      readerWindowMs: 2147483647 + 120000, captureBudget: true });
+    const deadline = Date.parse(f.plan.window.deadline), before = Date.now();
+    const result = await runHumanPublisher({ ...f, fresh: async () => {},
+      authorizeReady: async () => ({ permissionSha256: "e".repeat(64) }) });
+    assert.equal(result.status, "completed");
+    const after = Date.now(), budget = JSON.parse(await readFile(join(f.root, "budget.json")));
+    assert.ok(budget.timeoutMs >= Math.min(2147483647, deadline - after)
+      && budget.timeoutMs <= Math.min(2147483647, deadline - before));
+  });
+}
+
 test("genuine terminal shows the pinned npm web link without Enter or browser launch", {
   skip: !process.env.TABGRAD_COMPOSITION_CLIENT || !process.stdin.isTTY || !process.stdout.isTTY || !process.stderr.isTTY,
   timeout: 60000,

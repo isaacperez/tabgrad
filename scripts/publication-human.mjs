@@ -48,8 +48,9 @@ export async function runHumanPublisher({ root, plan, admission, environment, fr
     controller.abort(); cancelPending();
     if (child.connected) child.send({ kind: "cancel", session }, () => {});
   };
-  const timer = setTimeout(cancel, Math.max(1, Date.parse(plan.window.deadline) - Date.now()));
-  const lastResort = setTimeout(() => child.kill("SIGKILL"), Math.max(1, Date.parse(plan.window.deadline) - Date.now()) + 5000);
+  const remaining = Math.max(1, Date.parse(plan.window.deadline) - Date.now());
+  const timer = setTimeout(cancel, Math.min(publicationProcessMaxTimeoutMs, remaining));
+  const lastResort = setTimeout(() => child.kill("SIGKILL"), Math.min(publicationProcessMaxTimeoutMs, remaining + 5000));
   child.on("error", error => { failure ??= error; cancel(); });
   child.on("message", message => {
     if (message?.kind === "receipt") {
@@ -159,8 +160,8 @@ export async function runHumanClient(message, { identifyClient = identifyPublica
     const reader = JSON.parse(await publicationFile(process.env.TABGRAD_HUMAN_READER, 65536));
     await inspectNamespace({ client, role, plan, reader,
       expectedReaderSha256: process.env.TABGRAD_HUMAN_READER_SHA256, signal: controller.signal });
-    readerTimer = setTimeout(() => controller.abort(), Math.max(1,
-      Math.min(Date.parse(plan.window.deadline), Date.parse(reader.expiresAt)) - Date.now()));
+    readerTimer = setTimeout(() => controller.abort(), Math.min(publicationProcessMaxTimeoutMs, Math.max(1,
+      Math.min(Date.parse(plan.window.deadline), Date.parse(reader.expiresAt)) - Date.now())));
     waiting = true;
     await awaitHumanApproval({ session: message.session, call: admission.handoff.call,
       clientSha256: client.manifestSha256, signal: controller.signal });
