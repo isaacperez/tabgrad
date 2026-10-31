@@ -21,7 +21,15 @@ export async function humanPublicationFixture(t, config = {}) {
   });
   for (const name of ["input", "admission", "data", "proofs", "public-output"]) await mkdir(join(root, name));
   const { publicationPlan: plan, authority } = publicationPlanFixture();
-  if (config.windowMs) plan.window.deadline = new Date(Date.now() + config.windowMs).toISOString();
+  if (config.windowMs) {
+    plan.window.deadline = new Date(Date.now() + config.windowMs).toISOString();
+    // Long synthetic windows need equally valid dependent fixture evidence.
+    if (Date.parse(plan.window.deadline) > Date.parse(plan.producer.verification.expiresAt)) {
+      plan.producer.verification.expiresAt = plan.window.deadline;
+      plan.producer.signingDeadline = plan.window.deadline;
+      for (const output of [plan.producer.data, plan.producer.proofs, plan.producer.corroboration]) output.expiresAt = plan.window.deadline;
+    }
+  }
   if (config.clientSha256) plan.publisher.clientSha256 = config.clientSha256;
   const archive = Buffer.from("synthetic-archive-not-published"), proof = Buffer.from('{"synthetic":"not-a-proof"}\n');
   plan.candidate.archiveSha512 = createHash("sha512").update(archive).digest("hex");
@@ -37,7 +45,8 @@ export async function humanPublicationFixture(t, config = {}) {
   const admission = { handoff, journal, authorityObservation: authority,
     candidate: { tarball: { path: "candidate.tgz", byteLength: archive.length } } };
   const reader = { schemaVersion: 1, scope: "example", username: "fixture-owner", namespaceVisibility: "qualified-owner",
-    expiresAt: plan.window.deadline, evidenceSha256: "f".repeat(64) };
+    expiresAt: config.readerWindowMs ? new Date(Date.now() + config.readerWindowMs).toISOString() : plan.window.deadline,
+    evidenceSha256: "f".repeat(64) };
   for (const [path, raw] of [["input/plan.json", canonicalBytes(plan)], ["admission/admission.json", canonicalBytes(admission)],
     ["data/candidate.tgz", archive], ["proofs/archive-proof.json", proof], ["reader.json", canonicalBytes(reader)],
     ["fixture.json", canonicalBytes(config)], ["synthetic.npmrc", Buffer.from("//registry.npmjs.org/:_authToken=fixture-only-not-a-credential\n")]]) {

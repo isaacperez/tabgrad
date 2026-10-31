@@ -75,8 +75,13 @@ export async function publishNpmArchive({ client, archive, proof, directory, reg
   try {
     requirePublication(typeof channel === "string" && /^[a-z][a-z0-9._-]*$/.test(channel), "PUBLICATION_NPM_CHANNEL");
     role ??= await prepareNpmRole({ directory, registry, authentication });
+    // Namespace reads and CI keep JSON. Human authentication must display its
+    // link immediately without waiting for Enter or controlling a browser.
+    const arguments_ = role.authentication === "human"
+      ? [...role.arguments.filter(argument => argument !== "--json"), "--json=false", "--browser=false"]
+      : role.arguments;
     return await runPublicationProcess(client.executable, [client.npmEntry, "publish", archive,
-      "--access", "public", "--tag", channel, "--provenance-file", proof, ...role.arguments], {
+      "--access", "public", "--tag", channel, "--provenance-file", proof, ...arguments_], {
       directory: role.directory, environment: role.environment, timeoutMs, maxOutputBytes,
       interactive: role.authentication === "human", signal });
   } catch (error) { error.dispatched ??= false; throw error; }

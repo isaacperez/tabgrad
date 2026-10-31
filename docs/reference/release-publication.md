@@ -380,7 +380,17 @@ node scripts/release-publication.mjs human ABSOLUTE_OWNED_ROOT
 Keep stdin, stdout and stderr attached to the real terminal through both human
 launch layers. Redirecting any of them rejects before the publication process
 is spawned. npm presents its own supported second-factor prompt or browser
-flow; never disable MFA to compensate for a missing terminal.
+flow; never disable MFA to compensate for a missing terminal. Human publication
+uses plain output and disables automatic browser opening, so npm displays its
+authentication link immediately without requiring Enter. Give that private link
+to the person completing authentication to open themselves; do not put it in
+public evidence. Namespace queries and automated publication retain JSON.
+
+The human publication process uses the earlier remaining plan or namespace-reader
+deadline, capped only by the process API's maximum timer delay (2147483647ms).
+It has no separate two-minute limit. Authentication does not renew either
+deadline; cancellation and the finite outer session still apply. This does not
+change npm's HTTP request timeout or the automated publisher's process budget.
 
 The human call uses the explicit `human-terminal-exit` confirmation method.
 Its private original records the observed status, signal, dispatch and
