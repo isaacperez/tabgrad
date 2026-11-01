@@ -399,13 +399,18 @@ export async function executeNpm(root, state, material, admission, environment,
   return receipt;
 }
 
+export function publicationConsumerArguments(root, plan) {
+  return [join(repository, "scripts/run-package-browser-tests.mjs"), "--registry-plan", join(root, "input/registry.json"),
+    "--expected", join(root, "data/candidate.json"), "--browsers", plan.qualification.browsers.join(",")];
+}
+
 async function consumerReport(root, state, environment) {
   const registryPlan = { schemaVersion: 1, registry: state.plan.npm.registry, channel: state.plan.npm.channel,
     allowedOrigins: [state.plan.npm.registry], clientTimeoutMs: 30000, maxClientOutputBytes: 1024 * 1024 };
   const path = join(root, "input/registry.json"); await savePublicationJson(path, registryPlan);
   const child = await runPublicationProcess(process.execPath,
-    [join(repository, "scripts/run-package-browser-tests.mjs"), "--registry-plan", path, "--expected", join(root, "data/candidate.json")],
-    { directory: repository, environment: { ...registryEnvironment(root, environment), TABGRAD_BROWSER: state.plan.qualification.browsers.join(",") },
+    publicationConsumerArguments(root, state.plan),
+    { directory: repository, environment: registryEnvironment(root, environment),
       timeoutMs: Math.max(1, Math.min(600000, Date.parse(state.plan.window.deadline) - Date.now())), maxOutputBytes: 4 * 1024 * 1024 });
   const reports = [JSON.parse(child.stdout)];
   if (state.plan.qualification.gpu) {
@@ -417,7 +422,7 @@ async function consumerReport(root, state, environment) {
 
 /** Read-only post-result checks; retain safe diagnostics even without a success handoff. */
 export async function verifyPublishedConsumerResult(root, { plan, candidate, proof, registry, report, clock = Date.now }) {
-  let phase = "registry", status = "failed", code = null;
+  let phase = "registry", status = "failed", code = null, consumerFailure = null;
   try {
     await registry.waitForPublished(plan, Math.min(Date.parse(plan.window.deadline), clock() + 600000));
     phase = "provenance";
@@ -431,6 +436,17 @@ export async function verifyPublishedConsumerResult(root, { plan, candidate, pro
     return { status: "published-consumers-verified" };
   } catch (error) {
     code = /^PUBLICATION_[A-Z_]+$/.test(error.code ?? "") ? error.code : "PUBLICATION_CONSUMER_CHECK_FAILED";
+    const raw = error.privateClientEvidence?.stdout;
+    if (phase === "consumers" && typeof raw === "string" && Buffer.byteLength(raw) <= 4 * 1024 * 1024) {
+      try {
+        const result = JSON.parse(raw), failure = result.failure;
+        if (result.schemaVersion === 1 && result.input === "registry-version" && result.status === "failed"
+          && typeof failure?.phase === "string" && /^[A-Za-z0-9][A-Za-z0-9-]{0,127}$/.test(failure.phase)
+          && typeof failure.code === "string" && /^[A-Z][A-Z0-9_]{0,127}$/.test(failure.code)) {
+          consumerFailure = { phase: failure.phase, code: failure.code };
+        }
+      } catch { /* Unrecognized child output supplies no public diagnostic fields. */ }
+    }
     throw error;
   } finally {
     const keys = ["at", "urlSha256", "status", "sha256", "receivedBytes", "phase", "selectedVersionPresent", "exactVersion",
@@ -438,7 +454,7 @@ export async function verifyPublishedConsumerResult(root, { plan, candidate, pro
     const observations = registry.observations.slice(0, 64).map(row =>
       Object.fromEntries(keys.filter(key => Object.hasOwn(row, key)).map(key => [key, row[key]])));
     await savePublicationJson(join(root, "public-output/consumer-diagnostics.json"), {
-      schemaVersion: 1, status, phase, code, planSha256: sha256(canonicalBytes(plan)),
+      schemaVersion: 1, status, phase, code, consumerFailure, planSha256: sha256(canonicalBytes(plan)),
       observations, omittedObservations: Math.max(0, registry.observations.length - observations.length),
     });
   }

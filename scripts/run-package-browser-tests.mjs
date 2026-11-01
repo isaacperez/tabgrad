@@ -20,10 +20,12 @@ export function parsePackageArguments(arguments_) {
   for (let index = 0; index < arguments_.length; index += 1) {
     const argument = arguments_[index];
     if (argument === "--gpu" && !options.gpu) options.gpu = true;
+    else if (argument === "--browsers" && options.browsers === undefined && arguments_[index + 1]
+      && !arguments_[index + 1].startsWith("--")) options.browsers = arguments_[++index];
     else if ((argument === "--tarball" || argument === "--expected" || argument === "--registry-plan")
       && options[argument.slice(2)] === undefined && arguments_[index + 1] !== undefined
       && !arguments_[index + 1].startsWith("--")) options[argument.slice(2)] = resolve(arguments_[++index]);
-    else throw new PackageArtifactError("ARGUMENTS_INVALID", "Use optional --gpu and expected evidence with either --tarball or --registry-plan.");
+    else throw new PackageArtifactError("ARGUMENTS_INVALID", "Use optional --gpu/--browsers and expected evidence with either --tarball or --registry-plan.");
   }
   if (options["registry-plan"] !== undefined) {
     if (options.tarball !== undefined || options.expected === undefined) {
@@ -33,6 +35,20 @@ export function parsePackageArguments(arguments_) {
     throw new PackageArtifactError("ARGUMENTS_INVALID", "Supply both an archive and its admitted expected evidence.");
   }
   return options;
+}
+
+/** Explicit list takes precedence; the shared single/default environment contract stays unchanged. */
+export function selectPackageBrowsers(options, requestedBrowser = process.env.TABGRAD_BROWSER) {
+  if (options.browsers === undefined) {
+    return selectBrowserDefinitions(requestedBrowser ?? (options.gpu ? "Chrome" : undefined), browserDefinitions);
+  }
+  const names = typeof options.browsers === "string" ? options.browsers.split(",") : [];
+  const selected = names.map(name => browserDefinitions.find(browser => browser.name === name));
+  if (names.length === 0 || selected.some(browser => browser === undefined)
+    || new Set(names.map(name => name.toLowerCase())).size !== names.length) {
+    throw new PackageArtifactError("BROWSERS_INVALID", "Select unique canonical package browser names.");
+  }
+  return selected;
 }
 
 function containedPath(root, path) {
@@ -165,7 +181,7 @@ export async function qualifyPackage(options) {
   let directory, fixture;
   let phase = "selection";
   try {
-    const browsers = selectBrowserDefinitions(process.env.TABGRAD_BROWSER ?? (options.gpu ? "Chrome" : undefined), browserDefinitions);
+    const browsers = selectPackageBrowsers(options);
     report.requested.browsers = browsers.map(browser => browser.name);
     phase = "preparation";
     directory = await mkdtemp(join(tmpdir(), "tabgrad-package-browser-"));

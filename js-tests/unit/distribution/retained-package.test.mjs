@@ -8,7 +8,8 @@ import { test } from "node:test";
 import { createPackageApplication, runPackageProcess } from "../../fixtures/package-application.mjs";
 import { verifyPackageDirectory } from "../../../scripts/package-artifact.mjs";
 import { packageFixture, hash, archiveIdentity, sourceRevision } from "../../fixtures/package-candidate.mjs";
-import { parsePackageArguments } from "../../../scripts/run-package-browser-tests.mjs";
+import { parsePackageArguments, selectPackageBrowsers } from "../../../scripts/run-package-browser-tests.mjs";
+import { publicationConsumerArguments } from "../../../scripts/release-publication.mjs";
 
 const repository = fileURLToPath(new URL("../../..", import.meta.url));
 const driver = join(repository, "scripts/run-package-browser-tests.mjs");
@@ -64,6 +65,36 @@ test("retained package arguments keep source mode and require an explicit input 
   for (const arguments_ of [["--tarball", "x"], ["--expected", "x"], ["--gpu", "--gpu"], ["--other"], ["--tarball"], ["--expected", "--gpu"]]) {
     assert.throws(() => parsePackageArguments(arguments_), { code: "ARGUMENTS_INVALID" });
   }
+});
+
+for (const browsers of [["Chrome"], ["Firefox"], ["Chrome", "Firefox"], ["Firefox", "Chrome"]]) {
+  test(`publication caller selects its exact declared set ${browsers.join("/")} through the real qualifier`, () => {
+    const args = publicationConsumerArguments("/owned/publication", { qualification: { browsers } });
+    const parsed = parsePackageArguments(args.slice(1));
+    assert.deepEqual(selectPackageBrowsers(parsed, "invalid legacy selection").map(browser => browser.name), browsers);
+  });
+}
+
+test("explicit package browser lists reject empty, foreign and duplicate names", () => {
+  for (const browsers of ["", ",", "Chrome,", "Chrome,,Firefox", "Other", "Chrome,Chrome", "Chrome,chrome"]) {
+    assert.throws(() => selectPackageBrowsers({ browsers }), { code: "BROWSERS_INVALID" });
+  }
+  for (const args of [["--browsers"], ["--browsers", "--gpu"], ["--browsers", "Chrome", "--browsers", "Firefox"]]) {
+    assert.throws(() => parsePackageArguments(args), { code: "ARGUMENTS_INVALID" });
+  }
+  assert.deepEqual(selectPackageBrowsers({ gpu: false }, "").map(browser => browser.name), ["Chrome", "Firefox"]);
+  assert.deepEqual(selectPackageBrowsers({ gpu: true }, undefined).map(browser => browser.name), ["Chrome"]);
+  assert.deepEqual(selectPackageBrowsers({ gpu: false }, "firefox").map(browser => browser.name), ["Firefox"]);
+  assert.throws(() => selectPackageBrowsers({ gpu: false }, "Chrome,Firefox"));
+});
+
+test("actual publication argument list passes CLI browser selection before missing-input preparation", () => {
+  const args = publicationConsumerArguments("/nonexistent/owned/publication", { qualification: { browsers: ["Firefox", "Chrome"] } });
+  const result = spawnSync(process.execPath, args, { encoding: "utf8", env: { TABGRAD_BROWSER: "invalid legacy selection" }, timeout: 10000 });
+  assert.equal(result.status, 1); assert.equal(result.stderr, "");
+  const report = JSON.parse(result.stdout);
+  assert.deepEqual(report.requested.browsers, ["Firefox", "Chrome"]);
+  assert.equal(report.failure.phase, "preparation"); // No input or registry request was admitted.
 });
 
 test("supplied identity is independent of checkout and installs exact bytes without lifecycle scripts", async context => {

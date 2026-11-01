@@ -17,7 +17,7 @@ function report(f) {
   return value;
 }
 
-for (const phase of ["success", "registry", "provenance", "consumers", "admission"]) {
+for (const phase of ["success", "registry", "provenance", "consumers", "child-report", "admission"]) {
   test(`actual consumer orchestration conserves safe ${phase} evidence without publishing`, async t => {
     const f = await publicationServiceFixture(t); f.applyPublishedState();
     await mkdir(join(f.root, "public-output"), { recursive: true });
@@ -31,6 +31,13 @@ for (const phase of ["success", "registry", "provenance", "consumers", "admissio
     }
     if (phase === "provenance") options.proof = join(f.root, "absent-proof.json");
     if (phase === "consumers") options.report = async () => { throw new Error("PRIVATE DETAILS"); };
+    if (phase === "child-report") options.report = async () => {
+      throw Object.assign(new Error("PRIVATE DETAILS"), { code: "PUBLICATION_CLIENT_REJECTED", privateClientEvidence: {
+        stdout: JSON.stringify({ schemaVersion: 1, input: "registry-version", status: "failed",
+          failure: { phase: "Chrome-direct", code: "BROWSER_FAILED", message: "PRIVATE DETAILS" }, privateField: f.root }),
+        stderr: "PRIVATE DETAILS",
+      } });
+    };
     if (phase === "admission") options.report = async () => { const r = report(f); r.profiles[0].status = "failed"; return [r]; };
     if (phase === "success") {
       assert.equal((await verifyPublishedConsumerResult(f.root, options)).status, "published-consumers-verified");
@@ -44,6 +51,7 @@ for (const phase of ["success", "registry", "provenance", "consumers", "admissio
     assert.ok(evidence.observations.length > 0); assert.equal(evidence.omittedObservations, 0);
     assert.equal(raw.includes("PRIVATE DETAILS"), false); assert.equal(raw.includes(f.root), false);
     assert.equal(raw.includes("fixture-not-a-credential"), false);
+    assert.deepEqual(evidence.consumerFailure, phase === "child-report" ? { phase: "Chrome-direct", code: "BROWSER_FAILED" } : null);
     assert.equal(f.calls, 0); // This route never invokes the fixture's publishing client.
   });
 }
