@@ -7,6 +7,15 @@ established by the corresponding verified release record.
 
 ## Unreleased
 
+## 0.1.2 - 2026-11-01
+
+### Fixed
+
+- Release consumer verification and GitHub completion remain eligible after an
+  unused authentication branch is skipped, while requiring successful
+  prerequisites and rejecting cancellation
+  ([#376](https://github.com/isaacperez/tabgrad/pull/376)).
+
 ### Removed
 
 - Retired the superseded native acquisition laboratory, its contributor
@@ -14,6 +23,9 @@ established by the corresponding verified release record.
   reference navigation is separated by audience. The active hosted producer,
   proof verification and publication tooling are preserved
   ([#377](https://github.com/isaacperez/tabgrad/issues/377)).
+
+The [0.1.2 source and support record](docs/reference/release-0.1.2.md) preserves
+the existing tensor API and support limits. Applications need no API migration.
 
 ## 0.1.1 - 2026-11-01
 
