@@ -3,12 +3,13 @@ import test from "node:test";
 import { readFile, mkdtemp, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { publicationPlanFixture } from "../../fixtures/publication.mjs";
 import { canonicalBytes, sha256 } from "../../../scripts/release-record-data.mjs";
 import { admitPublicationPolicy, observePublicationAuthority, observePublicationPrecheck, observePublicationProducer,
   observePublicationConservation, publicationApprovalComment, publicationEnvironmentSnapshot } from "../../../scripts/publication-authority.mjs";
 import { resolvePublicationExecution, corroboratePublicationExecution } from "../../../scripts/publication-authority.mjs";
-import { publicationRole } from "../../../scripts/release-publication.mjs";
 
 /** Provider-policy model; actual HTTP/client and live-service qualification are distinct. */
 function fixture() {
@@ -117,14 +118,17 @@ test("closed-plan role cannot silently treat a stable profile as its missing exe
   f.plan.publisher.githubClientSha256 = sha256(await readFile(process.execPath));
   f.profile.clients.controller = f.plan.publisher.githubClientSha256;
   const raw = canonicalBytes(f.profile);
-  await assert.rejects(publicationRole("precheck", root, {
+  const result = spawnSync(process.execPath,
+    [fileURLToPath(new URL("../../../scripts/release-publication.mjs", import.meta.url)), "precheck", root], { encoding: "utf8", env: {
     TABGRAD_PUBLICATION_ENABLED: "true", TABGRAD_PUBLICATION_CONFIRMATION: "release-publication",
     TABGRAD_PUBLICATION_PLAN_JSON: canonicalBytes(f.plan).toString(),
     TABGRAD_PUBLICATION_PLAN_SHA256: sha256(canonicalBytes(f.plan)),
     GITHUB_EVENT_NAME: "workflow_dispatch", GITHUB_REF: "refs/heads/main", GITHUB_RUN_ATTEMPT: "1",
     GITHUB_SHA: f.plan.publisher.revision, TABGRAD_RELEASE_POLICY_JSON: raw.toString(),
     TABGRAD_RELEASE_POLICY_SHA256: sha256(raw),
-  }), { code: "PUBLICATION_EXECUTION_REQUIRED" });
+  } });
+  assert.equal(result.status, 1); assert.equal(result.stderr, "");
+  assert.equal(JSON.parse(result.stdout).code, "PUBLICATION_EXECUTION_REQUIRED");
   assert.deepEqual(await readdir(root), []);
 });
 
