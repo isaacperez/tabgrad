@@ -248,8 +248,9 @@ repeat unrelated investigation or checks merely because `main` advanced.
 A repository change is substantive when `CONTRIBUTING.md` requires it to have
 an issue. When a coding agent performs such a change:
 
-- an independent agent must perform a read-only preflight before the first
-  repository edit;
+- the writer checks readiness and plans affected validation before editing;
+- early independent investigation is required when material uncertainty could
+  invalidate implementation, rather than for every settled change;
 - only one agent at a time may own and modify the target working tree;
 - at least one agent independent of the writer must verify the final state;
 - the change must receive the independent review required by
@@ -351,79 +352,41 @@ target, assignment and coverage, outcome, required findings, limitations, and
 primary evidence references. A bare statement that an unnamed independent
 agent passed is not inspectable evidence.
 
-A pull-request review snapshot identifies the repository and pull request;
-exact title and description text; source repository, branch, and head commit;
-and target repository, branch, and comparison base revision. Before final
-review, make the title and description otherwise complete and freeze them. The
-final reviewer records the immutable identities and SHA-256 digests of the
-exact title and description text, together with the digest method. The digests
-belong in the report, not in the title or description they identify.
+A pull-request review identifies the repository/PR, source branch and exact
+head, target branch and comparison base, issue/result, reviewer and material
+claims. Keep those source identities and the review's coverage, findings,
+limitations and original evidence inspectable. Full title/body hashes and a
+metadata freeze are not required. Cosmetic wording or evidence-link edits do
+not invalidate source review; changed requirements or conclusions need affected
+review. A new head or relevant base change needs evaluation of the resulting
+complete change, reusing unaffected evidence.
 
-Under current authority, publish the reviewer-authored final report afterward
-as a comment in the same pull request, or as a formal review only when that
-separate action is authorized. A coordinator may relay it only while naming the
-reviewer and preserving the report rather than presenting it as the
-coordinator's own review. That report locates itself in the pull request and
-does not mutate the reviewed snapshot, so do not edit the description merely
-to add a link or copy the final result back into it. Without authority to
-publish the report, the ready-for-review gate remains unmet.
+Under current authority, preserve one concise reviewer-authored report as a
+comment in the same PR, naming the reviewer when relaying it. A formal review
+or human approval remains a separate action. Update or supplement that report
+for material findings/corrections; do not repeat it for administrative metadata.
+A prepared review may be reused after confirming remote source/base and material
+claims match. Private findings follow the protected reporting procedure and
+[publication content check](#check-content-before-publication).
 
-The reviewer may inspect an exact prepared title and description before they
-are published. After publication, the coordinator must rederive every remote
-snapshot field and publish the report only when they all match. A deliberate
-change to the title, description, source, head, or target creates a new
-snapshot. When the target branch merely advances, apply the overlap rules in
-this document to decide which evidence is invalidated and record the new
-comparison state; do not silently treat a conflicting or relevant base change
-as the reviewed state.
+For a new authorized PR, publish a draft after applicable writer checks and
+content inspection so CI overlaps the independent final verification/review.
+Mark it ready and move its issue to `In review` only when their source/content
+gate passes; remote-only checks may finish afterward but remain required before
+merge. No second full publication review is needed when the published result
+matches the inspected source and claims. A draft with missing required evidence
+must remain explicit about its status.
 
-For a new substantive coding-agent pull request, the user request to publish it
-ready for review authorizes the bounded transition needed to make that outcome
-possible: create it as a draft, verify the remote snapshot, publish one relayed
-final-report comment after independent review of that exact snapshot, and mark
-it ready only if the gate then passes. This draft is a transient safety state,
-not a silent substitution for the requested result. If publication, comparison,
-review, reporting, or the gate fails, leave the pull request draft, keep the
-issue out of `In review`, and report the incomplete operation. This authority
-does not include a formal GitHub review, approval, reviewer notification, or
-another unrelated mutation.
-
-Prefer one final review of that published draft snapshot over a complete
-prepared review followed by a second complete publication review. After the
-writer's applicable local checks and publication-content inspection, the
-authorized transient draft may launch CI while the existing independent agent
-performs final verification and skeptical review. Missing independent evidence
-is explicit draft work, not a readiness claim. Freeze otherwise-complete title,
-description and head before that final assignment; add the report afterward
-without editing the snapshot. Prepared review remains useful when publication
-is not authorized, or required for an update that must remain non-draft.
-
-For an existing review-ready pull request, an authorized verified-head, title,
-or description update may remain non-draft when every condition available
-before publication passes and the exact prepared snapshot has independent
-review. The requested push when one exists, minimum metadata update, remote
-snapshot confirmation, and one relayed final-report comment form one bounded
-transition; the comment is its final output, not a precondition for its own
-authority. If the snapshot cannot pass before publication, stop before changing
-the remote pull request unless returning it to draft is authorized. If the
-transition fails after publication, report the inconsistent state and obtain
-current authority before returning the pull request and issue to earlier
-workflow states. An update to a pull request that is already draft does not
-need a final report until it is requested to become ready.
-
-An already durable issue comment, pull request report, or registered artifact
-may supply earlier evidence, but it does not replace final review of the frozen
-pull request snapshot. Keep sensitive security or private information in the
-protected channel required by `CONTRIBUTING.md`; a public final report should
-state only the safe conclusion and, when safe to disclose, a protected evidence
-reference. Do not expose a private path or access-bearing link to locate it.
-Apply [the publication check](#check-content-before-publication) before relaying
-any report or evidence.
+For a correction, apply [active-task authority](../CONTRIBUTING.md#authorization-during-an-active-task),
+return to draft if its readiness gate no longer passes, correct the owning
+artifact, and obtain affected revalidation. Continue covered ordinary repairs
+without asking permission again. Inspect live source, claims, checks and merge
+safety at the action boundary; stable-source evidence does not cache those facts.
 
 ## Perform a preflight before implementation
 
-The preflight tests whether the recorded work still matches reality before any
-repository file is changed. The investigator must inspect the current issue,
+The writer checks whether recorded work still matches reality before changing
+repository files. Inspect the current issue,
 dependencies, related work, accepted decisions, affected code, tests,
 documentation, configuration, and relevant history.
 
@@ -437,7 +400,7 @@ preflight. Reuse current evidence when it already establishes a premise, and
 run a focused observation only when it is practical and materially informs
 readiness.
 
-The report must establish:
+The readiness conclusion must establish:
 
 - which issue assumptions and completion conditions are confirmed by current
   evidence;
@@ -457,6 +420,12 @@ paths and any category deliberately not opened; do not continue into solution
 design, implementation, final verification, or an unrelated maintenance
 investigation.
 
+Require a bounded independent read-only investigation before implementation
+when unresolved material design, compatibility, security or other uncertainty
+could invalidate the work. Define its question and stopping condition; it is
+not a second universal readiness gate. Settled ordinary work proceeds from the
+writer's readiness check to one independent final verification/review.
+
 The coordinating agent must inspect the evidence behind material findings. If
 the issue is stale, duplicated, incomplete, incorrectly scoped, or blocked,
 stop the affected implementation. Use `tabgrad-issue` for a proposed or
@@ -464,7 +433,7 @@ authorized correction. Do not edit code first and repair the issue afterward.
 
 ## Plan contextual validation
 
-The existing independent preflight supplies a validation plan under
+The writer supplies a validation plan, using any independent readiness findings, under
 [the affected-risk selection rule](quality.md#select-checks-from-the-affected-risks).
 It is part of its report, not another issue, agent or mandatory planning file.
 Identify the work class and exact base, affected responsibilities/consumers,
@@ -484,7 +453,9 @@ an exclusion. Preflight is not advance approval of a later implementation.
 Do not execute every conceivable check before this applicability decision, or
 launch another general agent merely to make it again.
 
-Commands are collected once per valid input state. Reused evidence identifies
+Run focused local checks and use configured CI for broader applicable suites;
+do not duplicate the full suite locally just to hand off work. Commands are
+collected once per valid input state. Reused evidence identifies
 the original observed revision/environment and why its relevant source, test,
 configuration, dependency and generated inputs remain equivalent for the new
 target. Do not present an older execution as a new one. If equivalence cannot
@@ -703,17 +674,14 @@ mutations proceed only under their current authority. Do not create a source
 edit or commit merely to correct an issue, pull request description, or check
 record.
 
-After a correction, identify the complete affected target and repeat every
-verification whose inputs or conclusions changed and the complete independent
-review of the new result. A pull-request-title-or-description-only correction
-normally invalidates review of that metadata and its claims, but not mechanical
-checks of an unchanged commit unless the corrected claim exposes missing or
-incorrect evidence. Publishing the final report as a comment after the snapshot
-was frozen does not invalidate that review; a later change to a snapshot field
-does. There is no fixed iteration count: the loop ends
-only when verification and review pass for the same state or a documented
-blocker, unavailable requirement, authority boundary, or material decision
-requires human input.
+After a correction, identify the complete resulting target and repeat checks
+whose inputs or conclusions changed. The independent reviewer evaluates that
+complete result and revisits affected findings, reusing unchanged inspection
+and command evidence. Cosmetic PR metadata edits need no new source review;
+material claim changes require review of those claims and their evidence.
+There is no fixed iteration count: continue authorized corrections until the
+gate passes or a material blocker, unavailable requirement or actual authority
+boundary needs user input.
 
 The reviewer remains read-only throughout the loop. It may explain the
 smallest required outcome but must not implement or materially design the
@@ -760,8 +728,9 @@ requires current user authority.
 
 ## Stop when required independence is unavailable
 
-If the required preflight agent is unavailable, do not begin a substantive
-agent-authored repository change. If independent verification or review is
+If risk-triggered independent investigation is required but unavailable, stop
+only the work that depends on its unresolved conclusion. Settled ordinary work
+needs no separate preflight agent. If independent final verification or review is
 unavailable afterward, preserve the work and report the missing check, but do
 not describe it as complete, ready for review, or ready to merge.
 
@@ -770,7 +739,7 @@ permission for the coordinating agent to impersonate an independent result.
 Retry only when the failure is understood and another attempt is authorized by
 the same task and safe for the environment.
 
-If substantive edits began without the required preflight, stop writing and
+If edits began without a required risk investigation, stop affected writing and
 preserve the work. Do not describe a later inspection of the edited state as a
 preflight. When the original base can be reconstructed safely in an isolated
 workspace, give that state and the original issue to an independent

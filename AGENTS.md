@@ -35,9 +35,11 @@ or a project rule applied by a skill changes. Use its bounded reasoned review;
 do not create or run a catalogue of model-behavior scenarios.
 
 Read and follow `docs/agent-workflow.md` before a coding agent begins a
-substantive repository change or delegates work to a subagent. Its independent
-preflight, single-writer, final-state verification, and evidence rules are
-required parts of the applicable skills.
+substantive repository change or delegates work to a subagent. Apply its writer
+readiness check, risk-triggered independent investigation, single-writer and
+independent final verification/review rules. Reuse valid evidence and covered
+task authority under `CONTRIBUTING.md`; routine handoffs do not require another
+approval or repeated inspection.
 
 Classify overlap with active issues, branches, and pull requests before
 performing work concurrently. Follow `docs/agent-workflow.md` to keep

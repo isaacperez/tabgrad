@@ -476,8 +476,9 @@ provides a conclusive non-applicability result.
 
 Reassess selection against the complete final diff. Changed scope, consumers,
 claims or environment assumptions invalidate affected exclusions and evidence.
-For coding agents, the existing independent preflight records the initial plan
-and the existing final verifier/reviewer validates its coverage under the
+For coding agents, the writer records the initial plan, informed by any
+risk-triggered independent investigation. The existing final verifier/reviewer
+validates its coverage under the
 [contextual validation handoff](agent-workflow.md#plan-contextual-validation).
 Do not add a routine agent just to repeat that decision.
 

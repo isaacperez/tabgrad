@@ -239,20 +239,8 @@ REQUIRED_GITIGNORE_RULES = {
     "target/",
     "test-results/",
 }
-REQUIRED_PULL_REQUEST_HEADINGS = {
-    "Linked issue",
-    "Test-driven development",
-    "Verification",
-    "Independent verification and review",
-    "Required evidence",
-    "Ready for review",
-    "Ready to merge",
-}
-REQUIRED_PULL_REQUEST_TEXT = {
-    "docs/quality.md#develop-production-behavior-test-first",
-    "docs/quality.md",
-    "explicit authorization",
-}
+REQUIRED_PULL_REQUEST_HEADINGS = {"Result", "Validation", "Risks and follow-up"}
+REQUIRED_PULL_REQUEST_TEXT = {"../CONTRIBUTING.md", "../docs/agent-workflow.md"}
 EXPECTED_RUFF_CONFIGURATION = {
     "target-version": "py311",
     "line-length": 88,
@@ -261,12 +249,9 @@ EXPECTED_RUFF_CONFIGURATION = {
 }
 REQUIRED_ISSUE_FIELDS = {
     "problem",
-    "why-it-matters",
     "expected-result",
-    "scope",
     "completion-conditions",
     "dependencies-related-work",
-    "effects-risks",
 }
 
 
@@ -278,57 +263,16 @@ class IssueFormRequirements(TypedDict):
 
 
 ISSUE_FORM_REQUIREMENTS: dict[str, IssueFormRequirements] = {
-    "bug.yml": {
-        "label": "type: bug",
-        "fields": {
-            "actual-behavior",
-            "environment",
-            "evidence",
-            "expected-behavior",
-            "reproduction",
-            "version-commit",
-            "worked-before",
-        },
+    "bug.yml": {"label": "type: bug", "fields": {"environment", "reproduction"}},
+    "feature.yml": {"label": "type: feature", "fields": {"behavior-contract"}},
+    "research.yml": {"label": "type: research", "fields": {"method-evidence"}},
+    "maintenance.yml": {
+        "label": "type: maintenance",
+        "fields": {"maintenance-evidence"},
     },
     "documentation.yml": {
         "label": "type: documentation",
-        "fields": {
-            "affected-documentation",
-            "authoritative-sources",
-            "intended-reader",
-            "unanswered-question",
-        },
-    },
-    "feature.yml": {
-        "label": "type: feature",
-        "fields": {
-            "behavior-example",
-            "deferred-behavior",
-            "public-interface",
-            "pytorch-reference",
-            "user-need",
-        },
-    },
-    "maintenance.yml": {
-        "label": "type: maintenance",
-        "fields": {
-            "affected-parts",
-            "concrete-improvement",
-            "maintenance-evidence",
-            "preserved-behavior",
-        },
-    },
-    "research.yml": {
-        "label": "type: research",
-        "fields": {
-            "alternatives",
-            "available-evidence",
-            "comparison-conditions",
-            "informed-decision",
-            "investigation",
-            "research-completeness",
-            "research-question",
-        },
+        "fields": {"documentation-context"},
     },
 }
 REQUIRED_ISSUE_FORMS = set(ISSUE_FORM_REQUIREMENTS)

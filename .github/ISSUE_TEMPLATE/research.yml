@@ -1,132 +1,50 @@
 name: Research question
-description: Gather evidence needed before Tabgrad makes a technical decision.
+description: Resolve a bounded unanswered question.
 labels:
-  - "type: research"
+- 'type: research'
 body:
-  - type: markdown
-    attributes:
-      value: |
-        Search open and closed issues and pull requests before submitting this question. Record the results under **Dependencies and related work**.
-
-        A research issue must seek evidence for a decision. It must not require a predetermined conclusion.
-
-  - type: textarea
-    id: problem
-    attributes:
-      label: Problem
-      description: Explain the unanswered question and the facts already known about it.
-    validations:
-      required: true
-
-  - type: textarea
-    id: why-it-matters
-    attributes:
-      label: Why it matters
-      description: Explain the effect on users, contributors, compatibility, correctness, performance, maintainability, or another project goal.
-    validations:
-      required: true
-
-  - type: textarea
-    id: expected-result
-    attributes:
-      label: Expected result
-      description: Describe the evidence and reasoned conclusion that the investigation must produce.
-    validations:
-      required: true
-
-  - type: textarea
-    id: scope
-    attributes:
-      label: Included and excluded work
-      description: State the affected question and project areas, explicit exclusions, and the evidence that could justify expanding the investigation.
-      placeholder: |
-        Included:
-        -
-
-        Excluded:
-        -
-    validations:
-      required: true
-
-  - type: textarea
-    id: completion-conditions
-    attributes:
-      label: Completion conditions
-      description: List the observable evidence, analysis, and recorded conclusions required to complete the issue.
-      placeholder: |
-        - [ ]
-        - [ ]
-    validations:
-      required: true
-
-  - type: textarea
-    id: dependencies-related-work
-    attributes:
-      label: Dependencies and related work
-      description: Link duplicates, related issues or pull requests, parents, sub-issues, and dependencies. Explain each relationship. If none were found, state that after searching.
-    validations:
-      required: true
-
-  - type: textarea
-    id: effects-risks
-    attributes:
-      label: Effects and risks
-      description: State known effects on public APIs, PyTorch compatibility, architecture, performance, memory, browsers, security, privacy, dependencies, and documentation. State when an item is unknown or not applicable.
-    validations:
-      required: true
-
-  - type: textarea
-    id: research-question
-    attributes:
-      label: Exact research question
-      description: Write the specific question that the investigation must answer.
-    validations:
-      required: true
-
-  - type: textarea
-    id: informed-decision
-    attributes:
-      label: Decision this research will inform
-      description: Explain the concrete architectural, implementation, compatibility, or project decision that depends on the answer.
-    validations:
-      required: true
-
-  - type: textarea
-    id: alternatives
-    attributes:
-      label: Alternatives to compare
-      description: List realistic alternatives, including the current approach when relevant. Do not include a token alternative only to justify a preferred answer.
-    validations:
-      required: true
-
-  - type: textarea
-    id: available-evidence
-    attributes:
-      label: Evidence already available
-      description: Link existing code, tests, documentation, prior experiments, standards, or authoritative external sources. Distinguish evidence from assumptions.
-    validations:
-      required: true
-
-  - type: textarea
-    id: investigation
-    attributes:
-      label: Proposed experiment or investigation
-      description: Explain how missing evidence will be produced and how another contributor can reproduce the investigation.
-    validations:
-      required: true
-
-  - type: textarea
-    id: comparison-conditions
-    attributes:
-      label: Environments, inputs, and measurements
-      description: Define the environments, representative inputs, controls, measurements, and comparison method needed for a fair result.
-    validations:
-      required: true
-
-  - type: textarea
-    id: research-completeness
-    attributes:
-      label: Required research record
-      description: Explain how the final issue will record the actual method, reproducible results, limitations, conclusion, reasoning, and consequences for Tabgrad.
-    validations:
-      required: true
+- type: markdown
+  attributes:
+    value: Search open and closed issues and PRs before submitting. Include only relevant
+      evidence and risks. Never publish credentials, private configuration or vulnerability
+      details; follow SECURITY.md for private reporting.
+- type: textarea
+  id: problem
+  attributes:
+    label: Problem
+    description: Explain the need and its concrete impact, with the facts already known.
+  validations:
+    required: true
+- type: textarea
+  id: expected-result
+  attributes:
+    label: Expected result
+    description: Describe the result, included/excluded scope, behavior to preserve and any
+      material effects, risks or unresolved decisions. Omit unrelated N/A catalogues.
+  validations:
+    required: true
+- type: textarea
+  id: completion-conditions
+  attributes:
+    label: Completion conditions
+    description: List observable conditions that demonstrate the result; avoid generic implementation
+      activities.
+  validations:
+    required: true
+- type: textarea
+  id: dependencies-related-work
+  attributes:
+    label: Dependencies and related work
+    description: Record the open/closed issue and PR search, relevant links and their relationship.
+      Identify any parent or blocking dependency; say when none was found.
+  validations:
+    required: true
+- type: textarea
+  id: method-evidence
+  attributes:
+    label: Method and available evidence
+    description: State the question and decision, realistic alternatives, evidence already
+      available, missing evidence and a reproducible comparison method with relevant inputs/environments/measurements.
+      Completion must allow an inconclusive result; preserve uncertainty.
+  validations:
+    required: true
