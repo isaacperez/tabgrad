@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { canonicalBytes, sha256 } from "./release-record-data.mjs";
 import { releaseRecord } from "./release-record.mjs";
@@ -7,6 +7,23 @@ import { publicationFile } from "./publication-admission.mjs";
 import { requireNpmCallReceipt, requireNpmConservationCall } from "./publication-effects.mjs";
 
 export const publicationHistoryLimits = Object.freeze({ files: 10000, fileBytes: 65536, bytes: 128 * 1024 * 1024 });
+
+/** Layout only: metadata admission and complete record replay remain separate. */
+export async function publicationHistoryInput(root, directory, history) {
+  if (directory !== join(root, "initial-history")) return directory;
+  requirePublication(typeof history?.runId === "string" && /^[1-9][0-9]*$/.test(history.runId),
+    "PUBLICATION_HISTORY_LAYOUT");
+  const layouts = new Map([[`tabgrad-publication-history-${history.runId}-1`, directory],
+    [`tabgrad-publication-observation-${history.runId}-1`, join(directory, "evidence")],
+    [`tabgrad-publication-completion-${history.runId}-1`, join(directory, "evidence")]]);
+  const selected = layouts.get(history.name);
+  requirePublication(selected !== undefined, "PUBLICATION_HISTORY_LAYOUT");
+  for (const path of new Set([directory, selected])) {
+    const stat = await lstat(path);
+    requirePublication(stat.isDirectory() && !stat.isSymbolicLink(), "PUBLICATION_HISTORY_LAYOUT");
+  }
+  return selected;
+}
 
 /** Data-only original evidence; never check out the control branch or execute it. */
 export async function publicationHistoryFiles(directory) {

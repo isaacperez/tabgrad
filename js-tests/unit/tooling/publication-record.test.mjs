@@ -1,17 +1,63 @@
 import assert from "node:assert/strict";
-import { mkdir, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
 import { publicationRecordFixture as fixture } from "../../fixtures/publication-record.mjs";
 import { canonicalBytes, sha256 } from "../../../scripts/release-record-data.mjs";
 import { releaseRecord } from "../../../scripts/release-record.mjs";
 import { publicationRecord } from "../../../scripts/publication-record.mjs";
+import { publicationHistoryInput, publicationHistoryFiles,
+  transferPublicationHistory } from "../../../scripts/publication-controller.mjs";
 
 
 function approvedPlan(f, plan) {
   return { ...f, plan, authorityObservation: { ...f.authorityObservation, planSha256: sha256(canonicalBytes(plan)),
     authority: plan.authority, owner: plan.owner, window: plan.window } };
 }
+
+for (const kind of ["history", "observation", "completion"]) {
+  test(`retained ${kind} layout transfers exact originals and replays the complete record`, async t => {
+    const f = await fixture(t), input = join(f.directory, "initial-history"); await mkdir(input);
+    const originals = kind === "history" ? input : join(input, "evidence");
+    if (kind !== "history") { await mkdir(originals); await writeFile(join(input, "role-result.json"), "not evidence or authority"); }
+    for (const [id, path] of Object.entries(f.config.evidence)) await copyFile(path, join(originals, `${id}.json`));
+    const selected = await publicationHistoryInput(f.directory, input, { runId: "123", name: `tabgrad-publication-${kind}-123-1` });
+    assert.equal(selected, originals);
+    const output = join(f.directory, "received"); await transferPublicationHistory(selected, output);
+    const evidence = await publicationHistoryFiles(output);
+    for (const [id, path] of Object.entries(evidence)) assert.deepEqual(await readFile(path), await readFile(f.config.evidence[id]));
+    const config = { ...f.config, evidence };
+    assert.equal((await releaseRecord({ command: "read", config, expectedHead: f.expectedHead, clock: f.clock })).head, f.expectedHead);
+    // A valid-looking subset cannot satisfy the retained Git history.
+    const missing = Object.keys(evidence).find(id => id === f.config.writerPolicy);
+    await rm(evidence[missing]); delete evidence[missing];
+    await assert.rejects(releaseRecord({ command: "read", config, expectedHead: f.expectedHead, clock: f.clock }));
+  });
+}
+
+test("initial history layout rejects foreign kind/run/attempt and absent/nonregular/symlink directory", async t => {
+  const f = await fixture(t), input = join(f.directory, "initial-history"); await mkdir(input);
+  for (const name of ["tabgrad-producer-data-123-1", "tabgrad-publication-observation-124-1", "tabgrad-publication-observation-123-2"]) {
+    await assert.rejects(publicationHistoryInput(f.directory, input, { runId: "123", name }), { code: "PUBLICATION_HISTORY_LAYOUT" });
+  }
+  const identity = { runId: "123", name: "tabgrad-publication-observation-123-1" }, path = join(input, "evidence");
+  await assert.rejects(publicationHistoryInput(f.directory, input, identity), { code: "ENOENT" });
+  await writeFile(path, "not a directory");
+  await assert.rejects(publicationHistoryInput(f.directory, input, identity), { code: "PUBLICATION_HISTORY_LAYOUT" });
+  await rm(path); await symlink(f.directory, path);
+  await assert.rejects(publicationHistoryInput(f.directory, input, identity), { code: "PUBLICATION_HISTORY_LAYOUT" });
+});
+
+test("selected wrapper originals retain filename, hash and regular-file checks", async t => {
+  const f = await fixture(t), input = join(f.directory, "initial-history"), evidence = join(input, "evidence");
+  await mkdir(evidence, { recursive: true });
+  const selected = await publicationHistoryInput(f.directory, input, { runId: "123", name: "tabgrad-publication-completion-123-1" });
+  const [id, original] = Object.entries(f.config.evidence)[0], path = join(evidence, `${id}.json`);
+  await writeFile(join(evidence, "foreign.json"), "foreign"); await assert.rejects(publicationHistoryFiles(selected));
+  await rm(join(evidence, "foreign.json")); await writeFile(path, "changed"); await assert.rejects(publicationHistoryFiles(selected));
+  await rm(path); await symlink(original, path); await assert.rejects(publicationHistoryFiles(selected));
+  await rm(path); await mkdir(path); await assert.rejects(publicationHistoryFiles(selected));
+});
 
 test("actual Git: published intent/observation bind full approved plan and retained evidence", async context => {
   const f = await fixture(context);
@@ -118,4 +164,12 @@ test("actual Git: authenticated late outcome is conserved but does not authorize
   assert.equal(await transferPublicationHistory(originals, backup), Object.keys(result.config.evidence).length);
   await writeFile(join(backup, `${f.plan.owner}.json`), "substituted");
   await assert.rejects(transferPublicationHistory(originals, backup));
+});
+
+
+test("later role evidence input is unchanged and never interpreted as an initial wrapper", async () => {
+  const root = "/owned/publication", input = join(root, "admission/evidence");
+  assert.equal(await publicationHistoryInput(root, input, null), input);
+  const other = join(root, "other/initial-history");
+  assert.equal(await publicationHistoryInput(root, other, null), other);
 });
