@@ -258,6 +258,14 @@ export async function composeReleaseInputs(root, environment, { clock = Date.now
   return { plan_sha256: prepared.planSha256, mode: "oidc" };
 }
 
+/** Exact single-line Actions handoff; data values are not shell or workflow source. */
+export async function writeReleasePreparationOutputs(result, environment) {
+  if (environment.GITHUB_OUTPUT) for (const [key, value] of Object.entries(result)) {
+    requirePublication(/^[a-z_][a-z0-9_]*$/.test(key) && typeof value === "string" && !/[\r\n]/.test(value), "PUBLICATION_OUTPUT_INVALID");
+    await appendFile(environment.GITHUB_OUTPUT, `${key}=${value}\n`);
+  }
+}
+
 async function main() {
   const [command, root] = process.argv.slice(2);
   requirePublication(process.argv.length === 4 && ["select", "compose"].includes(command), "PUBLICATION_PREPARATION_USAGE");
@@ -271,10 +279,7 @@ async function main() {
   process.env.GIT_ASKPASS = fileURLToPath(new URL("./release-record-askpass.mjs", import.meta.url));
   if (process.env.GH_TOKEN) process.env.GITHUB_TOKEN = process.env.GH_TOKEN;
   const result = command === "select" ? await selectReleaseInputs(root, process.env) : await composeReleaseInputs(root, process.env);
-  if (process.env.GITHUB_OUTPUT) for (const [key, value] of Object.entries(result)) {
-    requirePublication(/^[a-z_]+$/.test(key) && typeof value === "string" && !/[\r\n]/.test(value), "PUBLICATION_OUTPUT_INVALID");
-    await appendFile(process.env.GITHUB_OUTPUT, `${key}=${value}\n`);
-  }
+  await writeReleasePreparationOutputs(result, process.env);
   process.stdout.write(`${JSON.stringify(result)}\n`);
 }
 

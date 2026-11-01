@@ -6,7 +6,7 @@ import { readFile, writeFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { releasePreparationFixture } from "../../fixtures/release-preparation.mjs";
 import { selectReleaseInputs, composeReleaseInputs, releasePreparationPages, selectReleaseProducer,
-  selectReleaseHistory, releaseNotes } from "../../../scripts/prepare-release.mjs";
+  selectReleaseHistory, releaseNotes, writeReleasePreparationOutputs } from "../../../scripts/prepare-release.mjs";
 import { publicationRegistry } from "../../../scripts/publication-registry.mjs";
 import { canonicalBytes, sha256 } from "../../../scripts/release-record-data.mjs";
 
@@ -149,11 +149,12 @@ try { console.log(JSON.stringify(await publicationRole(process.argv[2], process.
 catch (error) { console.log(JSON.stringify({code:error.code})); process.exitCode=1; }
 `);
   const env = { PATH: process.env.PATH, ...f.environment, GH_TOKEN: "synthetic-read-token",
-    TABGRAD_PUBLICATION_PLAN_SHA256: result.plan_sha256, GITHUB_STEP_SUMMARY: join(f.directory, "summary.md") };
+    TABGRAD_PUBLICATION_PLAN_SHA256: result.plan_sha256, GITHUB_STEP_SUMMARY: join(f.directory, "summary.md"), GITHUB_OUTPUT: join(f.directory, "actions-output") };
   const precheck = spawnSync(process.execPath, [wrapper, "precheck", f.root], { env, encoding: "utf8", timeout: 10000 });
   assert.equal(precheck.status, 0, precheck.stdout + precheck.stderr);
   assert.equal(JSON.parse(precheck.stdout).status, "unapproved-precheck");
   assert.ok((await readFile(env.GITHUB_STEP_SUMMARY, "utf8")).includes(result.plan_sha256));
+  assert.ok((await readFile(env.GITHUB_OUTPUT, "utf8")).split("\n").includes(`plan_sha256=${result.plan_sha256}`));
   const admit = spawnSync(process.execPath, [wrapper, "admit", f.root], { env: { ...env, GITHUB_JOB: "admit" }, encoding: "utf8", timeout: 10000 });
   assert.equal(admit.status, 1, admit.stdout + admit.stderr);
   assert.equal(JSON.parse(admit.stdout).code, "PUBLICATION_ENVIRONMENT_REVIEW_INVALID");
@@ -190,4 +191,17 @@ test("pagination accepts a complete collection at its exact cap and rejects inco
     return { total_count: 10001, artifacts: Array.from({ length: 100 }, (_, i) => ({ id: i + 1 })) };
   } }, "/artifacts", "artifacts"), { code: "PUBLICATION_PREPARATION_PAGINATION" });
   assert.equal(calls, 1);
+});
+
+
+test("preparation writes its actual SHA-256 output name and rejects unsafe names or values", async t => {
+  const f = await releasePreparationFixture(t), path = join(f.directory, "preparation-output");
+  const digest = "1".repeat(64);
+  await writeReleasePreparationOutputs({ plan_sha256: digest, mode: "oidc" }, { GITHUB_OUTPUT: path });
+  assert.equal(await readFile(path, "utf8"), `plan_sha256=${digest}\nmode=oidc\n`);
+  for (const result of [{ "bad\nname": "value" }, { "": "value" }, { "1name": "value" },
+    { "bad-name": "value" }, { key: "value\ninjected=value" }, { key: "value\r" }, { key: 256 }]) {
+    await assert.rejects(writeReleasePreparationOutputs(result, { GITHUB_OUTPUT: path }), { code: "PUBLICATION_OUTPUT_INVALID" });
+  }
+  assert.equal(await readFile(path, "utf8"), `plan_sha256=${digest}\nmode=oidc\n`);
 });
