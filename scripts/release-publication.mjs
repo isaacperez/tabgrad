@@ -599,10 +599,10 @@ if (process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(
       await savePublicationJson(join(root, "public-output/role-result.json"), result);
     } catch { result = { ...result, status: "failed", conservation: "unconfirmed" }; process.exitCode = 1; }
   }
-  if (process.argv[2] === "consume" && process.env.TABGRAD_PUBLICATION_ENABLED === "true"
+  if (process.argv.length === 4 && process.argv[2] === "consume" && process.env.TABGRAD_PUBLICATION_ENABLED === "true"
     && process.env.TABGRAD_PUBLICATION_CONFIRMATION === "release-publication") {
-    const directory = join(resolve(process.argv[3]), "public-output");
     try {
+      const directory = join(resolve(process.argv[3]), "public-output");
       const stat = await lstat(directory);
       requirePublication(stat.isDirectory() && !stat.isSymbolicLink(), "PUBLICATION_OUTPUT_INVALID");
       await savePublicationJson(join(directory, "role-result.json"), result);

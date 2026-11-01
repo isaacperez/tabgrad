@@ -67,3 +67,11 @@ test("consumer CLI retains only a safe failure result in its existing enabled ou
   assert.deepEqual(JSON.parse(raw), JSON.parse(active.stdout));
   assert.equal(JSON.parse(raw).status, "failed");
 });
+
+test("enabled consumer CLI rejects missing root with bounded JSON and no private stack", () => {
+  const result = spawnSync(process.execPath, [entry, "consume"], { encoding: "utf8", env: {
+    TABGRAD_PUBLICATION_ENABLED: "true", TABGRAD_PUBLICATION_CONFIRMATION: "release-publication",
+  } });
+  assert.equal(result.status, 1); assert.equal(result.stderr, "");
+  assert.deepEqual(JSON.parse(result.stdout), { schemaVersion: 1, status: "failed", code: "PUBLICATION_USAGE" });
+});
