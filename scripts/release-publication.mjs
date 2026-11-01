@@ -81,6 +81,7 @@ async function request(root, environment, human = false, conservation = false, c
   "PUBLICATION_RECIPE_RUNTIME");
   const policy = admitPublicationPolicy(Buffer.from(environment.TABGRAD_RELEASE_POLICY_JSON ?? ""),
     environment.TABGRAD_RELEASE_POLICY_SHA256);
+  requirePublication(policy.schemaVersion === 1, "PUBLICATION_EXECUTION_REQUIRED");
   const evidence = Buffer.from(environment.TABGRAD_RELEASE_QUALIFICATION_JSON ?? "");
   requirePublication(sha256(evidence) === policy.operationalEvidence.sha256,
     "PUBLICATION_OPERATIONAL_EVIDENCE_UNAVAILABLE");

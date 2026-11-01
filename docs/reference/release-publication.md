@@ -72,7 +72,7 @@ is 48 KB, distinct from the local policy parser's
 65,536-byte ceiling. A locally valid document may therefore be too large for
 this CI transport; do not split, truncate or substitute its admitted bytes.
 
-The policy parser is closed; it binds repository/owner IDs, exact recipe,
+The v1 policy parser is closed; it binds repository/owner IDs, exact recipe,
 opaque responsible-owner mappings, environment snapshot, finite operational
 qualification, optional human-controller binary identity, enrolled Git control
 location/root/writer and an identified initial history artifact. Its `history`
@@ -80,6 +80,64 @@ fields are `id`, `sha256`, canonical `expiresAt`, `runId`, `revision` and `name`
 The metadata reader checks that artifact's repository, original run/source,
 digest, size, expiry and name before transfer. Configuration hashes alone do not
 authenticate the party which installed them.
+
+## Stable profile and execution contract
+
+`publication-authority.mjs` owns both explicit schema epochs. The closed-plan
+role entry uses v1; v2 requires an execution controller calling the resolver
+and corroborator below. Supplying a v2 profile alone to the closed-plan role
+fails with `PUBLICATION_EXECUTION_REQUIRED`. These APIs grant no activation or
+publication authority and do not write secrets.
+
+`admitPublicationPolicy(bytes, expectedSha256, now)` checks the independently
+enrolled digest and a closed schema. V2 preserves v1's `repositoryId`, `ownerId`,
+`workflow`, `writerPolicySha256`, `maintainers`, `environment`,
+`operationalEvidence`, `humanControllerSha256` and `record`. It replaces
+`recipeRevision` and `history` with `clients`: four admitted SHA-256 pins named
+`npm`, `controller`, `provenance` and `trustRoot`. Unknown/missing fields or
+another epoch reject. The operational-evidence hash/expiry still identifies
+independently admitted reusable qualification; fresh execution observations
+cannot update that baseline or its lifetime.
+
+`resolvePublicationExecution(profile, execution, plan, context, now,
+conservation)` checks the exact plan/context/client association and returns an
+effective v2 policy with its recipe/history values. It supplies no approval.
+The execution schema is closed:
+
+| Field | Meaning |
+| --- | --- |
+| `schemaVersion` | `1`, independently of profile epoch `2` |
+| `planSha256` | Canonical exact plan, which already includes publisher recipe and candidate |
+| `publisher` | Exact `revision`, `runId`, `attempt`; manual main attempt one |
+| `sourceChecks` | One `{revision, runId, attempt}` per distinct candidate/publisher revision |
+| `history` | Exact six-value original carrier metadata; one of the three run-bound layouts below |
+| `recordHead` | Current enrolled record head before initial admission |
+| `physical` | `null` when GPU is not declared; otherwise `{issue, commentId, sha256}` for the enrolled maintainer's original pre-publication report message |
+
+`corroboratePublicationExecution` queries the exact source-check runs and all
+five configured jobs, refusing incomplete/foreign/failed records. Only the
+publication-client job may be explicitly skipped; consistency/runtime/browser
+jobs must succeed, with their configured applicability semantics. It checks
+the physical comment's original hash, repository/issue and maintainer-to-owner
+mapping. Its prefix is `tabgrad-release-qualification PRODUCER_RUN/1
+INVENTORY_SHA256`, followed by a newline and the collected report. This
+authenticates transport, not local execution: input admission separately
+checks supplied-archive profiles, candidate identity and exact original CPU
+evidence. The report does not require the final plan hash, avoiding a cycle.
+
+Initial admission also compares the current record head. Later roles may see
+their own journal updates; the existing recorder and handoff govern those
+effects. Recheck time after asynchronous observations. Conservation checks
+the same original plan/context and still-valid operational qualification,
+without requiring its publication window to remain open or mutable source/GPU
+observations to remain available. It authorizes only conserving an existing
+call, never another effect.
+
+Neither resolver nor corroborator replaces `observePublicationPrecheck`'s
+live comparison with enrolled protections or `observePublicationAuthority`'s
+actual protected approval query. A self-supplied snapshot, matching hash or
+`approved=true` cannot satisfy that gate. Rejected/changed reviewers, bypass or
+branch protection still stop the protected job before it can be created.
 
 ## Prepare the initial history handoff
 

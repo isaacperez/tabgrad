@@ -241,6 +241,42 @@ channel/dist-tag and visibility, including package/configuration/environment
 overrides; any visibility change is an approved effect. Publish only the
 identified archive, never a workspace/tree selected by directory defaults.
 
+### Separate enrolled trust from execution facts
+
+The stable-profile admission contract keeps repository/owner identity,
+maintainers, protection snapshot, workflow paths, record root/writer, qualified
+clients and trust roots in independently enrolled configuration. Per-release
+source/recipe revisions, successful source checks, producer/run/attempt,
+original artifacts and current history are derived execution facts. A hash of
+those generated facts is not their authority. Corroborate them through the
+provider and original bytes, and compare live protections with the enrolled
+baseline before creating the protected environment job.
+
+The protected approval binds the exact generated plan, reviewed main recipe,
+candidate, effects and run/attempt. It replaces the separate per-release recipe
+pin; it does not enroll new actors, roots, clients or protections. Qualification
+validity remains independently bounded and is never renewed by generating a
+snapshot. Keep the producer/signing and publication starts separate, without
+adding an automatic trigger, secret writer or orchestration privilege.
+
+Select an exact eligible producer for the reviewed version/source. Reject
+ambiguity or require an explicit already identified run; never infer the latest
+successful run is intended. Version is checked against committed metadata and
+notes rather than edited into an archive. Physical GPU qualification, where
+declared, must still come from the admitted maintainer/device path for the
+exact candidate. A later installed-registry receipt cannot substitute for
+pre-publication supplied-archive evidence.
+
+The closed-plan v1 epoch remains explicit for existing/manual recovery. Stable
+v2 resolution is unapproved until the provider-correlated protected review;
+neither epoch is silently converted into the other. Existing-call conservation
+retains its separate time boundary and must not become a new publication.
+The [publication reference](reference/release-publication.md#stable-profile-and-execution-contract)
+defines the closed schemas and owner-level functions. These ownership and
+admission choices implement the accepted decision in
+[#391](https://github.com/isaacperez/tabgrad/issues/391); source controls alone
+establish neither actual service enrollment nor a qualified delivery.
+
 Before npm, compare actual package/version/channel and GitHub tag/release/draft
 state with the plan's expected starting state. Use sufficient authorized
 visibility, paginate where necessary and resolve tags to their commits. A
