@@ -433,6 +433,25 @@ class RepositoryCheckTests(unittest.TestCase):
                         self.assertEqual(len(failures), 1)
                         self.assertIn(name, failures[0].message)
 
+    def test_release_preparation_requires_step_local_private_inputs(self) -> None:
+        for command in CHECKS.PUBLICATION_PREPARATION_COMMANDS:
+            for missing in CHECKS.PUBLICATION_PRIVATE_INPUTS:
+                environment = {
+                    key: f"${{{{ secrets.{key} }}}}"
+                    for key in CHECKS.PUBLICATION_PRIVATE_INPUTS
+                    if key != missing
+                }
+                document: dict[object, object] = {
+                    "jobs": {
+                        "precheck": {"steps": [{"run": command, "env": environment}]}
+                    }
+                }
+                failures = CHECKS.check_publication_private_inputs(
+                    CHECKS.PUBLICATION_PATH, document
+                )
+                self.assertEqual(len(failures), 1)
+                self.assertIn(missing, failures[0].message)
+
     def test_publication_private_inputs_cannot_reach_other_steps_or_broader_scopes(
         self,
     ) -> None:

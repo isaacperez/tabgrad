@@ -11,6 +11,7 @@ import { publicationRegistry, admitPublishedConsumers } from "./publication-regi
 import { publicationRecord } from "./publication-record.mjs";
 import { admitPublicationPolicy, observePublicationPrecheck, observePublicationAuthority,
   observePublicationConservation, observePublicationProducer, publicationApprovalComment } from "./publication-authority.mjs";
+import { resolvePublicationExecution, corroboratePublicationExecution } from "./publication-authority.mjs";
 import { admitPublicationInputs, publicationFile, recheckPublicationInputs } from "./publication-admission.mjs";
 import { identifyPublicationClient, publicationEnvironment, runPublicationProcess } from "./publication-client.mjs";
 import { publishNpmArchive } from "./publication-npm.mjs";
@@ -65,12 +66,17 @@ export function publicationContext(environment) {
 async function request(root, environment, human = false, conservation = false, command) {
   requirePublication(isAbsolute(root) && (human || (environment.TABGRAD_PUBLICATION_ENABLED === "true"
     && environment.TABGRAD_PUBLICATION_CONFIRMATION === "release-publication")), "PUBLICATION_DISABLED");
-  const raw = environment.TABGRAD_PUBLICATION_PLAN_JSON === undefined
-    ? await publicationFile(join(root, "input/plan.json"), 65536)
-    : Buffer.from(environment.TABGRAD_PUBLICATION_PLAN_JSON);
-  requirePublication(raw.length <= 65536 && process.execArgv.length === 0
+  requirePublication(process.execArgv.length === 0
     && ["NODE_OPTIONS", "NODE_PATH", "NODE_EXTRA_CA_CERTS", "NODE_USE_ENV_PROXY"].every(key => !environment[key])
     && environment.NODE_TLS_REJECT_UNAUTHORIZED !== "0", "PUBLICATION_PROCESS_PROFILE");
+  const enrolled = admitPublicationPolicy(Buffer.from(environment.TABGRAD_RELEASE_POLICY_JSON ?? ""),
+    environment.TABGRAD_RELEASE_POLICY_SHA256);
+  const inputDirectory = enrolled.schemaVersion === 1 || ["precheck", "admit", "human"].includes(command)
+    ? join(root, "input") : join(root, "admission/input");
+  const raw = !environment.TABGRAD_PUBLICATION_PLAN_JSON
+    ? await publicationFile(join(inputDirectory, "plan.json"), 65536)
+    : Buffer.from(environment.TABGRAD_PUBLICATION_PLAN_JSON);
+  requirePublication(raw.length <= 65536, "PUBLICATION_PROCESS_PROFILE");
   const parsed = JSON.parse(raw);
   const plan = validatePublicationPlan(parsed, conservation ? Date.parse(parsed.window?.start) : Date.now());
   const planSha256 = environment.TABGRAD_PUBLICATION_PLAN_SHA256;
@@ -79,9 +85,13 @@ async function request(root, environment, human = false, conservation = false, c
     && environment.GITHUB_RUN_ATTEMPT === "1" && environment.GITHUB_SHA === plan.publisher.revision
     && process.version === "v22.12.0" && sha256(await readFile(process.execPath)) === plan.publisher.githubClientSha256),
   "PUBLICATION_RECIPE_RUNTIME");
-  const policy = admitPublicationPolicy(Buffer.from(environment.TABGRAD_RELEASE_POLICY_JSON ?? ""),
-    environment.TABGRAD_RELEASE_POLICY_SHA256);
-  requirePublication(policy.schemaVersion === 1, "PUBLICATION_EXECUTION_REQUIRED");
+  let context = publicationContext(environment), execution, policy = enrolled;
+  if (enrolled.schemaVersion === 2) {
+    requirePublication(!human, "PUBLICATION_MIXED_EPOCHS");
+    try { execution = JSON.parse(await publicationFile(join(inputDirectory, "execution.json"), 65536)); }
+    catch { throw new PublicationError("PUBLICATION_EXECUTION_REQUIRED"); }
+    policy = resolvePublicationExecution(enrolled, execution, plan, context, Date.now(), conservation);
+  } else requirePublication(environment.TABGRAD_PUBLICATION_PLAN_JSON !== "", "PUBLICATION_PLAN_IDENTITY");
   const evidence = Buffer.from(environment.TABGRAD_RELEASE_QUALIFICATION_JSON ?? "");
   requirePublication(sha256(evidence) === policy.operationalEvidence.sha256,
     "PUBLICATION_OPERATIONAL_EVIDENCE_UNAVAILABLE");
@@ -89,7 +99,6 @@ async function request(root, environment, human = false, conservation = false, c
     "PUBLICATION_QUALIFICATION_WINDOW");
   requirePublication(policy.record.protocol === "https"
     && policy.record.location === `https://github.com/${plan.publisher.repository}.git`, "PUBLICATION_RECORD_LOCATION");
-  let context = publicationContext(environment);
   if (human) {
     const rawAdmission = await publicationFile(join(root, "admission/admission.json"), 4 * 1024 * 1024);
     requirePublication(sha256(rawAdmission) === environment.TABGRAD_HUMAN_ADMISSION_SHA256
@@ -110,22 +119,29 @@ async function request(root, environment, human = false, conservation = false, c
   const activeJobName = publicationRoleJob(command);
   const api = publicationGithub({ repository: plan.publisher.repository, token: environment.GH_TOKEN,
     readOnly: !writer, draftVisibility: writer ? "qualified-workflow-writer" : null, signal: observationController.signal });
+  if (execution) await corroboratePublicationExecution({ api, policy, execution, plan, context,
+    initial: command === "precheck" || command === "admit", conservation });
   const fresh = async () => {
+    if (execution) await corroboratePublicationExecution({ api, policy, execution, plan, context });
     const result = await observePublicationAuthority({ api, plan, planSha256, policy, context, activeJobName });
     await observePublicationProducer(api, plan);
     await api.prerequisites(plan);
     requirePublication(Date.now() < Date.parse(plan.window.deadline), "PUBLICATION_WINDOW_EXPIRED");
     return result;
   };
-  return { plan, planSha256, policy, context, activeJobName, api, fresh,
+  return { plan, planSha256, policy, context, activeJobName, api, fresh, inputDirectory,
     cancelObservations: () => observationController.abort(),
     conserve: () => observePublicationConservation({ api, plan, policy, context, activeJobName }) };
 }
 
-async function stageRequest(root, environment, plan) {
+async function stageRequest(root, environment, plan, retained) {
   await mkdir(join(root, "input"), { recursive: true, mode: 0o700 });
-  for (const [name, bytes] of [["plan.json", canonicalBytes(plan)], ["notes.md", Buffer.from(environment.TABGRAD_PUBLICATION_NOTES ?? "")],
-    ["qualification.json", Buffer.from(environment.TABGRAD_PUBLICATION_QUALIFICATION_JSON ?? "")]]) {
+  const notes = retained ? await publicationFile(join(retained, "notes.md"), 1024 * 1024)
+    : environment.TABGRAD_PUBLICATION_NOTES ?? "";
+  const qualification = retained ? await publicationFile(join(retained, "qualification.json"), 4 * 1024 * 1024)
+    : environment.TABGRAD_PUBLICATION_QUALIFICATION_JSON ?? "";
+  for (const [name, bytes] of [["plan.json", canonicalBytes(plan)], ["notes.md", Buffer.from(notes)],
+    ["qualification.json", Buffer.from(qualification)]]) {
     await stagePublicationFile(join(root, "input", name), bytes);
   }
   await stagePublicationFile(join(root, "input/release-checksums.txt"), Buffer.from(publicationChecksums(plan)));
@@ -501,18 +517,21 @@ export async function publicationRole(command, root, environment = process.env) 
   requirePublication(commands.includes(command), "PUBLICATION_USAGE");
   const state = await request(root, environment, command === "human", command === "observe", command);
   const { plan } = state;
-  if (command !== "human" && !metadataCommands.includes(command)) await stageRequest(root, environment, plan);
+  if (command !== "human" && !metadataCommands.includes(command)) await stageRequest(root, environment, plan,
+    state.policy.schemaVersion === 2 ? state.inputDirectory : null);
   await mkdir(join(root, "public-output"), { recursive: true, mode: 0o700 });
   if (command === "precheck") {
     await observePublicationPrecheck(state); await observePublicationProducer(state.api, plan); await state.api.prerequisites(plan);
     requirePublication(plan.producer.verification.identity.workflowPath === producerWorkflow, "PUBLICATION_PRODUCER_PROFILE");
-    await output({ data_id: plan.producer.data.id, proofs_id: plan.producer.proofs.id,
+    await output({ plan_sha256: state.planSha256, data_id: plan.producer.data.id, proofs_id: plan.producer.proofs.id,
       producer_run: plan.producer.verification.identity.runId, verification_id: plan.producer.corroboration.id,
       history_id: state.policy.history.id, history_run: state.policy.history.runId,
       mode: plan.npm.mode, approval: publicationApprovalComment(plan, state.planSha256, state.context) }, environment);
     if (environment.GITHUB_STEP_SUMMARY) await appendFile(environment.GITHUB_STEP_SUMMARY,
       `## Publication awaiting separate approval\n\nCandidate: ${plan.candidate.name}@${plan.candidate.version}\n\n`
-      + `Plan SHA-256: \`${state.planSha256}\`\n\nReview the approved original files and use exactly this comment in the environment review:\n\n`
+      + `Source: \`${plan.candidate.sourceRevision}\`\n\nRecipe: \`${plan.publisher.revision}\`\n\n`
+      + `Deadline: ${plan.window.deadline}\n\nPlan SHA-256: \`${state.planSha256}\`\n\n`
+      + `Review the generated public input artifact and original producer files; use exactly this comment in the environment review:\n\n`
       + `\`${publicationApprovalComment(plan, state.planSha256, state.context)}\`\n`);
     return { status: "unapproved-precheck", planSha256: state.planSha256 };
   }
@@ -547,6 +566,8 @@ export async function publicationRole(command, root, environment = process.env) 
     for (const name of ["plan.json", "notes.md", "qualification.json", "producer-evidence.json", "release-checksums.txt"]) {
       await cp(join(root, "input", name), join(root, "public-output/input", name), { errorOnExist: true, force: false });
     }
+    if (state.policy.schemaVersion === 2) await cp(join(root, "input/execution.json"), join(root, "public-output/input/execution.json"),
+      { errorOnExist: true, force: false });
     await output({ admission_sha: sha256(canonicalBytes(admission)), record_head: record.head }, environment);
     return { status: "admitted", planSha256: state.planSha256, npm: handoff === null ? "already-confirmed" : plan.npm.mode };
   }

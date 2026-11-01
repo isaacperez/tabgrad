@@ -84,6 +84,17 @@ export function publicationRegistry({ registry = "https://registry.npmjs.org/", 
     }
     return { version, channel };
   }
+  /** Ordinary OIDC intent needs a visible existing namespace and an unused version. */
+  async function startingState(name, version, channel) {
+    const result = await json(encodeURIComponent(name).replace(/^%40/, "@"));
+    const pack = result.value;
+    requirePublication(result.status === 200 && pack?.name === name && pack.versions !== null
+      && typeof pack.versions === "object" && !Array.isArray(pack.versions), "PUBLICATION_REGISTRY_VISIBILITY_UNKNOWN");
+    requirePublication(!Object.hasOwn(pack.versions, version) && !Object.hasOwn(pack.time ?? {}, version)
+      && pack.time?.unpublished?.versions?.includes(version) !== true, "PUBLICATION_REGISTRY_CONFLICT");
+    return { package: "existing", version: "absent", channel: pack["dist-tags"]?.[channel] ?? null };
+  }
+
   /** Only after a known successful call; never retries a write or a contradiction. */
   async function waitForPublished(plan, deadline, { signal } = {}) {
     const remaining = deadline - clock();
@@ -125,7 +136,7 @@ export function publicationRegistry({ registry = "https://registry.npmjs.org/", 
     return { status: "passed", originalProofSha256: plan.producer.archiveProofSha256,
       associatedEnvelopeSha256: observations.at(-1).sha256 };
   }
-  return { inspect, waitForPublished, associateOriginalProof, observations };
+  return { inspect, startingState, waitForPublished, associateOriginalProof, observations };
 }
 
 /** Admit same-artifact consumer reports received from the separate read-only role. */

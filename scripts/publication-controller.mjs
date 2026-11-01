@@ -119,13 +119,17 @@ export async function readPublicationJson(path, limit = 65536) {
   return JSON.parse(raw);
 }
 
+export function publicationObservationPrefix(plan, planSha256, context, kind) {
+  return `tabgrad-release-${kind} ${planSha256} ${plan.operation} ${context.runId}/${context.attempt}\n`;
+}
+
 export async function pendingPublicationObservation({ api, context, policy, plan, planSha256, issue, kind = "bootstrap", clock = Date.now,
   pause = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds)) }) {
   // An authenticated maintainer publishes the safe receipt only after reviewing
   // the actual human client's originals; a destination match is insufficient.
   requirePublication(typeof issue === "string" && /^[1-9][0-9]*$/.test(issue), "PUBLICATION_BOOTSTRAP_RECEIPT_LOCATION");
   requirePublication(["bootstrap", "bootstrap-ready", "gpu-consumers"].includes(kind), "PUBLICATION_OBSERVATION_KIND");
-  const prefix = `tabgrad-release-${kind} ${planSha256} ${plan.operation} ${context.runId}/${context.attempt}\n`;
+  const prefix = publicationObservationPrefix(plan, planSha256, context, kind);
   while (clock() < Date.parse(plan.window.deadline)) {
     const matches = (await api.pages(`/issues/${issue}/comments`)).filter(comment => comment.body?.startsWith(prefix)
       && policy.maintainers.some(actor => actor.ownerSha256 === plan.owner && actor.id === String(comment.user?.id))
