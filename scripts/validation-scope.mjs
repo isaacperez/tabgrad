@@ -53,8 +53,8 @@ export function classifyValidationPaths(paths) {
  * @returns {ValidationScope}
  */
 export function selectValidationScope({ event, base, head, repository = process.cwd() }) {
-  if (event !== "pull_request") return fullScope("integrated-or-unknown-event");
-  const commit = /^[a-f0-9]{40}$/;
+  if (event !== "pull_request" && event !== "push") return fullScope("manual-or-unknown-event");
+  const commit = /^(?!0{40}$)[a-f0-9]{40}$/;
   if (typeof base !== "string" || typeof head !== "string" || !commit.test(base) || !commit.test(head)) {
     return fullScope("unavailable-comparison");
   }

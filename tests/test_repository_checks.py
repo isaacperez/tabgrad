@@ -1256,6 +1256,11 @@ class RepositoryCheckTests(unittest.TestCase):
                 "        if: false\n",
             ),
             (
+                "push comparison missing its actual event base",
+                "          TABGRAD_VALIDATION_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}\n",
+                "          TABGRAD_VALIDATION_BASE: ${{ github.event.pull_request.base.sha }}\n",
+            ),
+            (
                 "candidate different from the checked-out CI merge state",
                 "          TABGRAD_VALIDATION_HEAD: ${{ github.sha }}\n",
                 "          TABGRAD_VALIDATION_HEAD: ${{ github.event.pull_request.head.sha }}\n",

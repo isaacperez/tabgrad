@@ -677,7 +677,7 @@ EXPECTED_REPOSITORY_CHECKS_WORKFLOW = {
                     "id": "validation",
                     "env": {
                         "TABGRAD_VALIDATION_EVENT": "${{ github.event_name }}",
-                        "TABGRAD_VALIDATION_BASE": "${{ github.event.pull_request.base.sha }}",
+                        "TABGRAD_VALIDATION_BASE": "${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}",
                         "TABGRAD_VALIDATION_HEAD": "${{ github.sha }}",
                     },
                     "run": CI_SCOPE_COMMAND,
