@@ -1,9 +1,11 @@
 import ast
 import hashlib
 import json
+import re
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any
 from unittest import mock
 
 import yaml
@@ -13,7 +15,56 @@ from scripts import check_repository as CHECKS
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "check_repository.py"
 
 
+def publication_job_eligible(
+    job: dict[str, Any], results: dict[str, str], *, cancelled: bool = False
+) -> bool:
+    """Evaluate only the release recipe's conjunction profile, not arbitrary Actions."""
+    condition = job.get("if")
+    if condition is None:
+        # GitHub's implicit success propagates skipped/failed ancestors too.
+        return not cancelled and all(value == "success" for value in results.values())
+    if not isinstance(condition, str) or not condition.startswith("${{ "):
+        raise ValueError("unsupported release condition")
+    condition = " ".join(condition.split())
+    terms = condition.removeprefix("${{ ").removesuffix(" }}").split(" && ")
+    values: list[bool] = []
+    for term in terms:
+        if term == "always()":
+            values.append(True)
+        elif term == "!cancelled()":
+            values.append(not cancelled)
+        elif match := re.fullmatch(r"needs\.([a-z_]+)\.result == 'success'", term):
+            values.append(results.get(match[1]) == "success")
+        else:
+            raise ValueError("unsupported release condition term")
+    if "always()" not in terms and "!cancelled()" not in terms:
+        values.append(all(value == "success" for value in results.values()))
+    return all(values)
+
+
 class RepositoryCheckTests(unittest.TestCase):
+    def publication_workflow(self) -> dict[str, Any]:
+        loader = CHECKS.RepositoryYamlLoader
+        assert loader is not None
+        return yaml.load(
+            (SCRIPT.parents[1] / CHECKS.PUBLICATION_PATH).read_text(),
+            Loader=loader,
+        )
+
+    def registered_publication_failures(
+        self, document: dict[str, Any]
+    ) -> list[CHECKS.Failure]:
+        registered = hashlib.sha256(
+            json.dumps(
+                document, sort_keys=True, separators=(",", ":"), allow_nan=False
+            ).encode()
+        ).hexdigest()
+        state = CHECKS.YamlRepositoryState(
+            True, {CHECKS.PUBLICATION_PATH: document}, frozenset(), ()
+        )
+        with mock.patch.object(CHECKS, "EXPECTED_PUBLICATION_SHA256", registered):
+            return CHECKS.check_workflow_security(state)
+
     def write_issue_form(
         self,
         root: Path,
@@ -142,6 +193,99 @@ class RepositoryCheckTests(unittest.TestCase):
             target.write_bytes((SCRIPT.parents[1] / CHECKS.HISTORY_PATH).read_bytes())
             self.assertEqual(CHECKS.check_ci_workflow(root), [])
 
+    def test_publication_post_jobs_run_after_unused_authentication_is_skipped(
+        self,
+    ) -> None:
+        jobs = self.publication_workflow()["jobs"]
+        for mode, actors in {
+            "bootstrap": {"npm": "skipped", "bootstrap": "success", "gate": "success"},
+            "oidc": {"npm": "success", "bootstrap": "skipped", "gate": "success"},
+            "observe": {"npm": "skipped", "bootstrap": "skipped", "gate": "skipped"},
+        }.items():
+            results: dict[str, str] = dict.fromkeys(
+                ("precheck", "admit", "observe", "consume"), "success"
+            )
+            results.update(actors)
+            for name in ("consume", "complete"):
+                with self.subTest(mode=mode, job=name):
+                    self.assertTrue(publication_job_eligible(jobs[name], results))
+
+    def test_publication_post_jobs_reject_unsuccessful_prerequisites_and_cancellation(
+        self,
+    ) -> None:
+        jobs = self.publication_workflow()["jobs"]
+        prerequisites = {
+            "consume": {"precheck", "admit", "observe"},
+            "complete": {"precheck", "admit", "observe", "consume"},
+        }
+        for name, required in prerequisites.items():
+            self.assertEqual(set(jobs[name]["needs"]), required)
+            successful = dict.fromkeys(required, "success")
+            self.assertFalse(
+                publication_job_eligible(jobs[name], successful, cancelled=True)
+            )
+            for dependency in required:
+                for status in ("failure", "skipped", "cancelled"):
+                    with self.subTest(job=name, dependency=dependency, status=status):
+                        results = {**successful, dependency: status}
+                        self.assertFalse(publication_job_eligible(jobs[name], results))
+        # The recorder still runs after a failed actor to conserve its outcome.
+        self.assertTrue(
+            publication_job_eligible(
+                jobs["observe"],
+                {
+                    "precheck": "success",
+                    "admit": "success",
+                    "npm": "failure",
+                    "bootstrap": "skipped",
+                },
+            )
+        )
+
+    def test_registered_publication_cannot_waive_post_job_eligibility(self) -> None:
+        for name in ("consume", "complete"):
+            baseline = self.publication_workflow()["jobs"][name]
+            condition = " ".join(baseline.get("if", "${{ always() }}").split())
+            weakened = [None, "${{ always() }}", "${{ !cancelled() }}"]
+            for dependency in baseline["needs"]:
+                weakened.append(
+                    condition.replace(f" && needs.{dependency}.result == 'success'", "")
+                )
+            weakened.append(condition.replace(" && !cancelled()", ""))
+            for replacement in weakened:
+                with self.subTest(job=name, condition=replacement):
+                    document = self.publication_workflow()
+                    if replacement is None:
+                        document["jobs"][name].pop("if", None)
+                    else:
+                        document["jobs"][name]["if"] = replacement
+                    failures = self.registered_publication_failures(document)
+                    self.assertTrue(
+                        any(
+                            f"job {name} must" in failure.message
+                            for failure in failures
+                        )
+                    )
+
+    def test_registered_publication_retains_post_jobs_and_required_dependencies(
+        self,
+    ) -> None:
+        for name in ("consume", "complete"):
+            for removed in (name, *self.publication_workflow()["jobs"][name]["needs"]):
+                with self.subTest(job=name, removed=removed):
+                    document = self.publication_workflow()
+                    if removed == name:
+                        del document["jobs"][name]
+                    else:
+                        document["jobs"][name]["needs"].remove(removed)
+                    failures = self.registered_publication_failures(document)
+                    self.assertTrue(
+                        any(
+                            f"job {name} must" in failure.message
+                            for failure in failures
+                        )
+                    )
+
     def test_initial_history_rejects_changed_entry_privileges_and_transport(
         self,
     ) -> None:
@@ -229,22 +373,9 @@ class RepositoryCheckTests(unittest.TestCase):
     def test_registered_workflow_rejects_runner_paths_in_job_environment(self) -> None:
         for expression in ("${{ runner.temp }}", "${{ runner [ 'temp' ] }}"):
             with self.subTest(expression=expression):
-                document = {
-                    "permissions": CHECKS.PUBLICATION_PERMISSIONS,
-                    "jobs": {"example": {"env": {"INPUT": expression}}},
-                }
-                registered = hashlib.sha256(
-                    json.dumps(
-                        document, sort_keys=True, separators=(",", ":"), allow_nan=False
-                    ).encode()
-                ).hexdigest()
-                state = CHECKS.YamlRepositoryState(
-                    True, {CHECKS.PUBLICATION_PATH: document}, frozenset(), ()
-                )
-                with mock.patch.object(
-                    CHECKS, "EXPECTED_PUBLICATION_SHA256", registered
-                ):
-                    failures = CHECKS.check_workflow_security(state)
+                document = self.publication_workflow()
+                document["jobs"]["example"] = {"env": {"INPUT": expression}}
+                failures = self.registered_publication_failures(document)
                 self.assertEqual(
                     [failure.message for failure in failures],
                     ["job example environment INPUT must not use the runner context"],
@@ -339,20 +470,9 @@ class RepositoryCheckTests(unittest.TestCase):
                         self.assertIn(name, failures[0].message)
 
     def test_registered_definition_does_not_waive_private_input_policy(self) -> None:
-        document = {
-            "permissions": CHECKS.PUBLICATION_PERMISSIONS,
-            "env": {"TABGRAD_RELEASE_POLICY_JSON": "${{ vars.PRIVATE_POLICY }}"},
-        }
-        registered = hashlib.sha256(
-            json.dumps(
-                document, sort_keys=True, separators=(",", ":"), allow_nan=False
-            ).encode()
-        ).hexdigest()
-        state = CHECKS.YamlRepositoryState(
-            True, {CHECKS.PUBLICATION_PATH: document}, frozenset(), ()
-        )
-        with mock.patch.object(CHECKS, "EXPECTED_PUBLICATION_SHA256", registered):
-            failures = CHECKS.check_workflow_security(state)
+        document = self.publication_workflow()
+        document["env"]["TABGRAD_RELEASE_POLICY_JSON"] = "${{ vars.PRIVATE_POLICY }}"
+        failures = self.registered_publication_failures(document)
         self.assertEqual(len(failures), 1)
         self.assertIn("must not receive private publication input", failures[0].message)
 
@@ -373,16 +493,8 @@ class RepositoryCheckTests(unittest.TestCase):
                 }
             },
         }
-        registered = hashlib.sha256(
-            json.dumps(
-                document, sort_keys=True, separators=(",", ":"), allow_nan=False
-            ).encode()
-        ).hexdigest()
-        state = CHECKS.YamlRepositoryState(
-            True, {CHECKS.PUBLICATION_PATH: document}, frozenset(), ()
-        )
-        with mock.patch.object(CHECKS, "EXPECTED_PUBLICATION_SHA256", registered):
-            self.assertEqual(CHECKS.check_workflow_security(state), [])
+        document["jobs"].update(self.publication_workflow()["jobs"])
+        self.assertEqual(self.registered_publication_failures(document), [])
 
     def test_producer_trial_rejects_changed_authority_source_and_dataflow(self) -> None:
         changes = [
