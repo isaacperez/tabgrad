@@ -90,7 +90,7 @@ for (const [name, mutate, code] of [
 });
 
 test("selection cannot replace source notes, responsible owner or the complete current history", async t => {
-  for (const field of ["notes", "owner"]) {
+  for (const field of ["notesSha256", "owner"]) {
     const f = await releasePreparationFixture(t); await selectReleaseInputs(f.root, f.environment, ports(f)); await f.receive();
     const path = join(f.root, "selection.json"), s = JSON.parse(await readFile(path)); s[field] = "forged";
     await writeFile(path, canonicalBytes(s)); await assert.rejects(composeReleaseInputs(f.root, f.environment, ports(f)), { code: "PUBLICATION_PREPARATION_CHANGED" });
@@ -157,4 +157,16 @@ catch (error) { console.log(JSON.stringify({code:error.code})); process.exitCode
   const admit = spawnSync(process.execPath, [wrapper, "admit", f.root], { env: { ...env, GITHUB_JOB: "admit" }, encoding: "utf8", timeout: 10000 });
   assert.equal(admit.status, 1, admit.stdout + admit.stderr);
   assert.equal(JSON.parse(admit.stdout).code, "PUBLICATION_ENVIRONMENT_REVIEW_INVALID");
+});
+
+test("valid long release notes stay outside the bounded selection record without truncation", async t => {
+  const f = await releasePreparationFixture(t);
+  const notes = `## ${f.candidate.version} - 2026-01-01\n\n${"Useful change.\n".repeat(8192)}`;
+  const raw = Buffer.from(notes);
+  f.values.set(`/contents/CHANGELOG.md?ref=${f.candidate.sourceRevision}`, {
+    type: "file", encoding: "base64", content: raw.toString("base64"), size: raw.length });
+  await selectReleaseInputs(f.root, f.environment, ports(f)); await f.receive();
+  await composeReleaseInputs(f.root, f.environment, ports(f));
+  assert.equal((await readFile(join(f.root, "input/notes.md"), "utf8")), notes);
+  assert.ok((await readFile(join(f.root, "selection.json"))).length < 65536);
 });

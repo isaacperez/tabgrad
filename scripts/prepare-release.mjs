@@ -170,7 +170,7 @@ export async function selectReleaseInputs(root, environment, { clock = Date.now,
   const issue = environment.TABGRAD_RECEIPT_ISSUE;
   requirePublication(id(issue), "PUBLICATION_PHYSICAL_CHANNEL_REQUIRED");
   const selection = { schemaVersion: 1, publisher: { revision: context.revision, runId: context.runId, attempt: context.attempt },
-    source, version: state.version, name: metadata.name, owner: owner.ownerSha256, notes, start,
+    source, version: state.version, name: metadata.name, owner: owner.ownerSha256, notesSha256: sha256(Buffer.from(notes)), start,
     producerRun: String(producer.id), outputs, history, recordHead: head.object.sha, sourceChecks: checks,
     issue, physicalComment: environment.TABGRAD_RELEASE_PHYSICAL_COMMENT ?? "" };
   await mkdir(root, { mode: 0o700 });
@@ -192,7 +192,7 @@ export async function composeReleaseInputs(root, environment, { clock = Date.now
   const notes = releaseNotes((await sourceFile(api, "CHANGELOG.md", state.source)).toString(), state.version, repository, state.source);
   const current = await api.request(`/actions/runs/${context.runId}`);
   requirePublication(metadata.name === s.name && metadata.version === s.version && metadata.private !== true
-    && s.notes === notes && profile.maintainers.some(actor => actor.id === String(current.actor?.id) && actor.ownerSha256 === s.owner),
+    && s.notesSha256 === sha256(Buffer.from(notes)) && profile.maintainers.some(actor => actor.id === String(current.actor?.id) && actor.ownerSha256 === s.owner),
   "PUBLICATION_PREPARATION_CHANGED");
   const data = join(root, "data"), verification = join(root, "verification");
   const candidate = readProducerInventory(await publicationFile(join(data, "candidate.json"), 2 * 1024 * 1024));
@@ -232,7 +232,7 @@ export async function composeReleaseInputs(root, environment, { clock = Date.now
         .map(([kind, name]) => ({ kind, name })) },
     qualification: { browsers: ["Chrome", "Firefox"], gpu: true }, continuation: null };
   await mkdir(join(root, "input"), { mode: 0o700 });
-  await writeFile(join(root, "input/notes.md"), s.notes, { flag: "wx", mode: 0o600 });
+  await writeFile(join(root, "input/notes.md"), notes, { flag: "wx", mode: 0o600 });
   await writeFile(join(root, "input/qualification.json"), canonicalBytes(qualification), { flag: "wx", mode: 0o600 });
   await writeFile(join(root, "draft.json"), canonicalBytes(draft), { flag: "wx", mode: 0o600 });
   const prepared = await preparePublicationPlan(root, join(root, "composed"));
