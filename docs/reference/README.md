@@ -6,6 +6,8 @@ accepted form and scope without following a complete design narrative.
 
 ## Questions this perspective answers
 
+### Application interfaces and supported behavior
+
 Use [JavaScript tensor API](../javascript-api.md) for the direct session and
 tensor interface, observation and explicit resource cleanup.
 
@@ -28,91 +30,6 @@ application's loading, entry, connection and cleanup contracts.
 
 Use [Browser package installation](browser-package.md) for inspected tarballs,
 public entries, matched static files and the executable JavaScript example.
-
-Use [Qualifying a browser package](package-qualification.md) for admitted local
-archives or exact registry installations, shared consumers and JSON reports.
-
-Use [Verifying retained producer proofs](package-provenance.md) for offline
-signature, identity, claim and original-candidate verification under admitted trust.
-
-Use [Experimental hosted producer trial](producer-trial.md) for the inert manual
-recipe that separates candidate qualification, protected signing and retained
-proof verification using ordinary hosted jobs.
-
-Use [Release record tooling](release-record.md) for enrolled Git history,
-bounded event data, exact intent/observation relationships and recorder commands.
-
-Use [Controlled release publication](release-publication.md) for the maintained
-manual workflow, role interfaces, public-clone maintainer procedure, first npm
-bootstrap and failure-preserving continuation.
-
-Use the [0.1.0 source and support record](release-0.1.0.md) for that version's
-API groups, numerical/API limits, environments and qualification boundaries.
-
-Use [Acquisition control record](provenance-acquisition-record.md) for the internal
-experimental JSONL profile, independent file reserves, confirmed prefixes and
-bounded local readback, separate from trust admission and producer proofs.
-
-Use [Local acquisition coordination](provenance-acquisition-control.md) for
-separate actor states, exact action confirmations, irreversible revocation and
-the experimental ordinary-file session, distinct from external supervision.
-
-Use [Acquisition coordination across local processes](provenance-acquisition-process.md)
-for the experimental two-actor launcher, closed IPC, peer observations and
-failure-preserving direct-child cleanup, separate from physical containment.
-
-Use [Experimental Linux acquisition host control](provenance-acquisition-host.md)
-for prepared group identities, direct controller routes, an external deadline
-entry and conservative native observations, distinct from host qualification.
-
-Use [Experimental acquisition startup](provenance-acquisition-startup.md) for
-explicit pre-case self-entry, the three-control local gate, guard-channel
-correlation and separate record/guard cleanup over prepared premises.
-
-Use [Experimental binary acquisition capture](provenance-acquisition-capture.md)
-for the finite non-TTY framing subset, separate payload reservations, confirmed
-prefixes and incomplete outcomes, without transport or client admission.
-
-Use [Experimental raw acquisition payload writer](provenance-acquisition-payload.md)
-for independent raw stdout/stderr writes, shared clock history, confirmed
-prefixes and owned-handle cleanup without framing or upstream admission.
-
-Use [Experimental Docker Exec acquisition](provenance-acquisition-exec.md) for
-one local request sequence, raw daemon-channel capture and observed startup/
-cleanup composition, separate from process provenance and admission.
-
-Use [Experimental acquisition container activation](provenance-acquisition-activation.md)
-for one separately owned Start under existing permission, with unknown native
-effect and physical placement left to an independently admitted observer.
-
-Use [Experimental Linux acquisition placement](provenance-acquisition-placement.md)
-for retained native process/group identities under the specific prepared
-cgroupfs recipe, conditional local permission and explicit qualification limits.
-
-Use [Experimental Linux laboratory](provenance-acquisition-lab.md)
-for the closed private-daemon recipe, exterior service ownership, known-prefix
-preservation and conservative retirement, separate from native qualification.
-
-Use [Experimental laboratory diagnostics](provenance-acquisition-lab-cases.md)
-for the closed diagnostic inputs, literal programs, stopped-container checks,
-private file/FIFO preparation, one-case attempt composition and the independent
-A/B/C laboratory sequence under a single total cutoff.
-
-Use [Experimental acquisition program launcher](provenance-acquisition-launch.md)
-for the canonical program/profile binding, bounded separate control channel and
-single nonprivileged attempt over independently prepared endpoints.
-
-Use [Experimental acquisition FIFO transport](provenance-acquisition-fifo.md)
-for independent host-view readers, sentinel release, borrowed prefix delivery
-and conservative local waiting over existing identified endpoints.
-
-Use [Experimental local program capture](provenance-acquisition-capture-attempt.md)
-for nine-file admission, original control persistence and FIFO/Exec coordination
-under borrowed permission, with startup and global acquisition kept by the caller.
-
-Use [Experimental local acquisition attempt](provenance-acquisition-attempt.md)
-for original or activated startup/capture ordering and their conservative local
-join, retaining original observations without custody or release admission.
 
 Use [Python tensor creation, metadata, addition and observation](python-tensors.md) for the
 bounded Python call forms, metadata objects, errors and ownership obligations.
@@ -140,6 +57,31 @@ recording, alias versions, derivative guards and deferred failure.
 
 Use [Gradient recording scopes](gradient-recording.md) for Python `no_grad`,
 JavaScript callbacks, shared mode restoration and special-view tracking.
+
+Use the [0.1.0 source and support record](release-0.1.0.md) for that version's
+API groups, numerical/API limits, environments and qualification boundaries.
+
+Use the [0.1.1 source and support record](release-0.1.1.md) for the
+build correction and its preserved API, numerical and qualification boundaries.
+
+### Package qualification and release maintenance
+
+Use [Qualifying a browser package](package-qualification.md) for admitted local
+archives or exact registry installations, shared consumers and JSON reports.
+
+Use [Verifying retained producer proofs](package-provenance.md) for offline
+signature, identity, claim and original-candidate verification under admitted trust.
+
+Use [Experimental hosted producer trial](producer-trial.md) for the inert manual
+recipe that separates candidate qualification, protected signing and retained
+proof verification using ordinary hosted jobs.
+
+Use [Release record tooling](release-record.md) for enrolled Git history,
+bounded event data, exact intent/observation relationships and recorder commands.
+
+Use [Controlled release publication](release-publication.md) for the maintained
+manual workflow, role interfaces, public-clone maintainer procedure, first npm
+bootstrap and failure-preserving continuation.
 
 For contributor measurements, use
 [WebAssembly addition measurements](webassembly-addition-measurements.md) for

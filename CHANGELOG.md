@@ -7,6 +7,14 @@ established by the corresponding verified release record.
 
 ## Unreleased
 
+### Removed
+
+- Retired the superseded native acquisition laboratory, its contributor
+  commands, tests and reference contracts; application and release-tool
+  reference navigation is separated by audience. The active hosted producer,
+  proof verification and publication tooling are preserved
+  ([#377](https://github.com/isaacperez/tabgrad/issues/377)).
+
 ## 0.1.1 - 2026-11-01
 
 ### Fixed

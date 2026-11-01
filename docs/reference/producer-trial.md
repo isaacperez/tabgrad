@@ -13,8 +13,7 @@ It requires neither a nested Docker service nor the experimental acquisition
 supervisor. GitHub's runner, scheduler, artifact service, action implementations
 and effective repository protections are trusted service boundaries. Job and
 client timeouts do not prove physical termination, deletion or a strict wire
-deadline. Earlier acquisition tooling retains its separate experimental
-contracts; it is not a prerequisite of this recipe.
+deadline.
 
 The workflow has only `workflow_dispatch`. It is inert unless the repository
 variable `TABGRAD_PRODUCER_TRIAL_ENABLED` is exactly `true`. Merging source does
