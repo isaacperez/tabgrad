@@ -18,7 +18,7 @@ import { completeGithubPublication, npmCallReceipt, prepareNpmCall, requireNpmIn
   requirePublicationRecordAdmission } from "./publication-effects.mjs";
 import { corroboratePublicationJob, corroboratePublicationOutput, pendingPublicationObservation,
   publicationRecordConfig, publicationRecordHead, readPublicationJson, recordNpmPublication, savePublicationJson } from "./publication-controller.mjs";
-import { transferPublicationHistory } from "./publication-controller.mjs";
+import { publicationHistoryInput, transferPublicationHistory } from "./publication-controller.mjs";
 import { publicationAuthorityBytes, publicationChecksums } from "./prepare-publication-plan.mjs";
 import { PublicationError, publicationEffects, requirePublication, validatePublicationPlan } from "./publication-plan.mjs";
 import { readProducerInventory } from "./package-provenance.mjs";
@@ -161,7 +161,9 @@ async function inputLocations(root, plan, environment) {
 async function configAndHead(root, state, environment) {
   process.env.GIT_ASKPASS = fileURLToPath(new URL("./release-record-askpass.mjs", import.meta.url));
   process.env.GITHUB_TOKEN = environment.GH_TOKEN;
-  await transferPublicationHistory(environment.TABGRAD_RECORD_INPUT ?? join(root, "admission/evidence"), join(root, "evidence"));
+  const input = environment.TABGRAD_RECORD_INPUT ?? join(root, "admission/evidence");
+  const source = await publicationHistoryInput(root, input, state.policy.history);
+  await transferPublicationHistory(source, join(root, "evidence"));
   const config = await publicationRecordConfig(join(root, "evidence"), state.policy);
   return { config,
     expectedHead: await publicationRecordHead(state.api, state.policy) };

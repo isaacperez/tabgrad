@@ -83,6 +83,23 @@ authenticate the party which installed them.
 
 ## Prepare the initial history handoff
 
+For a subsequent delivery, prefer an already retained complete publication
+artifact instead of uploading unchanged originals again. Independently admit
+its six actual policy metadata values and inspect its exact original contents.
+The initial-admission path recognizes only run-bound attempt-one names:
+`tabgrad-publication-observation-RUN-1` and
+`tabgrad-publication-completion-RUN-1` select their `evidence/` directory;
+`tabgrad-publication-history-RUN-1` keeps the flat first-handoff layout. `RUN`
+must equal admitted `history.runId`. Outer role results are not authority or
+substitute evidence. Directory/file type, digest, size and complete-record
+replay checks remain mandatory; missing, changed or expired evidence rejects.
+Later role-to-role evidence paths are unchanged.
+
+Use the separate initial carrier below when no admitted retained artifact
+contains all originals required by the current record. Reuse avoids another
+base64 preparation and workflow dispatch; it does not compact/reset history,
+extend retention or remove independent custody before expiry.
+
 The first publication needs original evidence before its own recorder can
 upload anything. Enrollment still belongs to
 [`release-record.mjs`](release-record.md); the separate
