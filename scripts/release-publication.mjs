@@ -51,7 +51,7 @@ async function output(values, environment) {
   if (!environment.GITHUB_OUTPUT) return;
   for (const [key, value] of Object.entries(values)) {
     const text = typeof value === "string" ? value : JSON.stringify(value);
-    requirePublication(/^[a-z_]+$/.test(key) && !/[\r\n]/.test(text), "PUBLICATION_OUTPUT_INVALID");
+    requirePublication(/^[a-z_][a-z0-9_]*$/.test(key) && !/[\r\n]/.test(text), "PUBLICATION_OUTPUT_INVALID");
     await appendFile(environment.GITHUB_OUTPUT, `${key}=${text}\n`);
   }
 }

@@ -8,6 +8,11 @@ original producer proofs and observed publication outcome.
 
 ## Maintainer corrections
 
+[Release output names](https://github.com/isaacperez/tabgrad/issues/398) accept
+the digits in their own SHA-256 fields, while rejecting malformed names and
+multiline values. Both preparation and protected-role handoffs use their actual
+Actions output sinks.
+
 [Registry observation and diagnostics](https://github.com/isaacperez/tabgrad/pull/382)
 bound post-publication propagation waiting and retain safe consumer failure
 information. [Browser selection](https://github.com/isaacperez/tabgrad/pull/386)

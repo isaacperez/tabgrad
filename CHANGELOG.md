@@ -11,6 +11,9 @@ established by the corresponding verified release record.
 
 ### Fixed
 
+- Generated release digests such as `plan_sha256` are written to the actual
+  GitHub Actions output sink without being rejected as invalid names
+  ([#398](https://github.com/isaacperez/tabgrad/issues/398)).
 - Release verification bounds registry-propagation waiting and preserves safe
   consumer diagnostics; browser selection uses the qualifier's supported
   interface ([#382](https://github.com/isaacperez/tabgrad/pull/382),
