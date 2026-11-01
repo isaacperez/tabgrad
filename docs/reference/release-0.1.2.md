@@ -28,9 +28,10 @@ The [0.1.1 support record](release-0.1.1.md), including its inherited
 calls, numerical contracts, errors, warnings, identity, aliases, gradients,
 partial progress, float32/layout/device limits and declared environments.
 PyTorch support remains **Partially supported**. No operation, dtype, gradient
-mode or browser/device support is added. Runtime, Python, kernel, conformance,
-dependency and build inputs are unchanged from the identified 0.1.1 source;
-reused observations retain their original revision and scope.
+mode or browser/device support is added. Runtime, Python and kernel source,
+conformance fixtures, dependency resolution and build algorithms are unchanged
+from the identified 0.1.1 source; reused observations retain their original
+revision and scope.
 
 The changed metadata and packaged guide require a new exact candidate.
 Its source PR records the archive/inventory and installed public-entry/static
