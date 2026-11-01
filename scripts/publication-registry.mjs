@@ -1,6 +1,7 @@
 import { isDeepStrictEqual } from "node:util";
+import { setTimeout as delay } from "node:timers/promises";
 import { publicationFile, validatePublicationQualification } from "./publication-admission.mjs";
-import { requirePublication } from "./publication-plan.mjs";
+import { PublicationError, requirePublication } from "./publication-plan.mjs";
 import { sha256 } from "./release-record-data.mjs";
 
 /** Omitted/empty protobuf JSON defaults only; retain every other field and input. */
@@ -19,17 +20,23 @@ function withoutEmptySigstoreDefaults(bundle) {
 
 /** Public, credential-free registry observations; no 404-to-absence inference. */
 export function publicationRegistry({ registry = "https://registry.npmjs.org/", fetcher = fetch,
-  timeoutMs = 30000, maxBytes = 4 * 1024 * 1024 } = {}) {
+  timeoutMs = 30000, maxBytes = 4 * 1024 * 1024, clock = Date.now,
+  pause = (milliseconds, signal) => delay(milliseconds, undefined, { signal }) } = {}) {
   const base = new URL(registry);
   requirePublication(base.href === "https://registry.npmjs.org/"
     || (base.protocol === "http:" && base.hostname === "127.0.0.1" && base.pathname === "/"), "PUBLICATION_REGISTRY_ORIGIN");
   const observations = [];
-  async function json(url) {
+  async function json(url, signal) {
     const target = new URL(url, base);
     requirePublication(target.origin === base.origin && !target.username && !target.password && !target.hash,
       "PUBLICATION_REGISTRY_ENDPOINT");
+    const observation = { at: new Date(clock()).toISOString(), urlSha256: sha256(Buffer.from(target.href)),
+      status: null, sha256: null, receivedBytes: 0 };
+    observations.push(observation);
     const response = await fetcher(target, { method: "GET", headers: { Accept: "application/json" },
-      redirect: "error", signal: AbortSignal.timeout(timeoutMs) });
+      redirect: "error", signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs) });
+    observation.status = response.status;
+    if (![200, 404].includes(response.status)) await response.body?.cancel();
     requirePublication([200, 404].includes(response.status), "PUBLICATION_REGISTRY_RESPONSE");
     const chunks = []; let count = 0;
     if (response.body) {
@@ -38,16 +45,17 @@ export function publicationRegistry({ registry = "https://registry.npmjs.org/", 
         for (;;) {
           const next = await reader.read(); if (next.done) break;
           count += next.value.length;
+          observation.receivedBytes = count;
           requirePublication(count <= maxBytes, "PUBLICATION_REGISTRY_RESPONSE_LIMIT"); chunks.push(next.value);
         }
       } finally { try { await reader.cancel(); } finally { reader.releaseLock(); } }
     }
     const raw = Buffer.concat(chunks);
-    observations.push({ urlSha256: sha256(Buffer.from(target.href)), status: response.status, sha256: sha256(raw) });
+    observation.sha256 = sha256(raw);
     return { status: response.status, value: response.status === 404 ? null : JSON.parse(raw) };
   }
-  async function inspect(plan, mode) {
-    const result = await json(encodeURIComponent(plan.candidate.name).replace(/^%40/, "@"));
+  async function inspect(plan, mode, signal) {
+    const result = await json(encodeURIComponent(plan.candidate.name).replace(/^%40/, "@"), signal);
     requirePublication(result.status === 200, "PUBLICATION_REGISTRY_VISIBILITY_UNKNOWN");
     const pack = result.value;
     requirePublication(pack.name === plan.candidate.name && pack.versions !== null && typeof pack.versions === "object"
@@ -55,17 +63,50 @@ export function publicationRegistry({ registry = "https://registry.npmjs.org/", 
     const version = pack.versions[plan.candidate.version];
     const channel = pack["dist-tags"]?.[plan.npm.channel] ?? null;
     const used = version !== undefined || Object.hasOwn(pack.time ?? {}, plan.candidate.version)
-      || pack.time?.unpublished?.versions?.includes(plan.candidate.version);
+      || pack.time?.unpublished?.versions?.includes(plan.candidate.version) === true;
     if (mode === "before") {
       requirePublication(plan.npm.before.package === "existing" && plan.npm.before.version === "absent"
         && !used && channel === plan.npm.before.channel, "PUBLICATION_REGISTRY_CONFLICT");
     } else {
-      requirePublication(version?.name === plan.candidate.name && version.version === plan.candidate.version
-        && version.private !== true && channel === plan.candidate.version
-        && version.dist?.integrity === `sha512-${Buffer.from(plan.candidate.archiveSha512, "hex").toString("base64")}`,
-      "PUBLICATION_REGISTRY_CONFLICT");
+      const exactVersion = version?.name === plan.candidate.name && version.version === plan.candidate.version
+        && version.private !== true
+        && version.dist?.integrity === `sha512-${Buffer.from(plan.candidate.archiveSha512, "hex").toString("base64")}`;
+      const withdrawn = pack.time?.unpublished?.versions?.includes(plan.candidate.version) === true;
+      const priorChannel = typeof plan.npm.before.channel === "string" && channel === plan.npm.before.channel;
+      const pending = !withdrawn && priorChannel && (exactVersion || (!used && version === undefined));
+      const ready = !withdrawn && exactVersion && channel === plan.candidate.version;
+      Object.assign(observations.at(-1), { phase: "after", selectedVersionPresent: version !== undefined,
+        exactVersion, selectedVersionUsed: used, withdrawn,
+        channel: channel === plan.candidate.version ? "selected" : priorChannel ? "previous" : "other",
+        state: ready ? "ready" : pending ? "pending" : "conflict" });
+      requirePublication(ready || pending, "PUBLICATION_REGISTRY_CONFLICT");
+      requirePublication(ready, "PUBLICATION_REGISTRY_PENDING");
     }
     return { version, channel };
+  }
+  /** Only after a known successful call; never retries a write or a contradiction. */
+  async function waitForPublished(plan, deadline, { signal } = {}) {
+    const remaining = deadline - clock();
+    requirePublication(Number.isFinite(deadline) && remaining > 0 && remaining <= 600000
+      && deadline <= Date.parse(plan.window.deadline), "PUBLICATION_REGISTRY_WAIT_INVALID");
+    // Fixed attempt and wall-clock bounds survive a clock rollback or a faulty pause.
+    const attempts = Math.ceil(remaining / 15000) + 1;
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      signal?.throwIfAborted();
+      if (clock() >= deadline) break;
+      try {
+        const result = await inspect(plan, "after", signal);
+        signal?.throwIfAborted();
+        requirePublication(clock() < deadline, "PUBLICATION_REGISTRY_NOT_READY");
+        return result;
+      } catch (error) {
+        if (error.code !== "PUBLICATION_REGISTRY_PENDING") throw error;
+      }
+      signal?.throwIfAborted();
+      if (clock() >= deadline) break;
+      await pause(Math.min(15000, deadline - clock()), signal);
+    }
+    throw new PublicationError("PUBLICATION_REGISTRY_NOT_READY");
   }
   async function associateOriginalProof(plan, proofPath) {
     const { version } = await inspect(plan, "after");
@@ -84,7 +125,7 @@ export function publicationRegistry({ registry = "https://registry.npmjs.org/", 
     return { status: "passed", originalProofSha256: plan.producer.archiveProofSha256,
       associatedEnvelopeSha256: observations.at(-1).sha256 };
   }
-  return { inspect, associateOriginalProof, observations };
+  return { inspect, waitForPublished, associateOriginalProof, observations };
 }
 
 /** Admit same-artifact consumer reports received from the separate read-only role. */

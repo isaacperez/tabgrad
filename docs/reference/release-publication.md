@@ -477,6 +477,25 @@ that with its first useful separately authorized CI publication, not a dummy.
 
 ## Inspect, conserve and recover
 
+After a confirmed npm outcome, the consumer role observes readiness with
+credential-free registry GETs before associating the original proof. It waits
+only for an absent unused selected version with the admitted previous channel,
+or an already exact selected version with that previous channel. Readiness
+requires the exact selected version, publicness, integrity and selected channel.
+Contradictory identity/content, a foreign or missing channel, withdrawn/used but
+absent versions, HTTP/parse/size failures and changed proofs still fail closed.
+Prepublication reads remain one-shot; this never retries an npm call.
+
+This observation uses a fixed ten-minute budget capped by the admitted window,
+the existing 15-second polling cadence and a fixed attempt bound. These are
+operational limits, not measured registry convergence guarantees. Late reads
+cannot establish readiness after expiry. Consumer artifacts retain a bounded
+safe diagnostic projection on success or failure: ordered observation times,
+response digests, pending/ready/conflict classifications and terminal phase/code.
+They exclude raw registry account metadata, credentials and private paths.
+A failed role retains its result without fabricating a successful consumer
+handoff; a missing original response cannot be reconstructed from its digest.
+
 Download and verify the completion/partial-outcome artifact and full hash-named
 control originals before effective artifact expiry. Retention is requested for
 90 days, not a wait before release or a permanent store. Keep independently

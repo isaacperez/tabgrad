@@ -151,3 +151,90 @@ test("registry bounds response bytes and does not retry a rejected response", as
   await assert.rejects(r.inspect(f.plan, "after"), { code: "PUBLICATION_REGISTRY_RESPONSE_LIMIT" });
   assert.equal(calls, 1);
 });
+
+function pendingFixture(change) {
+  const f = fixture(); let now = Date.now(), calls = 0;
+  const exact = { name: f.plan.candidate.name, version: f.plan.candidate.version,
+    dist: { integrity: `sha512-${Buffer.from(f.plan.candidate.archiveSha512, "hex").toString("base64")}` } };
+  const states = [structuredClone(f.pack), structuredClone(f.pack)];
+  states[1].versions[f.plan.candidate.version] = exact;
+  states[1]["dist-tags"].latest = f.plan.candidate.version;
+  change?.(states[0], exact, f.plan);
+  const registry = publicationRegistry({ clock: () => now, pause: async ms => { now += ms; }, fetcher: async () => {
+    const value = states[Math.min(calls++, states.length - 1)]; return new Response(JSON.stringify(value));
+  } });
+  return { ...f, registry, states, deadline: now + 60000, calls: () => calls, advance: ms => { now += ms; } };
+}
+
+for (const present of [false, true]) test(`post-result waits for exact registry state (selected version present=${present})`, async () => {
+  const f = pendingFixture((pack, exact, plan) => { if (present) pack.versions[plan.candidate.version] = exact; });
+  await f.registry.waitForPublished(f.plan, f.deadline);
+  assert.equal(f.calls(), 2);
+  assert.deepEqual(f.registry.observations.map(row => row.state), ["pending", "ready"]);
+});
+
+for (const [name, change] of [
+  ["foreign channel", p => { p["dist-tags"].latest = "0.2.0"; }],
+  ["missing channel", p => { delete p["dist-tags"].latest; }],
+  ["selected channel without version", (p, _, plan) => { p["dist-tags"].latest = plan.candidate.version; }],
+  ["withdrawn version", (p, _, plan) => { p.time.unpublished = { versions: [plan.candidate.version] }; }],
+  ["used but absent version", (p, _, plan) => { p.time[plan.candidate.version] = "2026-01-01"; }],
+  ["incomplete selected metadata", (p, _, plan) => { p.versions[plan.candidate.version] = {}; }],
+  ["wrong integrity", (p, exact, plan) => { p.versions[plan.candidate.version] = { ...exact, dist: { integrity: "foreign" } }; }],
+  ["wrong name", (p, exact, plan) => { p.versions[plan.candidate.version] = { ...exact, name: "foreign" }; }],
+  ["wrong version", (p, exact, plan) => { p.versions[plan.candidate.version] = { ...exact, version: "0.0.1" }; }],
+  ["private version", (p, exact, plan) => { p.versions[plan.candidate.version] = { ...exact, private: true }; }],
+]) test(`post-result does not retry ${name}`, async () => {
+  const f = pendingFixture(change);
+  await assert.rejects(f.registry.waitForPublished(f.plan, f.deadline), { code: "PUBLICATION_REGISTRY_CONFLICT" });
+  assert.equal(f.calls(), 1); assert.equal(f.registry.observations[0].state, "conflict");
+});
+
+test("pending result expires with bounded evidence and before remains one-shot", async () => {
+  const f = pendingFixture(); f.states[1] = f.states[0];
+  await assert.rejects(f.registry.waitForPublished(f.plan, f.deadline), { code: "PUBLICATION_REGISTRY_NOT_READY" });
+  assert.equal(f.calls(), 4); assert.equal(f.registry.observations.length, 4);
+  const before = fixture(); await before.registry.inspect(before.plan, "before"); assert.equal(before.requests.length, 1);
+});
+
+test("an expired budget or cancellation does not establish readiness", async () => {
+  const f = pendingFixture(); f.states[0] = f.states[1]; f.advance(60000);
+  await assert.rejects(f.registry.waitForPublished(f.plan, f.deadline), { code: "PUBLICATION_REGISTRY_WAIT_INVALID" });
+  assert.equal(f.calls(), 0);
+  const g = pendingFixture(), abort = new AbortController(); abort.abort();
+  await assert.rejects(g.registry.waitForPublished(g.plan, g.deadline, { signal: abort.signal }), { name: "AbortError" });
+  assert.equal(g.calls(), 0);
+});
+
+test("an exact response completing after the fixed deadline is not ready", async () => {
+  const f = pendingFixture(); let now = Date.now();
+  const deadline = now + 1000;
+  const r = publicationRegistry({ clock: () => now, fetcher: async () => {
+    now += 1001; return new Response(JSON.stringify(f.states[1]));
+  } });
+  await assert.rejects(r.waitForPublished(f.plan, deadline), { code: "PUBLICATION_REGISTRY_NOT_READY" });
+  assert.equal(r.observations.length, 1);
+});
+
+test("cancellation after a pending observation stops before a second request", async () => {
+  const f = pendingFixture(), abort = new AbortController(); let calls = 0;
+  const r = publicationRegistry({ fetcher: async () => { calls++; return new Response(JSON.stringify(f.states[0])); },
+    pause: async () => { abort.abort(); } });
+  await assert.rejects(r.waitForPublished(f.plan, f.deadline, { signal: abort.signal }), { name: "AbortError" });
+  assert.equal(calls, 1);
+});
+
+test("a nonadvancing injected clock/pause cannot grow observations without bound", async () => {
+  const f = pendingFixture(); const now = Date.now(); let calls = 0;
+  const r = publicationRegistry({ clock: () => now, pause: async () => {},
+    fetcher: async () => { calls++; return new Response(JSON.stringify(f.states[0])); } });
+  await assert.rejects(r.waitForPublished(f.plan, now + 30000), { code: "PUBLICATION_REGISTRY_NOT_READY" });
+  assert.equal(calls, 3);
+});
+
+for (const response of [() => new Response("{}", { status: 404 }), () => new Response("denied", { status: 403 }),
+  () => new Response("not-json"), () => new Response("x".repeat(32))]) test("post-result does not retry invalid HTTP/body", async () => {
+  const f = pendingFixture(); let calls = 0;
+  const r = publicationRegistry({ maxBytes: 16, fetcher: async () => { calls++; return response(); } });
+  await assert.rejects(r.waitForPublished(f.plan, f.deadline)); assert.equal(calls, 1);
+});
