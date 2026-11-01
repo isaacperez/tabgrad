@@ -1146,6 +1146,31 @@ class RepositoryCheckTests(unittest.TestCase):
             failures = CHECKS.check_issue_forms(root)
             self.assertTrue(any("reproduction" in item.message for item in failures))
 
+    def test_concise_forms_accept_required_content_for_each_type(self) -> None:
+        for name in CHECKS.ISSUE_FORM_REQUIREMENTS:
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.write_issue_form(root, name=name)
+                failures = CHECKS.check_issue_forms(root)
+                self.assertFalse([item for item in failures if item.path.name == name])
+
+    def test_each_form_keeps_its_type_specific_evidence(self) -> None:
+        for name, requirements in CHECKS.ISSUE_FORM_REQUIREMENTS.items():
+            for identifier in requirements["fields"]:
+                with (
+                    self.subTest(name=name, field=identifier),
+                    tempfile.TemporaryDirectory() as directory,
+                ):
+                    root = Path(directory)
+                    self.write_issue_form(root, name=name, omitted=identifier)
+                    failures = CHECKS.check_issue_forms(root)
+                    self.assertTrue(
+                        any(
+                            item.path.name == name and identifier in item.message
+                            for item in failures
+                        )
+                    )
+
     def test_issue_form_must_keep_exact_type_label(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

@@ -86,10 +86,12 @@ An issue must contain enough information for another contributor to understand
 the need, decide whether the work is ready, and verify the result. A title and
 a checklist alone are not sufficient.
 
-Use the common section headings below in the order shown. An issue form may
-present the same information as separate fields, but it must preserve the same
-meaning and produce a readable issue body. Add the information required by the
-selected issue type after the common sections.
+Use concise sections for the problem and impact, expected result and boundary,
+completion conditions, and dependencies/related work. Include relevant evidence
+and known effects/risks where they clarify those sections; do not repeat the
+same facts under separate mandatory headings or enumerate unrelated N/A topics.
+The issue form groups the additional information needed for its type. The
+headings below explain the required meaning, not a mandatory section catalogue.
 
 ### Title
 
@@ -436,8 +438,10 @@ establishes whether the destination is truthful.
 
 The skill named in the second column does not gain authority to change GitHub
 merely because it established the condition. It must use `tabgrad-issue` for
-the mutation when the user authorized it. A previous transition does not grant
-continuing authority for later transitions.
+the mutation when the user authorized it. Apply the
+[active-task authorization rule](../CONTRIBUTING.md#authorization-during-an-active-task):
+a previous transition alone grants no new scope, while an explicit task/batch
+covering later transitions remains authority for them.
 
 Set the status to the work's current state, not the state expected next. Do not
 move an issue because time passed, a branch exists, a draft pull request was
@@ -691,7 +695,7 @@ and related work`, or explain why the work has no planning effect. Starting or
 resuming applicable work checks that context against current prerequisites.
 Do not require every contributor or subagent to reread the whole register.
 
-The implementer and independent preflight use that context to detect a stale
+The implementer and any risk-triggered independent investigator use that context to detect a stale
 premise, not to silently expand the issue or implement distant extensions. A
 new fact that changes viability or ordering is classified when discovered,
 rather than postponed to closure. Changes to accepted architecture, scope,

@@ -77,22 +77,21 @@ Coding agents must follow
 [`docs/agent-workflow.md`](docs/agent-workflow.md) when they delegate work or
 perform a substantive repository change.
 
-Before the first edit, an independent read-only agent must check the issue's
-current assumptions against the repository and report evidence, conflicts, and
-unresolved questions. Only one agent at a time may modify the target working
-tree. Delegated investigators, verifiers, reviewers, and specialists remain
-read-only unless a later, explicit handoff makes one of them the sole writer.
-
-That preflight also records a contextual validation plan under
+Before editing, the writer checks current issue/source readiness, authority,
+conflicts and material risks, and records a focused validation plan under
 [`docs/agent-workflow.md`](docs/agent-workflow.md#plan-contextual-validation).
-The final verifier/reviewer checks its applicability against the complete
-result. Do not add another routine agent or run unrelated environments by default.
+Settled ordinary work does not require a separate independent preflight. Obtain
+bounded independent investigation first when material unresolved design,
+compatibility, security or other uncertainty could invalidate implementation.
+Only one agent at a time may modify the target working tree.
 
-After implementation, an agent independent of the writer must verify the exact
-final state. The independent review must examine that same state and its
-verification evidence. Use additional specialists when separate material risks
-need different expertise, but do not choose a fixed number or ask several
-agents to repeat the same undivided check.
+After implementation, use one independent assignment for final verification and
+skeptical review of the same complete state. Reuse a read-only investigator for
+that assignment when it did not materially author or design the result. Add a
+specialist only for a distinct material risk the reviewer cannot assess.
+Investigators and reviewers remain read-only unless an explicit handoff makes
+one the sole writer, which also disqualifies it from independent review of that
+work. Evaluate valid original results instead of rerunning checks for attribution.
 
 Every assignment and result must identify the target, scope, evidence,
 commands, limitations, and unanswered questions. An agent's judgment does not
@@ -103,6 +102,25 @@ Delegation does not authorize repository edits, Git or GitHub mutations,
 external actions, publication, or decisions reserved for the user. Findings
 must follow the scope, blocking, security, and follow-up rules below; subagents
 must not create issues or expand the current work automatically.
+
+## Authorization during an active task
+
+Explicit task or batch authorization remains valid for its covered actions
+until revoked, completed, or limited by an explicit human deadline or condition.
+Read the whole session: a prior narrow request does not cancel later authority.
+Ordinary corrections, derived commit/run/artifact identifiers, and necessary
+issue/PR state transitions within that scope do not require repeated consent.
+Group dependent preparation and checks into coherent batches and continue
+useful authorized work instead of stopping at each handoff or recoverable error.
+
+Ask only when a material choice remains or an action adds an unapproved effect,
+privilege, audience, cost, credential/trust change or explicitly excluded work.
+Prepare a concrete reviewable proposal first. Authentication reserved for the
+account holder remains theirs. Technical timeouts do not expire human task
+authority, but expired signed/admitted plans or artifacts remain unusable:
+prepare a valid replacement within scope, never silently extend a deadline or
+repeat an uncertain external write. Preserve explicit human limits, privacy and
+service safeguards.
 
 ## Handling unexpected findings and pending decisions
 
@@ -395,10 +413,14 @@ the relevant tests and [`docs/compatibility.md`](docs/compatibility.md).
 
 ## Verification
 
-Before opening a pull request for review, run every repository check that
-applies to the changed files. This normally includes formatting, linting, type
-checking, unit tests, integration tests, and the build. Run browser, WebGPU, or
-performance checks when the change affects those areas.
+Run focused checks for the changed contracts locally. Let configured CI own
+the broader applicable suites; do not run the same full suite locally and in
+CI merely for a handoff. Before merge, every required check must pass for its
+relevant inputs. Reuse original results when source, tests, configuration,
+dependencies, generated inputs and relevant environment remain equivalent,
+and repeat only checks whose evidence a later change can invalidate. Browser,
+WebGPU and performance checks apply when the changed contract requires them;
+a broad suite cannot substitute for missing specialized evidence.
 
 The repository's configured tools and continuous integration define the exact
 commands. The command registry is
@@ -445,7 +467,7 @@ same state and leave an inspectable report. The documented single spelling or
 formatting correction exception does not require that agent sequence. Checks
 that run only on the pull request may still be in progress after publication;
 they remain required before merge. Follow `docs/agent-workflow.md` for the
-stable pull-request snapshot and non-circular final-report procedure. Marking a
+source identity and proportionate final-report procedure. Marking a
 pull request ready moves its implementation issue to `In review`.
 
 If the pull request head changes materially after verification, its earlier
@@ -455,8 +477,10 @@ new head that already satisfies the ready-for-review conditions may remain in
 review. When the new head does not satisfy them, return the pull request to
 draft and move its implementation issue to `In progress` before publishing it,
 or as soon as an already-published change is detected. Changing the pull
-request and project state requires current authority; an earlier request to
-mark the pull request ready is not continuing authority for later mutations.
+request and project state requires authority under
+[the active-task rule](#authorization-during-an-active-task). A narrow readiness
+request alone does not authorize later unrelated work; an explicit task/batch
+covering corrections and transitions does not need renewal for each one.
 
 The pull request should:
 
@@ -473,9 +497,10 @@ The pull request should:
 
 Include screenshots, logs, or measurements when they are needed to verify a
 claim. Keep evidence concise and make it possible for a reviewer to reproduce
-the result. Complete `.github/pull_request_template.md` without checking a
-statement that is not yet true. An item that does not apply needs a short
-reason rather than an unexplained `Not applicable`.
+the result. Use `.github/pull_request_template.md` to state the result, validation
+and material risks. Omit unrelated evidence categories instead of producing a
+catalogue of `Not applicable` rows; explain a material exclusion where it could
+otherwise imply missing required coverage.
 
 Preparing text or inspecting a pull request does not authorize a coding agent
 to change GitHub. A request to open a draft authorizes the ordinary push of the
@@ -496,13 +521,12 @@ does not authorize unrelated changes to the pull request. If the user excludes
 the evidence update, do not publish a head that would leave the pull request
 misleading.
 
-A request to change the title or description of a substantive review-ready
-pull request likewise authorizes the bounded metadata update, remote snapshot
-confirmation, and one relayed reviewer-authored final-report comment when the
-prepared snapshot passes every prepublication condition. Otherwise stop before
-editing until returning the pull request to draft is authorized. Editing a
-pull request that is already draft does not require that report until it is
-requested to become ready.
+A cosmetic title/description correction or added evidence link does not
+invalidate source review. Update only the authorized metadata and inspect its
+outgoing content. Changed requirements, supported-behavior claims or conclusions
+need affected verification/review; a new source head or relevant base change
+needs review of the resulting complete change. Keep one concise report current
+rather than freezing or hashing the entire PR text.
 
 If a GitHub operation fails or returns an ambiguous result, inspect the remote
 state before retrying. Do not create a duplicate pull request or repeat a

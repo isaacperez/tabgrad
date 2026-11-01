@@ -102,11 +102,19 @@ branch. A separately authorized, reviewed release change must establish:
 - compatibility, maintenance and supported environments for the release;
 - updated changelog, migration notes, documentation, and license notices;
 - reproducible dependency resolution and generated files;
-- passing required checks for the release commit;
+- passing required checks for the release commit, reusing valid equivalent-input
+  evidence under the contribution workflow rather than repeating suites;
 - successful creation and inspection of every distributed artifact;
 - artifact names, checksums, provenance, and publication destinations;
 - known limitations and unresolved security or correctness concerns; and
 - the person authorized to publish.
+
+Apply [active-task authorization](../CONTRIBUTING.md#authorization-during-an-active-task)
+to the release batch and ordinary recoverable failures. A new derived identifier
+is not a new permission boundary; changed privileges, audiences or publication
+effects remain subject to their actual authorization. Technical plan expiry
+requires a valid replacement, not necessarily renewed human consent within an
+otherwise current batch. Never reuse expired inputs or retry an unknown write.
 
 Select the resulting exact commit. A later correction on `main` cannot repair an
 older candidate's contents or documentation. Build artifacts through documented
