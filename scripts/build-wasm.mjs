@@ -1,15 +1,12 @@
 import { copyFile, mkdir } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repositoryRoot = fileURLToPath(new URL("..", import.meta.url));
 const outputDirectory = fileURLToPath(new URL("../dist/wasm", import.meta.url));
-const compiledModule = fileURLToPath(
-  new URL(
-    "../target/wasm32-unknown-unknown/release/tabgrad_wasm_kernels.wasm",
-    import.meta.url,
-  ),
-);
+const targetDirectory = fileURLToPath(new URL("../target", import.meta.url));
+const compiledModule = join(targetDirectory, "wasm32-unknown-unknown/release/tabgrad_wasm_kernels.wasm");
 
 const commonRustFlags = [
   "-C", "link-arg=--import-memory",
@@ -29,6 +26,8 @@ for (const variant of [
       "build",
       "--locked",
       "--release",
+      "--target-dir",
+      targetDirectory,
       "--target",
       "wasm32-unknown-unknown",
       "--package",

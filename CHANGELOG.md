@@ -7,6 +7,12 @@ established by the corresponding verified release record.
 
 ## Unreleased
 
+### Fixed
+
+- Browser builds use one explicit Cargo output directory, preventing an old
+  Wasm module from being copied under the wrong variant when environment or
+  Cargo configuration selects another directory ([#362](https://github.com/isaacperez/tabgrad/issues/362)).
+
 ## 0.1.0 - 2026-10-29
 
 ### Added
