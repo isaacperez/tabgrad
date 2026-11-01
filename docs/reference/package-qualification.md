@@ -201,7 +201,20 @@ driver directly:
 node scripts/run-package-browser-tests.mjs --tarball path/to/approved-package.tgz --expected path/to/candidate.json
 ```
 
-Use `--gpu` with that driver for the GPU route. The report has `schemaVersion: 1`:
+Use `--gpu` with that driver for the GPU route. Optional `--browsers Chrome,Firefox`
+selects an explicit ordered list of unique canonical browser names, overriding
+`TABGRAD_BROWSER`. Empty, repeated or unknown names reject before preparation.
+Without the flag, the existing single-browser environment selection and CPU/all
+or GPU/Chrome defaults remain. The release consumer passes its declared list
+through this flag rather than assigning a list to the single-browser environment
+variable.
+
+On a failed release consumer child, the publication diagnostic may retain only
+the recognized bounded `failure.phase` and `failure.code` from this report.
+Arbitrary child output, error messages and private paths are excluded; these
+diagnostics grant no authority or successful qualification.
+
+The report has `schemaVersion: 1`:
 
 - `input` distinguishes `supplied-archive`, `source-candidate` and `registry-version`; `candidate`
   records admitted and observed identity after successful installation.
