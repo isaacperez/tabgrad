@@ -498,7 +498,14 @@ not a claim that passing one language's checker validates another boundary.
 TypeScript reads `tsconfig.json`. Cargo reads `Cargo.toml`, `Cargo.lock`, and
 `rust-toolchain.toml`. `npm run check` does not rewrite maintained source;
 developers may run `cargo fmt --all` explicitly when they intend to format Rust
-source. `npm test` builds the exact ignored distribution once, runs the Node.js
+source. The browser Wasm build explicitly selects the checkout's `target/`
+directory for both Cargo output and the module copied into `dist/wasm/`.
+`CARGO_TARGET_DIR`, `CARGO_BUILD_TARGET_DIR` and Cargo's `build.target-dir`
+configuration therefore do not redirect this build; direct Cargo commands
+still follow their own configuration. Scalar and SIMD modules are copied
+immediately after their respective successful compilations.
+
+`npm test` builds the exact ignored distribution once, runs the Node.js
 suite, and then tests that same distribution in both real browsers. The
 from-source commands intentionally rebuild so isolated continuous-integration
 jobs do not depend on an artifact produced elsewhere. No test installs or
