@@ -7,11 +7,24 @@ established by the corresponding verified release record.
 
 ## Unreleased
 
+## 0.1.1 - 2026-11-01
+
 ### Fixed
 
 - Browser builds use one explicit Cargo output directory, preventing an old
   Wasm module from being copied under the wrong variant when environment or
   Cargo configuration selects another directory ([#362](https://github.com/isaacperez/tabgrad/issues/362)).
+- Release tooling preserves producer-proof association when Sigstore JSON
+  contains empty defaults, and shows human authentication links within the
+  admitted window ([#368](https://github.com/isaacperez/tabgrad/pull/368),
+  [#364](https://github.com/isaacperez/tabgrad/pull/364)).
+- Explicitly admitted release-history recovery preserves uncertain calls and
+  original authority while allowing a different candidate to proceed
+  ([#371](https://github.com/isaacperez/tabgrad/pull/371)).
+
+The [0.1.1 source and support record](docs/reference/release-0.1.1.md) preserves
+the existing API and numerical boundaries and explains the build correction,
+maintenance and qualification. No new tensor functionality is added.
 
 ## 0.1.0 - 2026-10-29
 
