@@ -1,9 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFile, mkdtemp, readdir, rm } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { publicationPlanFixture } from "../../fixtures/publication.mjs";
 import { canonicalBytes, sha256 } from "../../../scripts/release-record-data.mjs";
 import { admitPublicationPolicy, observePublicationAuthority, observePublicationPrecheck, observePublicationProducer,
   observePublicationConservation, publicationApprovalComment, publicationEnvironmentSnapshot } from "../../../scripts/publication-authority.mjs";
+import { resolvePublicationExecution, corroboratePublicationExecution } from "../../../scripts/publication-authority.mjs";
+import { publicationRole } from "../../../scripts/release-publication.mjs";
 
 /** Provider-policy model; actual HTTP/client and live-service qualification are distinct. */
 function fixture() {
@@ -49,6 +54,160 @@ function queuedRole(f, name = "admit-publication") {
   f.values.set("/actions/runs/301/attempts/1/jobs?per_page=100", jobs);
   return { job, jobs };
 }
+
+function stableFixture() {
+  const f = fixture();
+  f.context.repositoryId = f.policy.repositoryId;
+  f.policy.history.name = `tabgrad-publication-completion-${f.policy.history.runId}-1`;
+  f.values.get("/actions/artifacts/201").name = f.policy.history.name;
+  f.profile = { ...f.policy, schemaVersion: 2, clients: {
+    npm: f.plan.publisher.clientSha256, controller: f.plan.publisher.githubClientSha256,
+    provenance: f.plan.producer.verification.client.sha256, trustRoot: f.plan.producer.verification.trustRootSha256 } };
+  delete f.profile.recipeRevision; delete f.profile.history;
+  f.execution = { schemaVersion: 1, planSha256: sha256(canonicalBytes(f.plan)),
+    publisher: { revision: f.context.revision, runId: f.context.runId, attempt: "1" },
+    sourceChecks: [...new Set([f.plan.candidate.sourceRevision, f.plan.publisher.revision])]
+      .map((revision, index) => ({ revision, runId: String(401 + index), attempt: "1" })),
+    history: f.policy.history, recordHead: "a".repeat(40), physical: null };
+  assert.equal(f.plan.qualification.gpu, false);
+  for (const check of f.execution.sourceChecks) {
+    f.values.set(`/actions/runs/${check.runId}`, { id: Number(check.runId), run_attempt: 1, head_sha: check.revision,
+      head_branch: "main", event: "push", path: ".github/workflows/repository-checks.yml", status: "completed",
+      conclusion: "success", repository: { id: 17 }, head_repository: { id: 17 } });
+    f.values.set(`/actions/runs/${check.runId}/attempts/1/jobs?per_page=100`, { total_count: 5,
+      jobs: ["repository-consistency", "runtime", "browser-Chrome", "browser-Firefox", "publication-client"].map(name => ({
+        name, run_id: Number(check.runId), run_attempt: 1, head_sha: check.revision, status: "completed", conclusion: "success" })) });
+  }
+  f.values.set(`/git/ref/${f.policy.record.ref.slice(5)}`, { ref: f.policy.record.ref,
+    object: { type: "commit", sha: f.execution.recordHead } });
+  return f;
+}
+
+test("stable trust is independently enrolled and resolution remains unapproved until the actual protected review", async () => {
+  const f = stableFixture(), raw = canonicalBytes(f.profile);
+  const profile = admitPublicationPolicy(raw, sha256(raw), f.now);
+  const policy = resolvePublicationExecution(profile, f.execution, f.plan, f.context, f.now);
+  assert.equal(policy.schemaVersion, 2); assert.equal(policy.recipeRevision, f.plan.publisher.revision);
+  assert.deepEqual(policy.history, f.execution.history);
+  assert.equal(Object.hasOwn(policy, "approved"), false);
+  assert.deepEqual(await corroboratePublicationExecution({ ...f, policy, initial: true }),
+    { status: "corroborated-unapproved", epoch: 2 });
+  await observePublicationPrecheck({ ...f, policy });
+  assert.equal(f.requests.includes("/actions/runs/301/approvals"), false);
+  f.values.set("/actions/runs/301/approvals", []);
+  await assert.rejects(observePublicationAuthority({ ...f, policy }), { code: "PUBLICATION_ENVIRONMENT_REVIEW_INVALID" });
+});
+
+test("schema epochs are closed and cannot silently upgrade missing v1 pins", () => {
+  const f = stableFixture();
+  for (const change of [p => { p.history = f.execution.history; }, p => { p.recipeRevision = f.context.revision; },
+    p => { p.approved = true; }, p => { p.schemaVersion = 3; }, p => { delete p.clients.trustRoot; }]) {
+    const p = structuredClone(f.profile); change(p); const raw = canonicalBytes(p);
+    assert.throws(() => admitPublicationPolicy(raw, sha256(raw), f.now), { code: "PUBLICATION_POLICY_INVALID" });
+  }
+  const legacy = { ...f.profile, schemaVersion: 1 }; delete legacy.clients;
+  assert.throws(() => admitPublicationPolicy(canonicalBytes(legacy), sha256(canonicalBytes(legacy)), f.now));
+  const raw = canonicalBytes(f.profile);
+  assert.throws(() => admitPublicationPolicy(raw, "0".repeat(64), f.now), { code: "PUBLICATION_POLICY_IDENTITY" });
+});
+
+test("closed-plan role cannot silently treat a stable profile as its missing execution controller", async t => {
+  const f = stableFixture(), root = await mkdtemp(join(tmpdir(), "tabgrad-stable-entry-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  f.plan.publisher.githubClientSha256 = sha256(await readFile(process.execPath));
+  f.profile.clients.controller = f.plan.publisher.githubClientSha256;
+  const raw = canonicalBytes(f.profile);
+  await assert.rejects(publicationRole("precheck", root, {
+    TABGRAD_PUBLICATION_ENABLED: "true", TABGRAD_PUBLICATION_CONFIRMATION: "release-publication",
+    TABGRAD_PUBLICATION_PLAN_JSON: canonicalBytes(f.plan).toString(),
+    TABGRAD_PUBLICATION_PLAN_SHA256: sha256(canonicalBytes(f.plan)),
+    GITHUB_EVENT_NAME: "workflow_dispatch", GITHUB_REF: "refs/heads/main", GITHUB_RUN_ATTEMPT: "1",
+    GITHUB_SHA: f.plan.publisher.revision, TABGRAD_RELEASE_POLICY_JSON: raw.toString(),
+    TABGRAD_RELEASE_POLICY_SHA256: sha256(raw),
+  }), { code: "PUBLICATION_EXECUTION_REQUIRED" });
+  assert.deepEqual(await readdir(root), []);
+});
+
+for (const [name, change] of [
+  ["another recipe", f => { f.execution.publisher.revision = "f".repeat(40); }],
+  ["another run", f => { f.execution.publisher.runId = "999"; }],
+  ["a rerun", f => { f.execution.publisher.attempt = "2"; }],
+  ["another repository", f => { f.context.repositoryId = "999"; }],
+  ["another event", f => { f.context.event = "workflow_run"; }],
+  ["a generated approval", f => { f.execution.approved = true; }],
+  ["missing source checks", f => { f.execution.sourceChecks = []; }],
+  ["duplicate source checks", f => { f.execution.sourceChecks.push(f.execution.sourceChecks[0]); }],
+  ["an unbound history carrier", f => { f.execution.history.name = "arbitrary"; }],
+  ["another plan", f => { f.execution.planSha256 = "0".repeat(64); }],
+  ["another client", f => { f.profile.clients.npm = "0".repeat(64); }],
+  ["expired qualification", f => { f.profile.operationalEvidence.expiresAt = new Date(f.now).toISOString(); }],
+]) test(`stable resolution rejects ${name}`, () => {
+  const f = stableFixture(); change(f);
+  assert.throws(() => resolvePublicationExecution(f.profile, f.execution, f.plan, f.context, f.now));
+});
+
+for (const [name, change] of [
+  ["wrong source", run => { run.head_sha = "f".repeat(40); }],
+  ["another workflow", run => { run.path = ".github/workflows/arbitrary.yml"; }],
+  ["wrong event", run => { run.event = "pull_request"; }],
+  ["failed check run", run => { run.conclusion = "failure"; }],
+  ["another repository", run => { run.repository.id = 999; }],
+]) test(`provider corroboration rejects ${name}`, async () => {
+  const f = stableFixture(), check = f.execution.sourceChecks[0];
+  change(f.values.get(`/actions/runs/${check.runId}`));
+  await assert.rejects(corroboratePublicationExecution({ ...f, policy: f.profile }), { code: "PUBLICATION_SOURCE_CHECKS_INVALID" });
+});
+
+test("derived execution cannot replace protection or discard failing/missing job coverage", async () => {
+  const f = stableFixture(), policy = resolvePublicationExecution(f.profile, f.execution, f.plan, f.context, f.now);
+  f.values.get("/environments/tabgrad-npm-publication").can_admins_bypass = true;
+  await assert.rejects(observePublicationPrecheck({ ...f, policy }), { code: "PUBLICATION_PROTECTION_INVALID" });
+  assert.equal(f.requests.includes("/actions/runs/301/approvals"), false);
+  const check = f.execution.sourceChecks[0], jobs = f.values.get(`/actions/runs/${check.runId}/attempts/1/jobs?per_page=100`);
+  jobs.jobs[1].conclusion = "failure";
+  await assert.rejects(corroboratePublicationExecution({ ...f, policy: f.profile }), { code: "PUBLICATION_SOURCE_CHECKS_INVALID" });
+});
+
+test("expiry after a provider await stops new admission but preserves existing-call conservation", async () => {
+  const f = stableFixture(); let now = f.now;
+  const request = f.api.request;
+  f.api.request = async route => { const value = await request(route); now = Date.parse(f.plan.window.deadline); return value; };
+  await assert.rejects(corroboratePublicationExecution({ ...f, policy: f.profile, clock: () => now }),
+    { code: "PUBLICATION_EXECUTION_INVALID" });
+  f.requests.length = 0;
+  assert.deepEqual(await corroboratePublicationExecution({ ...f, policy: f.profile, conservation: true, clock: () => now }),
+    { status: "conservation-only", epoch: 2 });
+  assert.equal(f.requests.length, 0);
+});
+
+test("physical input corroborates the enrolled maintainer and exact producer channel, without inventing qualification", async () => {
+  const f = stableFixture(); f.plan.qualification.gpu = true;
+  const body = `tabgrad-release-qualification ${f.plan.producer.verification.identity.runId}/1 ${f.plan.candidate.inventorySha256}\n{"report":"transport-only fixture"}`;
+  const comment = { id: 901, body, user: { id: 11 },
+    issue_url: `https://api.github.com/repos/${f.plan.publisher.repository}/issues/77` };
+  f.values.set("/issues/comments/901", comment);
+  f.execution.physical = { issue: "77", commentId: "901", sha256: sha256(Buffer.from(body)) };
+  f.execution.planSha256 = sha256(canonicalBytes(f.plan));
+  assert.deepEqual(await corroboratePublicationExecution({ ...f, policy: f.profile }),
+    { status: "corroborated-unapproved", epoch: 2 });
+  // This only authenticates transport. Existing input admission still validates
+  // actual supplied-archive reports and the exact original CPU qualification.
+  for (const change of [c => { c.user.id = 12; }, c => { c.body = c.body.replace("tabgrad-release-qualification", "gpu-consumers"); },
+    c => { c.issue_url = c.issue_url.replace("/77", "/78"); }, c => { c.body += "edited"; }]) {
+    const saved = structuredClone(comment); change(comment);
+    await assert.rejects(corroboratePublicationExecution({ ...f, policy: f.profile }), { code: "PUBLICATION_PHYSICAL_INPUT_INVALID" });
+    for (const key of Object.keys(comment)) delete comment[key]; Object.assign(comment, saved);
+  }
+});
+
+test("record drift blocks initial admission while subsequent own journal updates remain possible", async () => {
+  const f = stableFixture(), route = `/git/ref/${f.policy.record.ref.slice(5)}`;
+  f.values.get(route).object.sha = "b".repeat(40);
+  await assert.rejects(corroboratePublicationExecution({ ...f, policy: f.profile, initial: true }),
+    { code: "PUBLICATION_HISTORY_HEAD_CHANGED" });
+  assert.deepEqual(await corroboratePublicationExecution({ ...f, policy: f.profile }),
+    { status: "corroborated-unapproved", epoch: 2 });
+});
 
 test("queued aggregate needs the exact active role before the actual review can grant authority", async () => {
   const f = fixture(); queuedRole(f);

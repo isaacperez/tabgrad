@@ -6,15 +6,29 @@ import { checkTrialArtifact, checkTrialJobs } from "./producer-trial.mjs";
 const digest = /^[0-9a-f]{64}$/;
 const identifier = /^[1-9][0-9]*$/;
 
+function validHistory(history, now) {
+  return exactPublicationKeys(history, ["id", "sha256", "expiresAt", "runId", "revision", "name"])
+    && identifier.test(history.id) && identifier.test(history.runId)
+    && digest.test(history.sha256) && /^[0-9a-f]{40}$/.test(history.revision)
+    && typeof history.name === "string" && /^[a-z0-9-]{1,128}$/.test(history.name)
+    && new Date(history.expiresAt).toISOString() === history.expiresAt
+    && now < Date.parse(history.expiresAt);
+}
+
 /** This digest comes from separately enrolled protected configuration, never dispatch. */
 export function admitPublicationPolicy(bytes, expectedSha256, now = Date.now()) {
   requirePublication(typeof expectedSha256 === "string" && digest.test(expectedSha256)
     && bytes.length <= 65536 && sha256(bytes) === expectedSha256, "PUBLICATION_POLICY_IDENTITY");
   const policy = JSON.parse(bytes);
-  requirePublication(exactPublicationKeys(policy, ["schemaVersion", "repositoryId", "ownerId", "workflow", "recipeRevision",
-    "writerPolicySha256", "maintainers", "environment", "operationalEvidence", "humanControllerSha256", "record", "history"])
-    && policy.schemaVersion === 1 && identifier.test(policy.repositoryId) && identifier.test(policy.ownerId)
-    && typeof policy.workflow === "string" && typeof policy.recipeRevision === "string"
+  const shared = ["schemaVersion", "repositoryId", "ownerId", "workflow", "writerPolicySha256", "maintainers",
+    "environment", "operationalEvidence", "humanControllerSha256", "record"];
+  const legacy = policy.schemaVersion === 1;
+  requirePublication((legacy || policy.schemaVersion === 2)
+    && exactPublicationKeys(policy, [...shared, ...(legacy ? ["recipeRevision", "history"] : ["clients"])])
+    && identifier.test(policy.repositoryId) && identifier.test(policy.ownerId)
+    && typeof policy.workflow === "string" && (legacy ? typeof policy.recipeRevision === "string"
+      : exactPublicationKeys(policy.clients, ["npm", "controller", "provenance", "trustRoot"])
+        && Object.values(policy.clients).every(value => typeof value === "string" && digest.test(value)))
     && digest.test(policy.writerPolicySha256)
     && (policy.humanControllerSha256 === null || (typeof policy.humanControllerSha256 === "string" && digest.test(policy.humanControllerSha256)))
     && Array.isArray(policy.maintainers) && policy.maintainers.length > 0
@@ -29,13 +43,91 @@ export function admitPublicationPolicy(bytes, expectedSha256, now = Date.now()) 
     && new Date(policy.operationalEvidence.expiresAt).toISOString() === policy.operationalEvidence.expiresAt
     && now < Date.parse(policy.operationalEvidence.expiresAt)
     && exactPublicationKeys(policy.record, ["root", "location", "ref", "protocol"])
-    && exactPublicationKeys(policy.history, ["id", "sha256", "expiresAt", "runId", "revision", "name"])
-    && identifier.test(policy.history.id) && identifier.test(policy.history.runId)
-    && digest.test(policy.history.sha256) && /^[0-9a-f]{40}$/.test(policy.history.revision)
-    && typeof policy.history.name === "string" && /^[a-z0-9-]{1,128}$/.test(policy.history.name)
-    && new Date(policy.history.expiresAt).toISOString() === policy.history.expiresAt
-    && now < Date.parse(policy.history.expiresAt), "PUBLICATION_POLICY_INVALID");
+    && (!legacy || validHistory(policy.history, now)), "PUBLICATION_POLICY_INVALID");
   return policy;
+}
+
+/** Structural resolution only; provider corroboration and protected approval are separate. */
+export function resolvePublicationExecution(profile, execution, plan, context, now = Date.now(), conservation = false) {
+  requirePublication(profile.schemaVersion === 2
+    && exactPublicationKeys(execution, ["schemaVersion", "planSha256", "publisher", "sourceChecks", "history", "recordHead", "physical"])
+    && execution.schemaVersion === 1 && execution.planSha256 === sha256(canonicalBytes(plan))
+    && exactPublicationKeys(execution.publisher, ["revision", "runId", "attempt"])
+    && execution.publisher.revision === context.revision && context.revision === plan.publisher.revision
+    && execution.publisher.runId === context.runId && execution.publisher.attempt === context.attempt
+    && context.attempt === "1" && identifier.test(context.runId)
+    && context.event === "workflow_dispatch" && context.ref === "refs/heads/main"
+    && context.workflowRef === `${plan.publisher.repository}/${profile.workflow}@refs/heads/main`
+    && profile.repositoryId === context.repositoryId && profile.workflow === plan.publisher.workflow
+    && profile.record.location === `https://github.com/${plan.publisher.repository}.git`
+    && profile.maintainers.some(actor => actor.ownerSha256 === plan.owner)
+    && Date.parse(plan.window.start) <= now && (conservation || now < Date.parse(plan.window.deadline))
+    && /^[a-f0-9]{40}$/.test(execution.recordHead) && validHistory(execution.history, now)
+    && Date.parse(plan.window.deadline) <= Date.parse(execution.history.expiresAt)
+    && now < Date.parse(profile.operationalEvidence.expiresAt)
+    && Date.parse(plan.window.deadline) <= Date.parse(profile.operationalEvidence.expiresAt), "PUBLICATION_EXECUTION_INVALID");
+  requirePublication(["history", "observation", "completion"].some(kind =>
+    execution.history.name === `tabgrad-publication-${kind}-${execution.history.runId}-1`), "PUBLICATION_HISTORY_LAYOUT");
+  requirePublication(plan.publisher.clientSha256 === profile.clients.npm
+    && plan.publisher.githubClientSha256 === profile.clients.controller
+    && plan.producer.verification.client.sha256 === profile.clients.provenance
+    && plan.producer.verification.trustRootSha256 === profile.clients.trustRoot,
+  "PUBLICATION_ENROLLED_CLIENT_MISMATCH");
+  const revisions = new Set([plan.candidate.sourceRevision, plan.publisher.revision]);
+  requirePublication(Array.isArray(execution.sourceChecks) && execution.sourceChecks.length === revisions.size,
+    "PUBLICATION_SOURCE_CHECKS_INVALID");
+  for (const check of execution.sourceChecks) {
+    requirePublication(exactPublicationKeys(check, ["revision", "runId", "attempt"])
+      && revisions.delete(check.revision) && identifier.test(check.runId) && identifier.test(check.attempt),
+    "PUBLICATION_SOURCE_CHECKS_INVALID");
+  }
+  requirePublication(plan.qualification.gpu ? exactPublicationKeys(execution.physical, ["issue", "commentId", "sha256"])
+    && identifier.test(execution.physical.issue) && identifier.test(execution.physical.commentId)
+    && digest.test(execution.physical.sha256) : execution.physical === null, "PUBLICATION_PHYSICAL_INPUT_INVALID");
+  return { ...profile, recipeRevision: plan.publisher.revision, history: execution.history };
+}
+
+/** Authenticated facts cannot approve a plan or replace the enrolled protection baseline. */
+export async function corroboratePublicationExecution({ api, policy, execution, plan, context,
+  initial = false, conservation = false, clock = Date.now }) {
+  // Re-resolve at the decision boundary, including after every asynchronous read.
+  const fresh = () => resolvePublicationExecution(policy, execution, plan, context, clock(), conservation);
+  fresh();
+  if (conservation) return { status: "conservation-only", epoch: 2 };
+  for (const check of execution.sourceChecks) {
+    const run = await api.request(`/actions/runs/${check.runId}`);
+    fresh();
+    requirePublication(String(run.id) === check.runId && String(run.run_attempt) === check.attempt
+      && run.head_sha === check.revision && run.head_branch === "main" && run.event === "push"
+      && run.path === ".github/workflows/repository-checks.yml" && run.status === "completed" && run.conclusion === "success"
+      && String(run.repository?.id) === policy.repositoryId && String(run.head_repository?.id) === policy.repositoryId,
+    "PUBLICATION_SOURCE_CHECKS_INVALID");
+    const jobs = await api.request(`/actions/runs/${check.runId}/attempts/${check.attempt}/jobs?per_page=100`);
+    fresh();
+    requirePublication(Array.isArray(jobs.jobs) && jobs.total_count === jobs.jobs.length && jobs.total_count === 5
+      && ["repository-consistency", "runtime", "browser-Chrome", "browser-Firefox", "publication-client"].every(name =>
+        jobs.jobs.filter(job => job.name === name && String(job.run_id) === check.runId
+          && String(job.run_attempt) === check.attempt && job.head_sha === check.revision && job.status === "completed"
+          && (job.conclusion === "success" || (name === "publication-client" && job.conclusion === "skipped"))).length === 1),
+    "PUBLICATION_SOURCE_CHECKS_INVALID");
+  }
+  if (execution.physical !== null) {
+    const comment = await api.request(`/issues/comments/${execution.physical.commentId}`);
+    fresh();
+    const prefix = `tabgrad-release-qualification ${plan.producer.verification.identity.runId}/1 ${plan.candidate.inventorySha256}\n`;
+    requirePublication(String(comment.id) === execution.physical.commentId && typeof comment.body === "string"
+      && comment.body.startsWith(prefix) && sha256(Buffer.from(comment.body)) === execution.physical.sha256
+      && policy.maintainers.some(actor => actor.id === String(comment.user?.id) && actor.ownerSha256 === plan.owner)
+      && comment.issue_url === `https://api.github.com/repos/${plan.publisher.repository}/issues/${execution.physical.issue}`,
+    "PUBLICATION_PHYSICAL_INPUT_INVALID");
+  }
+  if (initial) {
+    const record = await api.request(`/git/ref/${policy.record.ref.slice(5)}`);
+    fresh();
+    requirePublication(record.ref === policy.record.ref && record.object?.type === "commit"
+      && record.object.sha === execution.recordHead, "PUBLICATION_HISTORY_HEAD_CHANGED");
+  }
+  return { status: "corroborated-unapproved", epoch: 2 };
 }
 
 /** Stable relevant projection, rather than volatile URLs/timestamps from the API. */
