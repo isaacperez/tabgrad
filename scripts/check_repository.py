@@ -406,7 +406,7 @@ EXPECTED_HISTORY_SHA256 = (
     "1233f7d445d7d5d2c6aac157c75c9e2cb1cb34a81b3aac6b4864ec057c1226cb"
 )
 EXPECTED_PUBLICATION_SHA256 = (
-    "1c35366274124803c641f3e886734385432b3881c6a511efcb8ef1057d4c04c7"
+    "a97ec40e1dc2e32db3e9d072322d8a22d2c539c74a2804581d775df2408ed3ce"
 )
 PUBLICATION_PERMISSIONS = {"contents": "read", "actions": "read", "issues": "read"}
 PUBLICATION_JOB_PERMISSIONS = {
@@ -415,6 +415,10 @@ PUBLICATION_JOB_PERMISSIONS = {
         for name in ("admit", "gate", "observe", "complete")
     },
     "npm": {**PUBLICATION_PERMISSIONS, "id-token": "write"},
+}
+PUBLICATION_POST_JOB_PREREQUISITES = {
+    "consume": ("precheck", "admit", "observe"),
+    "complete": ("precheck", "admit", "observe", "consume"),
 }
 PUBLICATION_PRIVATE_INPUTS = (
     "TABGRAD_RELEASE_POLICY_JSON",
@@ -1280,6 +1284,42 @@ def check_publication_private_inputs(
     return failures
 
 
+def check_publication_post_jobs(
+    path: Path, document: Mapping[object, object]
+) -> list[Failure]:
+    """Keep post-publication work eligible despite skipped optional ancestors."""
+    failures: list[Failure] = []
+    jobs = document.get("jobs")
+    for name, required in PUBLICATION_POST_JOB_PREREQUISITES.items():
+        job = jobs.get(name) if is_yaml_mapping(jobs) else None
+        needs = job.get("needs") if is_yaml_mapping(job) else None
+        if not (
+            is_yaml_list(needs)
+            and all(isinstance(dependency, str) for dependency in needs)
+            and len(needs) == len(required)
+            and set(needs) == set(required)
+        ):
+            failures.append(
+                Failure(path, f"job {name} must retain its required dependencies")
+            )
+        expected = (
+            "${{ always() && !cancelled() && "
+            + " && ".join(
+                f"needs.{dependency}.result == 'success'" for dependency in required
+            )
+            + " }}"
+        )
+        condition = job.get("if") if is_yaml_mapping(job) else None
+        if not isinstance(condition, str) or " ".join(condition.split()) != expected:
+            failures.append(
+                Failure(
+                    path,
+                    f"job {name} must explicitly require successful prerequisites and reject cancellation",
+                )
+            )
+    return failures
+
+
 def check_workflow_security(state: YamlRepositoryState) -> list[Failure]:
     failures: list[Failure] = []
     documents = repository_workflow_documents(state)
@@ -1296,6 +1336,7 @@ def check_workflow_security(state: YamlRepositoryState) -> list[Failure]:
         is_history = relative == HISTORY_PATH
         if is_publication:
             failures.extend(check_publication_private_inputs(relative, document))
+            failures.extend(check_publication_post_jobs(relative, document))
         expected_permissions = {"contents": "read"}
         if is_producer_trial or is_publication or is_history:
             expected_permissions = (

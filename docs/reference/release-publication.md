@@ -287,6 +287,14 @@ complete the exact tag, draft, notes and six assets and make the release public.
 Final inspection requires the expected latest designation and immutable freeze.
 Failure after npm preserves a partial release and never repacks or republishes.
 
+The consumer and GitHub completion jobs use explicit status conditions: unused
+authentication branches may be skipped without skipping these later stages.
+Each stage still requires its own prerequisites to succeed and rejects workflow
+cancellation. Completion additionally requires successful consumer verification.
+The outcome recorder retains its separate failure-conservation condition.
+Inspect the actual required jobs and their receipts when assessing delivery;
+an aggregate successful run can also contain skipped jobs.
+
 Archive-proof association compares all bundle fields, including unknown fields.
 It treats omitted versus explicitly empty signature `keyid` and
 `timestampVerificationData.rfc3161Timestamps` as the same Sigstore JSON defaults,

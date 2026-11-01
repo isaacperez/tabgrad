@@ -497,6 +497,10 @@ jobs:
     - precheck
     - admit
     - observe
+    if: >-
+      ${{ always() && !cancelled() &&
+          needs.precheck.result == 'success' && needs.admit.result == 'success' &&
+          needs.observe.result == 'success' }}
     steps:
     - name: Check out the reviewed recipe
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -577,6 +581,10 @@ jobs:
     - admit
     - observe
     - consume
+    if: >-
+      ${{ always() && !cancelled() &&
+          needs.precheck.result == 'success' && needs.admit.result == 'success' &&
+          needs.observe.result == 'success' && needs.consume.result == 'success' }}
     steps:
     - name: Check out the reviewed recipe
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
