@@ -75,6 +75,7 @@ link to its primary source, but they must not create a competing version.
 | Version 0.1.0 source, supported API groups and qualification boundary | [`reference/release-0.1.0.md`](reference/release-0.1.0.md) |
 | Version 0.1.1 build correction, preserved support and qualification boundary | [`reference/release-0.1.1.md`](reference/release-0.1.1.md) |
 | Version 0.1.2 maintainer corrections, preserved support and qualification boundary | [`reference/release-0.1.2.md`](reference/release-0.1.2.md) |
+| Version 0.1.3 release automation corrections and preserved support boundary | [`reference/release-0.1.3.md`](reference/release-0.1.3.md) |
 | Controlled publication commands, roles and human procedure | [`reference/release-publication.md`](reference/release-publication.md) |
 | CPU intermediate reuse decision, semantic retention and physical last-use boundary | [`architecture/cpu-intermediate-reuse.md`](architecture/cpu-intermediate-reuse.md) |
 | Persistent same-device updates, alias versions, derivative fidelity and effect ownership | [`architecture/cpu-tensor-updates.md`](architecture/cpu-tensor-updates.md) |

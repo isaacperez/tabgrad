@@ -58,7 +58,7 @@ recording, alias versions, derivative guards and deferred failure.
 Use [Gradient recording scopes](gradient-recording.md) for Python `no_grad`,
 JavaScript callbacks, shared mode restoration and special-view tracking.
 
-Use the [0.1.2 source and support record](release-0.1.2.md) for maintainer
+Use the [0.1.3 source and support record](release-0.1.3.md) for maintainer
 corrections and the preserved application support and qualification boundary.
 
 Use the [0.1.0 source and support record](release-0.1.0.md) for that version's

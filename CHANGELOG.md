@@ -7,6 +7,32 @@ established by the corresponding verified release record.
 
 ## Unreleased
 
+## 0.1.3 - 2026-11-01
+
+### Fixed
+
+- Release verification bounds registry-propagation waiting and preserves safe
+  consumer diagnostics; browser selection uses the qualifier's supported
+  interface ([#382](https://github.com/isaacperez/tabgrad/pull/382),
+  [#386](https://github.com/isaacperez/tabgrad/pull/386)).
+
+### Changed
+
+- Maintainers can prepare the exact release plan from reviewed version/source
+  against stable enrolled trust, with protected approvals and separate physical
+  archive/registry reports. Complete retained CI history can be reused directly
+  ([#394](https://github.com/isaacperez/tabgrad/pull/394),
+  [#395](https://github.com/isaacperez/tabgrad/pull/395),
+  [#384](https://github.com/isaacperez/tabgrad/pull/384)).
+- Contributor validation selects affected work for main pushes and reuses valid
+  independent evidence through proportionate handoffs
+  ([#388](https://github.com/isaacperez/tabgrad/pull/388),
+  [#390](https://github.com/isaacperez/tabgrad/pull/390)).
+
+The [0.1.3 source and support record](docs/reference/release-0.1.3.md) preserves
+existing tensor behavior and support limits. Applications need no API migration;
+source integration alone does not activate or qualify the new publication route.
+
 ## 0.1.2 - 2026-11-01
 
 ### Fixed
