@@ -140,13 +140,18 @@ invoke agents, infer semantic correctness or replace the independent review's
 contextual validation plan. Local specialized checks may still be required by
 a changed contract even when a generic CI family cannot cover that environment.
 
-For a pull request, compare the event base commit with the actual checked-out
-candidate (`github.sha`, normally the PR merge commit). Full history is fetched
-in the consistency job. Both identifiers must be complete commit hashes, the
-candidate must match checkout HEAD and the base must be its ancestor. Read the
-complete NUL-separated Git diff with rename detection disabled so removed and
-added homes both influence coverage. Do not classify a guessed head-only diff
-while testing a different merge result.
+For a pull request, compare `github.event.pull_request.base.sha` with the actual
+checked-out candidate (`github.sha`, normally the PR merge commit). For a push,
+compare `github.event.before` with `github.sha`: this covers the entire push,
+including earlier commits, rather than guessing `HEAD^`. The
+[GitHub push event](https://docs.github.com/en/webhooks/webhook-events-and-payloads#push)
+defines that prior branch tip. Full history is fetched in the consistency job.
+Both identifiers must be complete nonzero commit hashes, the candidate must
+match checkout HEAD and the base must be its ancestor. Read the complete
+NUL-separated Git diff with rename detection disabled so removed and added
+homes both influence coverage. A new branch, non-fast-forward rewrite or
+unavailable comparison cannot establish exclusions. Do not classify a guessed
+head-only diff while testing a different merge result.
 
 The conservative policy is:
 
@@ -155,7 +160,7 @@ The conservative policy is:
 | Maintained Markdown documentation/root policy files, brand Markdown/SVG, issue forms/template, or native Python tests under `tests/` only | Repository consistency and the applicable independent content/instruction/tooling review; no runtime build or browser execution |
 | Node unit `.mjs` cases under `js-tests/unit/`, optionally mixed with the previous group | Runtime checks and the complete Node suite; unchanged browser execution is not selected |
 | Runtime, Python compatibility, Rust, browser fixtures, build/dependency inputs, selector/workflow code, mixed executable areas, or an unclassified path | Both runtime and browser families |
-| Main push, manual or unknown event, empty diff, malformed identifiers, missing history, checkout mismatch or failed/incomplete Git comparison | Both runtime and browser families |
+| Manual or unknown event, empty diff, zero/malformed identifiers, missing history, non-ancestor base, checkout mismatch or failed/incomplete Git comparison | Both runtime and browser families |
 
 Only known exclusions narrow coverage. New maintained locations default to full
 coverage until their ownership and consumers justify a reviewed policy update.
@@ -174,7 +179,8 @@ an unaffected result. This admission ordering avoids running expensive jobs on
 a rejected consistency result; it is not a measured speed improvement for
 execution-affecting changes.
 
-All configured execution runs on `main` and manual dispatch. There are no
+The same impact policy applies to PRs and `main` pushes. Manual dispatch remains
+the explicit full-validation route. There are no
 workflow-level PR path filters, relaxed protections, error-tolerance flags,
 new dependencies or secrets. Review and register the complete workflow and
 selection policy together. CI evidence must include the actual decision,
@@ -327,11 +333,11 @@ defines the exact job/step/artifact and raw-packet association. This source grap
 does not establish the provider's real handoff behavior.
 
 The consistency workflow also has a `publication-client` job, selected for
-runtime-affecting changes and every main/manual run. It explicitly prepares
+runtime-affecting PRs and pushes, or full-validation fallback/manual runs. It explicitly prepares
 hash-pinned isolated publishing tools and genuine public fixture originals,
 then runs the documented actual-client qualification with disposable local
 endpoints and fake credentials. Public TUF reads are explicit; it has no real
 npm identity, write permission or signature operation. A skipped job on a
-reviewed unaffected PR is not evidence of client execution. Its stable name is
+reviewed unaffected change is not evidence of client execution. Its stable name is
 `Repository checks / publication-client`; it is not made a required ruleset
 check by this document. The four existing stable checks retain their meaning.

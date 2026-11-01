@@ -56,11 +56,11 @@ async function repositoryFixture(context) {
   return { root, git, write, commit, base };
 }
 
-test("actual Git comparisons include newline filenames, deletion and both sides of renames", async (context) => {
+for (const event of ["pull_request", "push"]) test(`${event} comparisons include newline filenames, deletion and both sides of renames`, async (context) => {
   const repo = await repositoryFixture(context);
   await repo.write("docs/café\npage.md");
   let head = repo.commit();
-  const select = (base, target = head) => selectValidationScope({ event: "pull_request", base, head: target, repository: repo.root });
+  const select = (base, target = head) => selectValidationScope({ event, base, head: target, repository: repo.root });
   assert.equal(select(repo.base).runtime, false);
   await repo.write("src/component.ts");
   const source = repo.commit();
@@ -84,7 +84,7 @@ test("actual Git comparisons include newline filenames, deletion and both sides 
   repo.git("rm", "--quiet", "-rf", ".");
   await repo.write("README.md");
   const unrelated = repo.commit();
-  assert.equal(selectValidationScope({ event: "pull_request", base: repo.base, head: unrelated, repository: repo.root }).browser,
+  assert.equal(selectValidationScope({ event, base: repo.base, head: unrelated, repository: repo.root }).browser,
     true, "an unrelated history cannot support exclusions");
 });
 
@@ -104,14 +104,42 @@ test("the actual merged checkout, not a guessed PR-head diff, determines applica
   assert.equal(selectValidationScope({ event: "pull_request", base: advancedBase, head: candidate, repository: repo.root }).runtime, true);
 });
 
-test("main, manual, unknown or malformed events and unavailable repositories require all", () => {
-  for (const event of [undefined, "push", "workflow_dispatch", "unknown", "pull_request_target"]) {
+test("push uses the complete multi-commit range rather than only the final commit", async (context) => {
+  const repo = await repositoryFixture(context);
+  const select = (base, head) => selectValidationScope({ event: "push", base, head, repository: repo.root });
+  await repo.write("docs/first.md");
+  repo.commit();
+  await repo.write("docs/second.md");
+  let head = repo.commit();
+  assert.deepEqual(select(repo.base, head), { runtime: false, browser: false, reason: "consistency-only" });
+  await repo.write("js-tests/unit/contract.test.mjs");
+  head = repo.commit();
+  assert.deepEqual(select(repo.base, head), { runtime: true, browser: false, reason: "unit-tests-only" });
+  await repo.write("src/shared.ts");
+  const shared = repo.commit();
+  await repo.write("docs/last.md");
+  head = repo.commit();
+  assert.deepEqual(select(repo.base, head), { runtime: true, browser: true, reason: "execution-or-unclassified-change" });
+  assert.equal(select(shared, head).runtime, false, "the final docs commit alone would miss the earlier shared change");
+  repo.git("checkout", "--quiet", "-b", "rewritten", repo.base);
+  await repo.write("docs/replacement.md");
+  const rewritten = repo.commit();
+  assert.deepEqual(select(head, rewritten), { runtime: true, browser: true, reason: "unavailable-comparison" },
+    "a non-fast-forward rewrite cannot support exclusions");
+});
+
+test("manual, unknown or malformed events and unavailable repositories require all", () => {
+  for (const event of [undefined, "workflow_dispatch", "unknown", "pull_request_target"]) {
     assert.equal(selectValidationScope({ event }).browser, true);
   }
-  for (const base of [undefined, "main", "--output=other", "x".repeat(40)]) {
-    assert.equal(selectValidationScope({ event: "pull_request", base, head: "a".repeat(40) }).runtime, true);
+  for (const event of ["pull_request", "push"]) {
+    for (const base of [undefined, "main", "--output=other", "x".repeat(40), "0".repeat(40)]) {
+      assert.deepEqual(selectValidationScope({ event, base, head: "a".repeat(40) }),
+        { runtime: true, browser: true, reason: "unavailable-comparison" });
+    }
+    assert.equal(selectValidationScope({ event, base: "a".repeat(40), head: "0".repeat(40) }).browser, true);
+    assert.equal(selectValidationScope({ event, base: "a".repeat(40), head: "b".repeat(40), repository: "/nonexistent-validation-fixture" }).browser, true);
   }
-  assert.equal(selectValidationScope({ event: "pull_request", base: "a".repeat(40), head: "b".repeat(40), repository: "/nonexistent-validation-fixture" }).browser, true);
 });
 
 test("CLI publishes categorical outputs and distinguishes non-applicability from a test pass", async (context) => {
@@ -120,7 +148,7 @@ test("CLI publishes categorical outputs and distinguishes non-applicability from
   const head = repo.commit();
   const command = fileURLToPath(new URL("../../../scripts/validation-scope.mjs", import.meta.url));
   const output = join(repo.root, "outputs");
-  const env = { ...process.env, GITHUB_OUTPUT: output, TABGRAD_VALIDATION_EVENT: "pull_request", TABGRAD_VALIDATION_BASE: repo.base, TABGRAD_VALIDATION_HEAD: head };
+  const env = { ...process.env, GITHUB_OUTPUT: output, TABGRAD_VALIDATION_EVENT: "push", TABGRAD_VALIDATION_BASE: repo.base, TABGRAD_VALIDATION_HEAD: head };
   const decision = spawnSync(process.execPath, [command], { cwd: repo.root, env, encoding: "utf8", timeout: 5000 });
   assert.equal(decision.status, 0, decision.stderr);
   assert.deepEqual(JSON.parse(decision.stdout), { runtime: false, browser: false, reason: "consistency-only" });
