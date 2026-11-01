@@ -170,3 +170,24 @@ test("valid long release notes stay outside the bounded selection record without
   assert.equal((await readFile(join(f.root, "input/notes.md"), "utf8")), notes);
   assert.ok((await readFile(join(f.root, "selection.json"))).length < 65536);
 });
+
+test("pagination accepts a complete collection at its exact cap and rejects incomplete or over-cap collections", async () => {
+  for (const total of [100, 10000]) {
+    let calls = 0;
+    const rows = await releasePreparationPages({ request: async () => {
+      const start = calls++ * 100; return { total_count: total, artifacts: Array.from({ length: 100 }, (_, i) => ({ id: start + i + 1 })) };
+    } }, "/artifacts", "artifacts");
+    assert.equal(rows.length, total); assert.equal(calls, total / 100);
+  }
+  let calls = 0;
+  await assert.rejects(releasePreparationPages({ request: async () => {
+    const start = calls++ * 100; return { total_count: 10000,
+      artifacts: Array.from({ length: calls === 100 ? 99 : 100 }, (_, i) => ({ id: start + i + 1 })) };
+  } }, "/artifacts", "artifacts"), { code: "PUBLICATION_PREPARATION_PAGINATION" });
+  assert.equal(calls, 100);
+  calls = 0;
+  await assert.rejects(releasePreparationPages({ request: async () => { calls++;
+    return { total_count: 10001, artifacts: Array.from({ length: 100 }, (_, i) => ({ id: i + 1 })) };
+  } }, "/artifacts", "artifacts"), { code: "PUBLICATION_PREPARATION_PAGINATION" });
+  assert.equal(calls, 1);
+});

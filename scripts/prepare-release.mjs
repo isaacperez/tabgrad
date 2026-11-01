@@ -27,7 +27,7 @@ export async function releasePreparationPages(api, route, key) {
   for (let page = 1; page <= 100; page++) {
     const result = await api.request(`${route}${route.includes("?") ? "&" : "?"}per_page=100&page=${page}`);
     const rows = result?.[key];
-    requirePublication(Number.isSafeInteger(result?.total_count) && result.total_count >= 0
+    requirePublication(Number.isSafeInteger(result?.total_count) && result.total_count >= 0 && result.total_count <= 10000
       && Array.isArray(rows) && rows.length <= 100 && (expected === undefined || expected === result.total_count),
     "PUBLICATION_PREPARATION_PAGINATION");
     expected = result.total_count;
@@ -35,9 +35,9 @@ export async function releasePreparationPages(api, route, key) {
       requirePublication(Number.isSafeInteger(row?.id) && row.id > 0 && !seen.has(row.id), "PUBLICATION_PREPARATION_PAGINATION");
       seen.add(row.id); values.push(row);
     }
-    if (rows.length < 100) {
-      requirePublication(values.length === expected, "PUBLICATION_PREPARATION_PAGINATION"); return values;
-    }
+    requirePublication(values.length <= expected, "PUBLICATION_PREPARATION_PAGINATION");
+    if (values.length === expected) return values;
+    requirePublication(rows.length === 100, "PUBLICATION_PREPARATION_PAGINATION");
   }
   throw Object.assign(new Error("PUBLICATION_PREPARATION_PAGINATION"), { code: "PUBLICATION_PREPARATION_PAGINATION" });
 }
