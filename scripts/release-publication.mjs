@@ -1,5 +1,5 @@
 /** Manual release roles. Importing this module performs no service operation. */
-import { appendFile, cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { appendFile, cp, lstat, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
@@ -413,6 +413,35 @@ async function consumerReport(root, state, environment) {
   return reports;
 }
 
+/** Read-only post-result checks; retain safe diagnostics even without a success handoff. */
+export async function verifyPublishedConsumerResult(root, { plan, candidate, proof, registry, report, clock = Date.now }) {
+  let phase = "registry", status = "failed", code = null;
+  try {
+    await registry.waitForPublished(plan, Math.min(Date.parse(plan.window.deadline), clock() + 600000));
+    phase = "provenance";
+    const association = await registry.associateOriginalProof(plan, proof);
+    phase = "consumers";
+    const reports = await report();
+    phase = "admission";
+    const result = admitPublishedConsumers({ plan, candidate, reports, association });
+    await savePublicationJson(join(root, "public-output/consumers.json"), result);
+    status = "passed";
+    return { status: "published-consumers-verified" };
+  } catch (error) {
+    code = /^PUBLICATION_[A-Z_]+$/.test(error.code ?? "") ? error.code : "PUBLICATION_CONSUMER_CHECK_FAILED";
+    throw error;
+  } finally {
+    const keys = ["at", "urlSha256", "status", "sha256", "receivedBytes", "phase", "selectedVersionPresent", "exactVersion",
+      "selectedVersionUsed", "withdrawn", "channel", "state"];
+    const observations = registry.observations.slice(0, 64).map(row =>
+      Object.fromEntries(keys.filter(key => Object.hasOwn(row, key)).map(key => [key, row[key]])));
+    await savePublicationJson(join(root, "public-output/consumer-diagnostics.json"), {
+      schemaVersion: 1, status, phase, code, planSha256: sha256(canonicalBytes(plan)),
+      observations, omittedObservations: Math.max(0, registry.observations.length - observations.length),
+    });
+  }
+}
+
 async function observeNpmRole(root, state, admission, environment) {
   const { plan } = state;
   await state.conserve();
@@ -525,12 +554,8 @@ export async function publicationRole(command, root, environment = process.env) 
   }
   if (command === "consume") {
     await state.fresh(); await corroboratePublicationJob(state.api, state.context, roleNames.observe);
-    const registry = publicationRegistry();
-    const association = await registry.associateOriginalProof(plan, material.proof);
-    const reports = await consumerReport(root, state, environment);
-    const result = admitPublishedConsumers({ plan, candidate: material.candidate, reports, association });
-    await savePublicationJson(join(root, "public-output/consumers.json"), result);
-    return { status: "published-consumers-verified" };
+    return verifyPublishedConsumerResult(root, { plan, candidate: material.candidate, proof: material.proof,
+      registry: publicationRegistry(), report: () => consumerReport(root, state, environment) });
   }
   requirePublication(command === "complete", "PUBLICATION_USAGE");
   await state.fresh(); await corroboratePublicationJob(state.api, state.context, roleNames.consume);
@@ -573,6 +598,18 @@ if (process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(
       await transferPublicationHistory(source, join(root, "public-output/evidence"));
       await savePublicationJson(join(root, "public-output/role-result.json"), result);
     } catch { result = { ...result, status: "failed", conservation: "unconfirmed" }; process.exitCode = 1; }
+  }
+  if (process.argv[2] === "consume" && process.env.TABGRAD_PUBLICATION_ENABLED === "true"
+    && process.env.TABGRAD_PUBLICATION_CONFIRMATION === "release-publication") {
+    const directory = join(resolve(process.argv[3]), "public-output");
+    try {
+      const stat = await lstat(directory);
+      requirePublication(stat.isDirectory() && !stat.isSymbolicLink(), "PUBLICATION_OUTPUT_INVALID");
+      await savePublicationJson(join(directory, "role-result.json"), result);
+    } catch (error) {
+      // An inert/rejected request must not create an output directory.
+      if (error.code !== "ENOENT") { result = { ...result, status: "failed", conservation: "unconfirmed" }; process.exitCode = 1; }
+    }
   }
   process.stdout.write(`${JSON.stringify(result)}\n`);
 }

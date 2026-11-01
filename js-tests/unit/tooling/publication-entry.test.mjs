@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -48,4 +48,22 @@ test("actual CLI is inert by default for every CI role, creates no files and exp
     assert.equal(result.stderr, ""); assert.equal(result.stdout.includes(root), false);
     assert.deepEqual(await readdir(root), []);
   }
+});
+
+test("consumer CLI retains only a safe failure result in its existing enabled output", async t => {
+  const root = await mkdtemp(join(tmpdir(), "tabgrad-consumer-result-test-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const directory = join(root, "public-output"); await mkdir(directory);
+  const environment = publicationEnvironment(root);
+  const inert = spawnSync(process.execPath, [entry, "consume", root], { env: environment, encoding: "utf8" });
+  assert.equal(inert.status, 1); assert.deepEqual(await readdir(directory), []);
+  const active = spawnSync(process.execPath, [entry, "consume", root], { encoding: "utf8", env: {
+    ...environment, TABGRAD_PUBLICATION_ENABLED: "true", TABGRAD_PUBLICATION_CONFIRMATION: "release-publication",
+    TABGRAD_PUBLICATION_PLAN_JSON: "PRIVATE INVALID INPUT",
+  } });
+  assert.equal(active.status, 1); assert.equal(active.stderr, "");
+  const raw = await readFile(join(directory, "role-result.json"), "utf8");
+  assert.equal(raw.includes("PRIVATE"), false); assert.equal(raw.includes(root), false);
+  assert.deepEqual(JSON.parse(raw), JSON.parse(active.stdout));
+  assert.equal(JSON.parse(raw).status, "failed");
 });
