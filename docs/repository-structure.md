@@ -323,6 +323,13 @@ permission packets, provider job/step/artifact association and local session
 claims; it neither publishes nor replaces the record. The client profile,
 Python setup and actual-client
 qualification are optional release tooling, outside library distribution.
+`scripts/prepare-release.mjs` owns read-only selection and composition from
+reviewed version/source into that existing plan and execution contract. It
+reuses admission, provenance, history and registry owners, without approving or
+writing configuration. `release-qualification.mjs` collects exact physical
+archive/registry observations through the existing consumer and transfers only
+separately inspected messages; it does not share publication credentials with
+consumer execution. Both are optional release tooling, outside distribution.
 `scripts/release-history.mjs` prepares a bounded initial-evidence packet offline
 and materializes only inspected original bytes in its separate read-only manual
 workflow. It shares the existing history reader, not a second record or trust

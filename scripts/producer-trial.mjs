@@ -145,6 +145,8 @@ export async function inspectTrialPacket(directory, context) {
 async function prepare(directory, context) {
   const head = execFileSync("git", ["rev-parse", "HEAD"], { cwd: repository, encoding: "utf8" }).trim();
   check(head === context.identity.sourceRevision, "TRIAL_SOURCE");
+  const metadata = json(await original(join(repository, "package.json")));
+  check(!process.env.TABGRAD_TRIAL_VERSION || process.env.TABGRAD_TRIAL_VERSION === metadata.version, "TRIAL_VERSION");
   execFileSync("npm", ["run", "package", "--", directory], { cwd: repository, stdio: "inherit" });
   await outputs({ data_exists: "true" });
   const selected = await inspectCandidate(directory, context);

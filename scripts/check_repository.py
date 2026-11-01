@@ -350,7 +350,7 @@ EXPECTED_HISTORY_SHA256 = (
     "1233f7d445d7d5d2c6aac157c75c9e2cb1cb34a81b3aac6b4864ec057c1226cb"
 )
 EXPECTED_PUBLICATION_SHA256 = (
-    "a97ec40e1dc2e32db3e9d072322d8a22d2c539c74a2804581d775df2408ed3ce"
+    "b5909ee9bb5d76aef1707c56d9f580b2a69fb3a447853f5e0334562f04fcc8ca"
 )
 PUBLICATION_PERMISSIONS = {"contents": "read", "actions": "read", "issues": "read"}
 PUBLICATION_JOB_PERMISSIONS = {
@@ -369,6 +369,10 @@ PUBLICATION_PRIVATE_INPUTS = (
     "TABGRAD_RELEASE_POLICY_SHA256",
     "TABGRAD_RELEASE_QUALIFICATION_JSON",
 )
+PUBLICATION_PREPARATION_COMMANDS = {
+    f'node scripts/prepare-release.mjs {role} "$RUNNER_TEMP/tabgrad-publication"'
+    for role in ("select", "compose")
+}
 PUBLICATION_ROLE_COMMANDS = {
     f'node scripts/release-publication.mjs {role} "$RUNNER_TEMP/tabgrad-publication"'
     for role in (
@@ -388,7 +392,7 @@ PUBLICATION_ROLE_COMMANDS = {
 }
 # Canonical parsed JSON, not YAML layout. Updating this requires complete review.
 EXPECTED_PRODUCER_TRIAL_SHA256 = (
-    "9e43f39f1af0af055477194d6dc9de24253ebb4b37587a57ddbf62a4aabcc3c0"
+    "8dfd9c921ab8ee54e17421212140cb7ed601eab64c2de96b73a13e48d807850c"
 )
 APPROVED_WORKFLOW_PATHS = {
     Path(".github/workflows/repository-checks.yml"),
@@ -504,6 +508,7 @@ PUBLICATION_COMMANDS = {
     ".venv/bin/python scripts/prepare_provenance_client.py "
     '"$RUNNER_TEMP/tabgrad-provenance-client"',
     *PUBLICATION_ROLE_COMMANDS,
+    *PUBLICATION_PREPARATION_COMMANDS,
 }
 CHECKOUT_ACTION = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
 SETUP_PYTHON_ACTION = "actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97"
@@ -1219,7 +1224,9 @@ def check_publication_private_inputs(
             if not is_yaml_mapping(step):
                 continue
             command = step.get("run")
-            consumer = isinstance(command, str) and command in PUBLICATION_ROLE_COMMANDS
+            consumer = isinstance(command, str) and command in (
+                PUBLICATION_ROLE_COMMANDS | PUBLICATION_PREPARATION_COMMANDS
+            )
             failures.extend(
                 check_publication_input_environment(
                     path, f"job {name} step {index}", step.get("env"), consumer=consumer

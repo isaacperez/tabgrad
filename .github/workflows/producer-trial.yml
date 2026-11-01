@@ -11,9 +11,13 @@ on:
         description: Approved finite UTC deadline, including milliseconds and Z
         required: true
         type: string
+      version:
+        description: Optional assertion against committed package version
+        required: false
+        type: string
       trusted_root_sha256:
-        description: Independently admitted original trusted-root JSONL SHA-256
-        required: true
+        description: Legacy explicit root override; otherwise use the admitted stable root setting
+        required: false
         type: string
       confirmation:
         description: Enter producer-trial after separate operational authorization
@@ -33,7 +37,8 @@ env:
   TABGRAD_TRIAL_CONFIRMATION: ${{ inputs.confirmation }}
   TABGRAD_TRIAL_SOURCE: ${{ inputs.source_revision }}
   TABGRAD_TRIAL_DEADLINE: ${{ inputs.expires_at }}
-  TABGRAD_TRIAL_TRUST_ROOT: ${{ inputs.trusted_root_sha256 }}
+  TABGRAD_TRIAL_TRUST_ROOT: ${{ inputs.trusted_root_sha256 || vars.TABGRAD_PRODUCER_TRUST_ROOT_SHA256 }}
+  TABGRAD_TRIAL_VERSION: ${{ inputs.version }}
 
 jobs:
   prepare:

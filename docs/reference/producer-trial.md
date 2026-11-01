@@ -24,13 +24,14 @@ effective environment protection. Check those settings directly in GitHub.
 An absent environment can be created automatically without protection: a YAML
 environment name alone is never evidence of approval enforcement.
 
-The four required dispatch inputs are:
+The dispatch inputs are:
 
 | Input | Meaning |
 | --- | --- |
 | `source_revision` | Exact reviewed 40-character lowercase main commit; also the workflow revision and checkout SHA |
 | `expires_at` | Finite absolute UTC deadline, canonical ISO spelling with milliseconds and `Z`; it must remain in the future at admission and before either signature |
-| `trusted_root_sha256` | Independently admitted SHA-256 of the exact original trusted-root JSONL; it must not be learned from the received proofs |
+| `version` | Optional assertion against the committed package version; mismatch rejects before building |
+| `trusted_root_sha256` | Optional explicit legacy override; otherwise use the independently admitted stable `TABGRAD_PRODUCER_TRUST_ROOT_SHA256` repository setting. Never learn the root from received proofs |
 | `confirmation` | Literal `producer-trial`, supplied after operational authorization |
 
 The local entry is `node scripts/producer-trial.mjs COMMAND ...`. It requires

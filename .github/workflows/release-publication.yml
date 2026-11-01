@@ -2,25 +2,45 @@ name: Release publication
 'on':
   workflow_dispatch:
     inputs:
+      version:
+        description: 'Ordinary release: version already committed at the selected source'
+        required: false
+        type: string
+      source_revision:
+        description: 'Ordinary release: exact reviewed source commit'
+        required: false
+        type: string
+      producer_run:
+        description: Optional exact eligible producer run when selection is ambiguous
+        required: false
+        type: string
+      history_artifact:
+        description: Optional exact original-history carrier; full replay is still mandatory
+        required: false
+        type: string
+      physical_comment:
+        description: Optional exact pre-publication physical report when several exist
+        required: false
+        type: string
       plan_json:
-        description: Canonical separately inspected closed publication plan
-        required: true
+        description: Legacy closed-plan input (leave empty for version/source intent)
+        required: false
         type: string
       plan_sha256:
-        description: Independently inspected canonical plan SHA-256
-        required: true
+        description: Legacy closed-plan input (leave empty for version/source intent)
+        required: false
         type: string
       notes:
-        description: Approved public release notes
-        required: true
+        description: Legacy closed-plan input (leave empty for version/source intent)
+        required: false
         type: string
       qualification_json:
-        description: Identified same-candidate CPU and declared physical GPU reports
-        required: true
+        description: Legacy closed-plan input (leave empty for version/source intent)
+        required: false
         type: string
       receipt_issue:
-        description: Approved issue for public-safe bootstrap or physical consumer receipt
-        required: true
+        description: Receipt issue override; otherwise use the admitted repository setting
+        required: false
         type: string
       confirmation:
         description: Enter release-publication after separate operational authorization
@@ -40,7 +60,12 @@ env:
   TABGRAD_PUBLICATION_PLAN_SHA256: ${{ inputs.plan_sha256 }}
   TABGRAD_PUBLICATION_NOTES: ${{ inputs.notes }}
   TABGRAD_PUBLICATION_QUALIFICATION_JSON: ${{ inputs.qualification_json }}
-  TABGRAD_RECEIPT_ISSUE: ${{ inputs.receipt_issue }}
+  TABGRAD_RECEIPT_ISSUE: ${{ inputs.receipt_issue || vars.TABGRAD_RELEASE_RECEIPT_ISSUE }}
+  TABGRAD_RELEASE_VERSION: ${{ inputs.version }}
+  TABGRAD_RELEASE_SOURCE: ${{ inputs.source_revision }}
+  TABGRAD_RELEASE_PRODUCER_RUN: ${{ inputs.producer_run }}
+  TABGRAD_RELEASE_HISTORY_ARTIFACT: ${{ inputs.history_artifact }}
+  TABGRAD_RELEASE_PHYSICAL_COMMENT: ${{ inputs.physical_comment }}
 jobs:
   precheck:
     name: precheck-publication
@@ -57,6 +82,67 @@ jobs:
       with:
         node-version-file: .node-version
         check-latest: false
+    - name: Select exact release intent and original metadata
+      id: selection
+      run: node scripts/prepare-release.mjs select "$RUNNER_TEMP/tabgrad-publication"
+      env:
+        TABGRAD_RELEASE_POLICY_JSON: ${{ secrets.TABGRAD_RELEASE_POLICY_JSON }}
+        TABGRAD_RELEASE_POLICY_SHA256: ${{ secrets.TABGRAD_RELEASE_POLICY_SHA256 }}
+        TABGRAD_RELEASE_QUALIFICATION_JSON: ${{ secrets.TABGRAD_RELEASE_QUALIFICATION_JSON }}
+    - name: Receive selected original candidate
+      if: steps.selection.outputs.mode == 'intent'
+      uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      with:
+        artifact-ids: ${{ steps.selection.outputs.data_id }}
+        run-id: ${{ steps.selection.outputs.producer_run }}
+        github-token: ${{ github.token }}
+        path: ${{ runner.temp }}/tabgrad-publication/data
+        digest-mismatch: error
+    - name: Receive selected original proofs
+      if: steps.selection.outputs.mode == 'intent'
+      uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      with:
+        artifact-ids: ${{ steps.selection.outputs.proofs_id }}
+        run-id: ${{ steps.selection.outputs.producer_run }}
+        github-token: ${{ github.token }}
+        path: ${{ runner.temp }}/tabgrad-publication/proofs
+        digest-mismatch: error
+    - name: Receive selected original corroboration
+      if: steps.selection.outputs.mode == 'intent'
+      uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      with:
+        artifact-ids: ${{ steps.selection.outputs.verification_id }}
+        run-id: ${{ steps.selection.outputs.producer_run }}
+        github-token: ${{ github.token }}
+        path: ${{ runner.temp }}/tabgrad-publication/verification
+        digest-mismatch: error
+    - name: Receive selected complete history carrier
+      if: steps.selection.outputs.mode == 'intent'
+      uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      with:
+        artifact-ids: ${{ steps.selection.outputs.history_id }}
+        run-id: ${{ steps.selection.outputs.history_run }}
+        github-token: ${{ github.token }}
+        path: ${{ runner.temp }}/tabgrad-publication/initial-history
+        digest-mismatch: error
+    - name: Compose and independently corroborate the unapproved plan
+      id: composed
+      if: steps.selection.outputs.mode == 'intent'
+      run: node scripts/prepare-release.mjs compose "$RUNNER_TEMP/tabgrad-publication"
+      env:
+        TABGRAD_RELEASE_POLICY_JSON: ${{ secrets.TABGRAD_RELEASE_POLICY_JSON }}
+        TABGRAD_RELEASE_POLICY_SHA256: ${{ secrets.TABGRAD_RELEASE_POLICY_SHA256 }}
+        TABGRAD_RELEASE_QUALIFICATION_JSON: ${{ secrets.TABGRAD_RELEASE_QUALIFICATION_JSON }}
+    - name: Retain exact generated public inputs
+      id: input
+      if: steps.selection.outputs.mode == 'intent'
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      with:
+        name: tabgrad-publication-preparation-${{ github.run_id }}-${{ github.run_attempt }}
+        path: ${{ runner.temp }}/tabgrad-publication/input
+        overwrite: false
+        if-no-files-found: error
+        retention-days: 90
     - name: Run the maintained publication role
       id: role
       run: node scripts/release-publication.mjs precheck "$RUNNER_TEMP/tabgrad-publication"
@@ -64,6 +150,7 @@ jobs:
         TABGRAD_RELEASE_POLICY_JSON: ${{ secrets.TABGRAD_RELEASE_POLICY_JSON }}
         TABGRAD_RELEASE_POLICY_SHA256: ${{ secrets.TABGRAD_RELEASE_POLICY_SHA256 }}
         TABGRAD_RELEASE_QUALIFICATION_JSON: ${{ secrets.TABGRAD_RELEASE_QUALIFICATION_JSON }}
+        TABGRAD_PUBLICATION_PLAN_SHA256: ${{ inputs.plan_sha256 || steps.composed.outputs.plan_sha256 }}
     env:
       GH_TOKEN: ${{ github.token }}
     if: ${{ vars.TABGRAD_PUBLICATION_ENABLED == 'true' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.run_attempt == '1' && inputs.confirmation == 'release-publication' }}
@@ -76,6 +163,8 @@ jobs:
       history_run: ${{ steps.role.outputs.history_run }}
       mode: ${{ steps.role.outputs.mode }}
       approval: ${{ steps.role.outputs.approval }}
+      plan_sha256: ${{ steps.role.outputs.plan_sha256 }}
+      input_id: ${{ steps.input.outputs.artifact-id }}
   admit:
     name: admit-publication
     runs-on: ubuntu-24.04
@@ -134,6 +223,14 @@ jobs:
         github-token: ${{ github.token }}
         path: ${{ runner.temp }}/tabgrad-publication/initial-history
         digest-mismatch: error
+    - name: Receive exact prepared intent input
+      if: needs.precheck.outputs.input_id != ''
+      uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      with:
+        artifact-ids: ${{ needs.precheck.outputs.input_id }}
+        github-token: ${{ github.token }}
+        path: ${{ runner.temp }}/tabgrad-publication/input
+        digest-mismatch: error
     - name: Run the maintained publication role
       id: role
       run: node scripts/release-publication.mjs admit "$RUNNER_TEMP/tabgrad-publication"
@@ -155,6 +252,7 @@ jobs:
         retention-days: 90
     env:
       GH_TOKEN: ${{ github.token }}
+      TABGRAD_PUBLICATION_PLAN_SHA256: ${{ inputs.plan_sha256 || needs.precheck.outputs.plan_sha256 }}
     environment: tabgrad-npm-publication
     permissions:
       contents: write
@@ -278,6 +376,7 @@ jobs:
       TABGRAD_ADMISSION_ID: ${{ needs.admit.outputs.artifact_id }}
       TABGRAD_ADMISSION_DIGEST: ${{ needs.admit.outputs.digest }}
       TABGRAD_ADMISSION_SHA256: ${{ needs.admit.outputs.admission_sha }}
+      TABGRAD_PUBLICATION_PLAN_SHA256: ${{ inputs.plan_sha256 || needs.precheck.outputs.plan_sha256 }}
     if: ${{ needs.precheck.outputs.mode == 'oidc' }}
     permissions:
       contents: read
@@ -350,6 +449,7 @@ jobs:
       TABGRAD_ADMISSION_ID: ${{ needs.admit.outputs.artifact_id }}
       TABGRAD_ADMISSION_DIGEST: ${{ needs.admit.outputs.digest }}
       TABGRAD_ADMISSION_SHA256: ${{ needs.admit.outputs.admission_sha }}
+      TABGRAD_PUBLICATION_PLAN_SHA256: ${{ inputs.plan_sha256 || needs.precheck.outputs.plan_sha256 }}
     if: ${{ needs.precheck.outputs.mode == 'bootstrap' }}
     outputs:
       artifact_id: ${{ steps.retained.outputs.artifact-id }}
@@ -415,6 +515,7 @@ jobs:
       TABGRAD_ADMISSION_ID: ${{ needs.admit.outputs.artifact_id }}
       TABGRAD_ADMISSION_DIGEST: ${{ needs.admit.outputs.digest }}
       TABGRAD_ADMISSION_SHA256: ${{ needs.admit.outputs.admission_sha }}
+      TABGRAD_PUBLICATION_PLAN_SHA256: ${{ inputs.plan_sha256 || needs.precheck.outputs.plan_sha256 }}
     if: ${{ needs.precheck.outputs.mode != 'observe' }}
     permissions:
       contents: write
@@ -481,6 +582,7 @@ jobs:
       TABGRAD_NPM_RESULT_ID: ${{ needs.npm.outputs.artifact_id || needs.bootstrap.outputs.artifact_id }}
       TABGRAD_NPM_RESULT_DIGEST: ${{ needs.npm.outputs.digest || needs.bootstrap.outputs.digest }}
       TABGRAD_NPM_JOB_RESULT: ${{ needs.precheck.outputs.mode == 'bootstrap' && needs.bootstrap.result || needs.npm.result }}
+      TABGRAD_PUBLICATION_PLAN_SHA256: ${{ inputs.plan_sha256 || needs.precheck.outputs.plan_sha256 }}
     if: ${{ always() && !cancelled() && needs.admit.result == 'success' }}
     permissions:
       contents: write
@@ -569,6 +671,7 @@ jobs:
       TABGRAD_ADMISSION_ID: ${{ needs.admit.outputs.artifact_id }}
       TABGRAD_ADMISSION_DIGEST: ${{ needs.admit.outputs.digest }}
       TABGRAD_ADMISSION_SHA256: ${{ needs.admit.outputs.admission_sha }}
+      TABGRAD_PUBLICATION_PLAN_SHA256: ${{ inputs.plan_sha256 || needs.precheck.outputs.plan_sha256 }}
     outputs:
       artifact_id: ${{ steps.retained.outputs.artifact-id }}
       digest: ${{ steps.retained.outputs.artifact-digest }}
@@ -666,6 +769,7 @@ jobs:
       TABGRAD_ADMISSION_SHA256: ${{ needs.admit.outputs.admission_sha }}
       TABGRAD_CONSUMERS_ID: ${{ needs.consume.outputs.artifact_id }}
       TABGRAD_CONSUMERS_DIGEST: ${{ needs.consume.outputs.digest }}
+      TABGRAD_PUBLICATION_PLAN_SHA256: ${{ inputs.plan_sha256 || needs.precheck.outputs.plan_sha256 }}
     permissions:
       contents: write
       actions: read

@@ -146,6 +146,20 @@ export function publicationApprovalComment(plan, planSha256, context) {
   return `tabgrad-release-approve ${planSha256} ${plan.operation} ${context.runId}/${context.attempt}`;
 }
 
+/** Read-only preparation checks the enrolled baseline before any protected job exists. */
+export async function observePublicationPreparation({ api, profile, context, window, repository, clock = Date.now }) {
+  requirePublication(profile.schemaVersion === 2 && profile.record.location === `https://github.com/${repository}.git`
+    && context.repositoryId === profile.repositoryId, "PUBLICATION_PREPARATION_CONTEXT");
+  const plan = { publisher: { repository, workflow: profile.workflow, revision: context.revision }, window };
+  await checkPublicationControl({ api, plan, policy: { ...profile, recipeRevision: context.revision }, context,
+    activeJobName: "precheck-publication", clock });
+  const head = await api.request("/git/ref/heads/main");
+  requirePublication(head.ref === "refs/heads/main" && head.object?.type === "commit" && head.object.sha === context.revision,
+    "PUBLICATION_MAIN_MOVED");
+  requireObservationTime({ plan, policy: profile, clock });
+  return { status: "unapproved-preparation" };
+}
+
 /** Read again at the decision boundary; an earlier asynchronous read is not a clock. */
 function requireObservationTime(parameters, conservation = false) {
   const { plan, policy } = parameters;

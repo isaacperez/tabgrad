@@ -58,7 +58,7 @@ hash. These are repository configuration, not dispatch authority. Keep actual
 identities, policy originals, authentication and destinations out of issues and
 source. Install the three values as repository **secrets**, not configuration
 variables. The workflow delivers them only through the environment of each
-maintained publication-role command, excluding checkout, setup and transfer
+maintained publication-role or release-preparation command, excluding checkout, setup and transfer
 actions. Registering a mask inside that command is too late to protect the
 runner's preceding environment header.
 
@@ -83,11 +83,11 @@ authenticate the party which installed them.
 
 ## Stable profile and execution contract
 
-`publication-authority.mjs` owns both explicit schema epochs. The closed-plan
-role entry uses v1; v2 requires an execution controller calling the resolver
-and corroborator below. Supplying a v2 profile alone to the closed-plan role
-fails with `PUBLICATION_EXECUTION_REQUIRED`. These APIs grant no activation or
-publication authority and do not write secrets.
+`publication-authority.mjs` owns both explicit schema epochs. The role entry
+accepts a closed v1 plan or the v2 plan/execution files generated below.
+Supplying a v2 profile without that execution file fails with
+`PUBLICATION_EXECUTION_REQUIRED`. Neither epoch grants activation authority
+or writes secrets.
 
 `admitPublicationPolicy(bytes, expectedSha256, now)` checks the independently
 enrolled digest and a closed schema. V2 preserves v1's `repositoryId`, `ownerId`,
@@ -138,6 +138,104 @@ live comparison with enrolled protections or `observePublicationAuthority`'s
 actual protected approval query. A self-supplied snapshot, matching hash or
 `approved=true` cannot satisfy that gate. Rejected/changed reviewers, bypass or
 branch protection still stop the protected job before it can be created.
+
+## Ordinary version/source preparation
+
+Enroll the stable v2 profile, its digest and reusable operational qualification
+once through the admitted configuration procedure. The producer's stable root
+setting `TABGRAD_PRODUCER_TRUST_ROOT_SHA256` must match the independently
+enrolled profile pin. Set the public-safe receipt issue in
+`TABGRAD_RELEASE_RECEIPT_ISSUE`. These settings require separate operational
+authorization; merging source does not install them or enable either workflow.
+Changes to protections, clients, trust or expired qualification still require
+fresh admission, rather than rewriting configuration for each release.
+
+The two manual starts remain:
+
+1. Dispatch the producer on the reviewed main source, with `source_revision`,
+   the approved finite `expires_at`, confirmation `producer-trial` and optionally
+   `version` as an assertion against the committed package. Review its frozen
+   outputs before approving signing. Obtain its exact data artifact through
+   the maintained GitHub artifact client; do not rebuild it locally.
+2. After collecting the physical report below, dispatch the publisher on its
+   reviewed main recipe with `version`, `source_revision` and confirmation
+   `release-publication`. Leave the legacy plan/hash/notes/qualification fields
+   empty. The receipt issue defaults to the admitted repository setting.
+
+Read-only `prepare-release.mjs select` checks live enrolled protections before
+creating a protected job, verifies the committed package and version's
+`CHANGELOG.md` section, and requires one successful exact-source producer.
+`producer_run` can disambiguate eligible runs; no latest-run fallback is used.
+It selects the three original artifact IDs and a run-bound history carrier.
+An optional `history_artifact` selects another eligible carrier. Otherwise the
+largest eligible artifact ID is only a transfer hint: complete replay of its
+originals against the enrolled current root/head must still succeed. Missing
+history rejects; selection cannot reset the record. Collection pagination has
+the existing 100-page/100-row bound and rejects incomplete or changing totals.
+
+CI receives those original artifacts with fatal digest mismatch and invokes
+`prepare-release.mjs compose`. It rechecks source/owner/protections, actual
+successful source-check runs/jobs, original candidate/CPU/proof associations,
+current record head and complete history. Notes come from the committed
+version section, with relative links bound to that source. It derives the
+existing OIDC/latest plan, assets, checksums and public `execution.json`.
+The deadline is the earliest original producer, verification, qualification,
+artifact or history expiry; it is never renewed. Registry observations require
+a visible existing package and unused version. The new-tag/release intent is
+rechecked later by the qualified writer; this reader cannot infer draft absence.
+
+The generated public input artifact is downloadable before the protected
+approval and contains no enrolled policy or credentials. Its hash is transferred
+as a job output. Admission and subsequent actors receive the same plan and
+execution facts, corroborate them against enrolled trust/provider records, and
+still require the exact protected review below. The prepared files cannot
+approve themselves. Legacy v1 closed-plan input remains explicit for recovery;
+mixing v1 intent with v2 files or manual JSON fields rejects.
+
+### Collect and transfer physical observations
+
+On an admitted physical-GPU machine with the prepared browser/tool environment:
+
+```console
+node scripts/release-qualification.mjs collect DATA_DIRECTORY NEW_OUTPUT_DIRECTORY
+```
+
+The command inspects the original producer packet, runs the existing exact
+supplied-archive GPU/origin qualifier in Chrome without publication credentials,
+and validates its result against the original CPU report and candidate. It
+creates `report.json`, `message.txt` and `receipt.json`, ready for inspection;
+it does not post. Inspect the entire outgoing message before the explicit
+maintainer-attributed transfer, using an already admitted GitHub issue-writing
+identity via `GH_TOKEN`:
+
+```console
+node scripts/release-qualification.mjs publish OUTPUT_DIRECTORY ISSUE_NUMBER
+```
+
+CI requires one matching attributed comment; `physical_comment` can select an
+exact one when needed. Only a supplied-archive observation for the exact
+producer/inventory satisfies preparation. A post-npm registry receipt cannot.
+After npm, receive that publication's admission artifact at `admission/` and
+the producer packet at `data/` under a local root, then run:
+
+```console
+node scripts/release-qualification.mjs collect-registry ROOT NEW_OUTPUT_DIRECTORY
+```
+
+This performs the separate real registry installation and constructs the
+existing plan/operation/run-bound `gpu-consumers` message. Inspect and transfer
+it with the same `publish` command while CI awaits that observation. It does
+not relabel the earlier archive report. Each collection has a 10-minute child
+limit capped by the original deadline, a 4 MiB captured-output limit and the
+existing 64 KiB observation envelope. Failure/cleanup/fallback reports reject.
+No helper proves physical hardware beyond the existing reported nonfallback
+adapter contract; the admitted operator still establishes the real device.
+
+Transfer persists a local claim before its single POST. A lost or contrary
+response is conserved as unknown; repeating the command does not retry it.
+Reconcile original observations before any recovery. A different directory is
+not an exactly-once guarantee. Failures and raw child diagnostics remain local;
+only inspected successful report messages are intended for publication.
 
 ## Prepare the initial history handoff
 
@@ -320,7 +418,7 @@ asset hash.
 
 ## Approve and execute one ordinary publication
 
-The dispatch inputs are canonical `plan_json`, its separately inspected
+The legacy v1 dispatch inputs are canonical `plan_json`, its separately inspected
 `plan_sha256`, exact public `notes`, combined `qualification_json`, the approved
 public-safe receipt issue number and confirmation `release-publication`.
 Inspect the entire input and all intended public files before dispatch. Their
@@ -640,11 +738,10 @@ workflow; a public GitHub release must not trigger another npm publisher.
    protections, actors and destinations. Copying old files does not renew their
    expiry or approval. Reuse applicable immutable qualification; a new version
    alone does not justify repeating an acquisition laboratory.
-5. Construct and independently inspect the ordinary plan with
-   `node scripts/prepare-publication-plan.mjs INPUT_DIRECTORY NEW_OUTPUT_DIRECTORY`.
-   Use `npm.mode=oidc`, `npm.before.package=existing`, an absent unused version
-   and the observed starting channel. Pin producer artifact identities, original
-   proofs, qualification, notes, six assets and current source/clients.
+5. Use [ordinary version/source preparation](#ordinary-versionsource-preparation)
+   for a stable v2 profile. Explicit v1 recovery instead constructs and inspects
+   the closed plan with `prepare-publication-plan.mjs`; its separate recipe pin
+   and exact plan inputs remain mandatory.
 6. For the first useful OIDC delivery, coordinate trusted-publisher registration
    with that approved version/window. Bind the exact authorized repository,
    workflow filename and environment, and explicitly permit direct publication
@@ -654,8 +751,8 @@ workflow; a public GitHub release must not trigger another npm publisher.
    standing-token fallback or dummy publication. See
    [npm's trusted-publisher procedure](https://docs.npmjs.com/trusted-publishers/).
 7. Under concrete publication authorization, enable and dispatch the existing
-   release-publication workflow with inspected plan/hash, exact notes,
-   qualification, receipt issue and confirmation. Review the protected job's
+   release-publication workflow with the admitted version/source intent, or
+   explicit v1 recovery inputs, and confirmation. Review the protected job's
    exact approval comment. CI performs readiness, separate late GitHub permission,
    one identified npm invocation, outcome recording, registry/external consumers,
    then conditional immutable GitHub completion. Supply authenticated physical

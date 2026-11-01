@@ -39,31 +39,39 @@ export function validatePublicationQualification(reports, candidate, plan, input
   for (const expected of required) {
     const matches = reports.filter(report => report.requested?.gpu === expected.gpu);
     requirePublication(matches.length === 1, "PUBLICATION_QUALIFICATION_MISMATCH");
-    const report = matches[0];
-    sameCandidate(report, candidate, plan.candidate.inventorySha256);
-    requirePublication(report.input === input && isDeepStrictEqual(report.requested, expected)
-      && report.profiles?.length === expected.browsers.length * expected.profiles.length,
-    "PUBLICATION_QUALIFICATION_MISMATCH");
-    for (const browser of expected.browsers) for (const mode of expected.profiles) {
-      requirePublication(report.profiles.filter(profile => profile.browser === browser && profile.mode === mode
-        && profile.status === "passed" && typeof profile.version === "string" && profile.version.length > 0).length === 1,
-      "PUBLICATION_QUALIFICATION_MISMATCH");
-    }
-    if (expected.gpu) requirePublication(report.profiles.find(profile => profile.mode === "gpu")?.gpu?.adapter?.isFallbackAdapter === false,
-      "PUBLICATION_GPU_EVIDENCE_MISSING");
-    if (input === "registry-version") requirePublication(report.checks.includes("supplied-archive-installation"),
-      "PUBLICATION_QUALIFICATION_MISMATCH");
-    if (input === "registry-version") {
-      const registry = report.registry;
-      requirePublication(registry?.status === "passed" && registry.npm === "11.1.0" && registry.channel === plan.npm.channel
-        && registry.transport?.rejected === 0 && registry.consumedArchive?.sha256 === candidate.tarball.sha256
-        && registry.consumedArchive.byteLength === candidate.tarball.byteLength
-        && registry.consumedArchive.integrity === candidate.tarball.integrity
-        && ["exact-registry-metadata", "channel", "dependency-boundary", "downloaded-archive-identity",
-          "approved-cache-population", "named-registry-installation", "consumed-archive-integrity", "installed-inventory"]
-          .every(check => registry.checks?.includes(check)), "PUBLICATION_REGISTRY_CONSUMER_MISMATCH");
-    }
+    validateQualificationReport(matches[0], expected, candidate, plan, input);
   }
+}
+
+function validateQualificationReport(report, expected, candidate, plan, input) {
+  sameCandidate(report, candidate, plan.candidate.inventorySha256);
+  requirePublication(report.input === input && isDeepStrictEqual(report.requested, expected)
+    && report.profiles?.length === expected.browsers.length * expected.profiles.length,
+  "PUBLICATION_QUALIFICATION_MISMATCH");
+  for (const browser of expected.browsers) for (const mode of expected.profiles) {
+    requirePublication(report.profiles.filter(profile => profile.browser === browser && profile.mode === mode
+      && profile.status === "passed" && typeof profile.version === "string" && profile.version.length > 0).length === 1,
+    "PUBLICATION_QUALIFICATION_MISMATCH");
+  }
+  if (expected.gpu) requirePublication(report.profiles.find(profile => profile.mode === "gpu")?.gpu?.adapter?.isFallbackAdapter === false,
+    "PUBLICATION_GPU_EVIDENCE_MISSING");
+  if (input === "registry-version") requirePublication(report.checks.includes("supplied-archive-installation"),
+    "PUBLICATION_QUALIFICATION_MISMATCH");
+  if (input === "registry-version") {
+    const registry = report.registry;
+    requirePublication(registry?.status === "passed" && registry.npm === "11.1.0" && registry.channel === plan.npm.channel
+      && registry.transport?.rejected === 0 && registry.consumedArchive?.sha256 === candidate.tarball.sha256
+      && registry.consumedArchive.byteLength === candidate.tarball.byteLength
+      && registry.consumedArchive.integrity === candidate.tarball.integrity
+      && ["exact-registry-metadata", "channel", "dependency-boundary", "downloaded-archive-identity",
+        "approved-cache-population", "named-registry-installation", "consumed-archive-integrity", "installed-inventory"]
+        .every(check => registry.checks?.includes(check)), "PUBLICATION_REGISTRY_CONSUMER_MISMATCH");
+  }
+}
+
+/** A physical observation is validated independently before CI joins its real CPU observation. */
+export function validatePublicationPhysicalReport(report, candidate, plan, input = "supplied-archive") {
+  validateQualificationReport(report, { gpu: true, browsers: ["Chrome"], profiles: ["gpu", "origin"] }, candidate, plan, input);
 }
 
 /** Original-data verification, without building or running package/consumer code. */
