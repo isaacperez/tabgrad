@@ -4,6 +4,7 @@ import { browserDefinitions, browserVersion, resolveBrowser, runBrowserPage, sel
 
 const profiles = [
   { page: "python-webgpu/python-webgpu-diagnostics.html" },
+  ...["message", "error"].map((failure) => ({ page: "python-webgpu/python-webgpu-diagnostics.html", failure })),
   { page: "python-webgpu/python-webgpu.html" }, { page: "python-webgpu/python-webgpu-revocation.html" }, { page: "python-webgpu/python-webgpu-attachment.html" },
   { page: "python-webgpu/python-webgpu-revocation.html", operation: "sum" },
   { page: "python-webgpu/python-webgpu-revocation.html", operation: "mul" },
@@ -23,10 +24,20 @@ try {
   for (const browser of selectBrowserDefinitions(process.env.TABGRAD_BROWSER ?? "Chrome", browserDefinitions)) {
     const executable = await resolveBrowser(browser);
     const version = browserVersion(executable);
-    for (const { page, mode, operation } of profiles) await runBrowserPage({
-      server, browser, executable, version, page, parameters: { ...(mode === undefined ? {} : { mode }), ...(operation === undefined ? {} : { operation }) },
+    for (const { page, mode, operation, failure } of profiles) await runBrowserPage({
+      server, browser, executable, version, page, parameters: { ...(mode === undefined ? {} : { mode }), ...(operation === undefined ? {} : { operation }), ...(failure === undefined ? {} : { failure }) },
       validateResult(result) {
         assert.equal(result.ok, true, JSON.stringify(result.error));
+        if (failure !== undefined) {
+          assert.equal(result.expectedBootstrapFailure, failure);
+          assert.match(result.observedFailure, /controlled GPU diagnostic bootstrap failure/);
+          assert.equal(result.gpuDiagnostics.state, "closed");
+          assert.equal(result.gpuDiagnostics.ownedBufferBytes, 0);
+          assert.equal(result.gpuDiagnostics.pendingSubmissions, 0);
+          assert.equal(result.gpuDiagnostics.unknownCompletionBytes, 0);
+          process.stdout.write(`${browser.name} ${version} ${page} ${failure}: expected bootstrap failure preserved and cleanup acknowledged\n`);
+          return;
+        }
         assert.equal(result.worker, page !== "python-webgpu/python-webgpu-attachment.html");
         assert.equal(result.jspiAvailable, false);
         assert.equal(result.pyodide, "314.0.6");

@@ -1,7 +1,15 @@
 import { attachPython, servePythonWorker } from "/python.js";
 
 addEventListener("message", async ({ data }) => {
+  if (data.failureMode === "error") {
+    setTimeout(() => { throw new Error("controlled GPU diagnostic bootstrap failure"); }, 0);
+    return;
+  }
   try {
+    if (data.failureMode === "message") {
+      postMessage({ kind: "failure", message: "controlled GPU diagnostic bootstrap failure" });
+      return;
+    }
     for (const name of ["Suspending", "promising", "Suspender"]) {
       if (!Reflect.deleteProperty(WebAssembly, name) || name in WebAssembly) throw new Error(`Cannot disable JSPI: ${name}`);
     }
