@@ -168,6 +168,83 @@ Remove TypeScript only if maintained browser source no longer uses TypeScript;
 update it after reviewing diagnostics, emitted JavaScript, browser support,
 lockfile contents, license, and build size.
 
+### Website build and browser assets
+
+`website/package.json` and `website/package-lock.json` select a separate private
+site build. None of these new build tools enter the library's npm distribution.
+The website owner maintains this resolution and its component notices; removing
+the website removes this separate installation, not the library compiler or
+runtime dependency. Updates require affected Markdown/rendering, output and
+real-browser checks from [development](development.md#prepare-and-preview-the-static-website).
+
+| Direct dependency | Selected version | Purpose, origin and license |
+| --- | --- | --- |
+| Node.js | `22.23.4` | Website build only; official Node.js distribution, MIT and included component notices |
+| `astro` | `7.4.4` | Static builder, official `withastro/astro` npm distribution, MIT |
+| `@astrojs/starlight` | `0.42.8` | Documentation navigation, search and theme, official `withastro/starlight`, MIT |
+| `@astrojs/check` | `0.9.12` | Astro/TypeScript checks, official Astro tooling, MIT |
+| `@astrojs/markdown-remark` | `7.3.5` | Markdown processing with literal typography preserved, official Astro distribution, MIT |
+| `@mermaid-js/mermaid-cli` | `12.0.0` | Build-time SVG from reviewed Mermaid sources, official Mermaid project, MIT |
+| `puppeteer` | `25.16.0` | Explicit renderer browser acquisition/configuration, official Puppeteer project, Apache-2.0; Chrome for Testing has its own Google terms |
+| `typescript` | `6.0.3` | Strict website TypeScript checking, Microsoft distribution, Apache-2.0 |
+| `prismjs` | `1.30.0` | Editable Python/JavaScript syntax colors, official Prism project, MIT |
+| `unified` | `11.0.5` | Build-time Markdown syntax pipeline, official unified collective, MIT |
+| `remark-parse` | `11.0.0` | Markdown parsing, official remark project, MIT |
+| `remark-gfm` | `4.0.1` | Repository tables and GitHub Markdown, official remark project, MIT |
+| `remark-stringify` | `11.0.0` | Adapted Markdown output, official remark project, MIT |
+| `unist-util-visit` | `5.2.0` | Syntax-tree traversal, official unist project, MIT |
+| `github-slugger` | `2.0.0` | Preserve GitHub heading anchors, official project, ISC |
+| `parse5` | `8.1.0` | HTML verification and inline-script hashes, official project, MIT |
+| `@tabgrad/tabgrad` | `0.1.3` | Exact published browser distribution, this project's npm package, Apache-2.0 |
+| `pyodide` | `314.0.6` | Optional on-demand Python runtime; official distribution, MPL-2.0 and the component notices below |
+
+Registry URLs and integrity for all transitive packages belong to the website
+lockfile. Prism uses only its core and clike/JavaScript/Python grammars: no
+automatic page highlighting, plugins or remote grammar loading. A native
+textarea owns editing; a text-only token view adds colors without changing the
+source. Starlight supplies Pagefind `1.6.0` (MIT) and Expressive Code `0.44.3`
+(MIT) browser components; the build copies their installed notices to the
+site's license page, including the Svelte 4 runtime bundled into Pagefind's
+prebuilt UI. Its MIT notice is preserved from the upstream Svelte 4.2.20 source;
+that notice does not identify Pagefind's unrecorded exact build-time Svelte
+resolution. Mermaid and Puppeteer stay build-only; diagrams are
+delivered as inspected image SVG, without a client Mermaid runtime or remote
+font fetch. Do not treat generated images as permission to strip attribution.
+
+The website body and interface use unmodified Inter `4.1` variable WOFF2 files
+from the [official source revision](https://github.com/rsms/inter/tree/e3a3d4c57d5ecc01453a575621882a384c1995a3).
+Normal and italic faces are maintained under `website/src/assets/fonts/` and
+bundled as local assets; visitors do not contact a font CDN. The SIL Open Font
+License 1.1 permits this redistribution separately from Tabgrad's source
+license. Its full notice is preserved in `website/third-party/INTER-LICENSE`
+and the generated website component notices. The third-party index records
+the exact file hashes. Review origin, license, loading, fallback and layout
+when updating the font. The website owner maintains the pin; it does not add
+a library runtime dependency or change the outlined brand wordmark.
+
+The locked Mermaid tool's KaTeX dependency has the low-severity advisory
+[GHSA-238p-pmpm-9mq7](https://github.com/advisories/GHSA-238p-pmpm-9mq7), propagated
+to the CLI in npm's audit. It concerns attacker-controlled rendering options
+after prototype pollution; KaTeX does not itself cause that pollution. Site
+rendering uses reviewed repository sources and fixed options, contains no math
+diagrams, and verifies the resulting SVG before delivery. This bounds the
+current exposure; it is not an assertion that the dependency is patched or
+that arbitrary Mermaid input is safe. Review the advisory on renderer updates;
+do not downgrade the CLI or force an incompatible override merely to suppress
+the audit result.
+
+The website redistributes the matched Tabgrad `dist/` tree unmodified with its
+LICENSE and source/readme metadata. It separately copies Pyodide's seven
+browser bootstrap/runtime files. Their bytes are checked against the locked
+installed originals. The accompanying upstream source notices are maintained
+under `website/third-party/`: Pyodide at commit
+`8cec1b9bb8ead68c7c09b0a6443576bec7512268`, CPython `v3.14.2`, and Emscripten
+`5.0.3`, matching the interpreter's lock metadata. The site offers those exact
+source links and notices; it does not remove the prebuilt files' bundled
+component notices or modify covered source. See the Pyodide distribution duties
+below. Bump the website runtime pin deliberately, preserving this matched set
+and rerunning its CPU/browser and notice checks; a docs edit need not bump npm.
+
 ### Python integration and oracle dependencies
 
 Pyodide supplies the Python interpreter and cross-language facilities that

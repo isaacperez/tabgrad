@@ -1,0 +1,12 @@
+---
+interface Props { title: string; accent?: string; description: string; compact?: boolean }
+const { title, accent, description, compact = false } = Astro.props;
+const illustrated = Astro.slots.has("illustration");
+---
+<section class:list={["page-intro", { "workspace-intro": compact, "illustrated-intro": illustrated }]}>
+  <div class="page-intro-story">
+    <h1>{title}{accent && <><br /><span>{accent}</span></>}</h1>
+    <div class="page-intro-copy"><p>{description}</p><slot /></div>
+  </div>
+  {illustrated && <div class="page-intro-art"><slot name="illustration" /></div>}
+</section>

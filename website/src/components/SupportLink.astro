@@ -1,0 +1,7 @@
+---
+import { Icon } from "@astrojs/starlight/components";
+import { supportUrl } from "../../scripts/config.mjs";
+interface Props { primary?: boolean }
+const { primary = false } = Astro.props;
+---
+<a href={supportUrl} class:list={["button", primary ? "primary" : "secondary", "project-text-link", "support-link"]} data-support-link rel="noreferrer"><Icon name="heart" />Buy me a coffee <span aria-hidden="true">↗</span></a>

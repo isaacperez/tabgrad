@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" class="artwork" viewBox="0 0 480 280" role="img" aria-label="Two input branches join a calculation and receive separate gradients">
+  <g class="art-shadow art-panel art-outline">
+    <rect x="32" y="40" width="112" height="72" rx="16"/>
+    <rect x="32" y="168" width="112" height="72" rx="16"/>
+  </g>
+  <path class="art-detail" d="M56 68H96M56 84H120M56 196H112M56 212H88"/>
+  <path class="art-line" d="M144 76H188Q208 76 208 96V120M144 204H188Q208 204 208 184V160M208 140H304"/>
+  <path class="art-soft" d="M208 112L236 140L208 168L180 140Z"/>
+  <path class="art-arrow" d="M300 140H324M314 130L324 140L314 150"/>
+  <g class="art-shadow">
+    <rect class="art-primary" x="336" y="104" width="112" height="72" rx="16"/>
+    <path class="art-code-light" d="M364 140H420"/>
+  </g>
+  <path class="art-return" d="M392 104V48Q392 16 360 16H104Q88 16 88 32M80 24L88 32L96 24M392 176V232Q392 264 360 264H104Q88 264 88 248M80 256L88 248L96 256"/>
+</svg>

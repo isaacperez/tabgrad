@@ -22,6 +22,25 @@ function registerPolicyFixture(server, token) {
   return registration;
 }
 
+test("asset owners may supply MIME/CSP while harness isolation remains authoritative", async () => {
+  const server = await startBrowserServer([], {
+    crossOriginIsolation: true,
+    readAsset: async () => Buffer.from("body {}"),
+    assetHeaders: (path, body) => ({
+      "content-type": path.endsWith(".css") ? "text/css" : "text/plain",
+      "content-security-policy": `script-src 'sha256-${body.toString("base64")}'`,
+      "cross-origin-opener-policy": "unsafe-none",
+    }),
+  });
+  try {
+    const response = await fetch(server.origin + "/site.css");
+    assert.equal(response.headers.get("content-type"), "text/css");
+    assert.match(response.headers.get("content-security-policy"), /^script-src 'sha256-/);
+    assert.equal(response.headers.get("cross-origin-opener-policy"), "same-origin");
+    assert.equal(await response.text(), "body {}");
+  } finally { await server.close(); }
+});
+
 test("server registration enforces one active interval and resets after cancellation", async () => {
   const server = await startBrowserServer(["runtime/runtime.html"]);
   let registration;

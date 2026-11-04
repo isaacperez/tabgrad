@@ -31,9 +31,15 @@ PyTorch imports:
 ```python
 import torch
 
-x = torch.tensor([-1.0, 2.0], dtype=torch.float32, requires_grad=True)
+x = torch.tensor(
+    [-1.0, 2.0],
+    dtype=torch.float32,
+    requires_grad=True,
+)
+
 loss = (x * x).sum()
 loss.backward()
+
 print(x.grad.tolist())  # [-2.0, 4.0]
 ```
 

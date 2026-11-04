@@ -1,0 +1,51 @@
+---
+import StarlightPage from "@astrojs/starlight/components/StarlightPage.astro";
+import { Code } from "@astrojs/starlight/components";
+import PageIntro from "../components/PageIntro.astro";
+import SplitSection from "../components/SplitSection.astro";
+import NextStep from "../components/NextStep.astro";
+import IntegrationMap from "../components/IntegrationMap.astro";
+import data from "../../.generated/site-data.json";
+---
+<StarlightPage frontmatter={{ title: "Get started", template: "splash", editUrl: false }}>
+  <div class="not-content marketing">
+    <PageIntro title="Add Tabgrad" accent="to your page." description="Add a calculation to a static HTML page. No npm or build tools required.">
+      <a class="text-link" href="/playground/">Try an example first →</a>
+    </PageIntro>
+    <div class="integration-guide">
+      <SplitSection id="html" label="HTML + JavaScript" title="Copy a working example.">
+        <Fragment slot="intro">
+          <p>Paste this block into your HTML body. Serve your page over HTTPS, or localhost, and you’ll see <code>Sum: 6</code>.</p>
+          <p>The browser loads the versioned library and WebAssembly from the CDN. The calculation runs on your visitor’s device.</p>
+          <a class="text-link" href="/docs/reference/browser-package/#use-javascript-directly-in-html">HTML integration guide →</a>
+        </Fragment>
+        <Code wrap frame="code" title="HTML · ready to copy" code={data.integrationHtml} lang="html" />
+      </SplitSection>
+      <SplitSection label="Self-hosting · optional" title="Host the library yourself.">
+        <Fragment slot="intro">
+          <p>Prefer to deliver everything from your own site? Get the package and copy its complete <code>dist/</code> tree to a directory such as <code>/vendor/tabgrad/</code>.</p>
+          <p>Replace the CDN URL with <code>/vendor/tabgrad/index.js</code>. Keep the modules, manifests and WebAssembly together.</p>
+          <a class="text-link" href="/docs/reference/browser-package/#install-and-serve-your-own-files">Self-hosting guide →</a>
+        </Fragment>
+        <Code wrap frame="code" title="Get the files with npm" code={`npm install @tabgrad/tabgrad@${data.runtimeVersion} --ignore-scripts --no-audit --no-fund`} lang="shell" />
+        <div class="integration-note"><h3>Your files, your origin.</h3><p>Serve JavaScript, JSON and WebAssembly with their correct content types. Your visitors still install nothing.</p></div>
+      </SplitSection>
+      <SplitSection label="Optional Python" title="Run Python in the browser.">
+        <Fragment slot="intro">
+          <p>Pyodide provides the Python interpreter. Your application loads it in a worker and connects it to Tabgrad before running this code.</p>
+          <p><code>import torch</code> refers to Tabgrad’s supported API subset. The interpreter runs in the browser, alongside the same tensor runtime.</p>
+          <a class="text-link" href="/docs/reference/python-host/">Set up browser Python →</a>
+        </Fragment>
+        <Code wrap frame="code" title="Python · after setup" code={data.introductoryPython} lang="python" />
+      </SplitSection>
+      <SplitSection title="How Tabgrad runs.">
+        <Fragment slot="intro"><p>Use JavaScript directly, or connect Python through Pyodide. Both interfaces share Tabgrad’s tensor operations and gradients.</p><a class="text-link" href="/docs/architecture/">Explore the architecture →</a></Fragment>
+        <IntegrationMap />
+      </SplitSection>
+    </div>
+    <NextStep title="Use your GPU." description="GPU mode uses WebGPU, the browser’s GPU interface. Check the browser and hosting requirements before adding it to your site.">
+      <a class="text-link" href="/docs/reference/webgpu-runtime/">GPU setup →</a>
+      <a class="text-link" href="/versions/">Versions and compatibility →</a>
+    </NextStep>
+  </div>
+</StarlightPage>

@@ -1,0 +1,47 @@
+/* Original SVG sources own geometry; these shared roles own their paint. */
+.illustration { display: block; min-width: 0; width: 100%; line-height: 0; pointer-events: none; }
+.illustration .artwork { display: block; width: 100%; height: auto; overflow: visible; }
+.artwork .art-panel { fill: var(--tg-art-panel); }
+.artwork .art-outline { stroke: var(--tg-art-line); stroke-width: 2; }
+.artwork .art-soft { fill: var(--tg-art-soft); }
+.artwork .art-faint { fill: var(--tg-art-faint); }
+.artwork .art-primary { fill: var(--tg-art-primary); }
+.artwork .art-highlight { fill: var(--tg-art-highlight); }
+.artwork .art-side { fill: var(--tg-art-side); }
+.artwork .art-shadow { filter: drop-shadow(var(--tg-art-shadow)); }
+.artwork .art-code { fill: var(--tg-code-bg); }
+.artwork .art-detail-fill { fill: var(--tg-art-detail); }
+.artwork .art-line { fill: none; stroke: var(--tg-art-line); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.artwork .art-detail { fill: none; stroke: var(--tg-art-detail); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.artwork .art-guides { fill: none; stroke: var(--tg-art-line); stroke-width: 2; stroke-dasharray: 2 10; stroke-linecap: round; }
+.artwork .art-arrow { fill: none; stroke: var(--tg-art-primary); stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+.artwork .art-return { fill: none; stroke: var(--tg-art-primary); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.artwork .art-soft-stroke { fill: none; stroke: var(--tg-art-soft); stroke-width: 8; stroke-linecap: round; }
+.artwork .art-code-stroke, .artwork .art-code-light { fill: none; stroke: var(--tg-code-keyword); stroke-width: 8; stroke-linecap: round; }
+.artwork .art-code-light { stroke: var(--tg-code-text); }
+.artwork .art-code-rule { fill: none; stroke: var(--tg-code-border); stroke-width: 2; }
+.artwork .art-code-mark { fill: var(--tg-code-comment); }
+.artwork .art-cube-grid { fill: none; stroke: var(--tg-code-text); stroke-width: 1.5; opacity: .5; }
+
+/* Diagrams use native text so labels do not shrink with a drawing on mobile. */
+.integration-map { --map-gap: var(--tg-space-4); margin: 0; min-width: 0; }
+.integration-entries { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--map-gap); }
+.integration-entries > div { display: flex; flex-direction: column; justify-content: center; align-items: center; min-width: 0; gap: var(--tg-space-1); padding: var(--tg-space-3); border: 1px solid var(--tg-art-line); border-radius: var(--tg-radius-lg); background: var(--tg-art-panel); text-align: center; }
+.integration-entries strong { color: var(--ink); font-size: var(--sl-text-base); }
+.integration-entries span { color: var(--muted); font-size: var(--tg-text-interface); }
+.integration-runtime { width: max-content; max-width: 100%; margin: auto; padding: var(--tg-space-3) var(--tg-space-6); border-radius: var(--tg-radius-lg); background: var(--tg-code-bg); color: var(--tg-code-text); text-align: center; font-weight: 600; }
+.map-connector { position: relative; width: 100%; height: var(--tg-space-6); color: var(--tg-art-primary); }
+/* Quarter positions are the centres of the two grid columns, including their gap.
+   Native borders keep the same weight and corner radius at every viewport. */
+.map-connector::before { content: ""; position: absolute; inset-inline: calc((100% - var(--map-gap)) / 4); top: 0; height: 50%; border: 2px solid currentColor; border-top: 0; border-radius: 0 0 var(--tg-radius-md) var(--tg-radius-md); }
+.map-connector::after { content: ""; position: absolute; left: 50%; top: 50%; bottom: 0; border-left: 2px solid currentColor; transform: translateX(-50%); }
+.map-connector-outgoing { transform: rotate(180deg); }
+.integration-map figcaption { margin-top: var(--tg-space-4); text-align: center; font-size: var(--tg-text-interface); color: var(--muted); }
+.example-diagram { margin: var(--tg-space-6) 0; }
+.marketing .diagram-formula { color: var(--ink); font-size: var(--sl-text-lg); font-weight: 600; overflow-wrap: anywhere; }
+.diagram-terms { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--tg-card-min)), 1fr)); gap: var(--tg-space-3); margin: var(--tg-space-4) 0; }
+.diagram-terms > div { min-width: 0; padding: var(--tg-space-4); border: 1px solid var(--line); border-radius: var(--tg-radius-md); background: var(--paper); }
+.diagram-terms dt { color: var(--muted); font-size: var(--tg-text-interface); margin: 0 0 var(--tg-space-2); }
+.diagram-terms dd { margin: 0; color: var(--ink); font: var(--sl-text-base)/var(--sl-line-height) var(--tg-font-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.example-diagram figcaption { color: var(--muted); font-size: var(--tg-text-interface); }
+.expected-output-label { display: block; margin-bottom: var(--tg-space-3); font-size: var(--tg-text-interface); }

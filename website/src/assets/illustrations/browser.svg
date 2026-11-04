@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" class="artwork" viewBox="0 0 960 560" role="img" aria-label="Code, tensors and results inside a browser">
+  <g class="art-shadow">
+    <rect class="art-panel art-outline" x="80" y="64" width="800" height="408" rx="24"/>
+    <path class="art-line" d="M80 120H880"/>
+    <g class="art-detail-fill"><circle cx="112" cy="92" r="5"/><circle cx="132" cy="92" r="5"/><circle cx="152" cy="92" r="5"/></g>
+    <rect class="art-faint" x="336" y="80" width="288" height="24" rx="12"/>
+    <path class="art-detail" d="M364 92H432M768 88H792M768 96H808"/>
+  </g>
+  <path class="art-guides" d="M128 424H832M392 152V424M632 152V424"/>
+  <g class="art-shadow">
+    <rect class="art-code art-outline" x="112" y="176" width="232" height="224" rx="16"/>
+    <path class="art-code-rule" d="M112 208H344"/>
+    <g class="art-code-mark"><circle cx="132" cy="192" r="3"/><circle cx="144" cy="192" r="3"/><circle cx="156" cy="192" r="3"/></g>
+    <path class="art-code-stroke" d="M144 236H188M144 264H200M168 292H224M168 320H208M144 348H184"/>
+    <path class="art-code-light" d="M208 236H256M220 264H304M244 292H288M228 320H280M204 348H240M144 376H216"/>
+  </g>
+  <path class="art-arrow" d="M360 288H404M392 276L404 288L392 300M596 288H648M636 276L648 288L636 300"/>
+  <path class="art-faint" d="M448 384L512 352L576 384L512 416Z"/>
+  <path class="art-soft" d="M448 384L512 416L576 384V396L512 428L448 396Z"/>
+  <path class="art-soft" d="M448 344L512 312L576 344L512 376Z"/>
+  <path class="art-side" d="M448 344L512 376L576 344V356L512 388L448 356Z"/>
+  <g class="art-shadow">
+    <path class="art-highlight" d="M448 248L512 216L576 248L512 280Z"/>
+    <path class="art-side" d="M448 248V312L512 344V280Z"/>
+    <path class="art-primary" d="M512 280L576 248V312L512 344Z"/>
+    <path class="art-cube-grid" d="M480 232L544 264M544 232L480 264M512 216V280M480 264V328M544 264V328M448 280L512 312L576 280"/>
+  </g>
+  <g class="art-shadow">
+    <rect class="art-panel art-outline" x="672" y="176" width="176" height="224" rx="16"/>
+    <path class="art-detail" d="M696 204H728M696 216H752"/>
+    <path class="art-guides" d="M696 272H824M696 320H824"/>
+    <path class="art-line" d="M696 248V368H824"/>
+    <path class="art-soft-stroke" d="M708 344L748 312L780 320L816 264"/>
+    <path class="art-arrow" d="M708 344L748 312L780 320L816 264"/>
+    <g class="art-primary"><circle cx="708" cy="344" r="5"/><circle cx="748" cy="312" r="5"/><circle cx="780" cy="320" r="5"/><circle cx="816" cy="264" r="5"/></g>
+  </g>
+</svg>

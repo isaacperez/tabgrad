@@ -102,6 +102,37 @@ time, grants only `contents: read`, and cancels superseded runs for the same
 reference. Treat every workflow as executable code with access to the
 permissions stated in its file.
 
+## Website workflow
+
+`.github/workflows/website-checks.yml` owns the private website build package,
+separately from library compilation and publication. It runs for pull requests
+and `main` pushes affecting `website/`, repository Markdown, brand inputs or
+its browser harness/workflow, and on manual dispatch. It has only
+`contents: read`, pinned checkout/setup actions without persisted credentials,
+a 15-minute job bound and cancellation of superseded runs. It has no deploy,
+signing or npm permissions, environment secrets or artifact publication step.
+Merging this source does not configure a hosting service.
+
+The `website` job selects `website/.node-version`, npm 11.1.0 and the website
+lock independently of the library lock, disables Astro telemetry, installs
+without lifecycle scripts, and explicitly prepares Puppeteer's locked diagram
+browser. It then runs the documented website type/content check, unit tests,
+static build, emitted-output verification and the actual UI/CPU programs in
+installed Chrome and Firefox. These are the same local commands in
+[development](development.md#prepare-and-preview-the-static-website), not weaker
+CI substitutes. The repository validator registers its complete parsed
+definition and command set; executable drift needs renewed review.
+
+The explicit live-CDN example check is separate from this workflow. It needs
+external service availability and qualifies the HTML integration path; normal
+website checks keep the playground's same-origin matched files.
+
+The stable name is `Website checks / website`. Its path-filtered absence is
+not a test pass. Add any new website input to the workflow's filters and
+reassess coverage; a change to the library alone does not alter this site's
+already pinned published runtime. Host activation, HTTP/header qualification
+and production deployment remain separate work and authority.
+
 ## Experimental producer workflow
 
 The manually dispatched `.github/workflows/producer-trial.yml` is a separately
@@ -158,6 +189,7 @@ The conservative policy is:
 | Complete change set | Execution coverage |
 | --- | --- |
 | Maintained Markdown documentation/root policy files, brand Markdown/SVG, issue forms/template, or native Python tests under `tests/` only | Repository consistency and the applicable independent content/instruction/tooling review; no runtime build or browser execution |
+| Website package or its own workflow, optionally with the previous group | Repository consistency plus the independently selected website workflow; no library rebuild for website-only changes |
 | Node unit `.mjs` cases under `js-tests/unit/`, optionally mixed with the previous group | Runtime checks and the complete Node suite; unchanged browser execution is not selected |
 | Runtime, Python compatibility, Rust, browser fixtures, build/dependency inputs, selector/workflow code, mixed executable areas, or an unclassified path | Both runtime and browser families |
 | Manual or unknown event, empty diff, zero/malformed identifiers, missing history, non-ancestor base, checkout mismatch or failed/incomplete Git comparison | Both runtime and browser families |
@@ -181,8 +213,9 @@ execution-affecting changes.
 
 The same impact policy applies to PRs and `main` pushes. Manual dispatch remains
 the explicit full-validation route. There are no
-workflow-level PR path filters, relaxed protections, error-tolerance flags,
-new dependencies or secrets. Review and register the complete workflow and
+workflow-level PR path filters in the library workflow, relaxed protections,
+error-tolerance flags or new secrets. The website's separate reviewed path
+filters and dependency lock do not weaken library selection. Review and register the complete workflow and
 selection policy together. CI evidence must include the actual decision,
 selected step results and explicit exclusions, not merely four green badges.
 

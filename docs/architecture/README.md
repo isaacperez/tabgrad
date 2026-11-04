@@ -161,6 +161,9 @@ Read the documents in this order when learning the architecture:
    [Versioned browser distribution](browser-distribution.md) explains the
    matched module/asset set, optional Python boundary, hosting responsibilities
    and alternatives for packaging those prebuilt files.
+   [Static website and executable documentation](static-website.md) places
+   repository Markdown, static generation and the educational playground around
+   that distribution without extending the library's supported API.
 8. [Requests, completion, and failure](execution-lifecycle.md) explains one
    invocation, asynchronous completion, cancellation, observation, transfer,
    and device loss.

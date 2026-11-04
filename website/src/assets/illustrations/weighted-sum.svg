@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" class="artwork" viewBox="0 0 480 280" role="img" aria-label="Two inputs and their weights contribute to a scalar result">
+  <ellipse class="art-faint" cx="240" cy="236" rx="196" ry="12"/>
+  <g class="art-shadow">
+    <rect class="art-panel art-outline" x="32" y="64" width="112" height="136" rx="16"/>
+    <rect class="art-soft" x="56" y="92" width="40" height="28" rx="6"/>
+    <rect class="art-side" x="56" y="144" width="64" height="28" rx="6"/>
+  </g>
+  <g class="art-shadow">
+    <rect class="art-panel art-outline" x="168" y="64" width="88" height="136" rx="16"/>
+    <circle class="art-highlight" cx="212" cy="106" r="14"/>
+    <circle class="art-primary" cx="212" cy="158" r="20"/>
+  </g>
+  <path class="art-detail" d="M149 126L159 138M159 126L149 138"/>
+  <path class="art-line" d="M256 106H280Q292 106 292 118V146Q292 158 280 158H256"/>
+  <path class="art-arrow" d="M292 132H308M300 124L308 132L300 140"/>
+  <circle class="art-soft" cx="344" cy="132" r="26"/>
+  <path class="art-arrow" d="M344 120V144M332 132H356"/>
+  <path class="art-line" d="M370 132H392"/>
+  <g class="art-shadow"><rect class="art-primary" x="392" y="104" width="56" height="56" rx="12"/><circle class="art-highlight" cx="420" cy="132" r="8"/></g>
+</svg>

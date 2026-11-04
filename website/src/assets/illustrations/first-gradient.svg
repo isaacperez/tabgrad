@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" class="artwork" viewBox="0 0 480 280" role="img" aria-label="A quadratic curve, its slope and the return gradient">
+  <path class="art-faint" d="M104 64Q240 336 376 64V200H104Z"/>
+  <path class="art-guides" d="M44 64H436M44 132H436M172 40V200M308 40V200M376 40V200"/>
+  <path class="art-line" d="M44 200H436M240 216V32"/>
+  <path class="art-detail" d="M432 196L436 200L432 204M236 36L240 32L244 36"/>
+  <path class="art-arrow" d="M104 64Q240 336 376 64"/>
+  <path class="art-detail" d="M340 136L400 16"/>
+  <circle class="art-panel art-outline" cx="172" cy="166" r="10"/>
+  <circle class="art-primary" cx="376" cy="64" r="12"/>
+  <circle class="art-panel" cx="376" cy="64" r="4"/>
+  <path class="art-return" d="M392 64H408Q424 64 424 80V216Q424 232 408 232H188Q172 232 172 216V184M164 192L172 184L180 192"/>
+</svg>

@@ -43,6 +43,34 @@ def publication_job_eligible(
 
 
 class RepositoryCheckTests(unittest.TestCase):
+    def test_website_outputs_do_not_become_repository_source(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for generated in CHECKS.WEBSITE_GENERATED_DIRECTORIES:
+                path = root / generated / "derived.md"
+                path.parent.mkdir(parents=True)
+                path.write_text("generated without source formatting", encoding="utf-8")
+            authored = root / "website/src/pages/authored.md"
+            authored.parent.mkdir(parents=True)
+            authored.write_text("maintained source without newline", encoding="utf-8")
+            self.assertEqual(CHECKS.repository_files(root), [authored])
+            self.assertEqual(len(CHECKS.check_text_format(root)), 1)
+
+    def test_website_workflow_is_read_only_and_rejects_executable_drift(self) -> None:
+        loader = CHECKS.RepositoryYamlLoader
+        assert loader is not None
+        document = yaml.load(
+            (SCRIPT.parents[1] / CHECKS.WEBSITE_PATH).read_text(), Loader=loader
+        )
+        state = CHECKS.YamlRepositoryState(
+            True, {CHECKS.WEBSITE_PATH: document}, frozenset(), ()
+        )
+        self.assertEqual(CHECKS.check_workflow_security(state), [])
+        document["jobs"]["website"]["steps"][-1]["run"] = "echo skipped"
+        self.assertTrue(CHECKS.check_workflow_security(state))
+        document["permissions"]["contents"] = "write"
+        self.assertTrue(CHECKS.check_workflow_security(state))
+
     def publication_workflow(self) -> dict[str, Any]:
         loader = CHECKS.RepositoryYamlLoader
         assert loader is not None

@@ -1,0 +1,117 @@
+/* Starlight owns the type scale and leading. These tokens assign that scale
+   to Tabgrad's reading and interface roles. See website/README.md. */
+@font-face {
+  font-family: Inter;
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("../assets/fonts/InterVariable.woff2") format("woff2");
+}
+@font-face {
+  font-family: Inter;
+  font-style: italic;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("../assets/fonts/InterVariable-Italic.woff2") format("woff2");
+}
+:root {
+  /* Quarter-rem spacing scale: 4/8/12/16/24/32/48/64px at the default font size. */
+  --tg-space-1: 0.25rem;
+  --tg-space-2: 0.5rem;
+  --tg-space-3: 0.75rem;
+  --tg-space-4: 1rem;
+  --tg-space-6: 1.5rem;
+  --tg-space-8: 2rem;
+  --tg-space-12: 3rem;
+  --tg-space-16: 4rem;
+  --tg-radius-sm: 0.25rem;
+  --tg-radius-md: 0.5rem;
+  --tg-radius-lg: 0.75rem;
+  --tg-control-size: 2.75rem; /* Comfortable 44px controls; minimum, not fixed height. */
+  --tg-reading-measure: 65ch;
+  --tg-intro-measure: 45ch;
+  --tg-card-min: 16rem; /* A title and short paragraph must fit comfortably. */
+  /* Illustration hierarchy: lead scene, secondary scene, supporting drawing,
+     and compact symbol. These are maximum measures, not fixed dimensions. */
+  --tg-art-hero-size: 32rem;
+  --tg-art-scene-size: 24rem;
+  --tg-art-support-size: 16rem;
+  --tg-art-symbol-size: 8rem;
+  --tg-logo-width: 9rem;
+  --tg-site-width: 67.5rem; /* Starlight's splash-page measure; shared outer frame. */
+  --tg-menu-width: 24rem; /* Single-column navigation, bounded by viewport gutters. */
+  --tg-font-mono: var(--sl-font-mono, var(--sl-font-system-mono));
+  --sl-font: Inter;
+  --tg-text-display: var(--sl-text-5xl);
+  --tg-text-lead: var(--sl-text-xl);
+  --tg-text-interface: var(--sl-text-sm);
+  --tg-text-meta: var(--sl-text-xs);
+  --tg-link-underline-offset: 0.2em;
+  --tg-link-underline-thickness: 1px;
+  --tg-focus-width: 0.1875rem;
+  --sl-text-h1: var(--sl-text-5xl);
+  --sl-text-h2: var(--sl-text-3xl);
+  --sl-text-code: var(--sl-text-base);
+  --sl-nav-height: calc(var(--tg-control-size) + 2 * var(--sl-nav-pad-y));
+  --sl-content-width: 55rem; /* Reading column; Starlight widens splash pages. */
+  --sl-sidebar-width: 16rem;
+  --sl-color-accent-low: #343046;
+  --sl-color-accent: #7357ff;
+  --sl-color-accent-high: #a796ff;
+  --paper: #222333;
+  --surface: var(--tg-code-panel-bg);
+  --ink: #f6f5f2;
+  --muted: #b9b8c7;
+  --line: #454555;
+  --violet: #a796ff;
+  --accent-text: var(--sl-color-text-accent);
+  --tint: #343046;
+  --error: var(--tg-code-error);
+  --tg-code-bg: #222333;
+  --tg-code-panel-bg: #2a2b3d;
+  --tg-code-text: #f0eef6;
+  --tg-code-border: #414253;
+  --tg-code-selection: #8072b566;
+  --tg-code-comment: #a5a6bb;
+  --tg-code-keyword: #c7a7ff;
+  --tg-code-string: #b5dc98;
+  --tg-code-number: #efbc85;
+  --tg-code-function: #9bcbff;
+  --tg-code-punctuation: #dad4e8;
+  --tg-code-error: #ff9aa9;
+  --tg-art-panel: #343348;
+  --tg-art-line: #726687;
+  --tg-art-detail: #a294bd;
+  --tg-art-soft: #4d426c;
+  --tg-art-faint: #332f49;
+  --tg-art-primary: #a796ff;
+  --tg-art-highlight: #c5b7ff;
+  --tg-art-side: #7357ff;
+  --tg-art-shadow: 0 4px 10px #00000024;
+}
+:root[data-theme="light"] {
+  --sl-color-accent-low: #ede8ff;
+  --sl-color-accent: #7357ff;
+  --sl-color-accent-high: #4a33b2;
+  --sl-color-text-accent: var(--sl-color-accent-high);
+  --sl-color-bg: #f6f5f2;
+  --sl-color-bg-nav: #f6f5f2;
+  --sl-color-bg-sidebar: #f6f5f2;
+  --paper: #f6f5f2;
+  --surface: #fff;
+  --ink: #222333;
+  --muted: #676775;
+  --line: #dedee3;
+  --violet: #7357ff;
+  --tint: #ede8ff;
+  --error: #ad233b;
+  --tg-art-panel: #fff;
+  --tg-art-line: #b9b3ce;
+  --tg-art-detail: #9d92b7;
+  --tg-art-soft: #ded5fb;
+  --tg-art-faint: #ede8fa;
+  --tg-art-primary: #7357ff;
+  --tg-art-highlight: #c5b7ff;
+  --tg-art-side: #a796ff;
+  --tg-art-shadow: 0 4px 10px #22233314;
+}

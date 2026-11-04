@@ -21,6 +21,13 @@ test("Node cases need runtime validation while unchanged browser code is not exe
     { runtime: true, browser: false, reason: "unit-tests-only" });
 });
 
+test("the independently checked website does not rebuild the library; mixed changes still do", () => {
+  const web = ["website/src/pages/index.astro", "website/package-lock.json", ".github/workflows/website-checks.yml"];
+  assert.deepEqual(classifyValidationPaths(web), { runtime: false, browser: false, reason: "consistency-only" });
+  assert.equal(classifyValidationPaths([...web, "src/index.ts"]).runtime, true);
+  assert.equal(classifyValidationPaths([...web, "src/index.ts"]).browser, true);
+});
+
 test("shared, distribution, browser, selection and unknown changes keep both families", () => {
   for (const path of ["src/runtime/runtime.ts", "python/torch/__init__.py", "rust/lib.rs", "package-lock.json",
     "js-tests/browser/example.html", "scripts/validation-scope.mjs", ".github/workflows/repository-checks.yml",

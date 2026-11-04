@@ -1,0 +1,39 @@
+---
+import StarlightPage from "@astrojs/starlight/components/StarlightPage.astro";
+import PageIntro from "../components/PageIntro.astro";
+import Illustration from "../components/Illustration.astro";
+import data from "../../.generated/site-data.json";
+---
+<StarlightPage frontmatter={{ title: "Versions and compatibility", template: "splash", editUrl: false }}>
+  <div class="not-content marketing">
+    <PageIntro title="Versions &" accent="compatibility." description="Choose a version and check its supported API and tested environments before adding Tabgrad to your app."><Illustration slot="illustration" name="backends" /></PageIntro>
+    <section class="current-release ink-surface"><div><p class="release-label">Used in this playground</p><h2>v{data.runtimeVersion}</h2><p>Use the same version in your own page.</p></div><div class="next-actions"><a class="button primary" href="/start/#html">Use this version →</a><a class="text-link" href={`https://github.com/isaacperez/tabgrad/releases/tag/v${data.runtimeVersion}`}>Release notes →</a><a class="text-link" href={`https://www.npmjs.com/package/@tabgrad/tabgrad/v/${data.runtimeVersion}`}>View on npm ↗</a></div></section>
+    <section class="version-section" aria-labelledby="available-features">
+      <h2 id="available-features">What’s available</h2>
+      <p>Float32 tensors, calculations and first-order gradients through Python or the direct JavaScript API.</p>
+      <div class="capability-list">
+        <article class="capability-row"><h3>Tensors & shapes</h3><p>Create tensors, change their shape without copying and copy values on the same device.</p><a class="text-link" href="/docs/reference/python-tensors/">Tensor reference →</a></article>
+        <article class="capability-row"><h3>Arithmetic & matrices</h3><p>Add, multiply and sum tensors. Multiply 2D matrices.</p><a class="text-link" href="/docs/reference/tensor-matmul/">Matrix reference →</a></article>
+        <article class="capability-row"><h3>Automatic gradients</h3><p>Compute gradients, run <code>backward()</code> and read or set <code>.grad</code>.</p><a class="text-link" href="/docs/reference/functional-gradients/">Gradient reference →</a></article>
+        <article class="capability-row"><h3>Parameter updates</h3><p>Update parameters with the supported basic SGD interface.</p><a class="text-link" href="/docs/reference/sgd/">SGD reference →</a></article>
+      </div>
+    </section>
+    <section class="version-section" aria-labelledby="execution-options"><h2 id="execution-options">CPU and GPU</h2><p>GPU uses the browser’s WebGPU interface. Only the configurations below have been verified.</p>
+      <div class="compatibility-grid">
+        <article><h3>CPU</h3><p class="tested-environment">Default in the playground</p><dl class="environment-details"><div><dt>Tested with</dt><dd>Chrome and Firefox, using the JavaScript and Python package examples.</dd></div><div><dt>Setup</dt><dd>For JavaScript, import the versioned files from a CDN or serve them yourself. The browser loads the matching WebAssembly.</dd></div></dl><a class="text-link" href="/docs/reference/browser-package/">CPU setup →</a></article>
+        <article><h3>GPU</h3><p class="tested-environment">Choose GPU in the playground</p><dl class="environment-details"><div><dt>Tested with</dt><dd>Chrome with an Apple GPU.</dd></div><div><dt>Setup</dt><dd>JavaScript needs a secure page and browser GPU support. Python also needs a same-origin worker and cross-origin isolation.</dd></div></dl><a class="text-link" href="/docs/reference/webgpu-runtime/">GPU requirements →</a></article>
+      </div>
+      <p>Python is optional. The <a href="/docs/reference/python-host/">Python setup guide</a> shows how your application loads Pyodide, connects it to Tabgrad and handles cleanup.</p>
+    </section>
+    <section class="version-section" aria-labelledby="release-limits"><h2 id="release-limits">Current limits</h2><p>Tabgrad implements a documented PyTorch-compatible subset. Its supported operations have these boundaries:</p>
+      <dl class="release-limits">
+        <div><dt>Data and storage</dt><dd>Contiguous float32 tensors and whole-storage views. No dtype conversion, arbitrary strides or cross-device transfer.</dd></div>
+        <div><dt>Shapes and operations</dt><dd>Equal-shape elementwise inputs and 2D matrix products. Broadcasting, slicing and batched matrix products are unavailable.</dd></div>
+        <div><dt>Gradients and training</dt><dd>First-order gradients and basic SGD. Higher-order gradients, momentum and weight decay are unavailable.</dd></div>
+        <div><dt>Python API</dt><dd>The official PyTorch runtime is not used. <code>torch.nn</code>, <code>torch.nn.functional</code> and activations such as <code>relu</code> are unavailable.</dd></div>
+      </dl>
+      <p class="support-records"><a href={`https://github.com/isaacperez/tabgrad/blob/v${data.runtimeVersion}/docs/reference/release-${data.runtimeVersion}.md`}>Release support record ↗</a><a href="/docs/compatibility/">Compatibility and numerical boundaries →</a></p>
+    </section>
+    <section class="version-history version-section"><h2>Previous releases</h2>{[["0.1.2", "Maintainer corrections"], ["0.1.1", "Build correction"], ["0.1.0", "First public distribution"]].map(([version, title]) => <a class="link-card" href={`https://github.com/isaacperez/tabgrad/releases/tag/v${version}`}><strong data-link-title>{version}</strong><span>{title}</span><span data-link-title>Release notes ↗</span></a>)}</section>
+  </div>
+</StarlightPage>

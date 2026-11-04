@@ -71,6 +71,7 @@ link to its primary source, but they must not create a competing version.
 | Collaboration through a managed Python session | [`flows/managed-python-session.md`](flows/managed-python-session.md) |
 | WebAssembly CPU kernel language, binary interface, modules, and memory ownership | [`architecture/webassembly-cpu-backend.md`](architecture/webassembly-cpu-backend.md) |
 | Browser distribution design, module identity, matched assets and packaging alternatives | [`architecture/browser-distribution.md`](architecture/browser-distribution.md) |
+| Static website, repository documentation and educational playground ownership | [`architecture/static-website.md`](architecture/static-website.md) |
 | Browser package entries, offline installation and matched static payload | [`reference/browser-package.md`](reference/browser-package.md) |
 | Version 0.1.0 source, supported API groups and qualification boundary | [`reference/release-0.1.0.md`](reference/release-0.1.0.md) |
 | Version 0.1.1 build correction, preserved support and qualification boundary | [`reference/release-0.1.1.md`](reference/release-0.1.1.md) |

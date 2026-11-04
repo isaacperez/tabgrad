@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" class="artwork" viewBox="0 0 480 280" role="img" aria-label="An open guide connects explanations and runnable code">
+  <ellipse class="art-faint" cx="240" cy="244" rx="192" ry="14"/>
+  <path class="art-side" d="M48 80Q144 44 240 92Q336 44 432 80V224Q336 192 240 240Q144 192 48 224Z"/>
+  <path class="art-soft" d="M56 72Q148 40 240 84Q332 40 424 72V216Q332 184 240 232Q148 184 56 216Z"/>
+  <g class="art-shadow">
+    <path class="art-panel art-outline" d="M56 56Q148 24 240 72Q332 24 424 56V200Q332 168 240 216Q148 168 56 200Z"/>
+    <path class="art-line" d="M240 72V216"/>
+    <path class="art-detail" d="M96 88H160M96 104H192M96 140H176M96 156H192M96 172H152"/>
+    <path class="art-arrow" d="M304 104L280 128L304 152M352 104L376 128L352 152"/>
+    <path class="art-soft-stroke" d="M312 176H352"/>
+  </g>
+  <path class="art-primary" d="M352 44Q364 43 376 44V100L364 92L352 100Z"/>
+</svg>

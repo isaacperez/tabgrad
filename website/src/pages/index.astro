@@ -1,0 +1,34 @@
+---
+import StarlightPage from "@astrojs/starlight/components/StarlightPage.astro";
+import examples from "../playground/examples.json";
+import Runner from "../components/Runner.astro";
+import Illustration from "../components/Illustration.astro";
+import NextStep from "../components/NextStep.astro";
+---
+<StarlightPage frontmatter={{ title: "PyTorch-style code in your browser", template: "splash", description: "Run PyTorch-style Python or JavaScript in your browser with Tabgrad. Try its supported API examples without installing anything or creating an account.", editUrl: false }}>
+  <div class="not-content marketing">
+    <section class="hero">
+      <div class="hero-intro">
+        <div class="hero-copy"><h1>PyTorch-style code.<br /><span>Nothing to install.</span></h1>
+          <p class="hero-description">Run familiar Python and JavaScript in your browser. Try an example here, then bring it to your own site.</p>
+          <div class="hero-buttons"><a class="button primary" href="/playground/">Open playground →</a><a class="text-link" href="/start/">Add to your app →</a></div>
+          <p class="hero-scope">Tabgrad is an independent implementation of a <a href="/versions/">documented PyTorch API subset</a>.</p>
+        </div>
+        <div class="hero-art"><Illustration name="browser" /></div>
+      </div>
+      <div class="hero-demo">
+        <Runner compact id="home" />
+      </div>
+    </section>
+    <section class="principles" aria-label="Why use Tabgrad">
+      <article><h2>Start with what you know.</h2><p>Write Python with <code>import torch</code>, or use the same library directly from JavaScript.</p></article>
+      <article><h2>Keep computation local.</h2><p>Your visitors run the calculations on their own devices. No account or computation service required.</p></article>
+      <article><h2>Add it to a static page.</h2><p>A short <a href="/start/#html">HTML code block</a> loads the JavaScript API from a CDN. No npm or build step required.</p></article>
+    </section>
+    <section class="explore-section" aria-labelledby="examples-title">
+      <header class="section-heading"><div><h2 id="examples-title">Examples you can run.</h2><p>Calculate gradients or multiply matrices. Edit the inputs and compare the results in Python or JavaScript.</p></div><a class="text-link" href="/playground/">Open playground →</a></header>
+      <div class="example-gallery">{examples.map((example) => <a class="link-card" href={`/playground/?example=${example.id}&language=python`}><div class="example-card-art"><Illustration name={example.id} /></div><h3 data-link-title>{example.title}</h3><p>{example.summary}</p><strong data-link-title>Open example →</strong></a>)}</div>
+    </section>
+    <NextStep title="Add Tabgrad to your site." description="Start with a working HTML example, then explore the API and optional Python integration."><a class="button primary" href="/start/#html">Get the HTML example →</a><a class="text-link" href="/docs/">Read the documentation →</a></NextStep>
+  </div>
+</StarlightPage>

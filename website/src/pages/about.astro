@@ -1,0 +1,29 @@
+---
+import StarlightPage from "@astrojs/starlight/components/StarlightPage.astro";
+import { Icon } from "@astrojs/starlight/components";
+import PageIntro from "../components/PageIntro.astro";
+import SplitSection from "../components/SplitSection.astro";
+import Illustration from "../components/Illustration.astro";
+import SupportLink from "../components/SupportLink.astro";
+import { repositoryUrl, maintainerContact } from "../../scripts/config.mjs";
+---
+<StarlightPage frontmatter={{ title: "About Tabgrad", description: "Why Tabgrad exists, who maintains it and how to support its development.", template: "splash", editUrl: false }}>
+  <div class="not-content marketing">
+    <PageIntro title="About Tabgrad." accent="Built in the open." description="An independent, open-source library for running PyTorch-style calculations in the browser."><a class="text-link" href="/playground/">Try the playground →</a><Illustration slot="illustration" name="open-source" /></PageIntro>
+    <SplitSection title="Why Tabgrad exists.">
+      <p>A lesson, a demo or a quick experiment should be easy to share. Open the playground, change the code and run it without installing tools or creating an account.</p>
+      <p>Developers can add the same calculations to a static page with a JavaScript import. Python uses Pyodide, an interpreter that also runs in the browser. Computation stays on the visitor’s device.</p>
+      <a class="text-link" href="/start/">Bring it to your site →</a>
+    </SplitSection>
+    <SplitSection title="Meet the maintainer.">
+      <p>Tabgrad is created and maintained by <a href={maintainerContact.url}>{maintainerContact.label}</a>. Its code, documentation and tests are open on GitHub under the Apache License 2.0.</p>
+      <p>It does not run the official PyTorch package and is not affiliated with the PyTorch Foundation. Check the compatibility pages for supported operations and current limits.</p>
+      <div class="project-actions"><a class="text-link project-text-link" href={repositoryUrl}><Icon name="github" />Explore the source ↗</a><a class="text-link" href="/versions/">Check compatibility →</a></div>
+    </SplitSection>
+    <SplitSection id="support" title="Support Tabgrad.">
+      <p>Maintaining Tabgrad means fixing bugs, checking browser compatibility and keeping examples and documentation useful. Report an issue, share what you build or contribute code.</p>
+      <p>If you’d like to support that work financially, you can make a voluntary contribution or discuss sponsorship.</p>
+      <div class="project-actions"><SupportLink primary /><a class="text-link" href={`${repositoryUrl}/blob/main/CONTRIBUTING.md`}>Contribute on GitHub ↗</a><a class="text-link" href="/contact/">Discuss sponsorship →</a></div>
+    </SplitSection>
+  </div>
+</StarlightPage>

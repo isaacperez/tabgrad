@@ -230,7 +230,7 @@ export function browserVersion(executable) {
  */
 async function handleBrowserRequest(request, response, requestPolicy) {
   const { runs, activeToken, allowedPages, allowedAssets, isolationHeaders,
-    distributionDirectory, readAsset } = requestPolicy;
+    distributionDirectory, readAsset, assetHeaders } = requestPolicy;
   const requestUrl = new URL(request.url, "http://localhost");
   const pathname = requestUrl.pathname;
   const observedRun = runs.get(activeToken);
@@ -345,6 +345,7 @@ async function handleBrowserRequest(request, response, requestPolicy) {
     response.writeHead(200, {
       "cache-control": "no-store",
       "content-type": contentTypeFor(path),
+      ...assetHeaders(pathname, body),
       ...isolationHeaders,
     }).end(body);
   } catch {
@@ -359,7 +360,8 @@ async function handleBrowserRequest(request, response, requestPolicy) {
 
 export async function startBrowserServer(
   pageNames,
-  { crossOriginIsolation = false, assets = [], distributionDirectory = distributionRoot, readAsset = readFile } = {},
+  { crossOriginIsolation = false, assets = [], distributionDirectory = distributionRoot, readAsset = readFile,
+    assetHeaders = () => ({}) } = {},
 ) {
   const runs = new Map();
   const allowedPages = new Set(pageNames);
@@ -378,7 +380,7 @@ export async function startBrowserServer(
     : {};
   const requestPolicy = {
     runs, activeToken: undefined, allowedPages, allowedAssets,
-    isolationHeaders, distributionDirectory, readAsset,
+    isolationHeaders, distributionDirectory, readAsset, assetHeaders,
   };
   const server = createServer((request, response) =>
     handleBrowserRequest(request, response, requestPolicy));

@@ -1,0 +1,11 @@
+---
+import StarlightPage from "@astrojs/starlight/components/StarlightPage.astro";
+import data from "../../.generated/site-data.json";
+import PageIntro from "../components/PageIntro.astro";
+---
+<StarlightPage frontmatter={{ title: "Licenses and sources", template: "splash", editUrl: false }}>
+  <div class="not-content marketing">
+    <PageIntro compact title="Licenses and sources" description="The open-source components behind Tabgrad and this website." />
+    <div class="license-content"><p>The playground loads unmodified, versioned tensor-runtime and optional interpreter files from this site. Tabgrad is independent of the PyTorch Foundation.</p><h2>Tabgrad</h2><p>Version {data.runtimeVersion}, Apache-2.0. <a href={`/vendor/tabgrad/${data.runtimeVersion}/LICENSE`}>License</a> · <a href={`https://github.com/isaacperez/tabgrad/tree/v${data.runtimeVersion}`}>Source</a>.</p><h2>Python through Pyodide</h2><p>Pyodide {data.pyodideVersion}, MPL-2.0. <a href={`/vendor/pyodide/${data.pyodideVersion}/PYODIDE-LICENSE`}>License</a> · <a href="https://github.com/pyodide/pyodide/tree/8cec1b9bb8ead68c7c09b0a6443576bec7512268">Covered source and build recipes</a>. No upstream runtime files were modified.</p><p>The interpreter includes CPython 3.14.2 and Emscripten 5.0.3 components with their own notices: <a href={`/vendor/pyodide/${data.pyodideVersion}/PYTHON-LICENSE`}>Python and incorporated-software licenses</a> · <a href={`/vendor/pyodide/${data.pyodideVersion}/EMSCRIPTEN-LICENSE`}>Emscripten license</a>.</p><h2>Website components</h2><p>Astro, Starlight, Pagefind and Expressive Code supply the static-site and documentation presentation. Prism provides syntax colors in the editable playground. The <a href="/licenses/website-components.txt">included component notices</a> identify their licenses and sources. Mermaid is used during construction; its diagrams are delivered as images, with no remote font requirement.</p><h2>Typography</h2><p>Inter 4.1 is served from this site under the SIL Open Font License 1.1. Its <a href="/licenses/website-components.txt">copyright and full license</a> accompany the font files. <a href="https://github.com/rsms/inter/tree/e3a3d4c57d5ecc01453a575621882a384c1995a3">Original source</a>.</p></div>
+  </div>
+</StarlightPage>
