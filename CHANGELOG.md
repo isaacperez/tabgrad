@@ -7,6 +7,21 @@ established by the corresponding verified release record.
 
 ## Unreleased
 
+## 0.2.0 - 2026-11-04
+
+### Added
+
+- Applications can read managed Python's GPU counters and adapter information
+  through `controller.diagnostics()`, including while Python is busy. Returned
+  snapshots are detached and frozen; reading adds no tensor demand, GPU work or
+  retained history ([#402](https://github.com/isaacperez/tabgrad/issues/402)).
+
+The [0.2.0 source and support record](docs/reference/release-0.2.0.md) describes
+this additive host API and its observation limits. Existing tensor calls and
+numerical support are preserved; replace the complete matched distribution
+when updating. Registry availability and exact-byte qualification are verified
+separately from this source record.
+
 ## 0.1.3 - 2026-11-01
 
 ### Fixed

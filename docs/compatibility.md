@@ -101,6 +101,11 @@ adapter, enabled features and limits, and whether the adapter is a fallback.
 
 ## Required operation record
 
+The [managed GPU controller reader](reference/python-host.md#read-managed-gpu-observations)
+is another Tabgrad host extension, with no PyTorch tensor-call counterpart.
+Its detached resource observations and lifetime limits do not expand numerical
+compatibility, qualify additional hardware, or change Python tensor behavior.
+
 ### Python tensor evidence
 
 The [managed GPU connection reference](reference/python-host.md) defines the
