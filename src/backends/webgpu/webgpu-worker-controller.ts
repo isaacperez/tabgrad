@@ -3,7 +3,7 @@ import { TabgradError } from "../../shared/errors.js";
 import { isRecord } from "../../shared/object-shape.js";
 import type { WebGpuDiagnostics } from "./webgpu-backend.js";
 import { decodeGpuFailure } from "./webgpu-failure-diagnostic.js";
-import { GPU_ACCOUNTED, GPU_CONTROL_LENGTH, GPU_METRIC_LENGTH, retireGpuConnection, type WebGpuConnection, type WebGpuConnectionData } from "./webgpu-connection.js";
+import { GPU_ACCOUNTED, GPU_CONTROL_LENGTH, GPU_METRIC_LENGTH, readGpuMetrics, retireGpuConnection, snapshotWebGpuDiagnostics, type WebGpuConnection, type WebGpuConnectionData } from "./webgpu-connection.js";
 
 export type { WebGpuConnection } from "./webgpu-connection.js";
 
@@ -17,6 +17,8 @@ export interface WebGpuWorkerOptions {
 export interface WebGpuWorkerController {
   readonly connection: WebGpuConnection;
   readonly transferables: readonly Transferable[];
+  /** Detached latest published service data; not an atomic aggregate or drain acknowledgment. */
+  diagnostics(): WebGpuDiagnostics;
   /** Revoke GPU service, then join cleanup or report accounted worker loss. */
   close(): Promise<void>;
 }
@@ -88,6 +90,11 @@ class GpuWorkerController implements WebGpuWorkerController {
   }
 
   get transferables(): readonly Transferable[] { return Object.freeze([this.#channel.port2, this.#supervision.port2]); }
+
+  diagnostics(): WebGpuDiagnostics {
+    if (this.#connection === undefined) throw new TabgradError("BACKEND_STATUS_ERROR", "The GPU worker is not ready.");
+    return snapshotWebGpuDiagnostics(readGpuMetrics(this.#metrics, this.#connection.diagnostics, this.#control));
+  }
 
   close(): Promise<void> {
     if (!this.#closing && !this.#finished) {

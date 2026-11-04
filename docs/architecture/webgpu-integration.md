@@ -178,6 +178,43 @@ the same outcome rather than creating independent cleanup operations.
 Competing attachment cannot install another session, and neither attachment
 failure nor successful closure destroys borrowed Pyodide.
 
+## Observe the GPU owner outside Python
+
+An application may need to explain which GPU was acquired and what physical
+work used it. The application already retains the controller outside the
+interpreter, while the physical worker already publishes bounded resource
+data for the connected backend. Expose that data through the controller's
+`diagnostics()` projection. Keep Python entry/close and finite GPU execution
+protocols unchanged; inspection is not another route for tensor execution.
+
+The controller reads existing shared counters and returns detached frozen
+metadata. It does not enter Python, demand tensors, request numerical readback,
+flush work or collect semantic cycles. No observer loop, historical log or
+additional per-operation instrumentation is required. Reading has bounded
+counter/metadata copying cost; returned data and code still occupy space.
+Neither tensor size, graph depth nor previous observations determine its cost.
+
+A local-binding reader was also viable for quiescent session data, but session
+diagnostics may retire semantic cycles and report cleanup errors. It would
+expose CPU/semantic data beyond the GPU need and require a distinct local/remote
+contract. An asynchronous request to the interpreter cannot run while that
+interpreter is parked; making it appear live would require independently cached
+publication and a freshness policy. The controller uses the existing owner and
+publication instead. The [accepted investigation](https://github.com/isaacperez/tabgrad/issues/401)
+records the alternatives, physical controls, costs and measurement limitations.
+
+This projection reports the service lifetime, not total hardware utilization or
+an aggregate atomic device snapshot. Publication can lag work, fields can span
+updates, and loss can leave unpublished work unknown. Intentional generation
+retirement can report lost before close is acknowledged. Script results and
+physical cleanup retain their existing authority; snapshots cannot replace
+them. The [host reference](../reference/python-host.md#read-managed-gpu-observations)
+owns the exact interface and field/lifetime semantics.
+
+Reconsider a broader observer only when a consumer needs CPU/semantic data,
+historical capture or access without owning this controller. Those needs do
+not justify additional state or coordination in the present GPU-only reader.
+
 ## Graceful close and GPU revocation answer different questions
 
 Closing a Python binding asks it to finish its owned lifetime cooperatively.

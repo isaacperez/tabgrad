@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8"><title>Managed Python GPU diagnostics</title></head>
+  <body><script type="module">
+    import { connectPythonWorker, createWebGpuWorker } from "/python.js";
+    const token = new URLSearchParams(location.search).get("token");
+    const failureMode = new URLSearchParams(location.search).get("failure");
+    const expectedBootstrapFailure = failureMode === "message" || failureMode === "error";
+    const events = new Map(), output = [], cases = [];
+    const lifetime = new AbortController(), gate = new Int32Array(new SharedArrayBuffer(4));
+    let worker, controller, client;
+    const report = { ok: false };
+    function check(condition, message) { if (!condition) throw new Error(message); }
+    function next(kind) { return new Promise((resolve, reject) => events.set(kind, { resolve, reject })); }
+    function failWorker(error) {
+      lifetime.abort(error);
+      for (const event of events.values()) event.reject(error);
+      events.clear();
+    }
+    async function send(endpoint, value) {
+      const response = await fetch(`${endpoint}?token=${encodeURIComponent(token)}`, {
+        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(value),
+      });
+      if (!response.ok) throw new Error(`Reporting failed: ${response.status}`);
+    }
+    async function run(source) {
+      output.length = 0;
+      await client.runPythonAsync(`exec(compile(${JSON.stringify(source)}, '<gpu-diagnostics>', 'exec'), {'__name__': '__main__'})`);
+      return output.join("\n");
+    }
+    try {
+      await send("/__phase", { phase: "application-started" });
+      controller = await createWebGpuWorker({ signal: lifetime.signal });
+      const initial = controller.diagnostics();
+      check(initial.kernelCalls === 0 && initial.ownedBufferBytes === 0 && initial.uploadBytes === 0, "fresh service zeros");
+      worker = new Worker("/python-webgpu/python-webgpu-diagnostics.mjs", { type: "module" });
+      const channel = new MessageChannel();
+      client = connectPythonWorker(channel.port1, lifetime.signal);
+      check(typeof client.diagnostics === "undefined", "remote binding remains unchanged");
+      worker.addEventListener("error", (event) => failWorker(new Error(event.message)));
+      worker.addEventListener("message", ({ data }) => {
+        if (data.kind === "output") { output.push(data.text); return; }
+        if (data.kind === "failure") {
+          const error = new Error(data.message);
+          failWorker(error);
+          return;
+        }
+        events.get(data.kind)?.resolve(data);
+        events.delete(data.kind);
+      });
+      const ready = next("ready"), finished = next("finished");
+      void finished.catch(() => undefined);
+      worker.postMessage({ port: channel.port2, webgpu: controller.connection, gate: gate.buffer, failureMode }, [channel.port2, ...controller.transferables]);
+      Object.assign(report, await ready);
+      await send("/__phase", { phase: "assets-loaded" });
+      await send("/__phase", { phase: "runtime-started" });
+      for (const length of [0, 1, 17, 129]) for (const operations of [0, 1, 3]) {
+        const before = controller.diagnostics();
+        const actual = JSON.parse(await run(`import torch\nx = torch.tensor([2.] * ${length}, dtype=torch.float32, device='webgpu')\ny = x\nfor _ in range(${operations}):\n    y = y + x\nprint(y.tolist())`));
+        check(actual.length === length && actual.every(value => value === 2 * (operations + 1)), "numeric result");
+        const snapshot = controller.diagnostics();
+        check(snapshot.uploadBytes - before.uploadBytes === length * 4, "one input upload");
+        check(snapshot.readbackBytes - before.readbackBytes === length * 4, "one output readback");
+        check(snapshot.kernelCalls - before.kernelCalls === (length === 0 ? 0 : operations), "encoded addition count");
+        for (let repeat = 0; repeat < 20; repeat += 1) controller.diagnostics();
+        const after = controller.diagnostics();
+        for (const key of ["kernelCalls", "uploadBytes", "readbackBytes", "ownedBufferBytes"]) check(after[key] === snapshot[key], "read adds no GPU work");
+        check(Object.isFrozen(snapshot) && Object.isFrozen(snapshot.adapter) && Object.isFrozen(snapshot.features) && Object.isFrozen(snapshot.limits), "frozen data");
+        cases.push({ length, operations, snapshot });
+      }
+      const beforeCpu = controller.diagnostics();
+      check(await run("import torch\nx = torch.tensor([2.], dtype=torch.float32)\nprint((x + x).tolist())") === "[4.0]", "CPU control");
+      check(controller.diagnostics().kernelCalls === beforeCpu.kernelCalls, "CPU does not claim GPU work");
+      const parked = next("parked");
+      const running = client.runPythonAsync("from metric_probe import park\npark()");
+      await parked;
+      const whileParked = controller.diagnostics();
+      check(whileParked.kernelCalls > 0, "controller remains readable without interpreter progress");
+      Atomics.store(gate, 0, 1); Atomics.notify(gate, 0);
+      await running;
+      check(await run("import torch\nx = torch.tensor([-1., 2.], dtype=torch.float32, device='webgpu', requires_grad=True)\n(x * x).sum().backward()\nprint(x.grad.tolist())") === "[-2.0, 4.0]", "gradients preserved");
+      let scriptFailed = false;
+      try { await run("print('partial')\nraise ValueError('expected diagnostic test failure')"); }
+      catch (error) { scriptFailed = String(error).includes("expected diagnostic test failure"); }
+      check(scriptFailed && output.includes("partial"), "script error preserves partial output");
+      await client.close(); await finished; await controller.close();
+      const final = controller.diagnostics();
+      check(final.state === "closed" && final.ownedBufferBytes === 0 && final.pendingSubmissions === 0 && final.unknownCompletionBytes === 0, "acknowledged drain");
+      check(initial.kernelCalls === 0 && initial.state === "ready", "old snapshot remains detached");
+      const fresh = await createWebGpuWorker();
+      try {
+        const zero = fresh.diagnostics();
+        check(zero.kernelCalls === 0 && zero.peakOwnedBufferBytes === 0 && zero.uploadBytes === 0, "new service scope");
+      } finally { await fresh.close(); }
+      Object.assign(report, { ok: true, cases, gpuDiagnostics: final });
+    } catch (error) {
+      if (expectedBootstrapFailure && String(error).includes("controlled GPU diagnostic bootstrap failure") && lifetime.signal.aborted) {
+        Object.assign(report, { ok: true, expectedBootstrapFailure: failureMode, observedFailure: String(error) });
+      } else report.error = String(error);
+    }
+    finally {
+      Atomics.store(gate, 0, 1); Atomics.notify(gate, 0);
+      if (controller !== undefined) {
+        try { await controller.close(); } catch (error) { report.cleanupError = String(error); report.ok = false; }
+        if (expectedBootstrapFailure) {
+          report.gpuDiagnostics = controller.diagnostics();
+          if (report.gpuDiagnostics.state !== "closed" || report.gpuDiagnostics.ownedBufferBytes !== 0
+            || report.gpuDiagnostics.pendingSubmissions !== 0 || report.gpuDiagnostics.unknownCompletionBytes !== 0) report.ok = false;
+        }
+      }
+      worker?.terminate();
+      await send("/__phase", { phase: "runtime-finished" });
+      await send("/__result", report);
+    }
+  </script></body>
+</html>

@@ -264,6 +264,22 @@ worker ends with its existing finite work promise, and late subscriptions only
 hint and acknowledge existing shared state. None of these private records is a
 public operation, a physical completion authority or a completed-request cache.
 
+## The host reads the existing physical publication
+
+The physical worker publishes its bounded counter record at readiness, finite
+request boundaries and cleanup/failure. The controller's `diagnostics()` reads
+that existing shared record even after its ports have been transferred. The
+record remains available after worker retirement; inspection needs no extra
+live worker or completed-request history. The projection copies and freezes metadata
+so observations cannot retain or mutate the connection owner.
+
+No new message, counter publication, tensor observation or semantic collection
+is introduced by reading. Individual atomic fields can span updates; there is
+no aggregate synchronization barrier or forced publication. Retirement and
+unacknowledged loss remain governed by the supervision below, not inferred from
+a convenient counter value. The [host reference](../reference/python-host.md#read-managed-gpu-observations)
+defines the public result, costs and its distinction from completion authority.
+
 ## Supervision is independent; reclamation is not guessed
 
 Controller close or lifetime abort retires the generation and wakes observers

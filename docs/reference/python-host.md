@@ -57,6 +57,7 @@ create the interpreter worker.
 | `options.signal?: AbortSignal` | Cancellation during setup; lifetime GPU revocation after readiness. Unlike the direct-session factory's setup signal, this signal continues to govern the returned controller. |
 | `controller.connection: WebGpuConnection` | Opaque single-use connection for one attachment; transfer it rather than reconstructing its fields. |
 | `controller.transferables: readonly Transferable[]` | The matching endpoints to include in the bootstrap message's transfer list. Do not assume a fixed count. |
+| `controller.diagnostics(): WebGpuDiagnostics` | Detached frozen observation of this physical GPU service's latest published counters and acquired metadata. Does not enter Python or wait for fresh publication. |
 | `controller.close(): Promise<void>` | Retire GPU availability, wake observers and join owned cleanup or reject for unacknowledged physical worker loss. Repeated close shares the same outcome. |
 
 The host retains the controller and transfers only its connection. Enabling
@@ -119,6 +120,61 @@ parked `tolist()` fails, while accepted physical obligations remain owned until
 drain or explicit loss accounting. See the
 [connection component](../components/webgpu-worker-connection.md) for that
 failure sequence. Do not confuse revocation with cooperative `binding.close()`.
+
+## Read managed GPU observations
+
+Keep the controller in the application host and call `gpu.diagnostics()` there.
+It remains readable after connection transfer, while the interpreter is busy
+or parked, and after controller closure or observed worker loss. The type
+`WebGpuDiagnostics` is exported from `python.js`; neither local nor remote
+`PythonBinding` gains a diagnostics method.
+
+The result has the [physical resource fields](webgpu-runtime.md#inspect-the-gpu-resource-domain):
+adapter/fallback information, enabled features, three acquired limits, owned and
+peak buffer bytes, pending submissions, unknown-completion bytes, cumulative
+uploads/readbacks and encoded dispatch count. The scope is this GPU service,
+including work from its one attached runtime, not the whole device. CPU-only
+work can legitimately leave its GPU work counters at zero. CPU-only attachment
+does not acquire a controller implicitly. Adapter strings may be empty.
+
+The root, adapter, feature array and limits are detached frozen data. Holding a
+snapshot does not retain a tensor, runtime, controller or GPU allocation; later
+updates do not change it. Reading loads the existing shared record and copies
+bounded metadata. It does not demand a tensor, read back numerical data, flush
+work, collect semantic cycles or retain a sample history. It adds no
+per-operation publication or instrumentation. Explicit reads and their returned
+objects have a cost; total RAM/VRAM or zero latency is not promised.
+
+Publication happens at readiness, finite request boundaries and cleanup/failure.
+Fields are read individually and can span updates. A snapshot need not describe
+one atomic instant, and another read does not force fresher data. During
+intentional revocation the retired generation can report `lost` before the final
+`closed` publication. Thus `lost` does not by itself identify hardware failure.
+On unacknowledged physical worker loss, last-known owned/pending values remain
+visible and owned obligations are conservatively included in unknown completion;
+unpublished work cannot be reconstructed.
+
+Use script settlement and acknowledged physical cleanup separately from these
+observations. A dispatch count alone does not prove successful completion, and
+zeros alone do not prove graceful closure. After acknowledged normal close the
+stable final counters remain readable, including cumulative work and peak
+buffer bytes, with no live worker retained for inspection. Observe errors from
+`close()` rather than relabeling failed or forcibly stopped work as successful.
+
+For example, within the bootstrap above, after successful script execution:
+
+```javascript
+const observed = gpu.diagnostics();
+console.log(observed.adapter.vendor || 'Undisclosed adapter', observed.kernelCalls);
+await client.close();
+await gpu.close();
+const final = gpu.diagnostics();
+console.log(final.state, final.ownedBufferBytes, final.unknownCompletionBytes);
+```
+
+This is lifecycle reporting, not a percentage-use meter, continuous profiler or
+kernel benchmark. The application owns any observation interval and retained
+UI data. Use the [performance policy](../performance.md) for cost claims.
 
 ## Connect the external host
 
