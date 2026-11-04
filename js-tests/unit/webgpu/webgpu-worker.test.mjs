@@ -4,6 +4,7 @@ import { test } from "node:test";
 import * as python from "../../../dist/python.js";
 import { startWebGpuWorker } from "../../../dist/backends/webgpu/worker.js";
 import { TabgradError } from "../../../dist/shared/errors.js";
+import { GPU_METRICS, GPU_METRIC_STATE, writeGpuMetrics } from "../../../dist/backends/webgpu/webgpu-connection.js";
 
 const capabilities = { device: "webgpu", computations: ["add-f32"], gradients: false, maximumTensorBytes: 1048576 };
 const diagnostics = {
@@ -405,11 +406,15 @@ test("failed attachment retires its consumed connection rather than leaving read
     const controller = await setup;
     const connection = structuredClone(controller.connection, { transfer: [...controller.transferables] });
     const control = new Int32Array(connection.control);
+    const before = controller.diagnostics();
     await assert.rejects(python.attachPython({ version: "unsupported" }, { webgpu: connection }), {
       code: "UNSUPPORTED_PYODIDE",
     });
     assert.equal(Atomics.load(control, 1), 1);
     assert.equal(Atomics.load(control, 0), 1);
+    assert.equal(controller.diagnostics().state, "lost");
+    assert.equal(controller.diagnostics().kernelCalls, 0);
+    assert.equal(before.state, "ready");
     await assert.rejects(python.attachPython({ version: "unsupported" }, { webgpu: connection }), {
       code: "PYTHON_CONNECTION_IN_USE",
     });
@@ -418,4 +423,101 @@ test("failed attachment retires its consumed connection rather than leaving read
     await close;
     connection.port.close();
   } finally { restore(); }
+});
+
+test("controller diagnostics are detached frozen data without GPU work or transfer ownership", async () => {
+  const restore = workerEnvironment();
+  let worker;
+  try {
+    const setup = python.createWebGpuWorker();
+    worker = ControlledWorker.instances[0];
+    worker.ready();
+    const controller = await setup;
+    const initial = controller.diagnostics();
+    assert.deepEqual(initial, diagnostics);
+    const transferred = structuredClone(controller.connection, { transfer: [...controller.transferables] });
+    const messages = worker.messages.length;
+    for (let index = 0; index < 20; index += 1) {
+      const snapshot = controller.diagnostics();
+      assert.deepEqual(snapshot, initial);
+      for (const record of [snapshot, snapshot.adapter, snapshot.features, snapshot.limits]) assert(Object.isFrozen(record));
+      assert.notEqual(snapshot.adapter, initial.adapter);
+      assert.notEqual(snapshot.features, initial.features);
+      assert.notEqual(snapshot.limits, initial.limits);
+    }
+    assert.equal(worker.messages.length, messages, "read does not issue a GPU request or lifecycle message");
+    assert.throws(() => { initial.adapter.vendor = "changed"; }, TypeError);
+    assert.throws(() => { initial.features.push("changed"); }, TypeError);
+    assert.throws(() => { initial.limits.maxBufferSize = 0; }, TypeError);
+    assert.deepEqual(controller.diagnostics(), diagnostics);
+    const close = controller.close();
+    Atomics.store(new BigInt64Array(worker.initialization.metrics), GPU_METRIC_STATE, 2n);
+    worker.closed();
+    await close;
+    assert.equal(controller.diagnostics().state, "closed");
+    assert.equal(initial.state, "ready", "old snapshots stay detached through closure");
+    transferred.port.close();
+    transferred.supervision.close();
+  } finally { worker?.closed(); restore(); }
+});
+
+test("controller diagnostics preserve last-known obligations after worker loss", async () => {
+  const restore = workerEnvironment();
+  let worker;
+  try {
+    const setup = python.createWebGpuWorker();
+    worker = ControlledWorker.instances[0];
+    worker.ready();
+    const controller = await setup;
+    writeGpuMetrics(worker.initialization.metrics, { ...diagnostics, ownedBufferBytes: 64, peakOwnedBufferBytes: 96,
+      pendingSubmissions: 1, unknownCompletionBytes: 16, uploadBytes: 32, readbackBytes: 4, kernelCalls: 3 });
+    const before = controller.diagnostics();
+    assert.equal(before.ownedBufferBytes, 64);
+    assert.equal(before.unknownCompletionBytes, 16);
+    assert.equal(before.kernelCalls, 3);
+    worker.dispatchEvent(new Event("error"));
+    await assert.rejects(controller.close(), (error) => error.details.physicalCompletion === "unknown");
+    const after = controller.diagnostics();
+    assert.equal(after.state, "lost");
+    assert.equal(after.ownedBufferBytes, 64);
+    assert.equal(after.pendingSubmissions, 1);
+    assert.equal(after.unknownCompletionBytes, 64);
+    assert.equal(after.kernelCalls, 3);
+    assert.equal(before.state, "ready");
+    assert.equal(before.unknownCompletionBytes, 16);
+  } finally { worker?.initialization.port.close(); restore(); }
+});
+
+test("controller diagnostics preserve partial publication and undisclosed adapter data", async () => {
+  const restore = workerEnvironment();
+  let worker;
+  try {
+    const setup = python.createWebGpuWorker();
+    worker = ControlledWorker.instances[0];
+    worker.dispatchEvent(new MessageEvent("message", { data: { kind: "ready", capabilities,
+      diagnostics: { ...diagnostics, adapter: { vendor: "", architecture: "", device: "", description: "", isFallbackAdapter: true } } } }));
+    const controller = await setup;
+    const original = controller.diagnostics();
+    const metrics = new BigInt64Array(worker.initialization.metrics);
+    Atomics.store(metrics, GPU_METRICS.indexOf("ownedBufferBytes"), 16n);
+    const partial = controller.diagnostics();
+    assert.equal(partial.ownedBufferBytes, 16);
+    assert.equal(partial.peakOwnedBufferBytes, 0, "a read does not fabricate aggregate consistency");
+    assert.equal(partial.adapter.vendor, "");
+    assert.equal(partial.adapter.isFallbackAdapter, true);
+    assert.equal(original.ownedBufferBytes, 0);
+    Atomics.store(metrics, GPU_METRICS.indexOf("peakOwnedBufferBytes"), 32n);
+    assert.equal(controller.diagnostics().peakOwnedBufferBytes, 32);
+    const close = controller.close();
+    assert.equal(controller.diagnostics().state, "lost", "retirement is distinct from an acknowledged close");
+    assert.equal(controller.diagnostics().ownedBufferBytes, 16);
+    Atomics.store(metrics, GPU_METRICS.indexOf("ownedBufferBytes"), 0n);
+    Atomics.store(metrics, GPU_METRIC_STATE, 2n);
+    worker.closed();
+    await close;
+    assert.equal(controller.diagnostics().state, "closed");
+    assert.equal(controller.diagnostics().ownedBufferBytes, 0);
+    assert.equal(controller.diagnostics().peakOwnedBufferBytes, 32);
+    assert.equal(partial.ownedBufferBytes, 16);
+  } finally { worker?.closed(); restore(); }
 });

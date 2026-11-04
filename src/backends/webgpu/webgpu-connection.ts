@@ -18,6 +18,16 @@ export interface WebGpuConnectionData extends WebGpuConnection {
   readonly metrics: SharedArrayBuffer;
 }
 
+/** Detach acquired metadata as well as counters from the connection owner. */
+export function snapshotWebGpuDiagnostics(value: WebGpuDiagnostics): WebGpuDiagnostics {
+  return Object.freeze({
+    ...value,
+    adapter: Object.freeze({ ...value.adapter }),
+    features: Object.freeze([...value.features]),
+    limits: Object.freeze({ ...value.limits }),
+  });
+}
+
 // One context has one generation. Retirement is permanent, never recovery.
 export const GPU_GENERATION = 0;
 export const GPU_CONSUMED = 1;

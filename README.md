@@ -49,7 +49,7 @@ Tabgrad name and are not published as `torch`.
 
 The [browser package guide](docs/reference/browser-package.md) explains how to
 install and serve an inspected candidate. The
-[0.1.3 source and support record](docs/reference/release-0.1.3.md) identifies its
+[0.2.0 source and support record](docs/reference/release-0.2.0.md) identifies its
 bounded API and qualification; registry availability is verified separately.
 
 ## Execution model

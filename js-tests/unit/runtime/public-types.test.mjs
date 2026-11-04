@@ -145,10 +145,20 @@ test("the package entry point does not export executable or failure internals", 
   }
 });
 
-test("emitted declarations preserve scope result, backward and matrix contracts", () => {
+test("emitted declarations preserve scope, backward, matrix and GPU host contracts", () => {
   const filename = fileURLToPath(new URL("no-grad-consumer.ts", import.meta.url));
   const source = `
 import { RuntimeSession, Tensor, type BackwardOptions } from '../../../dist/index.js';
+import { type WebGpuWorkerController, type WebGpuDiagnostics, type PythonBinding } from '../../../dist/python.js';
+declare const gpu: WebGpuWorkerController, python: PythonBinding;
+const snapshot: WebGpuDiagnostics = gpu.diagnostics();
+const bytes: number = snapshot.ownedBufferBytes;
+// @ts-expect-error Snapshot fields are readonly.
+snapshot.kernelCalls = 0;
+// @ts-expect-error Nested acquired metadata is readonly.
+snapshot.adapter.vendor = 'changed';
+// @ts-expect-error The remote binding does not gain a synchronous RPC.
+python.diagnostics();
 declare const left: Tensor, right: Tensor;
 const matrix: Tensor = left.matmul(right);
 // @ts-expect-error Matrix inputs are handles rather than host payloads.

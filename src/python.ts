@@ -7,6 +7,7 @@ export {
 } from "./frontends/python/python-binding.js";
 export { connectPythonWorker, servePythonWorker } from "./frontends/python/python-worker.js";
 export { PythonWorkerError } from "./frontends/python/python-worker-errors.js";
+export type { WebGpuDiagnostics } from "./backends/webgpu/webgpu-backend.js";
 export {
   createWebGpuWorker,
   type WebGpuWorkerController,
