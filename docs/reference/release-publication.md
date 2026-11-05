@@ -651,20 +651,27 @@ that with its first useful separately authorized CI publication, not a dummy.
 ## Inspect, conserve and recover
 
 After a confirmed npm outcome, the consumer role observes readiness with
-credential-free registry GETs before associating the original proof. It waits
-only for an absent unused selected version with the admitted previous channel,
-or an already exact selected version with that previous channel. Readiness
-requires the exact selected version, publicness, integrity and selected channel.
-Contradictory identity/content, a foreign or missing channel, withdrawn/used but
-absent versions, HTTP/parse/size failures and changed proofs still fail closed.
-Prepublication reads remain one-shot; this never retries an npm call.
+credential-free registry GETs and strict original-proof association. It can wait
+for an absent unused selected version with the admitted previous channel,
+or an already exact selected version with that previous channel. Once exact
+version, publicness, integrity and selected channel match, only HTTP404 from
+that version's same-origin attestation locator is additionally pending. Each
+retry rechecks metadata and the original proof bytes; a matching retrieved
+proof is still required before consumers run. Missing/foreign locators,
+contradictory identity/content, a foreign or missing channel, withdrawn/used but
+absent versions, other HTTP/parse/size failures and changed proofs fail closed.
+A package-endpoint404 remains unknown, not pending proof availability.
+Prepublication and fresh GitHub-completion checks remain one-shot; this never
+retries an npm call.
 
-This observation uses a fixed ten-minute budget capped by the admitted window,
+Metadata and proof availability share one fixed ten-minute budget capped by the admitted window,
 the existing 15-second polling cadence and a fixed attempt bound. These are
 operational limits, not measured registry convergence guarantees. Late reads
 cannot establish readiness after expiry. Consumer artifacts retain a bounded
 safe diagnostic projection on success or failure: ordered observation times,
-response digests, pending/ready/conflict classifications and terminal phase/code.
+response digests, pending/ready/conflict classifications, provenance-phase reads
+and terminal phase/code. Unavailable proof evidence is distinct from a retrieved
+proof mismatch; neither supplies a successful association.
 They exclude raw registry account metadata, credentials and private paths.
 A failed role retains its result without fabricating a successful consumer
 handoff; a missing original response cannot be reconstructed from its digest.

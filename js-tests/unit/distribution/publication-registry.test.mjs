@@ -45,6 +45,101 @@ function syntheticBundle(defaults = 0) {
   return bundle;
 }
 
+async function proofReadinessFixture(t) {
+  const f = await associationFixture(t, syntheticBundle());
+  const state = { now: Date.now(), metadata: 0, proofs: 0, statuses: [404, 200], pauses: 0 };
+  const registry = publicationRegistry({ clock: () => state.now,
+    pause: async (ms, signal) => { state.pauses++; state.now += ms; await state.onPause?.(signal); },
+    fetcher: async (url, options) => {
+      const proof = url.pathname.startsWith('/-/');
+      await state.onRequest?.(proof, options);
+      if (!proof) { state.metadata++; return new Response(JSON.stringify(f.pack)); }
+      const status = state.statuses[Math.min(state.proofs++, state.statuses.length - 1)];
+      return new Response(status === 404 ? 'not available' : state.body ?? JSON.stringify({ attestations:
+        [{ predicateType: 'https://slsa.dev/provenance/v1', bundle: f.state.bundle }] }), { status });
+    } });
+  return { ...f, registry, state, deadline: state.now + 60000 };
+}
+
+test('consumer readiness waits for locator404 without accepting missing or different proof material', async t => {
+  const f = await proofReadinessFixture(t);
+  const result = await f.registry.waitForPublished(f.plan, f.deadline, { proofPath: f.path });
+  assert.equal(result.status, 'passed');
+  assert.equal(result.originalProofSha256, sha256(f.raw));
+  assert.equal(f.state.metadata, 2); assert.equal(f.state.proofs, 2); assert.equal(f.state.pauses, 1);
+  assert.deepEqual(f.registry.observations.map(row => row.status), [200, 404, 200, 200]);
+  assert.deepEqual(await readFile(f.path), f.raw);
+});
+
+test('metadata and proof availability spend the same absolute budget', async t => {
+  const f = await proofReadinessFixture(t), ready = structuredClone(f.pack);
+  f.pack.versions = {}; f.pack['dist-tags'].latest = f.plan.npm.before.channel;
+  f.state.statuses = [404];
+  f.state.onPause = () => Object.assign(f.pack, ready);
+  await assert.rejects(f.registry.waitForPublished(f.plan, f.state.now + 30000, { proofPath: f.path }),
+    { code: 'PUBLICATION_REGISTRY_NOT_READY' });
+  assert.equal(f.state.metadata, 2); assert.equal(f.state.proofs, 1);
+  assert.equal(f.state.pauses, 2);
+});
+
+for (const clockChange of ['advancing', 'static', 'rollback']) test(`unavailable proof has finite reads with ${clockChange} clock`, async t => {
+  const f = await proofReadinessFixture(t); f.state.statuses = [404];
+  if (clockChange !== 'advancing') f.state.onPause = () => { f.state.now -= clockChange === 'static' ? 15000 : 15001; };
+  await assert.rejects(f.registry.waitForPublished(f.plan, f.state.now + 30000, { proofPath: f.path }),
+    { code: 'PUBLICATION_REGISTRY_NOT_READY' });
+  assert.equal(f.state.proofs, clockChange === 'advancing' ? 2 : 3);
+});
+
+for (const at of ['before', 'metadata', 'proof', 'pause']) test(`proof readiness propagates cancellation ${at}`, async t => {
+  const f = await proofReadinessFixture(t), abort = new AbortController();
+  if (at === 'before') abort.abort();
+  if (at === 'metadata' || at === 'proof') f.state.onRequest = (proof, options) => {
+    assert.ok(options.signal instanceof AbortSignal);
+    if (proof === (at === 'proof')) abort.abort();
+  };
+  if (at === 'pause') f.state.onPause = signal => { assert.equal(signal, abort.signal); abort.abort(); };
+  await assert.rejects(f.registry.waitForPublished(f.plan, f.deadline, { proofPath: f.path, signal: abort.signal }), { name: 'AbortError' });
+  assert.equal(f.state.proofs, at === 'before' || at === 'metadata' ? 0 : 1);
+});
+
+for (const at of ['metadata', 'proof']) test(`late ${at} cannot establish proof readiness or start a later acquisition`, async t => {
+  const f = await proofReadinessFixture(t); f.state.statuses = [200];
+  f.state.onRequest = proof => { if (proof === (at === 'proof')) f.state.now += 1001; };
+  await assert.rejects(f.registry.waitForPublished(f.plan, f.state.now + 1000, { proofPath: f.path }),
+    { code: 'PUBLICATION_REGISTRY_NOT_READY' });
+  assert.equal(f.state.proofs, at === 'metadata' ? 0 : 1);
+});
+
+test('later metadata contradictions stop before another locator request', async t => {
+  const f = await proofReadinessFixture(t); f.state.onPause = () => { f.pack['dist-tags'].latest = 'foreign'; };
+  await assert.rejects(f.registry.waitForPublished(f.plan, f.deadline, { proofPath: f.path }), { code: 'PUBLICATION_REGISTRY_CONFLICT' });
+  assert.equal(f.state.proofs, 1); assert.equal(f.state.metadata, 2);
+});
+
+for (const [name, change] of [
+  ['HTTP403', f => { f.state.statuses = [403]; }],
+  ['HTTP500', f => { f.state.statuses = [500]; }],
+  ['malformed200', f => { f.state.statuses = [200]; f.state.body = 'invalid json'; }],
+  ['missing attestations', f => { f.state.statuses = [200]; f.state.body = '{}'; }],
+  ['different proof', f => { f.state.statuses = [200]; f.state.body = '{"attestations":[]}'; }],
+  ['missing locator', f => { delete f.pack.versions[f.plan.candidate.version].dist.attestations; }],
+  ['foreign locator', f => { f.pack.versions[f.plan.candidate.version].dist.attestations.url = 'https://example.invalid/proof'; }],
+]) test(`proof readiness does not retry ${name}`, async t => {
+  const f = await proofReadinessFixture(t); change(f);
+  await assert.rejects(f.registry.waitForPublished(f.plan, f.deadline, { proofPath: f.path }));
+  assert.equal(f.state.pauses, 0); assert.equal(f.state.metadata, 1);
+});
+
+test('locator404 cannot hide changed original bytes; direct association remains one-shot', async t => {
+  const f = await proofReadinessFixture(t);
+  await assert.rejects(f.registry.associateOriginalProof(f.plan, f.path), { code: 'PUBLICATION_REGISTRY_PROVENANCE_PENDING' });
+  assert.equal(f.state.proofs, 1); assert.equal(f.state.pauses, 0);
+  await writeFile(f.path, Buffer.concat([f.raw, Buffer.from('\n')]));
+  const before = f.state.proofs;
+  await assert.rejects(f.registry.waitForPublished(f.plan, f.deadline, { proofPath: f.path }), { code: 'PUBLICATION_REGISTRY_PROVENANCE_MISMATCH' });
+  assert.equal(f.state.proofs, before); assert.equal(f.state.pauses, 0);
+});
+
 for (let original = 0; original < 4; original++) for (let received = 0; received < 4; received++) {
   test(`association preserves known empty defaults (${original}/${received}) and original bytes`, async t => {
     const f = await associationFixture(t, syntheticBundle(original));

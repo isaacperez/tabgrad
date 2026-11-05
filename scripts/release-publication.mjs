@@ -438,12 +438,11 @@ async function consumerReport(root, state, environment) {
 }
 
 /** Read-only post-result checks; retain safe diagnostics even without a success handoff. */
-export async function verifyPublishedConsumerResult(root, { plan, candidate, proof, registry, report, clock = Date.now }) {
+export async function verifyPublishedConsumerResult(root, { plan, candidate, proof, registry, report, clock = Date.now, signal }) {
   let phase = "registry", status = "failed", code = null, consumerFailure = null;
   try {
-    await registry.waitForPublished(plan, Math.min(Date.parse(plan.window.deadline), clock() + 600000));
-    phase = "provenance";
-    const association = await registry.associateOriginalProof(plan, proof);
+    const association = await registry.waitForPublished(plan, Math.min(Date.parse(plan.window.deadline), clock() + 600000),
+      { proofPath: proof, signal });
     phase = "consumers";
     const reports = await report();
     phase = "admission";
@@ -452,6 +451,7 @@ export async function verifyPublishedConsumerResult(root, { plan, candidate, pro
     status = "passed";
     return { status: "published-consumers-verified" };
   } catch (error) {
+    if (phase === "registry" && registry.observations.at(-1)?.phase === "provenance") phase = "provenance";
     code = /^PUBLICATION_[A-Z_]+$/.test(error.code ?? "") ? error.code : "PUBLICATION_CONSUMER_CHECK_FAILED";
     const raw = error.privateClientEvidence?.stdout;
     if (phase === "consumers" && typeof raw === "string" && Buffer.byteLength(raw) <= 4 * 1024 * 1024) {
