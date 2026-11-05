@@ -13,7 +13,7 @@ localhost during development:
 ```html
 <pre id="output">Loading Tabgrad…</pre>
 <script type="module">
-  import { createRuntimeSession } from "https://cdn.jsdelivr.net/npm/@tabgrad/tabgrad@0.1.3/dist/index.js";
+  import { createRuntimeSession } from "https://cdn.jsdelivr.net/npm/@tabgrad/tabgrad@0.3.0/dist/index.js";
 
   const session = createRuntimeSession();
   const x = session.tensor([1, 2, 3]);
