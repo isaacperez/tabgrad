@@ -3,11 +3,13 @@ export {
   type PythonNamespace,
   type PythonInterpreter,
   type PythonBinding,
+  type LocalPythonBinding,
   type PythonBindingOptions,
 } from "./frontends/python/python-binding.js";
 export { connectPythonWorker, servePythonWorker } from "./frontends/python/python-worker.js";
 export { PythonWorkerError } from "./frontends/python/python-worker-errors.js";
 export type { WebGpuDiagnostics } from "./backends/webgpu/webgpu-backend.js";
+export type { RuntimeDiagnostics } from "./runtime/runtime.js";
 export {
   createWebGpuWorker,
   type WebGpuWorkerController,

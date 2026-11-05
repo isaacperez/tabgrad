@@ -202,6 +202,21 @@ closed binding is a different state: retrying through it cannot reopen the
 old session. Neither case permits the integration to hide the problem by
 switching to another backend.
 
+## Observe before releasing the CPU context
+
+After an accepted script settles, application code in the interpreter worker
+can read its local binding's diagnostics, including after a partial script
+failure. The reader uses that session's existing counters and may perform
+scheduled semantic cleanup or throw its failure. The application retains any
+snapshot it needs and handles observation failure separately from script and
+close outcomes. The [host reference](../reference/python-host.md#read-local-runtime-observations)
+defines the exact data and availability limits.
+
+Take a pre-close sample for CPU peaks/capacity: context release resets those
+fields. A host outside the interpreter receives only observations its application
+explicitly publishes; forced termination supplies no trustworthy final sample.
+This step does not add a diagnostics request to the script/close protocol.
+
 ## Closure: stop admission before releasing the session
 
 The host can request close while a script is still active. Close first stops

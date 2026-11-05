@@ -7,6 +7,22 @@ established by the corresponding verified release record.
 
 ## Unreleased
 
+## 0.3.0 - 2026-11-05
+
+### Added
+
+- Applications can read their local managed Python session through
+  `binding.diagnostics()`, including CPU buffer peaks, Wasm capacity, kernels
+  and transfers. Snapshots are detached and frozen; reading preserves the
+  existing runtime collection/error behavior and adds no per-operation
+  instrumentation or retained history
+  ([#406](https://github.com/isaacperez/tabgrad/issues/406)).
+
+The [0.3.0 source and support record](docs/reference/release-0.3.0.md) describes
+the local/remote distinction, pre-close observations and unchanged tensor
+support. Update the complete matched distribution; registry availability and
+exact-byte qualification are verified separately from this source record.
+
 ## 0.2.0 - 2026-11-04
 
 ### Added

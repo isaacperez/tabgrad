@@ -5,6 +5,8 @@ import { createHash } from "node:crypto";
 import { loadPyodide } from "pyodide";
 import { RuntimeSession, Tensor } from "../../../dist/index.js";
 import { PythonRuntimeBridge } from "../../../dist/frontends/python/python-runtime-bridge.js";
+import { WebAssemblyCpuBackend } from "../../../dist/backends/cpu/cpu-backend.js";
+import { selectCpuProfile } from "../../browser/helpers/cpu-profile.mjs";
 import { getTestExecutionFailureContext } from "../../../dist/testing.js";
 import { assertSumFixture } from "../../fixtures/sum-oracle.mjs";
 import { float32FromBits } from "../../fixtures/sum-oracle.mjs";
@@ -33,6 +35,215 @@ function getInterpreter() {
   interpreterPromise ??= loadPyodide();
   return interpreterPromise;
 }
+
+for (const variant of ["scalar", "simd128"]) {
+  test(`local Python diagnostics observe CPU work without demanding pending values (${variant})`, { timeout: 20_000 }, async () => {
+    const { attachPython } = await import("../../../dist/python.js");
+    const interpreter = await getInterpreter();
+    const validate = WebAssembly.validate;
+    selectCpuProfile(variant);
+    let binding;
+    try {
+      binding = await attachPython(interpreter);
+      const initial = binding.diagnostics();
+      assert.equal(initial.backendLoads, 0);
+      assert.equal(initial.kernelCalls, 0);
+      assert.equal(initial.wasmMemoryBytes, 0);
+      assert.equal(initial.webgpu, null);
+      await binding.runPythonAsync(`
+import torch
+observed_x = torch.tensor([1, 2, 3], dtype=torch.float32)
+observed_y = observed_x + observed_x
+observed_unused = observed_x * observed_x
+`);
+      const pending = binding.diagnostics();
+      assert.equal(pending.selectedVariant, variant);
+      assert.equal(pending.backendLoads, 1);
+      assert.equal(pending.kernelCalls, 0);
+      assert.equal(pending.hostToWasmCopies, 0);
+      assert.equal(pending.liveAllocationBytes, 0);
+      assert.ok(pending.wasmMemoryBytes > 0);
+      for (let read = 0; read < 32; read++) assert.deepEqual(binding.diagnostics(), pending);
+      await binding.runPythonAsync("assert observed_y.sum().tolist() == 12");
+      const completed = binding.diagnostics();
+      assert.equal(completed.kernelCalls, 2);
+      assert.equal(completed.hostToWasmCopies, 1);
+      assert.equal(completed.hostToWasmBytes, 12);
+      assert.equal(completed.wasmToHostCopies, 1);
+      assert.equal(completed.wasmToHostBytes, 4);
+      assert.equal(completed.highWaterAllocationBytes, 28);
+      assert(Object.isFrozen(completed));
+      assert(Object.isFrozen(completed.timings));
+      const next = binding.diagnostics();
+      assert.notEqual(next, completed);
+      assert.notEqual(next.timings, completed.timings);
+      assert.throws(() => { completed.kernelCalls = 0; }, TypeError);
+      assert.throws(() => { completed.timings.compilationMilliseconds = -1; }, TypeError);
+      assert.equal(initial.kernelCalls, 0);
+      assert.equal(pending.highWaterAllocationBytes, 0);
+      assert.deepEqual(next, completed);
+      await binding.close();
+      const closed = binding.diagnostics();
+      assert.equal(closed.liveAllocationBytes, 0);
+      assert.equal(closed.highWaterAllocationBytes, 0);
+      assert.equal(closed.wasmMemoryBytes, 0);
+      assert.equal(closed.kernelCalls, completed.kernelCalls);
+      assert.equal(completed.highWaterAllocationBytes, 28);
+    } finally {
+      await binding?.close();
+      WebAssembly.validate = validate;
+      interpreter.runPython("[globals().pop(name, None) for name in ('torch', 'observed_x', 'observed_y', 'observed_unused')]; None");
+    }
+    const fresh = await attachPython(interpreter);
+    try { assert.equal(fresh.diagnostics().backendLoads, 0); }
+    finally { await fresh.close(); }
+  });
+}
+
+test("local Python diagnostics propagate a real scheduled cycle retirement failure", { timeout: 20_000 }, async (context) => {
+  const { attachPython } = await import("../../../dist/python.js");
+  const interpreter = await getInterpreter();
+  const binding = await attachPython(interpreter);
+  const session = interpreter.runPython("__import__('torch')._runtime_session");
+  const fault = new Error("controlled local diagnostics retirement");
+  const release = WebAssemblyCpuBackend.prototype.release;
+  let releases = 0;
+  try {
+    const left = session.tensor([2]);
+    const right = session.tensor([3]);
+    const result = left.add(right);
+    assert.deepEqual([...await result.toArray()], [5]);
+    left.close(); right.close();
+    const view = result.view([1]);
+    result.grad = view;
+    const replacement = context.mock.method(WebAssemblyCpuBackend.prototype, "release", function (allocation) {
+      release.call(this, allocation);
+      releases += 1;
+      if (releases === 1) throw fault;
+    });
+    try {
+      view.close(); result.close();
+      assert.equal(releases, 0, "the view cycle keeps the actual backing until collection");
+      assert.throws(() => binding.diagnostics(), error => error === fault);
+      assert.equal(releases, 1, "the explicit reader performed the failing retirement");
+    } finally { replacement.mock.restore(); }
+    assert.equal(binding.diagnostics().liveAllocationBytes, 0);
+    assert.equal(binding.diagnostics().liveTensorHandles, 0);
+  } finally { await binding.close(); }
+});
+
+test("local Python diagnostics preserve observed gradients and partial script failure", { timeout: 20_000 }, async () => {
+  const { attachPython } = await import("../../../dist/python.js");
+  const interpreter = await getInterpreter();
+  const binding = await attachPython(interpreter);
+  try {
+    await assert.rejects(binding.runPythonAsync(`
+import torch
+observed_x = torch.tensor([2.0, -3.0], dtype=torch.float32, requires_grad=True)
+(observed_x * observed_x).sum().backward()
+assert observed_x.grad.tolist() == [4.0, -6.0]
+raise RuntimeError('observed partial failure')
+`), /observed partial failure/);
+    const partial = binding.diagnostics();
+    assert.equal(partial.kernelCalls, 4);
+    assert.equal(partial.highWaterAllocationBytes, 36);
+    await binding.close();
+    assert.equal(binding.diagnostics().kernelCalls, 4);
+    assert.equal(partial.highWaterAllocationBytes, 36);
+  } finally {
+    await binding.close();
+    interpreter.runPython("[globals().pop(name, None) for name in ('torch', 'observed_x')]; None");
+  }
+});
+
+test("local Python diagnostics detach nested GPU metadata supplied by the session", { timeout: 20_000 }, async (context) => {
+  const { attachPython } = await import("../../../dist/python.js");
+  const interpreter = await getInterpreter();
+  const binding = await attachPython(interpreter);
+  const session = interpreter.runPython("__import__('torch')._runtime_session");
+  // Controlled metadata tests the local snapshot boundary, not GPU execution.
+  const gpu = {
+    state: "ready", adapter: { vendor: "test", architecture: "", device: "", description: "", isFallbackAdapter: false },
+    features: ["test-feature"], limits: { maxBufferSize: 8192, maxStorageBufferBindingSize: 4096, maxComputeWorkgroupsPerDimension: 256 },
+    ownedBufferBytes: 0, peakOwnedBufferBytes: 0, pendingSubmissions: 0, unknownCompletionBytes: 0,
+    uploadBytes: 0, readbackBytes: 0, kernelCalls: 0,
+  };
+  const observed = { ...session.diagnostics(), webgpu: gpu };
+  const replacement = context.mock.method(session, "diagnostics", () => observed);
+  try {
+    const snapshot = binding.diagnostics();
+    for (const record of [snapshot, snapshot.webgpu, snapshot.webgpu.adapter, snapshot.webgpu.features, snapshot.webgpu.limits]) assert(Object.isFrozen(record));
+    assert.notEqual(snapshot.webgpu.adapter, gpu.adapter);
+    assert.notEqual(snapshot.webgpu.features, gpu.features);
+    assert.notEqual(snapshot.webgpu.limits, gpu.limits);
+    assert.throws(() => { snapshot.webgpu.adapter.vendor = "changed"; }, TypeError);
+    assert.throws(() => snapshot.webgpu.features.push("changed"), TypeError);
+    gpu.adapter.vendor = "updated";
+    gpu.features.push("later-feature");
+    gpu.limits.maxBufferSize = 16384;
+    assert.equal(snapshot.webgpu.adapter.vendor, "test");
+    assert.deepEqual(snapshot.webgpu.features, ["test-feature"]);
+    assert.equal(snapshot.webgpu.limits.maxBufferSize, 8192);
+    assert.equal(binding.diagnostics().webgpu.adapter.vendor, "updated");
+  } finally {
+    replacement.mock.restore();
+    await binding.close();
+  }
+});
+
+test("local Python diagnostics preserve busy admission and joined close during a yielded entry", { timeout: 20_000 }, async (context) => {
+  const { attachPython } = await import("../../../dist/python.js");
+  const interpreter = await getInterpreter();
+  const binding = await attachPython(interpreter);
+  const entered = Promise.withResolvers();
+  const resume = Promise.withResolvers();
+  const execute = interpreter.runPythonAsync.bind(interpreter);
+  const replacement = context.mock.method(interpreter, "runPythonAsync", async source => {
+    entered.resolve();
+    await resume.promise;
+    return execute(source);
+  });
+  try {
+    const running = binding.runPythonAsync("pass");
+    await entered.promise;
+    const during = binding.diagnostics();
+    assert.equal(during.backendLoads, 1);
+    assert.equal(during.kernelCalls, 0);
+    await assert.rejects(binding.runPythonAsync("pass"), { code: "PYTHON_ENTRY_BUSY" });
+    const closing = binding.close();
+    assert.equal(binding.close(), closing);
+    await assert.rejects(binding.runPythonAsync("pass"), { code: "CLOSED_PYTHON_BINDING" });
+    assert.equal(binding.diagnostics().wasmMemoryBytes, during.wasmMemoryBytes);
+    resume.resolve();
+    await running;
+    await closing;
+    assert.equal(binding.diagnostics().wasmMemoryBytes, 0);
+  } finally {
+    resume.resolve();
+    await binding.close();
+    replacement.mock.restore();
+  }
+});
+
+test("local Python diagnostics remain available after failed CPU preparation", { timeout: 20_000 }, async (context) => {
+  const { attachPython } = await import("../../../dist/python.js");
+  const interpreter = await getInterpreter();
+  const binding = await attachPython(interpreter);
+  const fileFetch = globalThis.fetch;
+  const replacement = context.mock.method(globalThis, "fetch", url => new URL(url).pathname.endsWith(".wasm")
+    ? new Response(null, { status: 404 }) : fileFetch(url));
+  try {
+    await assert.rejects(binding.runPythonAsync("pass"), { code: "BACKEND_LOAD_FAILED" });
+    const failed = binding.diagnostics();
+    assert.equal(failed.kernelCalls, 0);
+    assert.equal(failed.liveAllocationBytes, 0);
+    assert.equal(failed.wasmMemoryBytes, 0);
+    assert.equal(binding.diagnostics().backendLoads, failed.backendLoads);
+  } finally {
+    replacement.mock.restore();
+    await binding.close();
+  }
+});
 
 test("packaged Python matrix calls and histories match the native maintained cases", { timeout: 20_000 }, async () => {
   const oracle = JSON.parse(await readFile(new URL("../../fixtures/python-tensor-oracle.json", import.meta.url), "utf8"));
