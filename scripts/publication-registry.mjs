@@ -97,7 +97,7 @@ export function publicationRegistry({ registry = "https://registry.npmjs.org/", 
   }
 
   /** Only after a known successful call; never retries a write or a contradiction. */
-  async function waitForPublished(plan, deadline, { signal, proofPath } = {}) {
+  async function waitForPublished(plan, deadline, { signal, proofPath, onPhase } = {}) {
     const remaining = deadline - clock();
     requirePublication(Number.isFinite(deadline) && remaining > 0 && remaining <= 600000
       && deadline <= Date.parse(plan.window.deadline), "PUBLICATION_REGISTRY_WAIT_INVALID");
@@ -108,7 +108,7 @@ export function publicationRegistry({ registry = "https://registry.npmjs.org/", 
       if (clock() >= deadline) break;
       try {
         const result = proofPath === undefined ? await inspect(plan, "after", signal)
-          : await associateOriginalProof(plan, proofPath, { signal, deadline });
+          : await associateOriginalProof(plan, proofPath, { signal, deadline, onPhase });
         signal?.throwIfAborted();
         requirePublication(clock() < deadline, "PUBLICATION_REGISTRY_NOT_READY");
         return result;
@@ -122,14 +122,16 @@ export function publicationRegistry({ registry = "https://registry.npmjs.org/", 
     }
     throw new PublicationError("PUBLICATION_REGISTRY_NOT_READY");
   }
-  async function associateOriginalProof(plan, proofPath, { signal, deadline } = {}) {
+  async function associateOriginalProof(plan, proofPath, { signal, deadline, onPhase } = {}) {
     const active = () => {
       signal?.throwIfAborted();
       if (deadline !== undefined) requirePublication(clock() < deadline, "PUBLICATION_REGISTRY_NOT_READY");
     };
+    onPhase?.("registry");
     active();
     const { version } = await inspect(plan, "after", signal);
     active();
+    onPhase?.("provenance");
     const locator = version.dist?.attestations?.url;
     requirePublication(typeof locator === "string", "PUBLICATION_REGISTRY_PROVENANCE_MISSING");
     const proofBytes = await publicationFile(proofPath, 16 * 1024 * 1024);

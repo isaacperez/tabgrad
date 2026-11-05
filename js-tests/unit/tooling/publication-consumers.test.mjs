@@ -48,6 +48,8 @@ for (const phase of ["success", "registry", "provenance", "consumers", "child-re
     }
     const raw = await readFile(join(f.root, "public-output/consumer-diagnostics.json"), "utf8"), evidence = JSON.parse(raw);
     assert.equal(evidence.status, phase === "success" ? "passed" : "failed");
+    assert.equal(evidence.phase, phase === "success" || phase === "admission" ? "admission"
+      : phase === "child-report" ? "consumers" : phase);
     assert.ok(evidence.observations.length > 0); assert.equal(evidence.omittedObservations, 0);
     assert.equal(raw.includes("PRIVATE DETAILS"), false); assert.equal(raw.includes(f.root), false);
     assert.equal(raw.includes("fixture-not-a-credential"), false);

@@ -442,7 +442,7 @@ export async function verifyPublishedConsumerResult(root, { plan, candidate, pro
   let phase = "registry", status = "failed", code = null, consumerFailure = null;
   try {
     const association = await registry.waitForPublished(plan, Math.min(Date.parse(plan.window.deadline), clock() + 600000),
-      { proofPath: proof, signal });
+      { proofPath: proof, signal, onPhase: value => { phase = value; } });
     phase = "consumers";
     const reports = await report();
     phase = "admission";
@@ -451,7 +451,6 @@ export async function verifyPublishedConsumerResult(root, { plan, candidate, pro
     status = "passed";
     return { status: "published-consumers-verified" };
   } catch (error) {
-    if (phase === "registry" && registry.observations.at(-1)?.phase === "provenance") phase = "provenance";
     code = /^PUBLICATION_[A-Z_]+$/.test(error.code ?? "") ? error.code : "PUBLICATION_CONSUMER_CHECK_FAILED";
     const raw = error.privateClientEvidence?.stdout;
     if (phase === "consumers" && typeof raw === "string" && Buffer.byteLength(raw) <= 4 * 1024 * 1024) {
