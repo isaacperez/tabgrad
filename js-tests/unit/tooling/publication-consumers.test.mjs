@@ -48,10 +48,63 @@ for (const phase of ["success", "registry", "provenance", "consumers", "child-re
     }
     const raw = await readFile(join(f.root, "public-output/consumer-diagnostics.json"), "utf8"), evidence = JSON.parse(raw);
     assert.equal(evidence.status, phase === "success" ? "passed" : "failed");
+    assert.equal(evidence.phase, phase === "success" || phase === "admission" ? "admission"
+      : phase === "child-report" ? "consumers" : phase);
     assert.ok(evidence.observations.length > 0); assert.equal(evidence.omittedObservations, 0);
     assert.equal(raw.includes("PRIVATE DETAILS"), false); assert.equal(raw.includes(f.root), false);
     assert.equal(raw.includes("fixture-not-a-credential"), false);
     assert.deepEqual(evidence.consumerFailure, phase === "child-report" ? { phase: "Chrome-direct", code: "BROWSER_FAILED" } : null);
     assert.equal(f.calls, 0); // This route never invokes the fixture's publishing client.
+  });
+}
+
+for (const mode of ['success', 'unavailable', 'shared-budget', 'mismatch', 'abort']) {
+  test(`consumer orchestration admits only strict proof readiness (${mode})`, async t => {
+    const f = await publicationServiceFixture(t);
+    let now = Date.now(), metadata = 0, proofs = 0, reports = 0;
+    f.plan.window.deadline = new Date(now + 30000).toISOString();
+    f.plan.npm.before.channel = '0.9.6';
+    const abort = new AbortController(), original = JSON.parse(await readFile(f.material.proof));
+    const pack = { name: f.plan.candidate.name, 'dist-tags': { latest: f.plan.candidate.version }, versions: {
+      [f.plan.candidate.version]: { name: f.plan.candidate.name, version: f.plan.candidate.version,
+        dist: { integrity: f.candidate.tarball.integrity,
+          attestations: { url: 'https://registry.npmjs.org/-/npm/v1/attestations/fixture' } } },
+    } };
+    const registry = publicationRegistry({ clock: () => now, pause: async ms => { now += ms; }, fetcher: async url => {
+      if (!url.pathname.startsWith('/-/')) {
+        metadata++;
+        return new Response(JSON.stringify(mode === 'shared-budget' && metadata === 1
+          ? { name: pack.name, versions: {}, 'dist-tags': { latest: '0.9.6' } } : pack));
+      }
+      proofs++;
+      if (mode === 'abort') abort.abort();
+      if (mode === 'unavailable' || mode === 'shared-budget' || mode === 'success' && proofs === 1) {
+        return new Response('PRIVATE registry diagnostic', { status: 404 });
+      }
+      return new Response(JSON.stringify({ attestations: mode === 'mismatch' ? []
+        : [{ predicateType: 'https://slsa.dev/provenance/v1', bundle: original }] }));
+    } });
+    const options = { plan: f.plan, candidate: f.candidate, proof: f.material.proof, registry, clock: () => now,
+      signal: abort.signal, report: async () => {
+        reports++;
+        assert.equal(proofs, 2, 'consumer execution follows the unavailable and then strictly associated proof');
+        return [report(f)];
+      } };
+    if (mode === 'success') await verifyPublishedConsumerResult(f.root, options);
+    else {
+      await assert.rejects(verifyPublishedConsumerResult(f.root, options), mode === 'abort' ? { name: 'AbortError' }
+        : { code: mode === 'mismatch' ? 'PUBLICATION_REGISTRY_PROVENANCE_MISMATCH' : 'PUBLICATION_REGISTRY_NOT_READY' });
+      await assert.rejects(access(join(f.root, 'public-output/consumers.json')));
+    }
+    assert.equal(reports, mode === 'success' ? 1 : 0);
+    assert.equal(f.calls, 0, 'readiness never invokes the publishing client');
+    const raw = await readFile(join(f.root, 'public-output/consumer-diagnostics.json'), 'utf8');
+    const diagnostics = JSON.parse(raw);
+    assert.equal(diagnostics.status, mode === 'success' ? 'passed' : 'failed');
+    assert.equal(raw.includes('PRIVATE registry diagnostic'), false);
+    assert.equal(raw.includes(f.root), false);
+    if (mode === 'shared-budget') { assert.equal(metadata, 2); assert.equal(proofs, 1); }
+    if (mode === 'success') assert.deepEqual(diagnostics.observations.map(row => row.status), [200, 404, 200, 200]);
+    else assert.equal(diagnostics.phase, 'provenance');
   });
 }
