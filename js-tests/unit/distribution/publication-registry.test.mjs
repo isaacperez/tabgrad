@@ -140,6 +140,16 @@ test('locator404 cannot hide changed original bytes; direct association remains 
   assert.equal(f.state.proofs, before); assert.equal(f.state.pauses, 0);
 });
 
+test('proof bytes changed between locator observations reject before a second proof GET', async t => {
+  const f = await proofReadinessFixture(t);
+  f.state.onPause = () => writeFile(f.path, Buffer.concat([f.raw, Buffer.from('\n')]));
+  await assert.rejects(f.registry.waitForPublished(f.plan, f.deadline, { proofPath: f.path }),
+    { code: 'PUBLICATION_REGISTRY_PROVENANCE_MISMATCH' });
+  assert.equal(f.state.metadata, 2);
+  assert.equal(f.state.proofs, 1);
+  assert.equal(f.state.pauses, 1);
+});
+
 for (let original = 0; original < 4; original++) for (let received = 0; received < 4; received++) {
   test(`association preserves known empty defaults (${original}/${received}) and original bytes`, async t => {
     const f = await associationFixture(t, syntheticBundle(original));
