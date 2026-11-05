@@ -31,11 +31,17 @@ console.log("public entries resolved");
 export async function checkPublicPackageTypes(fixture) {
   const consumer = join(fixture.application, "consumer.ts");
   await writeFile(consumer, `import { createRuntimeSession, type Tensor } from ${JSON.stringify(fixture.metadata.name)};
-import { attachPython, createWebGpuWorker, type PythonInterpreter } from ${JSON.stringify(`${fixture.metadata.name}/python`)};
+import { attachPython, createWebGpuWorker, type PythonInterpreter, type LocalPythonBinding, type RuntimeDiagnostics } from ${JSON.stringify(`${fixture.metadata.name}/python`)};
 const session = createRuntimeSession();
 const x: Tensor = session.tensor([2, 3], {requiresGrad: true});
 const y: Tensor = x.mul(x).sum();
-async function attach(interpreter: PythonInterpreter) { return attachPython(interpreter); }
+async function attach(interpreter: PythonInterpreter): Promise<LocalPythonBinding> {
+  const binding = await attachPython(interpreter);
+  const observed: RuntimeDiagnostics = binding.diagnostics();
+  const bytes: number = observed.highWaterAllocationBytes;
+  void bytes;
+  return binding;
+}
 void attach; void createWebGpuWorker; void y;
 `);
   const compiler = fileURLToPath(new URL("../../node_modules/typescript/bin/tsc", import.meta.url));

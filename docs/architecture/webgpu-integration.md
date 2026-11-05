@@ -214,6 +214,10 @@ owns the exact interface and field/lifetime semantics.
 Reconsider a broader observer only when a consumer needs CPU/semantic data,
 historical capture or access without owning this controller. Those needs do
 not justify additional state or coordination in the present GPU-only reader.
+The [local runtime reader](python-integration.md#observe-the-session-where-it-is-owned)
+serves CPU/semantic observations in the interpreter's own realm, with its
+scheduled-collection and availability limits; it does not replace this
+independently progressing GPU boundary.
 
 ## Graceful close and GPU revocation answer different questions
 

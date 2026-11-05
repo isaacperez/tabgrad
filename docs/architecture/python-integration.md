@@ -95,6 +95,41 @@ tensor session with ambiguous shutdown responsibility is outside this
 contract. An all-in-one convenience loader could compose this attachment
 boundary, but does not justify coupling Python startup to the JavaScript API.
 
+## Observe the session where it is owned
+
+An embedding application can read the runtime counters already maintained by
+its local attachment. `LocalPythonBinding` extends the common script/close
+interface with a synchronous reader of that same owned session. The application
+does not acquire a second session, inspect private Python objects or transfer
+execution ownership to an observer. The [host reference](../reference/python-host.md#read-local-runtime-observations)
+defines the interface and fields.
+
+Reuse the existing runtime reader and its scheduled semantic collection,
+including cleanup errors. A passive CPU-backend-only reader would need another
+runtime boundary/type and omit semantic-owner information. A separate observer
+delegating the same reader would retain collection behavior while adding a
+capability lifetime; callbacks or a sample cache would add error, freshness and
+retention obligations unnecessary for explicit application reads. No new
+per-operation instrumentation, sampling or reader history is required. Reads
+allocate detached frozen data and can traverse scheduled ownership graphs;
+they do not demand tensor values or promise negligible time or zero memory.
+
+The reader is local because the session and interpreter share one JavaScript
+realm. A remote request cannot serve a parked interpreter. The common
+`PythonBinding` and worker protocol therefore retain script/close only; CPU-only
+attachment acquires no GPU or shared-memory prerequisite. GPU observations
+outside the interpreter continue to belong to its independent physical
+controller. A local observation can include GPU fields without becoming an
+atomic or independently progressing physical-service measurement.
+
+The caller owns any retained observation and samples before closure when it
+needs CPU peaks or capacity. Closing releases that context and resets those
+fields; a hidden terminal cache would introduce a different lifetime contract.
+Snapshots own no tensors, interpreter or execution resources. They cannot
+certify script success or cleanup, and a lost worker cannot publish a fabricated
+final snapshot. The [accepted investigation](https://github.com/isaacperez/tabgrad/issues/405)
+records the alternatives, bounded controls and unresolved timing/RSS limits.
+
 ## Run scripts under an explicit lifetime contract
 
 The binding's `runPythonAsync(source)` entry executes a script and resolves

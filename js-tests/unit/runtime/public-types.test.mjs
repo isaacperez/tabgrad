@@ -149,8 +149,17 @@ test("emitted declarations preserve scope, backward, matrix and GPU host contrac
   const filename = fileURLToPath(new URL("no-grad-consumer.ts", import.meta.url));
   const source = `
 import { RuntimeSession, Tensor, type BackwardOptions } from '../../../dist/index.js';
-import { type WebGpuWorkerController, type WebGpuDiagnostics, type PythonBinding } from '../../../dist/python.js';
+import { attachPython, connectPythonWorker, type PythonInterpreter, type LocalPythonBinding, type RuntimeDiagnostics, type WebGpuWorkerController, type WebGpuDiagnostics, type PythonBinding } from '../../../dist/python.js';
 declare const gpu: WebGpuWorkerController, python: PythonBinding;
+declare const interpreter: PythonInterpreter, local: LocalPythonBinding, port: MessagePort;
+const attached: Promise<LocalPythonBinding> = attachPython(interpreter);
+const common: PythonBinding = local;
+const localSnapshot: RuntimeDiagnostics = local.diagnostics();
+const cpuBytes: number = localSnapshot.highWaterAllocationBytes;
+// @ts-expect-error Local snapshots remain readonly.
+localSnapshot.timings.compilationMilliseconds = 0;
+// @ts-expect-error A remote connection does not gain a synchronous RPC.
+connectPythonWorker(port).diagnostics();
 const snapshot: WebGpuDiagnostics = gpu.diagnostics();
 const bytes: number = snapshot.ownedBufferBytes;
 // @ts-expect-error Snapshot fields are readonly.
