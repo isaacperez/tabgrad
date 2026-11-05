@@ -26,12 +26,13 @@ export function publicationRegistry({ registry = "https://registry.npmjs.org/", 
   requirePublication(base.href === "https://registry.npmjs.org/"
     || (base.protocol === "http:" && base.hostname === "127.0.0.1" && base.pathname === "/"), "PUBLICATION_REGISTRY_ORIGIN");
   const observations = [];
-  async function json(url, signal) {
+  async function json(url, signal, phase) {
     const target = new URL(url, base);
     requirePublication(target.origin === base.origin && !target.username && !target.password && !target.hash,
       "PUBLICATION_REGISTRY_ENDPOINT");
     const observation = { at: new Date(clock()).toISOString(), urlSha256: sha256(Buffer.from(target.href)),
       status: null, sha256: null, receivedBytes: 0 };
+    if (phase !== undefined) observation.phase = phase;
     observations.push(observation);
     const response = await fetcher(target, { method: "GET", headers: { Accept: "application/json" },
       redirect: "error", signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs) });
@@ -96,7 +97,7 @@ export function publicationRegistry({ registry = "https://registry.npmjs.org/", 
   }
 
   /** Only after a known successful call; never retries a write or a contradiction. */
-  async function waitForPublished(plan, deadline, { signal } = {}) {
+  async function waitForPublished(plan, deadline, { signal, proofPath, onPhase } = {}) {
     const remaining = deadline - clock();
     requirePublication(Number.isFinite(deadline) && remaining > 0 && remaining <= 600000
       && deadline <= Date.parse(plan.window.deadline), "PUBLICATION_REGISTRY_WAIT_INVALID");
@@ -106,12 +107,14 @@ export function publicationRegistry({ registry = "https://registry.npmjs.org/", 
       signal?.throwIfAborted();
       if (clock() >= deadline) break;
       try {
-        const result = await inspect(plan, "after", signal);
+        const result = proofPath === undefined ? await inspect(plan, "after", signal)
+          : await associateOriginalProof(plan, proofPath, { signal, deadline, onPhase });
         signal?.throwIfAborted();
         requirePublication(clock() < deadline, "PUBLICATION_REGISTRY_NOT_READY");
         return result;
       } catch (error) {
-        if (error.code !== "PUBLICATION_REGISTRY_PENDING") throw error;
+        if (error.code !== "PUBLICATION_REGISTRY_PENDING"
+          && !(proofPath !== undefined && error.code === "PUBLICATION_REGISTRY_PROVENANCE_PENDING")) throw error;
       }
       signal?.throwIfAborted();
       if (clock() >= deadline) break;
@@ -119,15 +122,27 @@ export function publicationRegistry({ registry = "https://registry.npmjs.org/", 
     }
     throw new PublicationError("PUBLICATION_REGISTRY_NOT_READY");
   }
-  async function associateOriginalProof(plan, proofPath) {
-    const { version } = await inspect(plan, "after");
+  async function associateOriginalProof(plan, proofPath, { signal, deadline, onPhase } = {}) {
+    const active = () => {
+      signal?.throwIfAborted();
+      if (deadline !== undefined) requirePublication(clock() < deadline, "PUBLICATION_REGISTRY_NOT_READY");
+    };
+    onPhase?.("registry");
+    active();
+    const { version } = await inspect(plan, "after", signal);
+    active();
+    onPhase?.("provenance");
     const locator = version.dist?.attestations?.url;
     requirePublication(typeof locator === "string", "PUBLICATION_REGISTRY_PROVENANCE_MISSING");
-    const result = await json(locator);
     const proofBytes = await publicationFile(proofPath, 16 * 1024 * 1024);
+    active();
+    requirePublication(sha256(proofBytes) === plan.producer.archiveProofSha256, "PUBLICATION_REGISTRY_PROVENANCE_MISMATCH");
     const original = JSON.parse(proofBytes);
-    requirePublication(sha256(proofBytes) === plan.producer.archiveProofSha256
-      && result.status === 200 && Array.isArray(result.value.attestations), "PUBLICATION_REGISTRY_PROVENANCE_MISMATCH");
+    active();
+    const result = await json(locator, signal, "provenance");
+    active();
+    requirePublication(result.status !== 404, "PUBLICATION_REGISTRY_PROVENANCE_PENDING");
+    requirePublication(Array.isArray(result.value.attestations), "PUBLICATION_REGISTRY_PROVENANCE_MISMATCH");
     // Avoid a whole-schema round trip: protobuf codecs discard unknown fields.
     const comparableOriginal = withoutEmptySigstoreDefaults(original);
     requirePublication(result.value.attestations.filter(value => value.predicateType === "https://slsa.dev/provenance/v1"

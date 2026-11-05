@@ -7,6 +7,17 @@ established by the corresponding verified release record.
 
 ## Unreleased
 
+### Fixed
+
+- Release consumers wait for an unavailable registry attestation within the
+  existing metadata-readiness budget, while retaining strict proof association
+  and never repeating publication
+  ([#411](https://github.com/isaacperez/tabgrad/issues/411)).
+- Isolated Chrome checks on macOS use a disposable mock keychain, avoiding a
+  startup dependency on the real user keychain while retaining the isolated
+  environment, temporary profile and GPU checks
+  ([#409](https://github.com/isaacperez/tabgrad/issues/409)).
+
 ## 0.3.0 - 2026-11-05
 
 ### Added

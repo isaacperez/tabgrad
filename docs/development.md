@@ -634,7 +634,13 @@ bytes. Operational access is separate from local fixture controls. The
 They copy only their registered application fixtures and locally prepared
 Pyodide files, consume the actual installed tarball, and serve every application
 module from that external tree. The existing browser harness still owns process,
-profile, loopback-server and diagnostic cleanup. Successful GPU output records
+profile, loopback-server and diagnostic cleanup. Disposable Chrome on macOS
+adds Chromium's `--use-mock-keychain` option to avoid depending on the real user
+keychain during startup. The isolated Node/npm home and configuration, temporary
+browser profile, GPU selection and browser sandbox remain unchanged. This does
+not change the user's ordinary Chrome session. See the
+[Chromium macOS instructions](https://chromium.googlesource.com/chromium/src/+/HEAD/docs/mac_build_instructions.md)
+for the upstream option. Successful GPU output records
 the actual adapter/features/limits and requires joined normal drain; it is not
 a timing, memory-growth, model-scale or broader hardware claim. These commands
 remove their disposable application/candidate directories even after failure.

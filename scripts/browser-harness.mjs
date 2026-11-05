@@ -42,6 +42,7 @@ export const browserDefinitions = Object.freeze([
     argumentsFor(profile, url) {
       return [
         "--headless=new",
+        ...(process.platform === "darwin" ? ["--use-mock-keychain"] : []),
         "--no-first-run",
         "--disable-background-networking",
         `--user-data-dir=${profile}`,

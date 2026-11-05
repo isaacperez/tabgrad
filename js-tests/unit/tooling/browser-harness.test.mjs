@@ -7,12 +7,26 @@ import { fileURLToPath } from "node:url";
 
 import {
   BrowserRunError,
+  browserDefinitions,
   removeBrowserProfile,
   runBrowserPage,
   selectBrowserDefinitions,
   startBrowserServer,
   terminateBrowser,
 } from "../../../scripts/browser-harness.mjs";
+
+test("disposable Chrome avoids the real macOS keychain without changing profile or sandbox selection", () => {
+  const profile = "/temporary/browser-profile";
+  const url = "http://127.0.0.1:12345/runtime/runtime.html";
+  const chrome = browserDefinitions.find((browser) => browser.name === "Chrome");
+  const firefox = browserDefinitions.find((browser) => browser.name === "Firefox");
+  assert.deepEqual(chrome.argumentsFor(profile, url), [
+    "--headless=new",
+    ...(process.platform === "darwin" ? ["--use-mock-keychain"] : []),
+    "--no-first-run", "--disable-background-networking", `--user-data-dir=${profile}`, url,
+  ]);
+  assert.deepEqual(firefox.argumentsFor(profile, url), ["--headless", "--no-remote", "--profile", profile, url]);
+});
 
 function registerPolicyFixture(server, token) {
   const registration = server.register(token, "runtime/runtime.html");

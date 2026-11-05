@@ -438,12 +438,11 @@ async function consumerReport(root, state, environment) {
 }
 
 /** Read-only post-result checks; retain safe diagnostics even without a success handoff. */
-export async function verifyPublishedConsumerResult(root, { plan, candidate, proof, registry, report, clock = Date.now }) {
+export async function verifyPublishedConsumerResult(root, { plan, candidate, proof, registry, report, clock = Date.now, signal }) {
   let phase = "registry", status = "failed", code = null, consumerFailure = null;
   try {
-    await registry.waitForPublished(plan, Math.min(Date.parse(plan.window.deadline), clock() + 600000));
-    phase = "provenance";
-    const association = await registry.associateOriginalProof(plan, proof);
+    const association = await registry.waitForPublished(plan, Math.min(Date.parse(plan.window.deadline), clock() + 600000),
+      { proofPath: proof, signal, onPhase: value => { phase = value; } });
     phase = "consumers";
     const reports = await report();
     phase = "admission";
