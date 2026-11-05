@@ -7,6 +7,13 @@ established by the corresponding verified release record.
 
 ## Unreleased
 
+### Fixed
+
+- Isolated Chrome checks on macOS use a disposable mock keychain, avoiding a
+  startup dependency on the real user keychain while retaining the isolated
+  environment, temporary profile and GPU checks
+  ([#409](https://github.com/isaacperez/tabgrad/issues/409)).
+
 ## 0.3.0 - 2026-11-05
 
 ### Added
