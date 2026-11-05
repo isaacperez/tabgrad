@@ -26,6 +26,11 @@ that local binding through `servePythonWorker`. Outside the worker,
 script and close methods. Exact signatures and application obligations are in
 the [host API reference](../reference/python-host.md).
 
+The common binding has script/close only. Local attachment additionally exposes
+its owned session's diagnostics, but that same-realm reader is not a request on
+this protocol. A service can explicitly publish observations on an application
+channel; this connection neither samples them nor serves a parked interpreter.
+
 The host-facing owner reserves a script before posting it. It keeps that
 reservation until the worker's completion reply arrives. A competing call
 therefore rejects without posting another script, whether the first script is

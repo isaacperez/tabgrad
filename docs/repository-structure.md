@@ -213,8 +213,9 @@ package browser launcher copies them outside the checkout, installs an actual
 candidate, serves its matched files at a relocated prefix and checks the
 packaged documentation example. It reuses the browser harness's transport and
 process lifetime rather than creating another harness or a private runtime seam.
-Installed Python session diagnostics are supplemental test observations, not
-an application API or a private JavaScript module import.
+Application observations use the public local-binding diagnostics reader.
+Private Python session access is only a test oracle for shared module identity;
+it does not supply those observations or import a private JavaScript module.
 
 The runner and loopback server support live in `scripts/`. Launchers explicitly
 register each nested page and fixture asset relative to the browser serving

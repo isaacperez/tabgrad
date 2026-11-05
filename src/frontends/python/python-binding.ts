@@ -2,9 +2,9 @@ import { TabgradError } from "../../shared/errors.js";
 import { loadPythonSources, type PythonSources } from "./python-assets.js";
 import { PythonInstallation } from "./python-installation.js";
 import { PythonRuntimeBridge } from "./python-runtime-bridge.js";
-import { createRuntimeSession, createConnectedRuntimeSession, prepareRuntimeSession, type RuntimeSession } from "../../runtime/runtime.js";
+import { createRuntimeSession, createConnectedRuntimeSession, prepareRuntimeSession, type RuntimeSession, type RuntimeDiagnostics } from "../../runtime/runtime.js";
 import { ConnectedWebGpuBackend, consumeWebGpuConnection, retireFailedGpuAttachment } from "../../backends/webgpu/webgpu-connected-backend.js";
-import type { WebGpuConnection, WebGpuConnectionData } from "../../backends/webgpu/webgpu-connection.js";
+import { snapshotWebGpuDiagnostics, type WebGpuConnection, type WebGpuConnectionData } from "../../backends/webgpu/webgpu-connection.js";
 
 /** The dictionary-proxy methods consumed when running bootstrap code in isolation. */
 export interface PythonNamespace {
@@ -41,6 +41,16 @@ export interface PythonBinding {
   close(): Promise<void>;
 }
 
+/** A local attachment can observe its own runtime without a remote request. */
+export interface LocalPythonBinding extends PythonBinding {
+  /**
+   * Return detached frozen runtime counters, collecting scheduled semantic cycles.
+   * May propagate cleanup errors; does not load CPU or demand numerical values.
+   * CPU allocator peaks and capacity reset at close: retain a pre-close sample.
+   */
+  diagnostics(): RuntimeDiagnostics;
+}
+
 const ATTACHED_INTERPRETERS = new WeakSet<PythonInterpreter>();
 
 /** Host-controlled location for the matching static Python artifact set. */
@@ -49,7 +59,7 @@ export interface PythonBindingOptions {
   readonly webgpu?: WebGpuConnection;
 }
 
-class InterpreterBinding implements PythonBinding {
+class InterpreterBinding implements LocalPythonBinding {
   readonly #interpreter: PythonInterpreter;
   readonly #session: RuntimeSession;
   readonly #bridge: PythonRuntimeBridge;
@@ -101,6 +111,12 @@ class InterpreterBinding implements PythonBinding {
     }
   }
 
+  diagnostics(): RuntimeDiagnostics {
+    const value = this.#session.diagnostics();
+    return value.webgpu === null ? value
+      : Object.freeze({ ...value, webgpu: snapshotWebGpuDiagnostics(value.webgpu) });
+  }
+
   close(): Promise<void> {
     this.#closing ??= this.#drain();
     return this.#closing;
@@ -136,7 +152,7 @@ class InterpreterBinding implements PythonBinding {
 export async function attachPython(
   interpreter: PythonInterpreter,
   options: PythonBindingOptions = {},
-): Promise<PythonBinding> {
+): Promise<LocalPythonBinding> {
   const connection = options.webgpu === undefined ? undefined : consumeWebGpuConnection(options.webgpu);
   try {
     return await attachClaimedInterpreter(interpreter, options, connection);
@@ -150,7 +166,7 @@ async function attachClaimedInterpreter(
   interpreter: PythonInterpreter,
   options: PythonBindingOptions,
   connection: WebGpuConnectionData | undefined,
-): Promise<PythonBinding> {
+): Promise<LocalPythonBinding> {
   if (
     typeof interpreter !== "object" || interpreter === null
     || interpreter.version !== "314.0.6"

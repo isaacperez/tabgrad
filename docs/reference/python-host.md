@@ -13,7 +13,7 @@ and static integration.
 
 ## Attach in the interpreter worker
 
-`attachPython(interpreter, options?) -> Promise<PythonBinding>` borrows the
+`attachPython(interpreter, options?) -> Promise<LocalPythonBinding>` borrows the
 prepared interpreter and owns one runtime session. Without a GPU connection,
 the session provides CPU execution. `options.manifestUrl?: URL`
 locates the matching Python asset manifest; its default is
@@ -35,6 +35,7 @@ The returned binding provides:
 | Method | Result and contract |
 | --- | --- |
 | `runPythonAsync(source: string): Promise<void>` | Reserve one managed script, prepare CPU once before Python starts, execute in preserved host globals, and destroy any returned owned Python proxy before settlement. |
+| `diagnostics(): RuntimeDiagnostics` | Read detached frozen observations of the locally owned session. May collect scheduled semantic cycles and propagate cleanup errors; does not prepare CPU or demand numerical values. |
 | `close(): Promise<void>` | Stop admission, join the accepted script, drain the session and remove owned installation state. Repeated calls share completion; interpreter and host globals remain. |
 
 The host must not concurrently enter raw Pyodide or drive the local binding
@@ -42,6 +43,55 @@ around an active service. Scripts must join their background tasks. Closure
 is cooperative; it cannot interrupt an infinite or externally stalled script.
 Ordinary tensor methods such as `tolist()` do not require Python `await` or
 JSPI. The JavaScript script-entry Promise has a different purpose.
+
+## Read local runtime observations
+
+`LocalPythonBinding` extends the common `PythonBinding` with `diagnostics()`;
+both it and `RuntimeDiagnostics` are exported from `python.js`. The local
+reader observes the same session that executes Python. Its
+[runtime fields](../javascript-api.md#diagnostics-and-cost-model) include CPU loads, kernels,
+host/Wasm copies and bytes, tracked allocation peaks, Wasm capacity, preparation
+timings and semantic-owner counts. They do not measure Pyodide's heap, total
+browser RAM, CPU utilization or isolated kernel time.
+
+Read before closing when the application needs allocator peaks or capacity:
+
+```javascript
+const binding = await attachPython(interpreter);
+try {
+  await binding.runPythonAsync(`
+import torch
+assert torch.tensor([1, 2, 3]).sum().tolist() == 6
+`);
+  const observed = binding.diagnostics();
+  console.log(observed.highWaterAllocationBytes);
+} finally {
+  await binding.close();
+}
+```
+
+The application owns `observed`; it is not an automatic history. After close,
+the reader remains callable, but released CPU capacity, current allocation and
+allocator high-water fields read as zero. Cumulative work, selected variant
+and preparation timings survive. A preserved observation does not certify
+script success or acknowledged cleanup. Applications must handle script,
+reader and close failures separately when they need to retain multiple errors.
+
+Each read creates detached frozen data, including CPU timings and any nested
+GPU metadata. It adds no per-operation instrumentation, sampling or retained
+reader state. The existing runtime reader can also collect scheduled semantic
+cycles, traversing their ownership graph and releasing unreachable resources;
+that work may throw cleanup errors. Snapshot allocation and collection are not
+zero-cost, and no general negligible-time or process-memory bound is promised.
+
+This is a same-realm call, available when the interpreter worker can run host
+JavaScript, including cooperative yields. It cannot answer while Python occupies
+or parks that worker. `connectPythonWorker()` still returns the narrower
+`PythonBinding`, with no diagnostics request or synchronous remote method.
+An application may explicitly publish its local observations through its own
+channel; it must label their freshness and cannot invent a final sample after
+forced termination. For GPU observations outside a parked interpreter, retain
+the independent controller described below.
 
 ## Acquire a managed GPU connection
 
@@ -126,8 +176,9 @@ failure sequence. Do not confuse revocation with cooperative `binding.close()`.
 Keep the controller in the application host and call `gpu.diagnostics()` there.
 It remains readable after connection transfer, while the interpreter is busy
 or parked, and after controller closure or observed worker loss. The type
-`WebGpuDiagnostics` is exported from `python.js`; neither local nor remote
-`PythonBinding` gains a diagnostics method.
+`WebGpuDiagnostics` is exported from `python.js`. This physical-service reader
+is independent of local runtime diagnostics; the common/remote `PythonBinding`
+has no diagnostics method.
 
 The result has the [physical resource fields](webgpu-runtime.md#inspect-the-gpu-resource-domain):
 adapter/fallback information, enabled features, three acquired limits, owned and
