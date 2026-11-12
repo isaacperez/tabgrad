@@ -94,6 +94,14 @@ DNS, certificate and any service enrollment remain separately admitted operator
 work. Hosting setup and the final destination need actual verification; native
 emulation cannot establish their behavior or an effective cost guarantee.
 
+The service may require a first deployment before accepting its custom domain.
+An empty administrative resource does not satisfy that prerequisite. Admit the
+actual order separately: upload the reviewed assets once, associate the domain
+and finish DNS/TLS through the operator's separately authorized access, then
+confirm the public identity. Do not insert a placeholder deployment or grant
+the CI source job DNS permissions to avoid this order. Check resource identity
+and CLI metadata before the initial upload; no deployed website exists yet.
+
 ## One checked handoff and one protected publication
 
 Run **Website checks** manually on `main` with `publish=true`. For an admitted
@@ -134,8 +142,22 @@ internal upload/retry behavior remains the vendor's; the wrapper performs no
 outer retry. Unfiltered CLI text is not emitted or uploaded because it may
 identify private hosting configuration. The bounded public receipt records the
 source, payload digest, attempted state, exit and confirmed/unknown outcome.
-After the command succeeds, a separate public manifest read must match the
-exact delivered bytes before the workflow reports confirmation.
+After the command succeeds, public manifest reads must match the exact delivered
+bytes before the workflow reports confirmation. Activation or propagation may
+still be pending, so only these observations are repeated, sequentially within
+one five-minute monotonic budget, with two seconds between attempts. Each read
+has at most 15 seconds, capped by the remaining budget, including body reading;
+the existing 8 MiB body limit remains. No credentials, redirects or cache reuse
+are allowed. A matching response arriving after the deadline cannot confirm.
+The receipt keeps constant-sized counts of unavailable and different identities,
+not response history. A failed command never starts this observation loop.
+
+The protected job still has a ten-minute total limit, including setup and the
+CLI call; cancellation may end observation earlier. Five minutes is a maximum
+tooling budget, not a guarantee of DNS/certificate propagation or operator
+availability. Missing confirmation preserves the original unknown outcome and
+successful command exit, without a second deployment call. The update's
+predecessor check remains before the write, outside this confirmation loop.
 
 ## Updates, recovery and remaining hosted checks
 
