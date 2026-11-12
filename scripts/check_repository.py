@@ -413,7 +413,7 @@ EXPECTED_PRODUCER_TRIAL_SHA256 = (
 )
 WEBSITE_PATH = Path(".github/workflows/website-checks.yml")
 EXPECTED_WEBSITE_SHA256 = (
-    "5cf2876858e330e4d58266fe40855c7aec7517af7577ee06c038903983b7325f"
+    "75f7417aaf2043ab83258dc98365b4a10103a9142be01fff2ed852d943967e88"
 )
 WEBSITE_COMMANDS = {
     "npm install --global npm@11.1.0 --ignore-scripts --no-audit --no-fund",

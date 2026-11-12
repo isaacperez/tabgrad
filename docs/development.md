@@ -350,7 +350,18 @@ locked Puppeteer package into its ordinary cache. `PUPPETEER_CACHE_DIR` may
 select an isolated cache. Browser installation is setup, never an implicit
 side effect of a check. Linux needs the browser's ordinary shared libraries
 and an available Chrome sandbox; do not disable the sandbox to hide a setup
-failure. The independently installed Chrome and Firefox used by integration
+failure. Ubuntu's AppArmor policy can prevent the downloaded Chrome for Testing
+from using user namespaces. When Google Chrome is already installed, Chromium
+[documents using its existing sandbox helper](https://chromium.googlesource.com/chromium/src/+/main/docs/security/apparmor-userns-restrictions.md)
+through `CHROME_DEVEL_SANDBOX=/opt/google/chrome/chrome-sandbox`. The website CI
+uses that helper on its ephemeral Ubuntu runner, retaining the locked renderer
+and requiring actual browser startup. It uses Chromium's older SUID sandbox,
+which upstream distinguishes from the user-namespace sandbox and describes as
+potentially weaker; this is not a claim that the two mechanisms are equivalent.
+This does not install a privileged helper,
+change AppArmor or enable unsandboxed execution. Other hosts must provide a
+working sandbox through their separately authorized setup.
+The independently installed Chrome and Firefox used by integration
 checks follow the existing `TABGRAD_BROWSER`, `TABGRAD_CHROME` and
 `TABGRAD_FIREFOX` selection above.
 

@@ -35,6 +35,7 @@ jobs:
     env:
       ASTRO_TELEMETRY_DISABLED: '1'
       PUPPETEER_SKIP_DOWNLOAD: 'true'
+      CHROME_DEVEL_SANDBOX: /opt/google/chrome/chrome-sandbox
       TABGRAD_SITE_URL: 'https://example.invalid/'
     steps:
       - name: Check out website and documentation sources

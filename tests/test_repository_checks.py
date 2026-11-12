@@ -85,6 +85,10 @@ class RepositoryCheckTests(unittest.TestCase):
             document["jobs"]["website"]["env"]["TABGRAD_SITE_URL"],
             "https://example.invalid/",
         )
+        self.assertEqual(
+            document["jobs"]["website"]["env"]["CHROME_DEVEL_SANDBOX"],
+            "/opt/google/chrome/chrome-sandbox",
+        )
         document["jobs"]["website"]["steps"][-1]["run"] = "echo skipped"
         self.assertTrue(CHECKS.check_workflow_security(state))
         document["permissions"]["contents"] = "write"
