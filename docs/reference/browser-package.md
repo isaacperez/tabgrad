@@ -4,7 +4,70 @@ Tabgrad is an independent browser-native tensor runtime with direct JavaScript
 and optional Python interfaces. It implements the documented subset of the
 PyTorch API; it does not distribute the official PyTorch runtime.
 
-## Install the inspected files
+## Use JavaScript directly in HTML
+
+You can use Tabgrad in a static page without npm, Node.js or a build step.
+Paste this block inside your HTML body and serve the page over HTTPS, or
+localhost during development:
+
+```html
+<pre id="output">Loading Tabgrad…</pre>
+<script type="module">
+  const output = document.getElementById("output");
+  let session;
+
+  try {
+    const { createRuntimeSession } = await import(
+      "https://cdn.jsdelivr.net/npm/@tabgrad/tabgrad@0.3.0/dist/index.js"
+    );
+    session = createRuntimeSession();
+    const x = session.tensor([1, 2, 3]);
+    const total = x.sum();
+    const [value] = await total.toArray();
+    output.textContent = `Sum: ${value}`;
+  } catch (error) {
+    output.textContent = "Could not run Tabgrad. Check the console for details.";
+    console.error(error);
+  } finally {
+    try {
+      await session?.close();
+    } catch (error) {
+      output.textContent += "\nCould not finish cleanup. Check the console for details.";
+      console.error(error);
+    }
+  }
+</script>
+```
+
+The page displays `Sum: 6`. The import makes the JavaScript API available in
+that module; it does not create a global `Tabgrad` variable. The browser loads
+the matching modules, manifest and CPU WebAssembly from the CDN when needed.
+Python is not loaded. Nothing needs to be installed on your computer, but the
+first visit still downloads the runtime and requires network access.
+
+The import is inside the error boundary so a download failure also produces a
+visible message. Closing the short-lived session releases its resident
+allocations, including those of the example's tensors. Long-lived applications
+should also close individual tensors when they no longer need them. Execution
+and cleanup failures are reported separately, preserving both original errors
+in the browser console.
+
+Keep the exact version and the explicit `dist/index.js` path. This example uses
+jsDelivr's raw package files, not a rewritten bundle, a `+esm` endpoint or an
+unversioned alias. See [jsDelivr's npm URL format](https://github.com/jsdelivr/jsdelivr#npm).
+If your site has a Content Security Policy, allow this origin in `script-src`
+and `connect-src`, permit the module block by hash or nonce, and allow
+WebAssembly compilation where required. Do not disable your policy wholesale.
+The CDN receives ordinary resource requests; tensor calculations remain in
+the visitor's browser. Self-host the matched files below if you want to serve
+all runtime resources from your own origin.
+
+This path covers direct JavaScript with the CPU backend. Python setup and
+managed GPU worker requirements remain separate; a CDN import does not remove
+them. Arbitrary CDN transformations and universal browser support are not
+implied.
+
+## Install and serve your own files
 
 Install a supplied, inspected candidate tarball with package scripts disabled:
 
@@ -71,7 +134,11 @@ try {
   console.log(Array.from(await loss.toArray())); // [11]
   console.log(Array.from(await gradient.toArray())); // [3, 4]
 } finally {
-  gradient.close(); loss.close(); product.close(); weights.close(); x.close();
+  gradient.close();
+  loss.close();
+  product.close();
+  weights.close();
+  x.close();
   await session.close();
 }
 ```

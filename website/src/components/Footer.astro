@@ -1,0 +1,41 @@
+---
+import EditLink from "@astrojs/starlight/components/EditLink.astro";
+import { Icon } from "@astrojs/starlight/components";
+import { repositoryUrl, packageUrl } from "../../scripts/config.mjs";
+import SupportLink from "./SupportLink.astro";
+---
+<footer class="not-content tabgrad-footer">
+  <div class="footer-main">
+    <div class="footer-identity">
+      <a class="footer-brand" href="/" aria-label="Tabgrad home">
+        <img class="light-logo" src="/brand/tabgrad-logo.svg" width="146" height="38" alt="Tabgrad"/>
+        <img class="dark-logo" src="/brand/tabgrad-logo-dark.svg" width="146" height="38" alt="Tabgrad"/>
+      </a>
+      <p>PyTorch code in your browser.<br />Nothing to install.</p>
+      <p class="footer-license">Open source · <a href="/licenses/">Apache 2.0</a></p>
+      <SupportLink />
+    </div>
+    <nav aria-label="Explore">
+      <h2>Explore</h2>
+      <a href="/start/">Get started</a>
+      <a href="/docs/">Documentation</a>
+      <a href="/playground/">Playground</a>
+      <a href="/blog/">Blog</a>
+      <a href="/versions/">Versions</a>
+    </nav>
+    <nav aria-label="Project">
+      <h2>Project</h2>
+      <a href="/about/">About</a>
+      <a href="/contact/">Contact</a>
+      <a class="project-text-link" href={repositoryUrl}><Icon name="github" />GitHub ↗</a>
+      <a class="project-text-link" href={packageUrl}><Icon name="npm" />npm ↗</a>
+    </nav>
+  </div>
+  <div class="footer-bottom">
+    <p>Independent implementation of a documented PyTorch subset.<br/>Not affiliated with the PyTorch Foundation.</p>
+    <div class="footer-meta">
+      <small class="footer-copyright">© 2026 Tabgrad</small>
+      <EditLink />
+    </div>
+  </div>
+</footer>

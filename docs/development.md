@@ -328,6 +328,113 @@ establish the failure with network access, then explain the evidence and obtain
 the user's authorization before changing credentials. Never print or persist a
 token in repository files, command output, logs, or issue content.
 
+## Prepare and preview the static website
+
+The website is a private build package under `website/`, independent of the
+library's compiler, Rust toolchain and package version. Select Node **22.23.4**
+from `website/.node-version` and npm **11.1.0** from its manifest; the root
+`.node-version` still selects the library toolchain. No Rust or native PyTorch
+setup is needed for website work. Disable Astro telemetry and prepare the
+locked packages without lifecycle scripts, then explicitly install the diagram
+renderer browser:
+
+```console
+export ASTRO_TELEMETRY_DISABLED=1
+export PUPPETEER_SKIP_DOWNLOAD=true
+npm ci --prefix website --ignore-scripts --no-audit --no-fund
+npm exec --prefix website -- puppeteer browsers install chrome
+```
+
+The last command downloads the Chrome for Testing revision selected by the
+locked Puppeteer package into its ordinary cache. `PUPPETEER_CACHE_DIR` may
+select an isolated cache. Browser installation is setup, never an implicit
+side effect of a check. Linux needs the browser's ordinary shared libraries
+and an available Chrome sandbox; do not disable the sandbox to hide a setup
+failure. Ubuntu's AppArmor policy can prevent the downloaded Chrome for Testing
+from using user namespaces. When Google Chrome is already installed, Chromium
+[documents using its existing sandbox helper](https://chromium.googlesource.com/chromium/src/+/main/docs/security/apparmor-userns-restrictions.md)
+through `CHROME_DEVEL_SANDBOX=/opt/google/chrome/chrome-sandbox`. The website CI
+requires that installed helper to be a regular executable owned by root, rejects
+a symbolic link, and sets its documented `4755` mode on the ephemeral Ubuntu
+runner. It retains the locked renderer and requires actual browser startup.
+It uses Chromium's older SUID sandbox,
+which upstream distinguishes from the user-namespace sandbox and describes as
+potentially weaker; this is not a claim that the two mechanisms are equivalent.
+This does not install a helper, change AppArmor or enable unsandboxed execution.
+Other hosts must provide a working sandbox through their separately authorized
+setup.
+The independently installed Chrome and Firefox used by integration
+checks follow the existing `TABGRAD_BROWSER`, `TABGRAD_CHROME` and
+`TABGRAD_FIREFOX` selection above.
+
+| Command from the repository root | Purpose |
+| --- | --- |
+| `npm --prefix website run dev` | Generate admitted content/assets and watch at `http://127.0.0.1:4321/`; tracked Markdown edits and Git index changes refresh documentation |
+| `npm --prefix website run check` | Generate content/assets, then check strict TypeScript and Astro templates |
+| `npm --prefix website test` | Unit tests of admission, link/heading fidelity, diagrams, messages and actual HTTP serving |
+| `npm --prefix website run build` | Generate Markdown/SVG/assets, static HTML and the local Pagefind index into `website/dist/` |
+| `npm --prefix website run verify` | Inspect the built HTML links/fragments, SVG, source headings, output boundaries and exact copied runtime bytes |
+| `npm --prefix website run preview` | Serve only that output on `http://127.0.0.1:4322/` with the candidate MIME, CSP and cache rules |
+| `npm --prefix website run test:browser` | Run the built UI's eight CPU examples and lifecycle/error controls in installed Chrome and Firefox |
+| `npm --prefix website run test:gpu` | Explicit physical WebGPU check of the built UI: eight JavaScript/Python programs, public resource feedback, cancellation and recovery; installed nonfallback Chrome by default (`TABGRAD_BROWSER`), secure isolated loopback hosting; unavailable hardware fails |
+| `npm --prefix website run test:cdn` | Explicit live-network check of the documented JavaScript and Python HTML/CPU examples against jsDelivr in installed Chrome and Firefox |
+| `node website/scripts/browser-check.mjs --serve` | Expose the same test fixture on an ephemeral loopback port for interactive browser inspection |
+
+`test:cdn` reads the exact HTML block from the browser package guide and adds
+only test reporting after its cleanup. A controlled module that throws on
+import checks the same JavaScript source's visible failure message; the unit
+control also faults setup, calculation and cleanup and checks original errors.
+The Python case reads both named file
+fences from the Python host guide and adds a page observer without changing
+their application code. It checks two successive successful runs and explicitly
+modified worker controls for program errors with partial output, startup errors
+and native WebAssembly instantiation failures. The generated examples are `website/.generated/cdn-example.html` and
+`website/.generated/python-cdn-example/`; observations are saved in
+`website/.generated/cdn-check.json`. Only the test HTML and Python application
+worker are local; runtime and interpreter assets use the selected versioned
+CDN packages. This opt-in check needs public network access and is separate
+from the ordinary website checks, which retain same-origin assets. It qualifies
+the observed CPU examples, not CDN availability, all browsers or GPU delivery.
+
+Documentation comes from the GitHub checkout's selected Markdown, not a request
+to GitHub for every visitor. Existing admitted files need no commit to preview
+edits. Add a new selected document to Git's index (`git add path/to/document.md`)
+before previewing it; untracked notes are deliberately excluded. Generated
+frontmatter and adapted links never become another editable documentation copy.
+Use `docs/` as the source. Diagram errors stop the update instead of silently
+omitting a diagram. The [website contract](architecture/static-website.md)
+owns selection, rendering and execution boundaries.
+
+Astro's development server is for authoring; search is available in the full
+build/preview. Rebuild the static preview after edits. The production build
+refreshes Astro's rendered-content cache so theme/code-renderer changes cannot
+retain obsolete stylesheet URLs; the separate diagram cache is reused.
+A local preview with
+uncommitted inputs identifies itself as such; a clean build links source to its
+exact Git revision. The package version executed by the playground remains
+separately pinned. Without `TABGRAD_SITE_URL`, no public origin is inferred and
+sitemap generation is skipped with an explicit warning. Supply an HTTPS origin
+without credentials, path, query or fragment to generate canonical/share URLs
+and the sitemap. `TABGRAD_SITE_URL=https://example.invalid npm --prefix website run build`
+qualifies that path locally with a reserved test address; `npm --prefix website run verify`
+checks the resulting routes, images and sitemap against the recorded build input.
+Set the same input during verification to also require that build origin. CI
+does this with the reserved test address; local mode without an origin remains
+available. The static robots file announces a sitemap only when that origin is
+supplied, and Blog structured data uses the same validated article metadata.
+Keep real deployment inputs outside maintained files. The post-build share-card
+renderer uses the already prepared Chrome, self-hosted font and shared design
+sources; it does not download a browser or call an external image service.
+A deployment must qualify its
+origin, headers, rollback and asset retention separately; these commands neither
+configure a host nor publish anything.
+
+`check` covers `.astro` templates and maintained TypeScript under `website/src/`.
+It does not statically check the `.mjs` build/test tools, browser fixture or
+JavaScript worker. Those boundaries have documented inputs and focused tests;
+the browser check exercises the actual emitted UI/worker and published artifacts.
+The root runtime checks do not discover or certify this separate package.
+
 ## Configured commands
 
 The repository provides these commands:

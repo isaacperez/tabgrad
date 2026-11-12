@@ -1,0 +1,42 @@
+---
+import StarlightPage from "@astrojs/starlight/components/StarlightPage.astro";
+import { Icon } from "@astrojs/starlight/components";
+import PageIntro from "../components/PageIntro.astro";
+import SplitSection from "../components/SplitSection.astro";
+import Illustration from "../components/Illustration.astro";
+import SupportLink from "../components/SupportLink.astro";
+import { repositoryUrl } from "../../scripts/config.mjs";
+---
+<StarlightPage frontmatter={{ title: "About Tabgrad", description: "Why Tabgrad exists, who maintains it and how to support its development.", template: "splash", editUrl: false }}>
+  <div class="not-content marketing">
+    <PageIntro
+      title="About Tabgrad."
+      description="The idea behind Tabgrad, who’s building it and where it’s headed."
+    >
+      <a class="text-link" href="/playground/">Try the playground →</a>
+      <Illustration slot="illustration" name="open-source" />
+    </PageIntro>
+    <SplitSection title="Why I started Tabgrad.">
+      <p>I started Tabgrad because I wanted to work with AI without spending so much time setting up environments and sorting out dependencies.</p>
+      <p>Tabgrad brings that work into the browser, with calculations running on your own device. Loading existing models and fine-tuning are part of the goal, but aren’t available yet.</p>
+      <div class="next-actions">
+        <a class="text-link" href="/blog/introducing-tabgrad/">Why I’m building Tabgrad →</a>
+        <a class="text-link" href="/versions/">See what’s available today →</a>
+      </div>
+    </SplitSection>
+    <SplitSection title="Isaac Pérez">
+      <p slot="intro">PhD in Deep Learning</p>
+      <p>I’m a deep learning engineer at a San Francisco startup. I’ve worked on AI systems from research to production, including the infrastructure needed to run models.</p>
+      <p>I’ve also taught deep learning and written a book about it.</p>
+      <a class="text-link" href="https://isaacperez.github.io/about/">More about me ↗</a>
+    </SplitSection>
+    <SplitSection id="support" title="Support Tabgrad.">
+      <p>Tabgrad is an independent open source project. If you find it useful, you can support its development by buying me a coffee or contributing on GitHub.</p>
+      <p>Would your team like to support the project? <a href="/contact/#sponsorship">Get in touch about sponsorship</a>.</p>
+      <div class="project-actions">
+        <SupportLink primary />
+        <a class="text-link project-text-link" href={`${repositoryUrl}/blob/main/CONTRIBUTING.md`}><Icon name="github" />Contribute on GitHub ↗</a>
+      </div>
+    </SplitSection>
+  </div>
+</StarlightPage>

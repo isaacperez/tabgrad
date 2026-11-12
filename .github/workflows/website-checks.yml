@@ -1,0 +1,73 @@
+name: Website checks
+
+on:
+  pull_request:
+    paths:
+      - 'website/**'
+      - 'docs/**'
+      - 'assets/brand/**'
+      - 'README.md'
+      - 'scripts/browser-harness.mjs'
+      - '.github/workflows/website-checks.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'website/**'
+      - 'docs/**'
+      - 'assets/brand/**'
+      - 'README.md'
+      - 'scripts/browser-harness.mjs'
+      - '.github/workflows/website-checks.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: website-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  website:
+    name: website
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      ASTRO_TELEMETRY_DISABLED: '1'
+      PUPPETEER_SKIP_DOWNLOAD: 'true'
+      CHROME_DEVEL_SANDBOX: /opt/google/chrome/chrome-sandbox
+      TABGRAD_SITE_URL: 'https://example.invalid/'
+    steps:
+      - name: Check out website and documentation sources
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Select the website Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.1
+        with:
+          node-version-file: website/.node-version
+          check-latest: false
+      - name: Select the pinned npm
+        run: npm install --global npm@11.1.0 --ignore-scripts --no-audit --no-fund
+      - name: Install website dependencies without lifecycle scripts
+        run: npm ci --prefix website --ignore-scripts --no-audit --no-fund
+      - name: Prepare the locked diagram browser explicitly
+        run: npm exec --prefix website -- puppeteer browsers install chrome
+      - name: Prepare the installed Chrome sandbox helper
+        run: |
+          test -f "$CHROME_DEVEL_SANDBOX"
+          test -x "$CHROME_DEVEL_SANDBOX"
+          test ! -L "$CHROME_DEVEL_SANDBOX"
+          test "$(stat -c '%u' "$CHROME_DEVEL_SANDBOX")" = 0
+          sudo chmod 4755 "$CHROME_DEVEL_SANDBOX"
+          test -u "$CHROME_DEVEL_SANDBOX"
+      - name: Check website types and generated content
+        run: npm --prefix website run check
+      - name: Test website source and serving contracts
+        run: npm --prefix website test
+      - name: Build the static website and search index
+        run: npm --prefix website run build
+      - name: Verify emitted links, diagrams and runtime bytes
+        run: npm --prefix website run verify
+      - name: Test real CPU examples in installed Chrome and Firefox
+        run: npm --prefix website run test:browser

@@ -1,0 +1,23 @@
+---
+interface Props {
+  title: string;
+  label?: string;
+  id?: string;
+  layout?: "split" | "stacked";
+}
+const { title, label, id, layout = "split" } = Astro.props;
+---
+<section
+  class:list={["split-section", { "stacked-section": layout === "stacked" }]}
+  id={id}
+  aria-labelledby={id && `${id}-title`}
+>
+  <div class="section-intro">
+    {label && <span class="section-label">{label}</span>}
+    <h2 id={id && `${id}-title`}>{title}</h2>
+    <slot name="intro" />
+  </div>
+  <div class="section-body">
+    <slot />
+  </div>
+</section>

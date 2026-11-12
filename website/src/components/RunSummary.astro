@@ -1,0 +1,60 @@
+---
+import { idleMeasurementNote } from "../playground/run-summary";
+---
+<div class="run-summary" data-run-summary>
+  <dl class="resource-strip" aria-label="Run information">
+    <div>
+      <dt>Device</dt>
+      <dd data-resource-device>CPU</dd>
+    </div>
+    <div>
+      <dt>Elapsed time</dt>
+      <dd data-resource-time>Not started</dd>
+    </div>
+    <div>
+      <dt>Peak buffer memory</dt>
+      <dd data-resource-memory>No run yet</dd>
+    </div>
+  </dl>
+  <p class="resource-state" data-resource-state>Selected</p>
+  <details class="resource-details disclosure">
+    <summary>Run details</summary>
+    <p data-resource-note>{idleMeasurementNote}</p>
+    <dl>
+      <div hidden>
+        <dt>Adapter</dt>
+        <dd data-resource-adapter></dd>
+      </div>
+      <div hidden>
+        <dt>Code time</dt>
+        <dd data-resource-program></dd>
+      </div>
+      <div hidden>
+        <dt>GPU dispatches</dt>
+        <dd data-resource-dispatches></dd>
+      </div>
+      <div hidden>
+        <dt>GPU buffers / pending work</dt>
+        <dd data-resource-remaining></dd>
+      </div>
+      <div hidden>
+        <dt>Data uploaded / read back</dt>
+        <dd data-resource-transfer></dd>
+      </div>
+      <div hidden>
+        <dt>CPU kernel calls</dt>
+        <dd data-resource-cpu-kernels></dd>
+      </div>
+      <div hidden>
+        <dt>Data into CPU / read back</dt>
+        <dd data-resource-cpu-transfer></dd>
+      </div>
+      <div hidden>
+        <dt>WebAssembly memory</dt>
+        <dd data-resource-wasm></dd>
+      </div>
+    </dl>
+    <p>Elapsed time ends when the run finishes, fails or is stopped. It includes loading and any cleanup completed before that point. Code time includes calculation and reading results.</p>
+    <p>Peak buffer memory records the highest tracked allocation during the run. CPU and WebAssembly memory are sampled before cleanup. GPU buffers and pending work show the latest state, including cleanup. Memory covers only what Tabgrad tracks, excluding the Python interpreter and total device memory. Data transfers stay on your device.</p>
+  </details>
+</div>

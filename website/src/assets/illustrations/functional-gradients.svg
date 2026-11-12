@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" class="artwork" viewBox="0 0 480 280" role="img" aria-label="Two input branches join a calculation and receive separate gradients">
+  <g class="art-shadow art-panel art-outline">
+    <rect x="80" y="64" width="112" height="64" rx="12"/>
+    <rect x="80" y="152" width="112" height="64" rx="12"/>
+  </g>
+  <path class="art-detail" d="M104 88H144M104 104H168M104 176H160M104 192H136"/>
+  <path class="art-line" d="M192 96H216A32 32 0 0 1 248 128M192 184H216A32 32 0 0 0 248 152"/>
+  <path class="art-soft" d="M248 112L276 140L248 168L220 140Z"/>
+  <path class="art-arrow" d="M288 140H344M334 130L344 140L334 150"/>
+  <g class="art-shadow">
+    <rect class="art-primary" x="360" y="104" width="96" height="72" rx="16"/>
+    <path class="art-code-light" d="M384 140H432"/>
+  </g>
+  <path class="art-return" d="M408 104V40A16 16 0 0 0 392 24H40A16 16 0 0 0 24 40V80A16 16 0 0 0 40 96H68M58 86L68 96L58 106"/>
+  <path class="art-return" d="M408 176V240A16 16 0 0 1 392 256H40A16 16 0 0 1 24 240V200A16 16 0 0 1 40 184H68M58 174L68 184L58 194"/>
+</svg>

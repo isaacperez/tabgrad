@@ -1,0 +1,10 @@
+.astro/
+.generated/
+src/content/docs/
+public/vendor/
+public/diagrams/
+public/brand/
+public/playground/
+public/licenses/
+dist/
+/public/examples/

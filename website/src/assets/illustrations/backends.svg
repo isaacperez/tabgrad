@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" class="artwork" viewBox="0 0 480 280" role="img" aria-label="Distinct CPU and GPU processors connected to the same runtime">
+  <path class="art-line" d="M184 152H296M240 152V60"/>
+  <circle class="art-soft" cx="240" cy="48" r="24"/>
+  <path class="art-primary" d="M228 42L240 36L252 42V54L240 60L228 54Z"/>
+  <g class="art-shadow art-panel art-outline"><rect x="40" y="80" width="152" height="144" rx="16"/><rect x="288" y="80" width="152" height="144" rx="16"/></g>
+  <path class="art-detail" d="M92 104V120M116 104V120M140 104V120M92 184V200M116 184V200M140 184V200M68 128H84M68 152H84M68 176H84M148 128H164M148 152H164M148 176H164"/>
+  <rect class="art-soft" x="84" y="120" width="64" height="64" rx="8"/>
+  <rect class="art-primary" x="100" y="136" width="32" height="32" rx="4"/>
+  <g class="art-soft"><rect x="312" y="112" width="104" height="80" rx="8"/></g>
+  <g class="art-primary"><rect x="320" y="120" width="24" height="24" rx="4"/><rect x="352" y="120" width="24" height="24" rx="4"/><rect x="384" y="120" width="24" height="24" rx="4"/><rect x="320" y="152" width="24" height="24" rx="4"/><rect x="352" y="152" width="24" height="24" rx="4"/><rect x="384" y="152" width="24" height="24" rx="4"/></g>
+  <path class="art-detail" d="M320 204H408"/>
+</svg>

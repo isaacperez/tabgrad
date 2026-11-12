@@ -1,0 +1,25 @@
+---
+import { Code } from "@astrojs/starlight/components";
+import { Icon } from "@astrojs/starlight/components";
+interface Props {
+  name: string;
+  href: string;
+  code: string;
+  lang: string;
+  description: string;
+}
+const { name, href, code, lang, description } = Astro.props;
+---
+<section class="integration-source" aria-label={name}>
+  <div class="integration-file">
+    <div>
+      <h3><code>{name}</code></h3>
+      <p>{description}</p>
+    </div>
+    <a class="text-link" href={href} download={name}><Icon name="download" size="1em" />Download<span class="sr-only"> {name}</span></a>
+  </div>
+  <details class="disclosure content-disclosure">
+    <summary>View and copy the code</summary>
+    <Code wrap frame="code" title={name} code={code} lang={lang} />
+  </details>
+</section>

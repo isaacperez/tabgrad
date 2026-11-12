@@ -22,6 +22,8 @@ function isRepositoryPath(path) {
 /** @param {string} path @returns {boolean} */
 function isConsistencyOnlyChange(path) {
   return nonExecutableRoots.has(path)
+    || path.startsWith("website/")
+    || path === ".github/workflows/website-checks.yml"
     || (path.startsWith("docs/") && path.endsWith(".md"))
     || (path.startsWith("assets/brand/") && /\.(md|svg)$/.test(path))
     || (path.startsWith(".github/ISSUE_TEMPLATE/") && /\.(md|yml|yaml)$/.test(path))

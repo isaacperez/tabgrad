@@ -1,0 +1,41 @@
+---
+import StarlightPage from "@astrojs/starlight/components/StarlightPage.astro";
+import { getCollection, render, type CollectionEntry } from "astro:content";
+import PageIntro from "../../components/PageIntro.astro";
+import PostMeta from "../../components/PostMeta.astro";
+import { socialHead, articleStructuredData } from "../../../scripts/publication.mjs";
+export async function getStaticPaths() {
+  return (await getCollection("blog")).map((post) => ({
+    params: { slug: post.id },
+    props: { post },
+  }));
+}
+interface Props {
+  post: CollectionEntry<"blog">;
+}
+const { post } = Astro.props;
+const { Content } = await render(post);
+const structuredData = articleStructuredData(Astro.site?.href, post.id, post.data);
+const head = [
+  ...socialHead(Astro.site?.href, `/social/article-${post.id}.png`, post.data.title),
+  { tag: "meta", attrs: { property: "og:type", content: "article" } },
+  { tag: "meta", attrs: { name: "author", content: post.data.author } },
+  { tag: "meta", attrs: { property: "article:published_time", content: post.data.date } },
+  ...(structuredData
+    ? [{ tag: "script", attrs: { type: "application/ld+json" }, content: structuredData }]
+    : []),
+];
+---
+<StarlightPage frontmatter={{ title: post.data.title, description: post.data.description, head, template: "splash", editUrl: false }}>
+  <article class="blog-article">
+    <header class="not-content marketing">
+      <a class="text-link" href="/blog/">← All posts</a>
+      <PageIntro compact title={post.data.title} description={post.data.description}>
+        <PostMeta author={post.data.author} date={post.data.date} />
+      </PageIntro>
+    </header>
+    <div class="post-body">
+      <Content />
+    </div>
+  </article>
+</StarlightPage>

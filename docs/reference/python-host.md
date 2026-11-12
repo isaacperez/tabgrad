@@ -11,6 +11,147 @@ The [distribution design](../architecture/browser-distribution.md) explains
 matched assets, module identity and hosting boundaries shared by the package
 and static integration.
 
+## Run a complete CPU example
+
+Pyodide provides Python inside the browser. Tabgrad provides the supported
+`torch` API and tensor runtime. You do not need npm, a build step or a Python
+server for this example.
+
+1. Save the following two files in the same folder: `index.html` and
+   `python-worker.js`.
+2. Serve that folder from a static HTTPS host, or localhost during development.
+   Open `index.html` through that server, rather than opening a `file://` URL.
+3. Select **Run Python**. The page loads the pinned browser packages, computes
+   gradients and displays `[-2.0, 4.0]`. Change the two inputs in the worker and
+   run again to explore the result.
+
+The worker keeps Python off the page's main thread. Each click creates a fresh
+worker; normal completion closes the Tabgrad binding before retiring it. These
+files use CPU, which does not need the GPU isolation headers. Applications with
+a Content Security Policy must allow the same-origin module worker, the pinned
+CDN modules/fetches and Pyodide's JavaScript/WebAssembly compilation. For module
+workers, the page's `worker-src` must admit the CDN module graph as well as
+`'self'`; allowing the CDN only in `script-src` is insufficient. See the
+[hosting contract](browser-package.md).
+
+```html title="index.html"
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tabgrad · Python in your browser</title>
+<button id="run">Run Python</button>
+<p id="status" role="status">Ready.</p>
+<pre id="output"></pre>
+<script type="module">
+  const run = document.getElementById("run");
+  const status = document.getElementById("status");
+  const output = document.getElementById("output");
+
+  run.onclick = () => {
+    run.disabled = true;
+    output.textContent = "";
+    status.textContent = "Loading Python…";
+    let worker;
+    let finished = false;
+    const finish = (ok, message) => {
+      if (finished) return;
+      finished = true;
+      if (message) output.textContent += message + "\n";
+      status.textContent = ok ? "Finished." : "Failed.";
+      worker?.terminate();
+      run.disabled = false;
+    };
+    try {
+      worker = new Worker("./python-worker.js", { type: "module" });
+      worker.onerror = event => finish(false, event.message || "Could not load the Python worker. Check the file URL, network and hosting policy.");
+      worker.onmessage = ({ data }) => {
+        if (finished) return;
+        if (data.kind === "stage") status.textContent = data.text;
+        if (data.kind === "output") output.textContent += data.text + "\n";
+        if (data.kind === "error") output.textContent += "Error: " + data.text + "\n";
+        if (data.kind === "fatal") finish(false, data.text);
+        if (data.kind === "done") finish(data.ok);
+      };
+    } catch (error) { finish(false, String(error)); }
+  };
+</script>
+</html>
+```
+
+```javascript title="python-worker.js"
+import { loadPyodide } from "https://cdn.jsdelivr.net/npm/pyodide@314.0.6/pyodide.mjs";
+import { attachPython } from "https://cdn.jsdelivr.net/npm/@tabgrad/tabgrad@0.3.0/dist/python.js";
+
+// The pinned loader may leave startup pending after a native Wasm failure.
+// Observe that failure only during startup, before attaching Tabgrad.
+async function loadPython() {
+  const originals = new Map();
+  try {
+    if (typeof WebAssembly.instantiateStreaming !== "function") {
+      throw new Error("This browser cannot initialize the Python WebAssembly runtime.");
+    }
+    for (const name of ["instantiate", "instantiateStreaming"]) {
+      const original = WebAssembly[name];
+      originals.set(name, original);
+      WebAssembly[name] = async (...args) => {
+        try { return await Reflect.apply(original, WebAssembly, args); }
+        catch (error) {
+          postMessage({ kind: "fatal", text: "Python could not load: " + String(error) });
+          throw error;
+        }
+      };
+    }
+    return await loadPyodide({
+      indexURL: "https://cdn.jsdelivr.net/npm/pyodide@314.0.6/",
+      stdout: text => postMessage({ kind: "output", text }),
+      stderr: text => postMessage({ kind: "output", text }),
+    });
+  } finally {
+    for (const [name, original] of originals) WebAssembly[name] = original;
+  }
+}
+addEventListener("unhandledrejection", event => {
+  event.preventDefault();
+  postMessage({ kind: "fatal", text: String(event.reason) });
+});
+
+let binding;
+let failed = false;
+try {
+  const interpreter = await loadPython();
+  postMessage({ kind: "stage", text: "Preparing Tabgrad…" });
+  binding = await attachPython(interpreter);
+  postMessage({ kind: "stage", text: "Running Python…" });
+  await binding.runPythonAsync(`
+import torch
+
+x = torch.tensor([-1.0, 2.0], dtype=torch.float32, requires_grad=True)
+loss = (x * x).sum()
+loss.backward()
+print(x.grad.tolist())
+`);
+} catch (error) {
+  failed = true;
+  postMessage({ kind: "error", text: String(error) });
+}
+try { await binding?.close(); }
+catch (error) {
+  failed = true;
+  postMessage({ kind: "error", text: String(error) });
+}
+postMessage({ kind: "done", ok: !failed });
+```
+
+The first run downloads a Python interpreter as well as Tabgrad. Later runs may
+reuse the browser's download cache, but use a new interpreter. Load/preparation,
+program and closure errors must remain visible; a failed or forcibly stopped
+worker is not evidence of acknowledged cleanup. The startup guard reports native
+Wasm failures even if the pinned loader leaves its Promise pending, and restores
+the native functions before attachment or program execution. It does not impose
+a network deadline or interrupt arbitrary Python. This is an application-owned,
+trusted program, not an editor for untrusted Python.
+
 ## Attach in the interpreter worker
 
 `attachPython(interpreter, options?) -> Promise<LocalPythonBinding>` borrows the
@@ -61,7 +202,7 @@ const binding = await attachPython(interpreter);
 try {
   await binding.runPythonAsync(`
 import torch
-assert torch.tensor([1, 2, 3]).sum().tolist() == 6
+assert torch.tensor([1, 2, 3], dtype=torch.float32).sum().tolist() == 6
 `);
   const observed = binding.diagnostics();
   console.log(observed.highWaterAllocationBytes);
@@ -212,12 +353,13 @@ stable final counters remain readable, including cumulative work and peak
 buffer bytes, with no live worker retained for inspection. Observe errors from
 `close()` rather than relabeling failed or forcibly stopped work as successful.
 
-For example, within the bootstrap above, after successful script execution:
+In the application-page composition below, after a script finishes successfully,
+read the controller and close the two owners in order:
 
 ```javascript
 const observed = gpu.diagnostics();
 console.log(observed.adapter.vendor || 'Undisclosed adapter', observed.kernelCalls);
-await client.close();
+await binding.close();
 await gpu.close();
 const final = gpu.diagnostics();
 console.log(final.state, final.ownedBufferBytes, final.unknownCompletionBytes);

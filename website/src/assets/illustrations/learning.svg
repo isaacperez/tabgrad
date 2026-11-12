@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" class="artwork" viewBox="56 16 368 248" role="img" aria-label="An open documentation guide with a page bookmark and code brackets">
+  <g class="art-shadow">
+    <path class="art-side" d="M80 68Q158 44 240 88Q322 44 400 68V226Q320 206 240 246Q160 206 80 226Z"/>
+    <path class="art-panel art-outline" d="M92 48Q164 30 240 74Q316 30 388 48V208Q316 188 240 226Q164 188 92 208Z"/>
+    <path class="art-line" d="M240 74V226"/>
+    <path class="art-arrow" d="M120 90H172"/>
+    <path class="art-detail" d="M120 116H202M120 134H190M120 160H202M120 178H180"/>
+    <path class="art-primary" d="M320 44Q332 42 344 43V104L332 96L320 104Z"/>
+    <path class="art-arrow" d="M296 130L276 150L296 170M336 130L356 150L336 170"/>
+  </g>
+</svg>

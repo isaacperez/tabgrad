@@ -2,6 +2,8 @@ import ast
 import hashlib
 import json
 import re
+import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -43,6 +45,113 @@ def publication_job_eligible(
 
 
 class RepositoryCheckTests(unittest.TestCase):
+    @unittest.skipUnless(shutil.which("bash"), "Ubuntu website setup requires Bash")
+    def test_website_sandbox_guards_precede_the_privileged_command(self) -> None:
+        loader = CHECKS.RepositoryYamlLoader
+        assert loader is not None
+        workflow = yaml.load(
+            (SCRIPT.parents[1] / CHECKS.WEBSITE_PATH).read_text(), Loader=loader
+        )
+        command = next(
+            step["run"]
+            for step in workflow["jobs"]["website"]["steps"]
+            if step["name"] == "Prepare the installed Chrome sandbox helper"
+        )
+        # Observe guard reachability without running sudo, stat or chmod.
+        harness = (
+            'export CHROME_DEVEL_SANDBOX="$1"\n'
+            'stat() { printf "%s" "$SIMULATED_UID"; }\n'
+            'sudo() { printf "privileged-command\\n"; }\n'
+        )
+        bash = shutil.which("bash")
+        assert bash is not None
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            executable = root / "helper"
+            executable.write_text("fixture", encoding="utf-8")
+            executable.chmod(0o755)
+            non_executable = root / "not-executable"
+            non_executable.write_text("fixture", encoding="utf-8")
+            link = root / "link"
+            link.symlink_to(executable)
+            for candidate, owner, allowed in (
+                (executable, "0", True),
+                (root / "missing", "0", False),
+                (root, "0", False),
+                (link, "0", False),
+                (non_executable, "0", False),
+                (executable, "1000", False),
+            ):
+                with self.subTest(candidate=candidate.name, owner=owner):
+                    result = subprocess.run(
+                        [
+                            bash,
+                            "-e",
+                            "-c",
+                            harness + command,
+                            "guard-test",
+                            str(candidate),
+                        ],
+                        env={"SIMULATED_UID": owner},
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                    )
+                    self.assertEqual("privileged-command" in result.stdout, allowed)
+                    # A stubbed chmod cannot satisfy the real setuid postcondition.
+                    self.assertNotEqual(result.returncode, 0)
+
+    def test_integration_downloads_keep_the_website_validation_owner(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name in ("python/index.html.txt", "python/python-worker.js.txt"):
+                generated = root / "website/public/examples" / name
+                generated.parent.mkdir(parents=True, exist_ok=True)
+                generated.write_text("exact source download", encoding="utf-8")
+            authored = root / "website/scripts/integration-files.mjs"
+            authored.parent.mkdir(parents=True)
+            authored.write_text("maintained without newline", encoding="utf-8")
+            self.assertEqual(CHECKS.repository_files(root), [authored])
+            failures = CHECKS.check_text_format(root)
+            self.assertEqual(len(failures), 1)
+            self.assertEqual(failures[0].path, authored.relative_to(root))
+
+    def test_website_outputs_do_not_become_repository_source(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for generated in CHECKS.WEBSITE_GENERATED_DIRECTORIES:
+                path = root / generated / "derived.md"
+                path.parent.mkdir(parents=True)
+                path.write_text("generated without source formatting", encoding="utf-8")
+            authored = root / "website/src/pages/authored.md"
+            authored.parent.mkdir(parents=True)
+            authored.write_text("maintained source without newline", encoding="utf-8")
+            self.assertEqual(CHECKS.repository_files(root), [authored])
+            self.assertEqual(len(CHECKS.check_text_format(root)), 1)
+
+    def test_website_workflow_is_read_only_and_rejects_executable_drift(self) -> None:
+        loader = CHECKS.RepositoryYamlLoader
+        assert loader is not None
+        document = yaml.load(
+            (SCRIPT.parents[1] / CHECKS.WEBSITE_PATH).read_text(), Loader=loader
+        )
+        state = CHECKS.YamlRepositoryState(
+            True, {CHECKS.WEBSITE_PATH: document}, frozenset(), ()
+        )
+        self.assertEqual(CHECKS.check_workflow_security(state), [])
+        self.assertEqual(
+            document["jobs"]["website"]["env"]["TABGRAD_SITE_URL"],
+            "https://example.invalid/",
+        )
+        self.assertEqual(
+            document["jobs"]["website"]["env"]["CHROME_DEVEL_SANDBOX"],
+            "/opt/google/chrome/chrome-sandbox",
+        )
+        document["jobs"]["website"]["steps"][-1]["run"] = "echo skipped"
+        self.assertTrue(CHECKS.check_workflow_security(state))
+        document["permissions"]["contents"] = "write"
+        self.assertTrue(CHECKS.check_workflow_security(state))
+
     def publication_workflow(self) -> dict[str, Any]:
         loader = CHECKS.RepositoryYamlLoader
         assert loader is not None
@@ -607,6 +716,35 @@ class RepositoryCheckTests(unittest.TestCase):
             failures = CHECKS.check_markdown_links(root)
             self.assertEqual(len(failures), 1)
             self.assertIn("docs/missing.md", failures[0].message)
+
+    def test_blog_site_routes_keep_their_website_validation_owner(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            article = root / "website/content/blog/post.md"
+            article.parent.mkdir(parents=True)
+            article.write_text(
+                "[Run](/playground/?language=python#code)\n"
+                "[Source](missing-source.md)\n",
+                encoding="utf-8",
+            )
+            (root / "README.md").write_text(
+                "[Missing](/missing-repository-file.md)\n", encoding="utf-8"
+            )
+            failures = CHECKS.check_markdown_links(root)
+            self.assertEqual(len(failures), 2)
+            self.assertEqual(
+                {failure.path for failure in failures},
+                {Path("README.md"), article.relative_to(root)},
+            )
+            self.assertTrue(
+                any("missing-source.md" in failure.message for failure in failures)
+            )
+            self.assertTrue(
+                any(
+                    "missing-repository-file.md" in failure.message
+                    for failure in failures
+                )
+            )
 
     def test_markdown_links_reject_targets_outside_repository(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

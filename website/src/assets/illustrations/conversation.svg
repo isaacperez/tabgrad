@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" class="artwork" viewBox="0 0 480 280" role="img" aria-label="A conversation about code and a shared project">
+  <path class="art-soft" d="M64 128H264Q284 128 284 148V212Q284 232 264 232H148L112 256V232H64Q44 232 44 212V148Q44 128 64 128Z"/>
+  <path class="art-arrow" d="M88 164L72 180L88 196M120 164L136 180L120 196"/>
+  <path class="art-detail" d="M160 176H240M160 192H208"/>
+  <g class="art-shadow">
+    <path class="art-panel art-outline" d="M196 32H420Q440 32 440 52V148Q440 168 420 168H372L336 196V168H196Q176 168 176 148V52Q176 32 196 32Z"/>
+    <circle class="art-primary" cx="212" cy="68" r="12"/>
+    <path class="art-detail" d="M244 64H356M244 80H308M208 112H408M208 132H368"/>
+  </g>
+</svg>

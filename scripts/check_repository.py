@@ -60,6 +60,22 @@ EXCLUDED_DIRECTORIES = {
     "target",
     "test-results",
 }
+WEBSITE_GENERATED_DIRECTORIES = {
+    Path("website/.astro"),
+    Path("website/.generated"),
+    Path("website/src/content/docs"),
+    *(
+        Path("website/public") / name
+        for name in (
+            "brand",
+            "diagrams",
+            "examples",
+            "licenses",
+            "playground",
+            "vendor",
+        )
+    ),
+}
 TEXT_SUFFIXES = {
     ".css",
     ".html",
@@ -92,6 +108,7 @@ ARCHITECTURE_DOCUMENTS = {
     "docs/architecture/bounded-lazy-execution.md",
     "docs/architecture/browser-distribution.md",
     "docs/architecture/central-decision.md",
+    "docs/architecture/static-website.md",
     "docs/architecture/computation-inspection.md",
     "docs/architecture/cpu-gradient-state.md",
     "docs/architecture/cpu-intermediate-reuse.md",
@@ -394,11 +411,32 @@ PUBLICATION_ROLE_COMMANDS = {
 EXPECTED_PRODUCER_TRIAL_SHA256 = (
     "8dfd9c921ab8ee54e17421212140cb7ed601eab64c2de96b73a13e48d807850c"
 )
+WEBSITE_PATH = Path(".github/workflows/website-checks.yml")
+EXPECTED_WEBSITE_SHA256 = (
+    "22d8b6ff669a831d34d2c643551c2a6574f24d803cb6071aaf64ff56962c844f"
+)
+WEBSITE_COMMANDS = {
+    "npm install --global npm@11.1.0 --ignore-scripts --no-audit --no-fund",
+    "npm ci --prefix website --ignore-scripts --no-audit --no-fund",
+    "npm exec --prefix website -- puppeteer browsers install chrome",
+    'test -f "$CHROME_DEVEL_SANDBOX"\n'
+    'test -x "$CHROME_DEVEL_SANDBOX"\n'
+    'test ! -L "$CHROME_DEVEL_SANDBOX"\n'
+    'test "$(stat -c \'%u\' "$CHROME_DEVEL_SANDBOX")" = 0\n'
+    'sudo chmod 4755 "$CHROME_DEVEL_SANDBOX"\n'
+    'test -u "$CHROME_DEVEL_SANDBOX"\n',
+    "npm --prefix website run check",
+    "npm --prefix website test",
+    "npm --prefix website run build",
+    "npm --prefix website run verify",
+    "npm --prefix website run test:browser",
+}
 APPROVED_WORKFLOW_PATHS = {
     Path(".github/workflows/repository-checks.yml"),
     PRODUCER_TRIAL_PATH,
     PUBLICATION_PATH,
     HISTORY_PATH,
+    WEBSITE_PATH,
 }
 CI_INSTALL_COMMAND = (
     "python -m venv .venv && .venv/bin/python -m pip install --only-binary=:all: --require-hashes "
@@ -776,6 +814,12 @@ class YamlRepositoryState:
 def repository_files(root: Path) -> list[Path]:
     files: list[Path] = []
     for path in root.rglob("*"):
+        relative = path.relative_to(root)
+        if any(
+            relative.is_relative_to(directory)
+            for directory in WEBSITE_GENERATED_DIRECTORIES
+        ):
+            continue
         if path.relative_to(root).parts[:2] == (".agents", "skills"):
             continue
         if not path.is_file():
@@ -827,6 +871,12 @@ def check_markdown_links(root: Path) -> list[Failure]:
         for match in MARKDOWN_LINK.finditer(text):
             destination = match.group(1).strip("<>")
             if destination.startswith(("#", "http://", "https://", "mailto:")):
+                continue
+            if destination.startswith("/") and path.relative_to(root).is_relative_to(
+                "website/content/blog"
+            ):
+                # Article routes and fragments belong to the built website.
+                # website/scripts/verify-output.mjs checks their actual targets.
                 continue
             destination = unquote(destination.split("#", 1)[0].split("?", 1)[0])
             if not destination:
@@ -1285,14 +1335,17 @@ def check_workflow_security(state: YamlRepositoryState) -> list[Failure]:
         is_producer_trial = relative == PRODUCER_TRIAL_PATH
         is_publication = relative == PUBLICATION_PATH
         is_history = relative == HISTORY_PATH
+        is_website = relative == WEBSITE_PATH
         if is_publication:
             failures.extend(check_publication_private_inputs(relative, document))
             failures.extend(check_publication_post_jobs(relative, document))
         expected_permissions = {"contents": "read"}
-        if is_producer_trial or is_publication or is_history:
+        if is_producer_trial or is_publication or is_history or is_website:
             expected_permissions = (
                 PUBLICATION_PERMISSIONS
                 if is_publication
+                else {"contents": "read"}
+                if is_website
                 else {"contents": "read", "actions": "read"}
             )
             try:
@@ -1300,7 +1353,9 @@ def check_workflow_security(state: YamlRepositoryState) -> list[Failure]:
                     document, sort_keys=True, separators=(",", ":"), allow_nan=False
                 ).encode()
                 matches_definition = hashlib.sha256(definition).hexdigest() == (
-                    EXPECTED_HISTORY_SHA256
+                    EXPECTED_WEBSITE_SHA256
+                    if is_website
+                    else EXPECTED_HISTORY_SHA256
                     if is_history
                     else EXPECTED_PUBLICATION_SHA256
                     if is_publication
@@ -1398,7 +1453,9 @@ def check_ci_workflow(
     failures.extend(command_failures)
     for workflow_path, command in all_run_commands:
         registered_commands = (
-            HISTORY_COMMANDS
+            WEBSITE_COMMANDS
+            if workflow_path == WEBSITE_PATH
+            else HISTORY_COMMANDS
             if workflow_path == HISTORY_PATH
             else PUBLICATION_COMMANDS
             if workflow_path == PUBLICATION_PATH

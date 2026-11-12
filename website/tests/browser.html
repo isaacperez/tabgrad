@@ -1,0 +1,1455 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>Website CPU integration</title>
+<h1>Website CPU integration</h1><pre id="result">Running…</pre>
+<iframe title="Built website under test" src="/playground/" style="width:100%;height:700px"></iframe>
+<script type="module">
+import { checkEditablePythonExamples } from '/__example_checks.mjs';
+// Test the built UI and its real released CPU artifacts, not a second executor.
+const token = new URL(location.href).searchParams.get("token");
+const frame = document.querySelector("iframe");
+const results = [];
+const navigationFocus = { visible: 0, unavailable: 0 };
+const pageTitleScale = new Map();
+const phase = (value) => token ? fetch(`/__phase?token=${encodeURIComponent(token)}`, { method: "POST", body: JSON.stringify({ phase: value }) }) : Promise.resolve();
+async function until(predicate, description, milliseconds = 30000) {
+  const end = performance.now() + milliseconds;
+  while (!predicate()) {
+    if (performance.now() >= end) throw new Error(`Timed out: ${description}`);
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+}
+function assert(value, message) { if (!value) throw new Error(message); }
+function paintedPixel(scale, value) { return Math.round(value * scale); }
+function startsWithCompactSource(runner) {
+  return runner.classList.contains('compact-runner') && runner.dataset.state === 'idle'
+    && runner.ownerDocument.defaultView.matchMedia('(width < 70rem)').matches;
+}
+function checkFooterAttribution(document, context) {
+  const footer = document.querySelector('.footer-bottom');
+  const statement = footer.querySelector(':scope > p').getBoundingClientRect();
+  const copyright = footer.querySelector('.footer-copyright').getBoundingClientRect();
+  const row = document.defaultView.getComputedStyle(footer);
+  const available = footer.clientWidth - parseFloat(row.paddingLeft) - parseFloat(row.paddingRight);
+  const statementStyle = document.defaultView.getComputedStyle(footer.querySelector(':scope > p'));
+  const canShare = available >= parseFloat(statementStyle.flexBasis) + parseFloat(row.columnGap) + copyright.width;
+  if (canShare) {
+    assert(copyright.left >= statement.right && Math.abs(copyright.top - statement.top) <= 1, `copyright is beside and aligned with the attribution: ${context}`);
+  } else {
+    assert(copyright.top >= statement.bottom, `narrow attribution rows wrap without overlap: ${context}`);
+  }
+  const bounds = footer.getBoundingClientRect();
+  assert(copyright.left >= bounds.left && copyright.right <= bounds.right, `copyright remains inside the shared footer: ${context}`);
+}
+async function checkFooterNavigation(frame) {
+  const observations = [];
+  for (const width of [390, 1280]) {
+    frame.style.width = `${width}px`;
+    frame.src = '/blog/introducing-tabgrad/';
+    await until(() => frame.contentWindow.location.pathname === '/blog/introducing-tabgrad/' && frame.contentDocument?.readyState === 'complete', 'footer navigation starting page');
+    for (const path of ['/about/', '/contact/']) {
+      const previous = frame.contentDocument;
+      await previous.fonts.ready;
+      previous.defaultView.scrollTo(0, previous.documentElement.scrollHeight);
+      assert(previous.defaultView.scrollY > 0, 'footer navigation starts below the top of a long page');
+      previous.querySelector(`.tabgrad-footer a[href="${path}"]`).click();
+      await until(() => frame.contentDocument !== previous && frame.contentWindow.location.pathname === path && frame.contentDocument?.readyState === 'complete', `native footer click to ${path}`);
+      await frame.contentDocument.fonts.ready;
+      assert(frame.contentWindow.scrollY === 0, `a new document opens at the top: ${path} at ${width}px`);
+      observations.push({ path, width, scrollY: frame.contentWindow.scrollY });
+    }
+  }
+  return observations;
+}
+async function checkSponsorshipNavigation(frame) {
+  const observations = [];
+  for (const width of [390, 1280]) {
+    frame.style.width = `${width}px`;
+    frame.src = '/about/';
+    await until(() => frame.contentWindow.location.pathname === '/about/' && frame.contentDocument?.readyState === 'complete', 'sponsorship starting page');
+    const previous = frame.contentDocument;
+    previous.querySelector('#support a[href="/contact/#sponsorship"]').click();
+    await until(() => frame.contentDocument !== previous && frame.contentWindow.location.pathname === '/contact/' && frame.contentDocument?.readyState === 'complete', 'About sponsorship navigation');
+    const doc = frame.contentDocument;
+    await doc.fonts.ready;
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const target = doc.querySelector('#sponsorship');
+    const top = target.getBoundingClientRect().top;
+    const headerBottom = doc.querySelector('header').getBoundingClientRect().bottom;
+    assert(frame.contentWindow.location.hash === '#sponsorship' && top >= headerBottom && top < frame.contentWindow.innerHeight, `sponsorship navigation reveals its target below the fixed header at ${width}px`);
+    observations.push({ width, hash: frame.contentWindow.location.hash, targetTop: top, headerBottom });
+  }
+  return observations;
+}
+function checkResourceStrip(document, context) {
+  const scale = document.defaultView.devicePixelRatio;
+  const cells = [...document.querySelectorAll('.resource-strip > div')];
+  assert(cells.length === 3, `the summary retains its three labelled observations: ${context}`);
+  const boxes = cells.map(cell => cell.getBoundingClientRect());
+  const columns = boxes.every(box => paintedPixel(scale, box.top) === paintedPixel(scale, boxes[0].top));
+  const owner = document.querySelector('[data-run-summary]');
+  const style = document.defaultView.getComputedStyle(owner);
+  const availableWidth = owner.getBoundingClientRect().width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight) - parseFloat(style.borderLeftWidth) - parseFloat(style.borderRightWidth);
+  const wide = availableWidth >= 50 * parseFloat(document.defaultView.getComputedStyle(document.documentElement).fontSize);
+  assert(columns === wide, `metrics use narrow rows and wide columns: ${context}`);
+  for (const [index, cell] of cells.entries()) {
+    const box = boxes[index];
+    for (const field of cell.querySelectorAll('dt,dd')) {
+      const range = document.createRange(); range.selectNodeContents(field);
+      for (const line of range.getClientRects()) {
+        assert(paintedPixel(scale, line.left) >= paintedPixel(scale, box.left) && paintedPixel(scale, line.right) <= paintedPixel(scale, box.right), `metric text stays inside its own cell: ${context}; ${field.textContent}; ${JSON.stringify({cell:box.toJSON(),text:line.toJSON()})}`);
+      }
+    }
+    if (index > 0) assert(columns ? paintedPixel(scale, box.left) >= paintedPixel(scale, boxes[index - 1].right) : paintedPixel(scale, box.top) >= paintedPixel(scale, boxes[index - 1].bottom), `metric cells do not overlap: ${context}`);
+    if (!columns) assert(paintedPixel(scale, cell.querySelector('dd').getBoundingClientRect().left) >= paintedPixel(scale, cell.querySelector('dt').getBoundingClientRect().right), `metric values remain beside their labels: ${context}`);
+  }
+  if (columns) assert(new Set(cells.map(cell => paintedPixel(scale, cell.querySelector('dd').getBoundingClientRect().top))).size === 1, `wide metric values align below wrapped labels: ${context}`);
+}
+function relativeLuminance(color) {
+  const channels = color.match(/^rgb\((\d+), (\d+), (\d+)\)$/);
+  assert(channels, `expected opaque computed RGB: ${color}`);
+  const [red, green, blue] = channels.slice(1).map((channel) => {
+    const value = Number(channel) / 255;
+    return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+}
+function contrastRatio(foreground, background) {
+  const pair = [relativeLuminance(foreground), relativeLuminance(background)].sort((a, b) => a - b);
+  return (pair[1] + 0.05) / (pair[0] + 0.05);
+}
+function checkHeader(document, context) {
+  const controls = [...document.querySelectorAll('.tabgrad-brand, .tabgrad-navigation a, .header-repository, .tabgrad-header-actions button[data-open-modal], .tabgrad-header-actions select, .site-menu-toggle, .docs-menu-toggle')]
+    .map((element) => ({ element, bounds: element.getBoundingClientRect() })).filter(({ bounds }) => bounds.width && bounds.height);
+  for (let index = 0; index < controls.length; index++) {
+    const { element, bounds } = controls[index];
+    assert(bounds.left >= 0 && bounds.right <= document.documentElement.clientWidth, `header control remains within the viewport: ${element.className} ${context}`);
+    for (const other of controls.slice(index + 1)) {
+      const overlap = bounds.left < other.bounds.right && bounds.right > other.bounds.left && bounds.top < other.bounds.bottom && bounds.bottom > other.bounds.top;
+      assert(!overlap, `header controls must not cover each other: ${element.className}/${other.element.className} ${context}`);
+    }
+  }
+  const link = document.querySelector('.tabgrad-navigation a');
+  for (const selector of ['.header-repository', '.header-appearance select']) {
+    const control = document.querySelector(selector);
+    if (!control.getBoundingClientRect().width) continue;
+    const surface = control.closest('.header-appearance') ?? control;
+    assert(document.defaultView.getComputedStyle(surface).backgroundColor === 'rgba(0, 0, 0, 0)', `header icon has no filled tile: ${selector} ${context}`);
+    control.focus();
+    if (control.matches(':focus-visible')) {
+      const underline = document.defaultView.getComputedStyle(surface, '::after');
+      assert(underline.visibility === 'visible' && parseFloat(underline.borderBottomWidth) > 0, `header icon shares the visible underline state: ${selector} ${context}`);
+    }
+    control.blur();
+  }
+  if (link.getBoundingClientRect().width) {
+    link.focus();
+    assert(document.activeElement === link, `navigation accepts keyboard focus: ${context}`);
+    // Native :focus-visible depends on input modality and document activation.
+    // An unfocused Firefox iframe can have an activeElement without that state.
+    if (link.matches(':focus-visible')) {
+      navigationFocus.visible++;
+      assert(document.defaultView.getComputedStyle(link).textDecorationLine.includes('underline'), `navigation shares the visible link focus state: ${context}`);
+    } else navigationFocus.unavailable++;
+    link.blur();
+  }
+}
+async function checkNavigation(document, context) {
+  const trigger = document.querySelector('.site-menu-toggle');
+  const menu = document.getElementById('tabgrad-site-menu');
+  if (!trigger.getBoundingClientRect().width) {
+    assert(!menu.matches(':popover-open'), `hidden trigger leaves no open navigation: ${context}`);
+    return;
+  }
+  trigger.click();
+  assert(menu.matches(':popover-open'), `Menu opens the native navigation: ${context}`);
+  const bounds = menu.getBoundingClientRect();
+  assert(bounds.left >= 0 && bounds.right <= document.documentElement.clientWidth && bounds.top >= 0 && bounds.bottom <= document.documentElement.clientHeight, `navigation fits the viewport: ${context}`);
+  const links = [...menu.querySelectorAll('.site-menu-links a')];
+  const projectLinks = [...menu.querySelectorAll('.site-menu-secondary a')];
+  const destinations = [...links, ...projectLinks];
+  const current = document.defaultView.location;
+  const expectedCurrent = destinations.some(link => link.origin === current.origin &&
+    (link.pathname === '/' ? current.pathname === '/' : current.pathname.startsWith(link.pathname))) ? 1 : 0;
+  assert(JSON.stringify(links.map(link => link.pathname)) === JSON.stringify([...document.querySelectorAll('.tabgrad-navigation a')].map(link => link.pathname)) && destinations.filter((link) => link.hasAttribute('aria-current')).length === expectedCurrent, `compact navigation mirrors the main destinations and identifies the active one: ${context}`);
+  for (const link of destinations) {
+    const linkBounds = link.getBoundingClientRect();
+    assert(linkBounds.height >= 44 && linkBounds.left >= bounds.left && linkBounds.right <= bounds.right, `navigation links are usable within their panel: ${context}`);
+  }
+  const sidebar = document.getElementById('starlight__sidebar');
+  const docsTrigger = document.querySelector('.docs-menu-toggle');
+  if (docsTrigger?.getBoundingClientRect().width) {
+    const scale = document.defaultView.devicePixelRatio;
+    const originalPosition = Math.round(docsTrigger.getBoundingClientRect().left * scale);
+    docsTrigger.click();
+    assert(sidebar.matches(':popover-open') && !menu.matches(':popover-open'), `documentation and site navigation do not overlap: ${context}`);
+    assert(Math.round(docsTrigger.getBoundingClientRect().left * scale) === originalPosition, `opening documentation must not shift the header: ${context}`);
+    docsTrigger.click();
+    assert(!sidebar.matches(':popover-open'), `documentation navigation closes: ${context}`);
+  } else {
+    trigger.click();
+    assert(!menu.matches(':popover-open'), `Menu toggles closed: ${context}`);
+  }
+}
+function checkEditorToolbar(document, context) {
+  for (const toolbar of document.querySelectorAll('.code-top')) {
+    const bounds = toolbar.getBoundingClientRect();
+    // Compare visible horizontal limits on the document's device-pixel grid.
+    // DOMRect's separately reported x/width can sum past a shared edge by a
+    // fraction of a pixel; raw rectangles remain in a failing diagnostic.
+    const scale = document.defaultView.devicePixelRatio;
+    const controls = [...toolbar.querySelectorAll('button')].map((element) => ({ element, bounds: element.getBoundingClientRect() })).filter(({ bounds }) => bounds.width && bounds.height);
+    for (let index = 0; index < controls.length; index++) {
+      const control = controls[index];
+      assert(Math.round(control.bounds.left * scale) >= Math.round(bounds.left * scale) && Math.round(control.bounds.right * scale) <= Math.round(bounds.right * scale), `editor control must not be clipped: ${control.element.textContent} ${context}; ${JSON.stringify({ control: control.bounds.toJSON(), toolbar: bounds.toJSON() })}`);
+      for (const other of controls.slice(index + 1)) {
+        const overlap = control.bounds.left < other.bounds.right && control.bounds.right > other.bounds.left && control.bounds.top < other.bounds.bottom && control.bounds.bottom > other.bounds.top;
+        assert(!overlap, `editor controls must not cover each other: ${context}`);
+      }
+    }
+    const copy = toolbar.querySelector('[data-copy-editor]').getBoundingClientRect();
+    const rootStyle = document.defaultView.getComputedStyle(document.documentElement);
+    const inset = parseFloat(rootStyle.getPropertyValue('--tg-space-3')) * parseFloat(rootStyle.fontSize);
+    assert(Math.round((copy.top - bounds.top) * scale) >= Math.round(inset * scale) && Math.round((bounds.bottom - copy.bottom) * scale) >= Math.round(inset * scale), `Copy needs the shared toolbar inset on both sides: ${context}; ${JSON.stringify({copy:copy.toJSON(),toolbar:bounds.toJSON(),inset})}`);
+  }
+}
+function checkRunControls(document, context) {
+  for (const runner of document.querySelectorAll('[data-runner]')) {
+    const toolbar = runner.querySelector('.code-top').getBoundingClientRect();
+    const settings = runner.querySelector('.execution-options').getBoundingClientRect();
+    const actions = runner.querySelector('.run-actions').getBoundingClientRect();
+    assert(settings.top >= toolbar.bottom && actions.top >= toolbar.bottom, `execution controls have their own row below editor tools: ${context}`);
+    const overlap = settings.left < actions.right && settings.right > actions.left && settings.top < actions.bottom && settings.bottom > actions.top;
+    assert(!overlap, `device settings and run actions retain distinct space: ${context}`);
+    assert(runner.querySelector('.editor-tools [data-restore]'), `Reset belongs to the editor tools: ${context}`);
+  }
+}
+function checkResultPlacement(document, context) {
+  for (const runner of document.querySelectorAll('[data-runner]')) {
+    const toolbar = runner.querySelector('.runner-toolbar').getBoundingClientRect();
+    const body = runner.querySelector('.runner-body').getBoundingClientRect();
+    const result = runner.querySelector('.runner-result').getBoundingClientRect();
+    const input = runner.querySelector('.runner-input').getBoundingClientRect();
+    const summary = runner.querySelector('[data-run-summary]').getBoundingClientRect();
+    const scale = document.defaultView.devicePixelRatio;
+    assert(paintedPixel(scale, body.top) === paintedPixel(scale, toolbar.bottom), `the workspace follows its execution controls: ${context}`);
+    if (startsWithCompactSource(runner)) {
+      assert(result.height > 0 && summary.height > 0, `the initial demo retains its entire result and measurement component: ${context}`);
+      assert(paintedPixel(scale, input.top) === paintedPixel(scale, toolbar.bottom), `the initial editable example starts directly after its controls: ${context}`);
+    } else assert(paintedPixel(scale, result.top) === paintedPixel(scale, body.top), `output starts immediately after execution controls: ${context}`);
+    // Firefox rounds positions and dimensions separately. Compare visible
+    // device pixels, as the other layout controls do, not float identities.
+    if (runner.classList.contains('compact-runner')) {
+      assert(runner.querySelector('[data-run-summary]').parentElement === runner.querySelector('.runner-result'), `the compact demo keeps its complete measurements with the result: ${context}`);
+      assert(Math.round(summary.top * scale) >= Math.round(runner.querySelector('.run-console').getBoundingClientRect().bottom * scale) && Math.round(summary.bottom * scale) <= Math.round(result.bottom * scale), `compact metrics follow actual output within its panel: ${context}`);
+    } else assert(Math.round(summary.top * scale) >= Math.round(body.bottom * scale), `real metrics follow the workspace without pushing output away: ${context}; ${JSON.stringify({ summary: summary.toJSON(), body: body.toJSON(), scale })}`);
+    const console = runner.querySelector('.run-console').getBoundingClientRect();
+    const editor = runner.querySelector('.run-editor').getBoundingClientRect();
+    if (Math.round(result.top * scale) !== Math.round(input.top * scale)) {
+      assert(startsWithCompactSource(runner)
+        ? paintedPixel(scale, input.bottom) <= paintedPixel(scale, result.top)
+        : paintedPixel(scale, result.bottom) <= paintedPixel(scale, input.top), `narrow layout leads with source initially and results after execution: ${context}`);
+      assert(paintedPixel(scale, console.width) === paintedPixel(scale, editor.width), `narrow result and source share their usable width: ${context}`);
+    } else {
+      assert(Math.round(result.left * scale) >= Math.round(input.right * scale), `wide layout keeps output next to source: ${context}`);
+      assert(paintedPixel(scale, console.top) === paintedPixel(scale, editor.top), `wide result and source start together: ${context}`);
+    }
+  }
+}
+
+async function checkCompactRunStates(frame, preset) {
+  const savedWidth = frame.style.width;
+  const document = frame.contentDocument;
+  const runner = document.querySelector('[data-runner]');
+  const input = runner.querySelector('textarea');
+  const run = runner.querySelector('[data-run]');
+  const output = runner.querySelector('.run-output');
+  const result = runner.querySelector('.runner-result');
+  const summary = runner.querySelector('[data-run-summary]');
+  const observations = [];
+  frame.style.width = '390px';
+  runner.querySelector('[data-run-language="javascript"]').click();
+  await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  checkResultPlacement(document, 'compact initial state');
+  for (const scenario of [
+    { state: 'complete', source: preset },
+    { state: 'error', source: preset + '\nthrow new Error("compact failure");' },
+    { state: 'stopped', source: 'console.log("compact pending"); await new Promise(() => {});' },
+  ]) {
+    input.value = scenario.source;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    run.click();
+    assert(runner.dataset.state !== 'idle' && result.getClientRects().length, 'starting a compact run keeps its full result and measurement panel visible');
+    if (scenario.state === 'stopped') {
+      await until(() => output.textContent.includes('compact pending'), 'compact pending output');
+      runner.querySelector('[data-stop]').click();
+    }
+    await until(() => !run.disabled, `compact ${scenario.state} settled`);
+    assert(runner.dataset.state === scenario.state && result.getClientRects().length, `compact ${scenario.state} retains its visible result`);
+    assert(runner.querySelector('[data-run-summary]') === summary && summary.getClientRects().length, 'all compact run states retain the same complete measurement component');
+    if (scenario.state !== 'stopped') {
+      assert(output.textContent.includes('[-2,4]'), 'success and failure preserve the actual computed compact output');
+      assert(summary.querySelector('[data-resource-memory]').textContent !== 'No run yet', 'settled compact runs retain their observations');
+    }
+    if (scenario.state === 'error') assert(runner.querySelector('[data-error-details]').textContent.includes('compact failure'), 'compact failure keeps the original error');
+    checkResultPlacement(document, `compact ${scenario.state}`);
+    checkResourceStrip(document, `compact ${scenario.state}`);
+    observations.push({ state: scenario.state, output: output.textContent.trim(), peak: summary.querySelector('[data-resource-memory]').textContent });
+    runner.querySelector('[data-restore]').click();
+    assert(runner.dataset.state === 'idle', 'Reset restores the unexecuted compact example');
+    checkResultPlacement(document, `compact reset after ${scenario.state}`);
+  }
+  frame.style.width = '1280px';
+  await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  const console = runner.querySelector('.run-console');
+  frame.focus(); console.focus();
+  assert(document.activeElement === console, 'the wide initial result can receive keyboard focus');
+  frame.style.width = '390px';
+  await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  assert(document.activeElement === console && result.getClientRects().length, 'narrowing preserves a focused initial result');
+  input.focus();
+  assert(document.activeElement === input && result.getClientRects().length && summary.getClientRects().length, 'moving focus to the initial editor preserves all result and measurement controls');
+  runner.querySelector('[data-run-language="python"]').click();
+  frame.style.width = savedWidth;
+  await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  return observations;
+}
+
+function checkDocumentationTables(document, context) {
+  for (const table of document.querySelectorAll('.sl-markdown-content table')) {
+    const viewport = table.parentElement;
+    assert(viewport.classList.contains('table-viewport') && viewport.tabIndex === 0 && viewport.getAttribute('aria-label'), `native tables have a named keyboard pan area: ${context}`);
+    assert(viewport.getBoundingClientRect().right <= document.documentElement.clientWidth, `only the table area may overflow: ${context}`);
+    assert(document.defaultView.getComputedStyle(table).display === 'table', `header and body retain native column alignment: ${context}`);
+  }
+}
+function checkDisclosureType(document, context) {
+  const interfaceSize = document.defaultView.getComputedStyle(document.querySelector('.tabgrad-header-actions button[data-open-modal]')).fontSize;
+  for (const summary of document.querySelectorAll('.disclosure > summary')) {
+    const content = summary.parentElement.classList.contains('content-disclosure');
+    const size = content ? document.defaultView.getComputedStyle(document.querySelector('.text-link')).fontSize : interfaceSize;
+    assert(document.defaultView.getComputedStyle(summary).fontSize === size, `shared disclosures use their content or interface type role: ${context}; ${summary.textContent}`);
+    const marker = document.defaultView.getComputedStyle(summary, '::before');
+    assert(marker.maskImage === 'none' && marker.backgroundColor === 'rgba(0, 0, 0, 0)' && marker.transform === 'none', `shared disclosure marker must not retain a framework arrow mask: ${context}; ${summary.textContent}`);
+    assert(document.defaultView.getComputedStyle(summary).fontWeight === (content ? '500' : '400'), `shared disclosure labels use their content or interface weight: ${context}; ${summary.textContent}`);
+  }
+}
+
+function checkQuestionLayout(document, context) {
+  const section = document.querySelector('#faq');
+  if (!section) return;
+  const intro = section.querySelector('.section-intro');
+  const title = intro.querySelector('h2');
+  const body = section.querySelector('.section-body');
+  const sectionStyle = document.defaultView.getComputedStyle(section);
+  const titleBox = title.getBoundingClientRect(), bodyBox = body.getBoundingClientRect();
+  assert(title.textContent === 'Common questions' && intro.children.length === 1, `FAQ has one concise heading without filler: ${context}`);
+  assert(bodyBox.top >= titleBox.bottom && bodyBox.left === titleBox.left && bodyBox.width === intro.getBoundingClientRect().width, `FAQ title and questions share one reading column: ${context}`);
+  assert(sectionStyle.borderTopWidth === '0px' && sectionStyle.borderBottomWidth === '0px', `FAQ has no outer frame: ${context}`);
+  for (const [index, question] of [...body.querySelectorAll('details')].entries()) {
+    const style = document.defaultView.getComputedStyle(question);
+    assert(style.borderTopWidth === (index ? '1px' : '0px') && style.borderBottomWidth === '0px' && style.borderLeftWidth === '0px' && style.borderRightWidth === '0px', `only neighbouring questions have a separator: ${context}`);
+    const summary = question.querySelector('summary');
+    const marker = document.defaultView.getComputedStyle(summary, '::before');
+    assert(marker.order === '1' && document.defaultView.getComputedStyle(summary).justifyContent === 'space-between', `content disclosure puts the indicator after the question: ${context}`);
+  }
+}
+
+const searchChecks = [];
+function checkSharedTextLinks(document, context) {
+  const targets = [...new Set(document.querySelectorAll('.tabgrad-navigation a[href="/blog/"], .site-menu-links a[href="/blog/"], .tabgrad-footer nav a, .tabgrad-header-actions button[data-open-modal] > span, .blog-article header > a, .post-body p a, .post-card [data-link-title], .marketing a.text-link, .sl-markdown-content p a, #starlight__sidebar a'))];
+  const root = document.documentElement.style;
+  const properties = ['--tg-link-underline-offset', '--tg-link-underline-thickness'];
+  const saved = properties.map(name => [name, root.getPropertyValue(name), root.getPropertyPriority(name)]);
+  try {
+    root.setProperty('--tg-link-underline-offset', '0.5em');
+    root.setProperty('--tg-link-underline-thickness', '2px');
+    for (const target of targets) {
+      const style = document.defaultView.getComputedStyle(target);
+      assert(style.textUnderlinePosition === 'under' && style.textDecorationSkipInk === 'auto', `shared text links keep the line below descenders: ${context}; ${target.textContent}`);
+      assert(parseFloat(style.textUnderlineOffset) === parseFloat(style.fontSize) / 2 && style.textDecorationThickness === '2px', `one token change reaches navigation, prose, actions and card text: ${context}; ${target.textContent}`);
+    }
+  } finally {
+    for (const [name, value, priority] of saved) { if (value) root.setProperty(name, value, priority); else root.removeProperty(name); }
+  }
+}
+async function checkSearch(document, path) {
+  const win = document.defaultView;
+  const NativeWorker = win.Worker;
+  const originalWarn = win.console.warn;
+  const warnings = [];
+  const workers = [];
+  win.Worker = class extends NativeWorker {
+    constructor(url, options) {
+      super(url, options);
+      if (new URL(url, document.baseURI).pathname === '/pagefind/pagefind-worker.js') {
+        const record = { messages: 0, errors: 0 }; workers.push(record);
+        this.addEventListener('message', () => record.messages++);
+        this.addEventListener('error', () => record.errors++);
+      }
+    }
+  };
+  win.console.warn = (...args) => { warnings.push(args.map(String).join(' ')); originalWarn.apply(win.console, args); };
+  const dialog = document.querySelector('site-search dialog');
+  try {
+    document.querySelector('site-search [data-open-modal]').click();
+    await until(() => document.querySelector('site-search input'), `search ready at ${path}`);
+    const input = document.querySelector('site-search input');
+    input.value = path.startsWith('/blog/') ? document.querySelector('.post-card[href="/blog/introducing-tabgrad/"] h2').textContent : 'matmul'; input.dispatchEvent(new win.Event('input', { bubbles: true }));
+    await until(() => path.startsWith('/blog/')
+      ? [...document.querySelectorAll('.pagefind-ui__result-link')].some(link => new URL(link.href).pathname === '/blog/introducing-tabgrad/')
+      : document.querySelectorAll('.pagefind-ui__result-link').length > 0, `real results for the requested search at ${path}`);
+    assert(workers.length > 0 && workers.every(worker => worker.messages > 0 && worker.errors === 0), `search uses its actual worker without an error: ${path}; ${JSON.stringify(workers)}`);
+    assert(!warnings.some(warning => /Pagefind|falling back|Worker failed/i.test(warning)), `search must not fall back to the main thread: ${path}; ${JSON.stringify(warnings)}`);
+    searchChecks.push({ path, results: document.querySelectorAll('.pagefind-ui__result-link').length, workers });
+  } finally {
+    dialog.close(); win.Worker = NativeWorker; win.console.warn = originalWarn;
+  }
+}
+
+const presentationFailures = [];
+let selectedExampleUrl;
+async function presentationCase(name, check) {
+  try { await check(); }
+  catch (error) { presentationFailures.push({ name, error: String(error) }); }
+}
+function resetPresentation(page) {
+  page.querySelector('[data-example="first-gradient"]').click();
+  page.querySelector('[data-run-device="cpu"]').click();
+  page.querySelector('[data-run-language="javascript"]').click();
+  page.querySelector('[data-restore]').click();
+}
+async function checkPresentation(page, execute, examples) {
+  const input = page.querySelector('textarea');
+  const stdout = page.querySelector('.run-output');
+  await presentationCase('Python examples accept edited inputs and retain their numerical checks', async () => {
+    try {
+      await checkEditablePythonExamples({ examples, execute, select(id) {
+        page.querySelector(`[data-example="${id}"]`).click();
+        page.querySelector('[data-run-language="python"]').click();
+      } });
+    } finally { resetPresentation(page); }
+  });
+  await presentationCase('live preparing and unavailable metrics remain readable at each width', async () => {
+    const previousWidth = frame.style.width;
+    try {
+      for (const width of [320, 390, 1280]) {
+        frame.style.width = `${width}px`;
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        for (const language of ['python', 'javascript']) {
+          resetPresentation(page);
+          page.querySelector(`[data-run-language="${language}"]`).click();
+          page.querySelector('[data-run]').click();
+          try {
+            assert(page.querySelector('[data-resource-memory]').textContent === 'Preparing…', 'the real run enters preparation before any worker observation');
+            checkResourceStrip(page, `${language} preparing ${width}px`);
+          } finally {
+            if (!page.querySelector('[data-stop]').disabled) page.querySelector('[data-stop]').click();
+          }
+          assert(page.querySelector('[data-resource-memory]').textContent === 'Unavailable', 'an immediate Stop preserves unavailable memory rather than zero');
+          checkResourceStrip(page, `${language} stopped ${width}px`);
+        }
+      }
+    } finally {
+      if (!page.querySelector('[data-stop]').disabled) page.querySelector('[data-stop]').click();
+      frame.style.width = previousWidth;
+    }
+  });
+  await presentationCase('example explanations share literal inline code styling', async () => {
+    const references = {
+      'first-gradient': ['backward()', 'x.grad', 'x'],
+      'weighted-sum': [],
+      'functional-gradients': ['x', 'y', 'autograd.grad()', 'dx', 'dy'],
+      'matrix-products': ['a', 'b'],
+    };
+    for (const [id, expected] of Object.entries(references)) {
+      page.querySelector(`[data-example="${id}"]`).click();
+      for (const language of ['python', 'javascript']) {
+        page.querySelector(`[data-run-language="${language}"]`).click();
+        const description = page.querySelector('[data-example-description]');
+        const frontendReferences = expected.map(value => language === 'javascript' && value === 'autograd.grad()' ? 'session.grad()' : value);
+        assert(JSON.stringify([...description.querySelectorAll('code')].map(e => e.textContent)) === JSON.stringify(frontendReferences), `explicit code references are readable code elements: ${id}/${language}`);
+        assert(!description.textContent.includes('`'), 'authoring markers are absent from rendered prose');
+        for (const code of description.querySelectorAll('code')) assert(page.defaultView.getComputedStyle(code).fontFamily.includes('mono'), 'inline code uses the common monospace role');
+      }
+      const explanation = page.querySelector(`[data-example-diagram="${id}"] figcaption`);
+      assert(explanation.querySelector('code') && !explanation.textContent.includes('`'), `expanded explanations share inline code: ${id}`);
+    }
+    resetPresentation(page);
+  });
+  await presentationCase('each example offers a relevant editing suggestion in both languages', async () => {
+    for (const example of examples) {
+      const id = example.id;
+      page.querySelector(`[data-example="${id}"]`).click();
+      for (const language of ['python', 'javascript']) {
+        page.querySelector(`[data-run-language="${language}"]`).click();
+        const hint = page.querySelector('[data-example-hint]');
+        assert(hint && !hint.hidden && hint.textContent === example.hint.replaceAll('`', ''), 'the suggestion follows the selected example');
+        assert(hint.querySelector('code') && !hint.textContent.includes('`'), 'suggestions share literal inline code rendering');
+        assert(!page.querySelector('[data-example-editing-note]'), 'obsolete assertion guidance is removed');
+      }
+    }
+    resetPresentation(page);
+  });
+  await presentationCase('Copy feedback preserves the run outcome and ignores a later run', async () => {
+    resetPresentation(page);
+    await execute('throw new Error("copy-state probe");', 'error');
+    const status = page.querySelector('.run-status');
+    const outcome = status.textContent;
+    const clipboard = page.defaultView.navigator.clipboard;
+    const original = clipboard.writeText;
+    const copy = page.querySelector('[data-copy-editor]');
+    const feedback = page.querySelector('[data-editor-feedback]');
+    try {
+      clipboard.writeText = async text => { assert(text === input.value, 'Copy uses the actual edited source'); };
+      copy.click();
+      await until(() => feedback && !feedback.hidden, 'independent Copy feedback');
+      assert(feedback.textContent === 'Code copied.' && status.textContent === outcome, 'Copy success leaves the failed outcome intact');
+      clipboard.writeText = async () => { throw new Error('expected clipboard denial'); };
+      copy.click();
+      await until(() => feedback.textContent.startsWith('Copy unavailable.'), 'clipboard denial feedback');
+      assert(status.textContent === outcome && !page.querySelector('[data-run-failure]').hidden, 'clipboard denial does not replace a run failure');
+      let release;
+      clipboard.writeText = () => new Promise(resolve => { release = resolve; });
+      copy.click();
+      const result = await execute('console.log("new result");');
+      release(); await Promise.resolve();
+      assert(status.textContent === 'Finished.' && feedback.hidden && result === 'new result', 'late clipboard completion cannot overwrite the newer run');
+    } finally { clipboard.writeText = original; }
+  });
+  await presentationCase('reference table prose remains readable in narrow viewports', async () => {
+    const probe = document.createElement('iframe');
+    probe.title = 'Documented method table'; probe.src = '/docs/reference/python-host/';
+    probe.style.width = '320px'; document.body.append(probe);
+    try {
+      await until(() => probe.contentDocument?.readyState === 'complete' && probe.contentDocument.querySelector('table'), 'reference table ready');
+      await probe.contentDocument.fonts.ready;
+      for (const width of [320, 390]) {
+        probe.style.width = `${width}px`;
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const document = probe.contentDocument;
+        checkDocumentationTables(document, `Python reference ${width}px`);
+        const table = document.querySelector('table');
+        const [method, contract] = table.querySelector('tbody tr').children;
+        assert(contract.getBoundingClientRect().width >= method.getBoundingClientRect().width, 'contract prose gets at least as much room as the method signature');
+        const viewport = table.parentElement;
+        assert(contract.getBoundingClientRect().width <= viewport.clientWidth, 'a complete contract line fits after panning to its column');
+        viewport.scrollLeft = viewport.scrollWidth;
+        assert(viewport.scrollLeft > 0 && viewport.scrollLeft + viewport.clientWidth >= viewport.scrollWidth - 1, 'the complete wide table is reachable in its own pan area');
+        assert(document.documentElement.scrollWidth <= document.documentElement.clientWidth, 'wide table does not widen the page');
+      }
+    } finally { probe.remove(); }
+  });
+  await presentationCase('JavaScript output preserves special numbers without confusing null or strings', async () => {
+    resetPresentation(page);
+    await execute('console.log([NaN, Infinity, -Infinity, -0, null, "NaN"]); console.log({value: Infinity}); console.log(NaN, Infinity, -Infinity, -0);');
+    assert(stdout.textContent === '[NaN,Infinity,-Infinity,-0,null,"NaN"]\n{"value":Infinity}\nNaN Infinity -Infinity -0\n', 'special values retain their actual meaning in scalars and containers');
+  });
+  await presentationCase('Python retains partial stdout and stderr through success and failure', async () => {
+    resetPresentation(page); page.querySelector('[data-run-language="python"]').click();
+    await execute('import sys\nprint("first line")\nprint("stdout tail", end="", flush=True)\nsys.stderr.write("stderr tail")');
+    assert(stdout.textContent === 'first line\nstdout tailstderr tail', 'normal completion preserves text without inventing newlines');
+    await execute('import sys\nprint("é🙂", end="", flush=True)\nsys.stderr.write("error tail")\nraise ValueError("partial output")', 'error');
+    assert(stdout.textContent === 'é🙂error tail', 'cooperative failure retains both streams and UTF-8 text');
+    assert(page.querySelector('[data-error-details]').textContent.includes('partial output'), 'the actual error remains separate');
+    await execute('import sys\nfor _ in range(1500):\n    sys.stdout.write("x")');
+    assert(stdout.textContent === 'x'.repeat(1500), 'fragments of one line do not consume the line budget individually');
+  });
+  await presentationCase('the exact documented Python diagnostic example reads before close', async () => {
+    const {url} = await (await fetch('/__diagnostics-worker.json')).json();
+    const worker = new frame.contentWindow.Worker(url, {type:'module'});
+    let report;
+    worker.onmessage = event => { report = event.data; };
+    worker.onerror = event => { report = {ok:false,error:event.message}; };
+    try {
+      await until(() => report, 'documented diagnostic example completion');
+      assert(report.ok, `documented diagnostics example succeeds: ${report.error}`);
+      assert(report.peak > 0 && report.after === 0 && report.closed, 'the full sample reads its real pre-close peak and acknowledges closure');
+    } finally { worker.terminate(); }
+  });
+  await presentationCase('results retain their executed-source identity', async () => {
+    for (const language of ['javascript', 'python']) {
+      resetPresentation(page);
+      page.querySelector(`[data-run-language="${language}"]`).click();
+      const source = language === 'javascript' ? 'console.log("last run");' : 'print("last run")';
+      assert(await execute(source) === 'last run', 'the real program completed');
+      const metrics = page.querySelector('[data-run-summary]').textContent;
+      input.value = source + '\n# edited'.replace('#', language === 'python' ? '#' : '//');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      const note = page.querySelector('[data-run-provenance]');
+      assert(note && !note.hidden, 'edited source must identify output and measurements from the previous run');
+      assert(stdout.textContent.trim() === 'last run' && page.querySelector('[data-run-summary]').textContent === metrics, 'editing preserves authentic previous observations');
+      input.value = source; input.dispatchEvent(new Event('input', { bubbles: true }));
+      assert(note.hidden, 'returning to exactly the executed text removes the stale mark');
+      input.value = source + '\n'; input.dispatchEvent(new Event('input', { bubbles: true }));
+      assert(!note.hidden, 'another text change is detected');
+      await execute(); assert(note.hidden, 'a new run updates provenance');
+      page.querySelector('[data-restore]').click(); assert(note.hidden && stdout.textContent === '', 'Reset clears result and provenance together');
+    }
+  });
+  await presentationCase('console contains admitted long output without dropping it', async () => {
+    resetPresentation(page);
+    await execute('for (let i = 1; i <= 80; i++) console.log(i);');
+    for (const width of [320, 390, 1280]) {
+      frame.style.width = `${width}px`;
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const console = page.querySelector('.run-console') ?? stdout;
+      assert(console.getBoundingClientRect().height <= frame.contentWindow.innerHeight / 2, `console stays within half its viewport at ${width}px`);
+      assert(console.scrollHeight > console.clientHeight && console.tabIndex === 0, 'long console has a focusable scroll area');
+      assert(stdout.textContent.trim() === Array.from({length:80},(_,i)=>String(i+1)).join('\n'), 'all admitted lines remain intact');
+      console.scrollTop = console.scrollHeight;
+      assert(console.scrollTop > 0 && stdout.lastElementChild.getBoundingClientRect().bottom <= console.getBoundingClientRect().bottom, 'last line remains reachable');
+      console.scrollTop = 0;
+    }
+  });
+  frame.style.width = '100%';
+  await presentationCase('Python errors have a useful headline and complete original details', async () => {
+    resetPresentation(page); page.querySelector('[data-run-language="python"]').click();
+    await execute('print("partial")\nraise RuntimeError("concise failure")', 'error');
+    const failure = page.querySelector('[data-run-failure]');
+    assert(failure && !failure.hidden, 'a failed run exposes its diagnostic presentation');
+    assert(page.querySelector('[data-error-summary]').textContent === 'RuntimeError: concise failure (line 2)', 'headline identifies the Python error and user line');
+    const raw = page.querySelector('[data-error-details]').textContent;
+    assert(raw.includes('Traceback') && raw.includes('RuntimeError: concise failure'), 'original diagnostic remains available');
+    assert(stdout.textContent.includes('partial'), 'partial stdout stays separate and intact');
+    assert(!failure.querySelector('details').open, 'raw diagnostic starts collapsed');
+    input.value += '\n'; input.dispatchEvent(new Event('input', { bubbles: true }));
+    assert(!page.querySelector('[data-run-provenance]').hidden && page.querySelector('[data-error-details]').textContent === raw, 'editing a failed run marks provenance without discarding its diagnostic');
+    failure.querySelector('details').open = true;
+    assert(page.querySelector('[data-error-details]').getBoundingClientRect().height > 0, 'full diagnostic can be opened');
+    await execute('print("recovered")'); assert(failure.hidden && page.querySelector('[data-error-details]').textContent === '', 'a new successful run clears old failure details');
+  });
+  await presentationCase('selection is reflected in a privacy-preserving replaceable URL', async () => {
+    resetPresentation(page);
+    const win = page.defaultView;
+    win.history.replaceState({ probe: 'kept' }, '', '/playground/?other=kept#selection');
+    const length = win.history.length;
+    page.querySelector('[data-example="matrix-products"]').click();
+    page.querySelector('[data-run-language="javascript"]').click();
+    page.querySelector('[data-run-device="webgpu"]').click();
+    const url = new URL(win.location.href);
+    assert(url.searchParams.get('example') === 'matrix-products' && url.searchParams.get('language') === 'javascript' && url.searchParams.get('device') === 'webgpu', 'the address records all three choices');
+    assert(url.searchParams.get('other') === 'kept' && url.hash === '#selection' && win.history.state.probe === 'kept', 'unrelated query, fragment and history state survive');
+    assert(win.history.length === length && [...url.searchParams.keys()].sort().join(',') === 'device,example,language,other', 'no per-click history or edited source enters the URL');
+    selectedExampleUrl = url.href;
+    const replace = win.history.replaceState;
+    try {
+      win.history.replaceState = () => { throw new Error('expected address failure'); };
+      page.querySelector('[data-run-device="cpu"]').click();
+      assert(page.querySelector('.run-status').textContent.includes('address could not be updated') && !page.querySelector('[data-run]').disabled, 'an address failure is visible and does not disable execution');
+      assert(await execute('console.log("address failure does not stop work")') === 'address failure does not stop work', 'the real program remains runnable');
+    } finally { win.history.replaceState = replace; }
+  });
+  resetPresentation(page);
+  assert(presentationFailures.length === 0, `presentation regressions: ${JSON.stringify(presentationFailures)}`);
+}
+
+function checkUseCaseCards(document, context) {
+  const cards = [...document.querySelectorAll('.use-cases .example-gallery > a')];
+  const scale = document.defaultView.devicePixelRatio;
+  const rows = new Map();
+  for (const card of cards) {
+    const top = paintedPixel(scale, card.getBoundingClientRect().top);
+    const row = rows.get(top) ?? []; row.push(card); rows.set(top, row);
+  }
+  for (const row of rows.values()) {
+    const boxes = row.map(card => card.getBoundingClientRect());
+    const widths = boxes.map(box => paintedPixel(scale, box.width));
+    assert(Math.max(...widths) - Math.min(...widths) <= 1, `use-case cards share the available width: ${context}`);
+    const gaps = boxes.slice(1).map((box, index) => paintedPixel(scale, box.left - boxes[index].right));
+    assert(gaps.every(gap => gap === gaps[0]), `use-case cards have equal gutters: ${context}`);
+    for (const selector of ['.example-card-art', 'h3', 'p', 'strong']) {
+      const positions = row.map(card => paintedPixel(scale, card.querySelector(selector).getBoundingClientRect().top));
+      assert(new Set(positions).size === 1, `use-case content aligns within each row despite different text lengths: ${context}; ${selector}`);
+    }
+  }
+}
+function checkUnillustratedIntro(document, context) {
+  const intro = document.querySelector('.page-intro:not(.illustrated-intro)');
+  if (!intro) return;
+  const scale = document.defaultView.devicePixelRatio;
+  const title = intro.querySelector('h1').getBoundingClientRect();
+  const description = intro.querySelector('.page-intro-copy > p').getBoundingClientRect();
+  const bounds = intro.getBoundingClientRect();
+  assert(Math.round(title.left * scale) === Math.round(description.left * scale), `page title and explanation share a left edge: ${context}`);
+  assert(description.top > title.bottom, `page explanation follows its title vertically: ${context}`);
+  assert(Math.round(description.right * scale) <= Math.round(bounds.right * scale) && Math.round(description.bottom * scale) <= Math.round(bounds.bottom * scale), `page introduction contains its complete explanation: ${context}`);
+  for (const link of intro.querySelectorAll('.page-intro-copy a')) {
+    const action = link.getBoundingClientRect();
+    assert(action.top >= description.bottom && Math.round(action.left * scale) === Math.round(title.left * scale), `intro action follows the explanation on the shared left edge: ${context}`);
+    assert(action.right <= bounds.right && action.bottom <= bounds.bottom, `intro action stays inside the complete introduction: ${context}`);
+  }
+  const choices = document.querySelector('.example-chooser');
+  if (choices) assert(choices.getBoundingClientRect().top >= bounds.bottom, `example choices remain below the complete introduction: ${context}`);
+}
+async function checkCompactExampleChooser(frame) {
+  const document = frame.contentDocument;
+  const chooser = document.querySelector('[data-example-chooser]');
+  assert(chooser instanceof frame.contentWindow.HTMLDetailsElement, 'the example chooser uses a native disclosure');
+  const summary = chooser.querySelector('summary');
+  const selectedTitle = summary.querySelector('[data-example-selection]');
+  const source = document.querySelector('textarea');
+  const initialSource = source.value;
+  const initialWidth = frame.style.width;
+  frame.style.width = '390px';
+  await until(() => !chooser.open && frame.contentWindow.getComputedStyle(summary).display !== 'none', 'compact chooser is initially closed');
+  assert(chooser.getBoundingClientRect().height === summary.getBoundingClientRect().height, 'the collapsed chooser occupies only its summary in the mobile page');
+  assert(frame.contentWindow.getComputedStyle(document.querySelector('.run-output'), '::before').content.includes('Run the code to see the result here.'), 'the initial output explains how to get a result');
+  source.value += '\n# Keep this draft';
+  source.dispatchEvent(new frame.contentWindow.Event('input', { bubbles: true }));
+  const draft = source.value;
+  summary.click();
+  assert(chooser.open, 'the native summary reveals examples');
+  frame.style.width = '400px';
+  await until(() => frame.contentWindow.innerWidth === 400, 'same-mode resize');
+  assert(chooser.open, 'same-mode resizing keeps a manually opened chooser open');
+  chooser.querySelector('[data-example="matrix-products"]').click();
+  assert(!chooser.open && document.activeElement === summary, 'choosing an example closes the compact chooser and returns focus');
+  assert(selectedTitle.textContent === document.querySelector('[data-example-title]').textContent, 'the complete selected title follows the example');
+  assert(document.querySelector('[data-example-reference]').textContent === 'Matrix multiplication reference →', 'the reference link names its actual topic');
+  summary.click();
+  chooser.querySelector('[data-example="first-gradient"]').click();
+  assert(source.value === draft, 'choosing another example and returning preserves the edited program');
+  summary.click();
+  chooser.querySelector('[data-example="first-gradient"]').click();
+  assert(!chooser.open && source.value === draft && document.activeElement === summary, 'choosing the current example also closes without resetting its draft');
+  frame.style.width = '1280px';
+  await until(() => chooser.open && frame.contentWindow.getComputedStyle(summary).display === 'none', 'desktop reveals the four existing choices');
+  assert(document.activeElement === chooser.querySelector('[aria-pressed="true"]'), 'wide layout transfers focus from its hidden summary to the selected choice');
+  for (const button of chooser.querySelectorAll('[data-example]')) assert(button.getBoundingClientRect().height > 0, 'desktop keeps every example visible');
+  frame.style.width = '390px';
+  await until(() => !chooser.open, 'returning to compact layout closes the choices');
+  assert(document.activeElement === summary && source.value === draft, 'compact layout retires hidden focus without discarding code');
+  document.querySelector('[data-restore]').click();
+  assert(source.value === initialSource, 'chooser checks restore the original program');
+  frame.style.width = initialWidth;
+  await until(() => frame.contentWindow.getComputedStyle(summary).display === 'none' ? chooser.open : !chooser.open, 'chooser returns to initial layout');
+}
+async function checkBusyChooserFocus(frame) {
+  const document = frame.contentDocument;
+  const initialWidth = frame.style.width;
+  const chooser = document.querySelector('[data-example-chooser]');
+  const summary = chooser.querySelector('summary');
+  const source = document.querySelector('textarea');
+  const run = document.querySelector('[data-run]');
+  const stop = document.querySelector('[data-stop]');
+  document.querySelector('[data-run-language="javascript"]').click();
+  source.value = 'await new Promise(() => {});';
+  source.dispatchEvent(new frame.contentWindow.Event('input', { bubbles: true }));
+  run.click();
+  await until(() => run.disabled && !stop.disabled, 'controlled pending program is busy');
+  frame.style.width = '390px';
+  await until(() => !chooser.open, 'busy chooser enters compact layout');
+  summary.focus();
+  assert(document.activeElement === summary, 'the compact summary can have keyboard focus during a run');
+  const retirement = [];
+  summary.addEventListener('blur', () => retirement.push({ open: chooser.open, display: frame.contentWindow.getComputedStyle(summary).display }), { once: true });
+  frame.style.width = '1280px';
+  await until(() => chooser.open, 'busy chooser enters wide layout');
+  assert(document.activeElement === stop, `wide busy layout moves focus to the enabled Stop control instead of a disabled example: ${JSON.stringify({ retirement, active: document.activeElement?.tagName, stopDisabled: stop.disabled })}`);
+  assert(frame.contentWindow.getComputedStyle(summary).display === 'none', 'wide layout hides its compact summary after transferring focus');
+  // GPU retirement can disable Stop while cleanup is pending. Exercise control
+  // availability here without claiming to simulate that backend lifecycle.
+  stop.disabled = true;
+  frame.style.width = '390px';
+  await until(() => !chooser.open, 'unavailable controls enter compact layout');
+  summary.focus();
+  frame.style.width = '1280px';
+  await until(() => chooser.open, 'unavailable controls enter wide layout');
+  assert(document.activeElement === document.querySelector('.run-console'), 'when both controls are unavailable, wide layout focuses the existing output region');
+  assert(frame.contentWindow.getComputedStyle(summary).display === 'none', 'output fallback also retires the compact summary');
+  stop.disabled = false;
+  stop.click();
+  await until(() => !run.disabled, 'controlled pending program is stopped');
+  document.querySelector('[data-restore]').click();
+  document.querySelector('[data-run-language="python"]').click();
+  frame.style.width = initialWidth;
+  await until(() => frame.contentWindow.getComputedStyle(summary).display === 'none' ? chooser.open : !chooser.open, 'busy focus check restores initial layout');
+}
+try {
+  await phase("application-started");
+  assert((await fetch('/blog/')).ok, 'the static website provides the Markdown blog index');
+  await until(() => frame.contentDocument?.querySelector("[data-run]")?.disabled === false, "playground ready");
+  await checkCompactExampleChooser(frame);
+  await checkBusyChooserFocus(frame);
+  const page = frame.contentDocument;
+  checkResultPlacement(page, "initial Playground");
+  assert(page.querySelector('[data-run-device="cpu"][aria-pressed="true"]') && page.querySelector('[data-run-device="webgpu"]'), 'the shared runner offers an explicit CPU/WebGPU choice with CPU initial');
+  assert(page.querySelector('[data-run-device="webgpu"]').textContent === 'GPU', 'GPU is the visitor label; the API device identifier stays webgpu');
+  assert(page.querySelector('[data-run-summary]'), 'scoped run feedback is part of the shared workspace');
+  const runner = page.querySelector("[data-runner]");
+  const code = page.querySelector("textarea");
+  const run = page.querySelector("[data-run]");
+  const output = page.querySelector(".run-output");
+  const status = page.querySelector(".run-status");
+  assert(page.querySelector('[data-resource-time]').textContent === 'Not started' && page.querySelector('[data-resource-memory]').textContent === 'No run yet', 'before execution the UI distinguishes an unrun program from an unavailable measurement');
+  const examples = await (await fetch("/__examples.json")).json();
+  await phase("assets-loaded");
+  await phase("runtime-started");
+  async function execute(source, state = "complete") {
+    if (source !== undefined) { code.value = source; code.dispatchEvent(new Event("input", { bubbles: true })); }
+    run.click();
+    await until(() => !run.disabled, "execution settled");
+    assert(runner.dataset.state === state, `${state}: ${status.textContent} ${output.textContent}`);
+    if (state === "complete") assert(status.textContent === "Finished.", "acknowledged success reaches the finished label");
+    else assert(status.textContent !== "Finished.", "failure cannot display success");
+    return output.textContent.trim();
+  }
+  for (const example of examples) for (const language of ["javascript", "python"]) {
+    page.querySelector(`[data-example="${example.id}"]`).click();
+    page.querySelector(`[data-run-language="${language}"]`).click();
+    assert(code.value === example[language].code, "catalogue/editor mismatch");
+    const originalDiagrams = [...page.querySelectorAll('[data-example-diagram]:not([hidden])')];
+    assert(originalDiagrams.length === 1 && originalDiagrams[0].dataset.exampleDiagram === example.id, 'selection exposes only its original-example diagram');
+    assert(originalDiagrams[0].querySelector('.diagram-formula').textContent === example.diagram.formula, 'explanation follows the selected original example');
+    const paint = page.querySelector('[data-syntax-layer]');
+    assert(paint?.textContent === code.value, 'syntax colors preserve the complete editable source');
+    assert(paint.querySelectorAll('.token').length > 0, `syntax colors are available for ${language}`);
+    assert(new Set([...paint.querySelectorAll('.token')].map((span) => frame.contentWindow.getComputedStyle(span).color)).size > 1, `tokens have distinct syntax colors for ${language}`);
+    const actual = await execute();
+    assert(actual === example[language].expected, `${example.id}/${language}: ${actual}`);
+    const summary = page.querySelector('[data-run-summary]');
+    const measurements = summary.textContent;
+    const disclosure = summary.querySelector('details');
+    disclosure.open = true;
+    for (const selector of [`[data-run-language="${language}"]`, '[data-run-device="cpu"]', `[data-example="${example.id}"]`]) {
+      page.querySelector(selector).click();
+      assert(runner.dataset.state === 'complete' && output.textContent.trim() === actual && summary.textContent === measurements && disclosure.open,
+        `reselecting ${selector} preserves completed CPU output, timings and available resources`);
+    }
+    page.querySelector(`[data-run-language="${language}"]`).dispatchEvent(new KeyboardEvent('keydown', { key: language === 'python' ? 'Home' : 'End', bubbles: true }));
+    assert(summary.textContent === measurements && output.textContent.trim() === actual, 'keyboard re-selection retains CPU results');
+    const detailRows = [...page.querySelectorAll('.resource-details dl > div')];
+    assert(detailRows.filter(row => !row.hidden).every(row => row.querySelector('dd').textContent && row.querySelector('dd').textContent !== '—'), 'details show observed readings rather than empty or placeholder rows');
+    assert(page.querySelector('[data-resource-adapter]').parentElement.hidden && page.querySelector('[data-resource-dispatches]').parentElement.hidden, 'CPU details omit GPU-only rows');
+    assert(!page.querySelector('[data-resource-wasm]').parentElement.hidden && !page.querySelector('[data-resource-cpu-kernels]').parentElement.hidden, 'both public frontends report CPU observations');
+    assert(Number(page.querySelector('[data-resource-cpu-kernels]').textContent) > 0, 'CPU work is measured for the selected preset');
+    assert(/.+ \([\d,]+ cop(?:y|ies)\) \/ .+ \([\d,]+ cop(?:y|ies)\)$/.test(page.querySelector('[data-resource-cpu-transfer]').textContent), 'CPU transfer byte and copy counts stay visible in singular and plural');
+    assert(!['Not measured', 'Unavailable', '0 B', ''].includes(page.querySelector('[data-resource-memory]').textContent), 'the pre-close CPU peak survives normal cleanup for both languages');
+    results.push({ name: `${example.id}/${language}`, output: actual });
+    if (results.length === 1) {
+      const requests = await (await fetch("/__requests.json")).json();
+      assert(!requests.some((path) => path.startsWith("vendor/pyodide/")), "JavaScript must not load Python");
+    }
+  }
+  const blogExample = await (await fetch('/__blog-example.json')).json();
+  page.querySelector('[data-run-language="python"]').click();
+  assert(await execute(blogExample.python) === '[-2.0, 4.0]', 'the exact Markdown article example executes through the released Python runtime');
+  results.push({ name: 'introduction article Python example', passed: true });
+  for (const width of [320, 390, 1280]) {
+    frame.style.width = `${width}px`;
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const rows = [...page.querySelectorAll('.resource-details dl > div')].filter(row => !row.hidden);
+    const valueLeft = rows[0].querySelector('dd').getBoundingClientRect().left;
+    for (const row of rows) {
+      const label = row.querySelector('dt').getBoundingClientRect();
+      const value = row.querySelector('dd').getBoundingClientRect();
+      assert(label.right < value.left && value.left === valueLeft, `run details keep a shared value column and label gap at ${width}px`);
+    }
+  }
+  frame.style.width = '100%';
+  page.querySelector('[data-restore]').click();
+  assert(runner.dataset.state === 'idle' && output.textContent === '' && page.querySelector('[data-resource-memory]').textContent === 'No run yet', 'explicit Reset still clears the previous result and its observations');
+  page.querySelector('[data-run-language="javascript"]').click();
+  const paint = page.querySelector('[data-syntax-layer]');
+  for (const language of ['javascript', 'python']) {
+    page.querySelector(`[data-run-language="${language}"]`).click();
+    for (const source of ['\t"<img src=x onerror=alert(1)> café 😀"\n\n', '"unfinished', '# comment\n\t\n']) {
+      code.value = source;
+      code.setSelectionRange(1, Math.min(7, source.length));
+      const selection = [code.selectionStart, code.selectionEnd];
+      code.dispatchEvent(new Event('input', { bubbles: true }));
+      assert(paint.textContent === source, 'coloring preserves incomplete, Unicode, tabbed and trailing-line source');
+      assert(!paint.querySelector('img,script,b'), 'source is painted as text, never interpreted as HTML');
+      assert(code.selectionStart === selection[0] && code.selectionEnd === selection[1], 'coloring preserves the native selection');
+    }
+  }
+  const tokenizer = frame.contentWindow.Prism.tokenize;
+  try {
+    frame.contentWindow.Prism.tokenize = () => { throw new Error('expected coloring failure'); };
+    code.dispatchEvent(new Event('input', { bubbles: true }));
+    assert(!page.querySelector('[data-syntax-notice]').hidden, 'color failure is visible');
+    assert(frame.contentWindow.getComputedStyle(code).color !== 'rgba(0, 0, 0, 0)', 'native source remains visible without syntax colors');
+    assert(await execute('print("coloring is optional")') === 'coloring is optional', 'a coloring failure does not disable execution');
+  } finally { frame.contentWindow.Prism.tokenize = tokenizer; }
+  code.dispatchEvent(new Event('input', { bubbles: true }));
+  assert(page.querySelector('[data-syntax-notice]').hidden && paint.textContent === code.value, 'coloring recovers on the next edit');
+  page.querySelector('[data-run-language="javascript"]').click();
+  const originalExplanation = page.querySelector('[data-example-diagram]:not([hidden])').textContent;
+  const edited = await execute('console.log(Array.from(await session.tensor([3, 4]).mul(session.tensor([3, 4])).toArray()));');
+  assert(edited === "[9,16]", "edited JS is actually executed");
+  assert(page.querySelector('[data-example-diagram]:not([hidden])').textContent === originalExplanation, 'edited execution does not fabricate a new explanatory diagram');
+  assert(page.querySelector('.expected-output summary').textContent === 'How this example works' && page.querySelector('[data-example-scope]').textContent.toLowerCase().includes('original code'), 'the approved disclosure labels its explanation as the original code, separately from actual edited output');
+  await execute('console.log("<b>partial</b>"); throw new Error("expected failure");', "error");
+  assert(output.textContent.includes("<b>partial</b>") && page.querySelector("[data-error-details]").textContent.includes("expected failure"), "partial output survives failure: " + output.textContent);
+  assert(!output.querySelector("b"), "output is text, never HTML");
+  await execute('globalThis.websiteMarker = 1; console.log("marked");');
+  assert(await execute('console.log(typeof globalThis.websiteMarker);') === "undefined", "fresh global environment");
+  assert(await execute('self.postMessage({kind:"done", cleanup:"acknowledged"}); await new Promise(r=>setTimeout(r,80)); console.log("private channel preserved");') === "private channel preserved", "ordinary worker messages cannot complete the run");
+  run.click();
+  page.querySelector("[data-stop]").click();
+  assert(!run.disabled && /stopped/i.test(status.textContent), "Stop returns control");
+  assert(runner.dataset.state === "stopped" && status.textContent !== "Finished.", "Stop cannot display success");
+  code.value += '\n// edited after Stop'; code.dispatchEvent(new Event('input', { bubbles: true }));
+  assert(!page.querySelector('[data-run-provenance]').hidden, 'an edited stopped run is identified without claiming completion');
+  assert(await execute('console.log("recovered");') === "recovered", "fresh recovery after Stop");
+  page.querySelector('[data-run-language="python"]').click();
+  assert(await execute('print("edited Python")') === "edited Python", "edited Python executes");
+  assert(page.querySelector('[data-resource-memory]').textContent === '0 B' && page.querySelector('[data-resource-cpu-kernels]').textContent === '0', 'a Python program with no tensor work has real measured zero, not missing data');
+  await execute('import torch\nx = torch.tensor([2., 3.], dtype=torch.float32)\nprint((x * x).tolist())\nprint("python partial")\nraise ValueError("expected Python failure")', "error");
+  assert(Number(page.querySelector('[data-resource-cpu-kernels]').textContent) > 0 && page.querySelector('[data-resource-memory]').textContent !== '0 B', 'real Python CPU observations survive partial script failure and cleanup');
+  assert(output.textContent.includes("python partial") && page.querySelector("[data-error-details]").textContent.includes("expected Python failure"), "Python failure retains output");
+  page.querySelector("[data-restore]").click();
+  assert(code.value === examples.at(-1).python.code, "restore returns original source");
+  results.push({ name: "editing, errors, partial text, fresh globals, private channel, Stop, recovery, restore", passed: true });
+  await checkPresentation(page, execute, examples);
+  results.push({name:"provenance, bounded console, readable errors and selection URL",passed:true});
+  for (const path of ["/", "/start/", "/docs/", "/playground/", "/blog/", "/blog/introducing-tabgrad/", "/versions/", "/about/", "/contact/", "/licenses/", "/404.html", "/docs/javascript-api/", "/docs/reference/python-host/", "/docs/concepts/python-in-the-browser/", "/docs/flows/backward-gradients/"]) {
+    frame.src = path;
+    await until(() => frame.contentWindow.location.pathname === path && frame.contentDocument?.readyState === "complete" && frame.contentDocument.querySelector("h1"), `page ${path}`);
+    await frame.contentDocument.fonts.ready;
+    const diagramSizes = new Map();
+    for (const image of frame.contentDocument.querySelectorAll('.documentation-diagram img')) {
+      image.loading = 'eager';
+      await image.decode();
+      const source = await (await fetch(image.src)).text();
+      const svg = new DOMParser().parseFromString(source, 'image/svg+xml').documentElement;
+      diagramSizes.set(image, svg.viewBox.baseVal.width);
+    }
+    assert(frame.contentWindow.getComputedStyle(frame.contentDocument.body).fontFamily.includes('Inter'), 'reader typography uses the self-hosted family');
+    assert([...frame.contentDocument.fonts].some((face) => face.family === 'Inter' && face.status === 'loaded'), 'Inter is actually loaded, not just declared');
+    assert(frame.contentDocument.querySelector('button[popovertarget="tabgrad-site-menu"]'), 'compact navigation has a native menu trigger');
+    if (['/', '/playground/', '/docs/', '/blog/'].includes(path)) await checkSearch(frame.contentDocument, path);
+    if (path === '/start/' || path === '/versions/' || path === '/docs/') {
+      const links = [...frame.contentDocument.querySelectorAll('main a')];
+      assert(links.some(link => link.getAttribute('href') === '/docs/reference/webgpu-runtime/' && /JavaScript/.test(link.textContent)), `GPU orientation identifies JavaScript at ${path}`);
+      assert(links.some(link => link.getAttribute('href') === '/docs/reference/python-host/#acquire-a-managed-gpu-connection' && /Python/.test(link.textContent)), `GPU orientation identifies Python at ${path}`);
+    }
+    if (path === '/docs/concepts/python-in-the-browser/') assert(frame.contentDocument.querySelector('main a[href="/docs/reference/python-host/#run-a-complete-cpu-example"]'), 'Python introduction directs app integrators to the complete browser tutorial');
+    if (path === '/versions/') {
+      const doc = frame.contentDocument;
+      assert(doc.querySelector('main a[href="https://github.com/isaacperez/tabgrad/releases/tag/v0.2.0"]'), 'release history includes the published 0.2.0');
+      assert(doc.querySelector('.current-release a.button').getAttribute('href') === '/start/', 'the release integration action offers both JavaScript and Python');
+      const cpu = doc.querySelector('.compatibility-grid article');
+      assert(cpu.querySelector('a[href="/docs/reference/browser-package/#use-javascript-directly-in-html"]')?.textContent.includes('JavaScript CPU setup'), 'CPU setup identifies the complete JavaScript example');
+      assert(cpu.querySelector('a[href="/docs/reference/python-host/#run-a-complete-cpu-example"]')?.textContent.includes('Python CPU setup'), 'CPU setup identifies the complete Python example');
+      const limits = doc.querySelector('#release-limits').parentElement;
+      assert(limits.textContent.includes('Loading pretrained models and fine-tuning are not supported yet.') && limits.textContent.includes('First-order gradients and basic SGD.'), 'pretrained-model limitations remain distinct from supported gradient and SGD work');
+    }
+    if (['/', '/start/', '/docs/', '/playground/', '/versions/', '/about/', '/contact/'].includes(path)) {
+      assert(frame.contentDocument.querySelector('[data-illustration], .integration-map'), `primary and project pages include contextual original artwork: ${path}`);
+    }
+    for (const drawing of frame.contentDocument.querySelectorAll('[data-illustration]')) {
+      assert(drawing.getAttribute('aria-hidden') === 'true' && drawing.querySelector('svg'), 'contextual illustration does not duplicate surrounding accessible text');
+    }
+    if (path === '/playground/') frame.contentDocument.querySelector('.expected-output').open = true;
+    const footerLinks = [...frame.contentDocument.querySelectorAll('.tabgrad-footer a')];
+    checkSharedTextLinks(frame.contentDocument, path);
+    assert(frame.contentDocument.querySelector('.tabgrad-navigation a[href="/blog/"]') && footerLinks.some(link => link.getAttribute('href') === '/blog/'), 'Blog is discoverable from the shared header and footer');
+    const license = frame.contentDocument.querySelector('.footer-license');
+    assert(frame.contentDocument.querySelectorAll('.footer-copyright').length === 1 && frame.contentDocument.querySelector('.footer-bottom > .footer-meta > .footer-copyright')?.textContent === '© 2026 Tabgrad', 'one copyright belongs to the shared attribution row');
+    assert(license?.textContent === 'Open source · Apache 2.0' && license.querySelector('a[href="/licenses/"]'), 'footer groups the source and license facts in one secondary line');
+    assert(footerLinks.filter(link => link.getAttribute('href') === '/licenses/').length === 1, 'footer has one license destination without a duplicate navigation entry');
+    for (const destination of ['/about/', '/contact/']) assert(footerLinks.some((link) => link.getAttribute('href') === destination), `project and contact pages remain discoverable: ${destination}`);
+    const projectLinks = [...frame.contentDocument.querySelectorAll('.tabgrad-footer nav[aria-label="Project"] a')];
+    assert(JSON.stringify(projectLinks.map(link => link.getAttribute('href'))) === JSON.stringify(['/about/', '/contact/', 'https://github.com/isaacperez/tabgrad', 'https://www.npmjs.com/package/@tabgrad/tabgrad']), 'About and Contact share the Project navigation with its source and package');
+    assert(frame.contentDocument.querySelector('.tabgrad-footer nav[aria-label="Explore"] a[href="/versions/"]'), 'Versions belongs to the library resources');
+    assert(!frame.contentDocument.querySelector('.footer-identity nav'), 'the identity column groups brand, promise, license and support without a separate navigation');
+    const support = frame.contentDocument.querySelector('.tabgrad-footer [data-support-link]');
+    assert(support?.href === 'https://buymeacoffee.com/isaperbor' && support.textContent.includes('Buy me a coffee') && support.querySelector('svg[aria-hidden="true"]'), 'footer support uses the owner-approved public destination and a named ordinary link');
+    assert(!frame.contentDocument.querySelector('script[src*="buymeacoffee"], iframe[src*="buymeacoffee"]'), 'support does not load a third-party widget');
+    if (path === '/about/') {
+      const doc = frame.contentDocument;
+      assert(doc.querySelector('#support [data-support-link]')?.href === support.href, 'About and footer share the same support destination');
+      assert(doc.querySelector('main a[href="/blog/introducing-tabgrad/"]'), 'About leads to the complete project story');
+      const sponsorship = doc.querySelector('#support a[href="/contact/#sponsorship"]');
+      assert(sponsorship, 'team support leads to the contextual Contact sponsorship section');
+    }
+    if (path === '/404.html') {
+      assert(frame.contentDocument.querySelector('main a.button[href="/"]'), 'the missing-page view offers a direct recovery to Home');
+      assert(frame.contentDocument.querySelector('main a[href="/docs/"]'), 'the missing-page view offers a documentation recovery');
+    }
+    const github = frame.contentDocument.querySelector('.header-repository');
+    assert(github?.href === 'https://github.com/isaacperez/tabgrad' && github.getAttribute('aria-label') && github.querySelector('svg[aria-hidden="true"]'), 'GitHub icon has the real destination and an accessible link name');
+    assert(footerLinks.some((link) => link.href === 'https://www.npmjs.com/package/@tabgrad/tabgrad' && link.querySelector('svg')), 'footer exposes the package with its icon');
+    if (path === '/contact/') {
+      const contact = frame.contentDocument.querySelector('main a.button');
+      assert(contact?.href === 'https://www.linkedin.com/in/isaperbor/' && contact.textContent.includes('Find me on LinkedIn') && contact.querySelector('svg'), 'contact opens the owner-provided LinkedIn profile with a named icon link');
+      assert(frame.contentDocument.querySelector('main .page-intro a[href="https://x.com/isaperbor"]')?.textContent.includes('Find me on X'), 'contact keeps X available beside LinkedIn without promising direct messages');
+      for (const id of ['work', 'sponsorship']) {
+        const action = frame.contentDocument.querySelector(`#${id} a[href="${contact.href}"]`);
+        assert(action?.textContent.includes('LinkedIn'), `${id} offers a named action through the same primary contact channel`);
+      }
+      assert(frame.contentDocument.querySelector('main a[href="https://github.com/isaacperez/tabgrad/issues"]') && frame.contentDocument.querySelector('main a[href="https://github.com/isaacperez/tabgrad/security/policy"]'), 'public bug discussion and private security reporting remain separate');
+      assert(!frame.contentDocument.querySelector('main form, main iframe'), 'contact has no embedded form or third-party feed');
+    }
+    if (path.startsWith('/blog/')) {
+      const doc = frame.contentDocument;
+      assert(!doc.querySelector('[data-runner], iframe'), 'reading the blog does not create an execution environment');
+      const meta = path === '/blog/' ? doc.querySelector('.post-card[href="/blog/introducing-tabgrad/"] .post-meta') : doc.querySelector('.post-meta');
+      assert(meta?.textContent.includes('Isaac Pérez') && meta.querySelector('time[datetime="2026-11-11"]')?.textContent === 'November 11, 2026', 'the introduction carries its real author and calendar date');
+      if (path === '/blog/') {
+        blogExample.title = doc.querySelector('.post-card[href="/blog/introducing-tabgrad/"] h2').textContent;
+        const cards = [...doc.querySelectorAll('.post-list > article > .post-card')];
+        const routes = cards.map(card => card.getAttribute('href'));
+        assert(JSON.stringify([...routes].sort()) === JSON.stringify(blogExample.posts.map(post => post.route).sort()), 'the blog lists exactly its admitted Markdown articles without placeholder posts');
+        const ordered = cards.map(card => ({ route: card.getAttribute('href'), date: card.querySelector('time').dateTime }));
+        assert(JSON.stringify(ordered) === JSON.stringify([...ordered].sort((a, b) => b.date.localeCompare(a.date) || a.route.localeCompare(b.route))), 'articles are newest first with a deterministic tie order');
+      } else {
+        assert(doc.querySelectorAll('h1').length === 1 && doc.querySelector('.blog-article h1').textContent === blogExample.title, 'listing and shared article template use the same Markdown title');
+        assert(doc.querySelector('.post-body a[href="/playground/?example=first-gradient&language=python&device=cpu"]'), 'the article leads to its executable CPU example');
+        const copied = [...doc.querySelectorAll('[data-code]')].map(button => button.getAttribute('data-code').replaceAll('\x7f', '\n'));
+        assert(copied.includes(blogExample.python), 'the article displays and copies its complete original Python code');
+        assert(doc.querySelector('.post-body').textContent.includes('Loading pretrained models and fine-tuning are not supported yet.'), 'future model loading is distinguished from current support');
+        assert(!doc.querySelector('a[href*="/blob/"][href*="introducing-tabgrad"]'), 'an unpublished article has no fabricated source permalink');
+      }
+    }
+    if (path === '/') {
+      const document = frame.contentDocument;
+      const input = document.querySelector('textarea');
+      const cases = [...document.querySelectorAll('.use-cases .example-gallery > a')];
+      assert(cases.length === 3 && cases.every(article => article.querySelector('h3') && article.querySelector('p') && article.getAttribute('href')), 'Home connects three current uses to actual examples or integration');
+      const hero = document.querySelector('.hero-copy');
+      assert(hero.querySelector('h1').innerText === 'PyTorch code in your browser.\nNothing to install.' && hero.querySelector('.hero-description').textContent === 'Run Python or JavaScript on CPU or GPU, directly in the browser. No computation server required.', 'Home presents the accepted browser and no-install promise');
+      assert(document.querySelector('.build-next .button.primary').getAttribute('href') === '/start/', 'the closing integration action opens the shared JavaScript/Python choice');
+      const scope = hero.querySelector('.hero-scope');
+      assert(scope.children.length === 1 && scope.textContent === scope.querySelector('a[href="/versions/"]').textContent && !hero.querySelector('.project-facts'), 'hero keeps one compact compatibility link without a source/license block');
+      assert(footerLinks.some(link => link.href === 'https://github.com/isaacperez/tabgrad'), 'project source remains reachable from footer navigation');
+      const questions = [...document.querySelectorAll('.question-list > details')];
+      assert(questions.length === 5, 'Home provides the five practical adoption questions');
+      for (const question of questions) {
+        assert(!question.open && question.querySelector('summary') && question.querySelector('p a[href]'), 'each FAQ starts closed with an answer linked to the current detail');
+        question.querySelector('summary').click();
+        assert(question.open && question.querySelector('p').getBoundingClientRect().height > 0, 'the native FAQ exposes its readable answer');
+        question.querySelector('summary').click();
+        assert(!question.open, 'the native FAQ closes again');
+      }
+      const originalContext = document.querySelector('.demo-context');
+      assert(document.querySelectorAll('[data-run-summary]').length === 1 && originalContext.textContent.toLowerCase().includes('original example'), 'Home labels the original calculation and keeps one complete real summary');
+      assert(originalContext.textContent.includes(examples[0].description.replaceAll('`', '')), 'Home explains the original calculation and gradient with the complete shared catalogue description');
+      assert(document.querySelector('.run-output').textContent === '', 'Home never presents expected output as an executed result');
+      const compactStates = await checkCompactRunStates(frame, examples[0].javascript.code);
+      for (const language of ['python', 'javascript']) {
+        document.querySelector(`[data-run-language="${language}"]`).click();
+        document.querySelector('[data-restore]').click();
+        assert(input.value === examples[0][language].code && document.querySelector('[data-syntax-layer]').textContent === input.value, 'the compact demo displays the complete catalogue source that actually executes');
+        document.querySelector('[data-run]').click();
+        await until(() => !document.querySelector('[data-run]').disabled, `Home ${language} completion`);
+        assert(document.querySelector('[data-runner]').dataset.state === 'complete' && document.querySelector('.run-output').textContent.trim() === examples[0][language].expected, 'the compact demo executes the real programme in each language');
+        assert(!['No run yet', 'Unavailable', ''].includes(document.querySelector('[data-resource-memory]').textContent) && Number(document.querySelector('[data-resource-cpu-kernels]').textContent) > 0, 'Home retains real CPU memory and kernel observations in both languages');
+        document.querySelector('.resource-details').open = true;
+        checkResourceStrip(document, `completed compact ${language}`);
+        checkResultPlacement(document, `completed compact ${language}`);
+        document.querySelector('.resource-details').open = false;
+      }
+      const theme = document.querySelector('starlight-theme-select select');
+      const originalTheme = theme.value;
+      document.querySelector('[data-run-language="javascript"]').click();
+      input.value = 'console.warn("visible warning"); throw new Error("visible failure");';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      document.querySelector('[data-run]').click();
+      await until(() => !document.querySelector('[data-run]').disabled, 'home diagnostic run');
+      assert(document.querySelector('[data-runner]').dataset.state === 'error', 'home retains failed-run state');
+      assert(document.querySelector('.run-status').textContent !== 'Finished.', 'home failure cannot display success');
+      assert(originalContext.textContent.includes(examples[0].description.replaceAll('`', '')) && originalContext.textContent.toLowerCase().includes('original example'), 'editing and failure keep the catalogue explanation explicitly separate from the actual result');
+      for (const selection of ['light', 'dark']) {
+        theme.value = selection;
+        theme.dispatchEvent(new Event('change', { bubbles: true }));
+        await until(() => document.documentElement.dataset.theme === selection, 'diagnostic theme');
+        const background = frame.contentWindow.getComputedStyle(document.querySelector('.run-output')).backgroundColor;
+        for (const selector of ['.output-warning', '.output-error']) {
+          const message = document.querySelector(selector);
+          assert(message && message.textContent.includes('visible'), 'home retains diagnostic text');
+          const foreground = frame.contentWindow.getComputedStyle(message).color;
+          assert(contrastRatio(foreground, background) >= 4.5, `home ${selector} meets normal-text contrast in ${selection}: ${foreground} on ${background}`);
+        }
+      }
+      theme.value = originalTheme;
+      theme.dispatchEvent(new Event('change', { bubbles: true }));
+      document.querySelector('[data-restore]').click();
+      document.querySelector('[data-run-language="python"]').click();
+      results.push({ name: 'Home warnings and errors retain text, failure state and contrast in both themes', passed: true, compactStates });
+    }
+    for (const width of [320, 390, 768, 799, 800, 801, 1119, 1120, 1121, 1280]) {
+      frame.style.width = `${width}px`;
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const document = frame.contentDocument;
+      assert(document.documentElement.scrollWidth <= document.documentElement.clientWidth, `horizontal page overflow: ${path} at ${width}px`);
+      if (path === '/blog/introducing-tabgrad/') for (const source of document.querySelectorAll('.post-body pre')) {
+        assert(source.scrollWidth <= source.clientWidth, `the introductory example is readable without horizontal panning at ${width}px`);
+      }
+      checkUseCaseCards(document, `${path} at ${width}px`);
+      checkUnillustratedIntro(document, `${path} at ${width}px`);
+      checkDocumentationTables(document, `${path} at ${width}px`);
+      checkDisclosureType(document, `${path} at ${width}px`);
+      checkQuestionLayout(document, `${path} at ${width}px`);
+      for (const [image, authoredWidth] of diagramSizes) {
+        assert(image.getBoundingClientRect().width >= authoredWidth, `technical diagram labels must not shrink below their authored size: ${path} at ${width}px`);
+        const viewport = image.parentElement;
+        assert(viewport.classList.contains('diagram-viewport') && viewport.tabIndex === 0 && viewport.getAttribute('aria-label'), 'wide diagrams have a named keyboard-accessible pan viewport');
+        assert(frame.contentWindow.getComputedStyle(viewport).overflowX === 'auto' && viewport.getBoundingClientRect().right <= document.documentElement.clientWidth, 'only the diagram viewport can scroll horizontally');
+      }
+      assert(document.querySelectorAll("h1").length === 1, `one source heading: ${path}`);
+      const pageTitle = document.querySelector('.page-intro h1, .docs-overview h1, .hero h1');
+      if (pageTitle) {
+        const style = frame.contentWindow.getComputedStyle(pageTitle);
+        const type = [style.fontFamily, style.fontSize, style.fontWeight, style.lineHeight, style.letterSpacing].join(';');
+        if (!pageTitleScale.has(width)) pageTitleScale.set(width, type);
+        assert(type === pageTitleScale.get(width), `entry titles share their type role across Home, Docs and PageIntro: ${path} at ${width}px; ${type}`);
+      }
+      checkHeader(document, `${path} at ${width}px`);
+      await checkNavigation(document, `${path} at ${width}px`);
+      checkEditorToolbar(document, `${path} at ${width}px`);
+      checkRunControls(document, `${path} at ${width}px`);
+      checkResultPlacement(document, `${path} at ${width}px`);
+      for (const tabs of document.querySelectorAll('starlight-tabs')) {
+        const controls = [...tabs.querySelectorAll('[role="tab"]')];
+        for (const control of controls) {
+          control.click();
+          const panel = document.getElementById(control.hash.slice(1));
+          assert(panel && !panel.hidden && panel.querySelector('pre code'), `file tab exposes its copyable source: ${path} at ${width}px`);
+          const disclosure = panel.querySelector('.integration-source details');
+          if (disclosure) {
+            assert(!disclosure.open, 'complete integration source starts collapsed');
+            disclosure.querySelector('summary').click();
+            assert(disclosure.open && disclosure.querySelector('[data-code]') && disclosure.querySelector('pre').getBoundingClientRect().height > 0, 'each file can reveal its complete copyable code');
+            assert(document.documentElement.scrollWidth <= document.documentElement.clientWidth, 'expanded integration code stays within the page');
+            disclosure.querySelector('summary').click();
+          }
+          assert(control.getBoundingClientRect().height >= 44, `file tabs retain a usable touch target: ${path} at ${width}px`);
+          assert(document.documentElement.scrollWidth <= document.documentElement.clientWidth, `neither integration file overflows the page: ${path} at ${width}px`);
+        }
+        controls[0].click();
+      }
+      if (path === '/start/') for (const source of document.querySelectorAll('.integration-source')) {
+        const link = source.querySelector('a[download]');
+        assert(link && ['index.html', 'python-worker.js'].includes(link.download) && link.pathname.endsWith('.txt'), 'source downloads use the actual file name without adding executable page routes');
+        const download = await fetch(link.href);
+        assert(download.ok && download.headers.get('content-type')?.startsWith('text/plain'), 'the file is available as plain text');
+        const copied = source.querySelector('[data-code]').getAttribute('data-code').replaceAll('\x7f', '\n');
+        assert(copied.trimEnd() === (await download.text()).trimEnd(), 'copy and download provide the same complete file');
+        const disclosure = source.querySelector('details');
+        if (source.getBoundingClientRect().height && !source.closest('[hidden]')) {
+          disclosure.querySelector('summary').click();
+          assert(disclosure.open && disclosure.querySelector('[data-code]'), 'the complete JavaScript or selected Python file stays available');
+          disclosure.querySelector('summary').click();
+        }
+      }
+      if (path === '/playground/') {
+        const chooser = document.querySelector('[data-example-chooser]');
+        const summary = chooser.querySelector('summary');
+        const compact = frame.contentWindow.getComputedStyle(summary).display !== 'none';
+        if (compact) {
+          assert(!chooser.open, `compact example choices start closed at ${width}px`);
+          summary.click();
+        } else assert(chooser.open, `wide example choices stay open at ${width}px`);
+        for (const choice of document.querySelectorAll('[data-example]')) assert(choice.getBoundingClientRect().height > 0, `all example choices remain visible at ${width}px`);
+        if (compact) summary.click();
+      }
+      if (path === '/blog/') for (const card of document.querySelectorAll('.post-card.illustrated-post')) {
+        const copy = card.querySelector('.post-card-copy').getBoundingClientRect();
+        const art = card.querySelector('.post-card-art').getBoundingClientRect();
+        const action = card.querySelector('.post-card-action').getBoundingClientRect();
+        assert(action.top >= copy.bottom && action.left === copy.left, `the article reading action follows its copy on the shared left edge at ${width}px`);
+        if (art.left >= copy.right) {
+          assert(art.top <= action.bottom && art.bottom >= copy.top, `desktop article art accompanies the copy and reading action at ${width}px`);
+        } else assert(art.top >= copy.bottom && action.top >= art.bottom, `stacked article cards place artwork before their closing reading action at ${width}px`);
+        if (width === 1280) assert(art.left >= copy.right, 'the desktop article keeps its copy and artwork in separate columns');
+        if (width === 320 || width === 390) assert(action.top >= art.bottom, 'the mobile article reading action closes the card after its illustration');
+      }
+      if (width < 1120) for (const section of document.querySelectorAll('.split-section')) {
+        const title = section.querySelector('.section-intro > h2:last-child');
+        if (title) {
+          const separation = section.querySelector('.section-body').getBoundingClientRect().top - title.getBoundingClientRect().bottom;
+          const gap = parseFloat(frame.contentWindow.getComputedStyle(section).rowGap);
+          const scale = frame.contentWindow.devicePixelRatio;
+          // Firefox exposes separately rounded DOMRect coordinates. Compare
+          // visible device pixels, as the toolbar geometry checks do above.
+          assert(Math.round(separation * scale) === Math.round(gap * scale), `the shared grid alone owns title/body separation: ${path} at ${width}px; ${JSON.stringify({ separation, gap, scale })}`);
+        }
+      }
+      if (path === '/' || path === '/playground/') {
+        for (const control of document.querySelectorAll('.device-choice button, .resource-details summary')) {
+          assert(control.getBoundingClientRect().height >= 44, 'device and details controls retain shared touch targets');
+        }
+        checkResourceStrip(document, `${path} at ${width}px`);
+        const input = document.querySelector('.run-editor');
+        const editor = input.getBoundingClientRect();
+        const paint = document.querySelector('[data-syntax-layer]');
+        const inputStyle = frame.contentWindow.getComputedStyle(input);
+        const paintStyle = frame.contentWindow.getComputedStyle(paint);
+        assert(paint.textContent === input.value, `paint/source equality at ${width}px`);
+        for (const property of ['fontFamily', 'fontSize', 'lineHeight', 'letterSpacing', 'paddingTop', 'paddingLeft', 'paddingRight', 'paddingBottom', 'whiteSpace', 'overflowWrap', 'tabSize']) {
+          assert(inputStyle[property] === paintStyle[property], `editor/paint ${property} matches at ${width}px`);
+        }
+        const painted = paint.getBoundingClientRect();
+        assert(painted.width === editor.width && painted.height === editor.height, `editor/paint geometry matches at ${width}px: ${painted.width}×${painted.height} vs ${editor.width}×${editor.height}`);
+        assert(paint.getAttribute('aria-hidden') === 'true', 'syntax layer does not duplicate accessible source');
+        assert(document.querySelector('.run-console').tabIndex === 0, 'output remains reachable in the native keyboard order');
+        const context = document.querySelector('.run-context');
+        assert(context.getBoundingClientRect().top >= editor.bottom, 'execution context follows the source');
+        assert(document.querySelector('.runner-version').getBoundingClientRect().height > 0, 'backend and version remain visible inside the example');
+        for (const [language, identifier] of [['javascript', 'session'], ['python', 'import torch']]) {
+          document.querySelector(`[data-run-language="${language}"]`).click();
+          const active = context.querySelector('[data-context-language]:not([hidden])');
+          assert(active?.dataset.contextLanguage === language && active.querySelector('code')?.textContent === identifier, 'visible execution caption marks the selected language identifier as code');
+          assert([...context.querySelectorAll('[data-context-language][hidden]')].every(note => note.getClientRects().length === 0), 'the other language caption remains hidden');
+          assert(frame.contentWindow.getComputedStyle(active.querySelector('code')).fontFamily === inputStyle.fontFamily, 'inline code uses the shared monospace family');
+        }
+      }
+      if (path === '/versions/') {
+        for (const paragraph of document.querySelectorAll('.version-section > p')) {
+          const width = paragraph.getBoundingClientRect().width;
+          const sectionWidth = paragraph.parentElement.getBoundingClientRect().width;
+          assert(width === sectionWidth, `section-wide explanations use their section width rather than an unrelated reading cap at ${width}px`);
+        }
+        const sectionHeadings = [...document.querySelectorAll('.marketing > section:not(.current-release) > h2')];
+        assert(sectionHeadings.length === 4, 'Versions separates capabilities, execution, limits and history');
+        assert(new Set(sectionHeadings.map((heading) => frame.contentWindow.getComputedStyle(heading).fontSize)).size === 1, `peer compatibility headings share a type scale at ${width}px`);
+        const reference = [...sectionHeadings[0].parentElement.querySelectorAll('a')].at(-1);
+        const separation = sectionHeadings[1].getBoundingClientRect().top - reference.getBoundingClientRect().bottom;
+        assert(separation >= parseFloat(frame.contentWindow.getComputedStyle(reference).lineHeight), `compatibility sections retain a line of separation at ${width}px`);
+        for (const release of document.querySelectorAll('.version-history > a')) {
+          const style = frame.contentWindow.getComputedStyle(release);
+          assert(style.borderLeftWidth === '0px' && style.borderRightWidth === '0px' && style.borderBottomWidth === '0px' && style.borderRadius === '0px' && style.backgroundColor === 'rgba(0, 0, 0, 0)', 'release history retains its unframed row style');
+        }
+        const capabilities = document.querySelectorAll('.capability-row');
+        assert(capabilities.length === 5 && [...capabilities].every(row => row.querySelector('h3') && row.querySelector('a[href^="/docs/"]')), 'each capability group has an explanation and an actionable reference');
+        assert(document.querySelectorAll('.release-limits > div').length === 4, 'release limits remain explicit, separate from available capabilities');
+        const [cpu, gpu] = document.querySelectorAll('.compatibility-grid article');
+        if (cpu.getBoundingClientRect().right <= gpu.getBoundingClientRect().left) {
+          const cpuSetup = cpu.querySelectorAll('dt')[1].getBoundingClientRect();
+          const gpuSetup = gpu.querySelectorAll('dt')[1].getBoundingClientRect();
+          assert(Math.abs(cpuSetup.top - gpuSetup.top) < 1, 'backend setup rows align despite different explanation lengths');
+        }
+        for (const row of capabilities) {
+          const title = row.querySelector('h3').getBoundingClientRect();
+          const detail = row.querySelector('p').getBoundingClientRect();
+          assert(width >= 1120 ? title.right <= detail.left : title.bottom <= detail.top, `capability text retains independent space at ${width}px`);
+        }
+      }
+      if (path === '/start/') {
+        const intro = document.querySelector('.page-intro.illustrated-intro');
+        const actions = intro?.querySelector('.page-intro-copy > .project-actions');
+        assert(intro?.querySelector('.page-intro-art [data-illustration]') && actions?.getAttribute('aria-label') === 'Choose an integration example', 'Get started reuses the illustrated intro with its language navigation grouped below the explanation');
+        const links = [...actions.querySelectorAll('a')];
+        assert(links.map(link => link.getAttribute('href')).join(',') === '#html,#python', 'the intro presents the two integration language choices');
+        const story = intro.querySelector('.page-intro-story').getBoundingClientRect();
+        const description = intro.querySelector('.page-intro-copy > p').getBoundingClientRect();
+        const boxes = links.map(link => link.getBoundingClientRect());
+        // Shared edges can differ by floating-point roundoff in DOMRect reports.
+        const scale = frame.contentWindow.devicePixelRatio;
+        assert(boxes.every(box => paintedPixel(scale, box.top) >= paintedPixel(scale, description.bottom) && paintedPixel(scale, box.left) >= paintedPixel(scale, story.left) && paintedPixel(scale, box.right) <= paintedPixel(scale, story.right) && paintedPixel(scale, box.bottom) <= paintedPixel(scale, story.bottom)), `intro actions wrap within the shared story column: ${width}px; ${JSON.stringify({story,description,boxes})}`);
+        if (width === 1280) assert(boxes.every(box => box.top === boxes[0].top), 'desktop integration choices share one compact row');
+        for (const code of document.querySelectorAll('.expressive-code pre')) assert(code.scrollWidth <= code.clientWidth, `introductory code wraps without horizontal scrolling at ${width}px`);
+        const example = document.getElementById('html');
+        const python = document.getElementById('python');
+        const sections = [...document.querySelectorAll('.integration-guide > .split-section')];
+        assert(sections[0] === example && sections[1] === python, 'both complete language integrations precede optional self-hosting');
+        const map = document.querySelector('.integration-map');
+        assert(example.compareDocumentPosition(map) & Node.DOCUMENT_POSITION_FOLLOWING, 'working HTML precedes the architecture explanation');
+        example.scrollIntoView();
+        assert(example.getBoundingClientRect().top >= document.querySelector('header.header').getBoundingClientRect().bottom, `HTML destination clears the sticky header at ${width}px`);
+        frame.contentWindow.scrollTo(0, 0);
+      }
+      for (const codeFrame of document.querySelectorAll('.expressive-code .frame')) {
+        assert(frame.contentWindow.getComputedStyle(codeFrame).boxShadow === 'none', `static code does not retain a theme shadow: ${path}`);
+        const tab = codeFrame.querySelector('.title');
+        if (tab && codeFrame.classList.contains('has-title') && !codeFrame.classList.contains('is-terminal')) {
+          const indicator = frame.contentWindow.getComputedStyle(tab, '::after');
+          assert(parseFloat(indicator.borderTopWidth) === 0 && parseFloat(indicator.borderBottomWidth) === 0, `static code does not retain a tab accent: ${path}`);
+          const header = codeFrame.querySelector('.header');
+          assert(parseFloat(frame.contentWindow.getComputedStyle(tab).borderTopLeftRadius) >= parseFloat(frame.contentWindow.getComputedStyle(header).borderTopLeftRadius), `title background respects the frame corner: ${path}`);
+        }
+      }
+      for (const link of document.querySelectorAll('.tabgrad-navigation a, .site-menu-links a')) {
+        assert(frame.contentWindow.getComputedStyle(link).backgroundColor === 'rgba(0, 0, 0, 0)', 'text navigation has no competing background treatment');
+      }
+      if (path === '/start/') for (const label of document.querySelectorAll('.integration-map strong, .integration-map span')) {
+        assert(parseFloat(frame.contentWindow.getComputedStyle(label).fontSize) >= 14, `integration labels remain native readable text at ${width}px`);
+      }
+      if (path === '/' && width === 1280) {
+        const examplesSection = document.querySelector('.use-cases');
+        const examplesHeading = document.getElementById(examplesSection.getAttribute('aria-labelledby'));
+        const gallery = examplesSection.querySelector('.example-gallery');
+        assert(examplesHeading && gallery.getBoundingClientRect().top >= examplesSection.querySelector('.section-heading').getBoundingClientRect().bottom, 'examples have a labelled full-width heading before their gallery');
+        const cards = [...gallery.children];
+        const scale = frame.contentWindow.devicePixelRatio;
+        for (const selector of ['.example-card-art', 'h3', 'strong']) {
+          const positions = cards.map(card => Math.round(card.querySelector(selector).getBoundingClientRect().top * scale));
+          assert(new Set(positions).size === 1, `example artwork, titles and actions align across the desktop row: ${selector}`);
+        }
+        // Earlier narrow/text-spacing cases can move the scroll anchor. This
+        // checks the opening viewport, not that retained scroll position.
+        frame.contentWindow.scrollTo(0, 0);
+        await new Promise(resolve => requestAnimationFrame(resolve));
+        const action = document.querySelector('[data-run]').getBoundingClientRect();
+        assert(action.top >= 0 && action.bottom <= frame.contentWindow.innerHeight, 'wide Home keeps Run visible with its illustrated opening: ' + JSON.stringify({action:action.toJSON(),height:frame.contentWindow.innerHeight,scrollY:frame.contentWindow.scrollY}));
+      }
+      const footer = document.querySelector('.tabgrad-footer');
+      for (const link of footer.querySelectorAll('nav a')) {
+        assert(link.getBoundingClientRect().height >= 24, `footer navigation meets the 24 CSS px target minimum at ${width}px`);
+      }
+      for (const link of footer.querySelectorAll('a')) {
+        const bounds = link.getBoundingClientRect();
+        assert(bounds.left >= 0 && bounds.right <= document.documentElement.clientWidth, `footer links remain within the page at ${width}px`);
+      }
+      assert(!/Library v|Docs source \(preview\)/.test(footer.textContent), 'generic footer keeps technical build metadata in its relevant destination');
+      const sidebarLinks = [...document.querySelectorAll('#starlight__sidebar a[href]')];
+      if (sidebarLinks.length) {
+        const destinations = sidebarLinks.map(link => link.getAttribute('href'));
+        assert(new Set(destinations).size === destinations.length, `documentation navigation has one entry per destination: ${path}`);
+        const active = sidebarLinks.filter(link => link.getAttribute('aria-current') === 'page');
+        assert(active.length === 1 && active[0].getAttribute('href') === path, `documentation navigation selects the current destination: ${path}`);
+      }
+      if (path === '/docs/') {
+        const source = document.querySelector('.docs-source [data-documentation-source]');
+        assert(source && /\/blob\/(?:[0-9a-f]{40}|main)\/docs\/README\.md$/.test(source.href), 'documentation links to published repository source independently of the playground package');
+        assert(document.querySelector('.docs-source').textContent.includes('independently'), 'documentation explains the source/package distinction in context');
+      }
+      const intro = document.querySelector('.illustrated-intro');
+      if (intro) {
+        const story = intro.querySelector('.page-intro-story').getBoundingClientRect();
+        const art = intro.querySelector('.page-intro-art').getBoundingClientRect();
+        if (width >= 1120) {
+          const contentTop = intro.getBoundingClientRect().top + parseFloat(frame.contentWindow.getComputedStyle(intro).paddingTop);
+          assert(Math.abs(story.top - contentTop) < 1, `artwork does not displace the narrative start: ${path}`);
+          assert(story.right <= art.left, `intro story and artwork have separate columns: ${path}`);
+        } else assert(art.top >= story.bottom, `stacked artwork follows the complete story: ${path}`);
+      }
+      for (const row of document.querySelectorAll('.code-tabs, .run-actions')) {
+        const children = [...row.children].filter((node) => node.getBoundingClientRect().height > 0);
+        for (const child of children) assert(frame.contentWindow.getComputedStyle(child).marginTop === '0px', `prose margin displaces UI: ${path} at ${width}px`);
+      }
+      for (const tabs of document.querySelectorAll('.code-tabs')) {
+        const [python, javascript] = [...tabs.children].map((node) => node.getBoundingClientRect());
+        assert(python.top === javascript.top && python.height === javascript.height, `language tabs must align: ${path} at ${width}px`);
+      }
+      if (width === 1280) for (const grid of document.querySelectorAll('.hero, .split-section')) {
+        const [left, right] = [...grid.children].map((node) => node.getBoundingClientRect());
+        if (grid.classList.contains('hero')) {
+          assert(left.bottom <= right.top && left.left === right.left && left.right === right.right, 'home promise and live example share a full-width alignment');
+        } else if (grid.classList.contains('stacked-section')) {
+          assert(left.bottom <= right.top && left.left === right.left && left.right === right.right, `shared stacked section keeps its heading above its body: ${path}`);
+        } else assert(left.top === right.top, `shared editorial columns align: ${path}`);
+      }
+      if (path === '/docs/') {
+        const routes = document.querySelectorAll('.docs-route');
+        assert(routes.length === 4, 'documentation presents the four reader paths');
+        assert(routes[0].querySelector('ul a').getAttribute('href') === '/start/', 'documentation integration begins with the JavaScript and Python file choices');
+        for (const href of ['/start/', '/docs/reference/browser-package/', '/docs/reference/python-host/']) assert(document.querySelector(`#starlight__sidebar a[href="${href}"]`), `documentation navigation offers setup: ${href}`);
+        for (let index = 0; index < routes.length; index += 2) {
+          const left = routes[index], right = routes[index + 1];
+          if (left.getBoundingClientRect().right <= right.getBoundingClientRect().left) {
+            for (const selector of ['.sl-heading-wrapper', 'p', 'ul']) {
+              assert(left.querySelector(selector).getBoundingClientRect().top === right.querySelector(selector).getBoundingClientRect().top, `documentation headings, descriptions and links align at ${width}px: ${selector}`);
+            }
+            if (width === 1280) {
+              const leftLinks = left.querySelectorAll('ul > li'), rightLinks = right.querySelectorAll('ul > li');
+              for (let row = 0; row < Math.min(leftLinks.length, rightLinks.length); row++) assert(leftLinks[row].getBoundingClientRect().top === rightLinks[row].getBoundingClientRect().top, 'documentation links keep a common rhythm when lists have different lengths');
+            }
+          }
+        }
+        const linkColor = frame.contentWindow.getComputedStyle(document.querySelector('#starlight__sidebar a[aria-current="page"]')).color;
+        for (const route of routes) {
+          const heading = route.querySelector('h2');
+          const description = route.querySelector('p');
+          assert(description.getBoundingClientRect().top > heading.getBoundingClientRect().bottom, 'documentation paths separate their title and explanation');
+          for (const link of route.querySelectorAll('a')) assert(frame.contentWindow.getComputedStyle(link).color === linkColor, 'documentation paths use the shared link color');
+        }
+      }
+      const emptyTitle = document.querySelector('.content-panel:has(.tabgrad-page-start)');
+      assert(frame.contentWindow.getComputedStyle(emptyTitle.nextElementSibling).borderTopWidth === '0px', 'empty title wrapper does not duplicate the header separator');
+      if (width === 320 || width === 1280) {
+        // WCAG 1.4.12 override conditions, not prescribed authored typography.
+        const saved = new Map([...document.body.querySelectorAll('*')].map((element) => [element, element.getAttribute('style')]));
+        for (const element of saved.keys()) {
+          element.style.setProperty('line-height', '1.5', 'important');
+          element.style.setProperty('letter-spacing', '0.12em', 'important');
+          element.style.setProperty('word-spacing', '0.16em', 'important');
+          if (element.tagName === 'P') element.style.setProperty('margin-bottom', '2em', 'important');
+        }
+        frame.contentWindow.dispatchEvent(new Event('resize'));
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        assert(document.documentElement.scrollWidth <= document.documentElement.clientWidth, `text spacing must not cause page overflow: ${path} at ${width}px`);
+        checkHeader(document, `${path} at ${width}px with increased text spacing`);
+        await checkNavigation(document, `${path} at ${width}px with increased text spacing`);
+        checkEditorToolbar(document, `${path} at ${width}px with increased text spacing`);
+        checkRunControls(document, `${path} at ${width}px with increased text spacing`);
+        checkResultPlacement(document, `${path} at ${width}px with increased text spacing`);
+        checkUseCaseCards(document, `${path} at ${width}px with increased text spacing`);
+        checkUnillustratedIntro(document, `${path} at ${width}px with increased text spacing`);
+        checkQuestionLayout(document, `${path} at ${width}px with increased text spacing`);
+        checkDocumentationTables(document, `${path} at ${width}px with increased text spacing`);
+        if (document.querySelector('.resource-strip')) checkResourceStrip(document, `${path} at ${width}px with increased text spacing`);
+        if (document.querySelector('.run-editor')) {
+          const editor = document.querySelector('.run-editor');
+          const paint = document.querySelector('[data-syntax-layer]');
+          assert(editor.scrollHeight <= editor.clientHeight, 'source remains visible with increased text spacing');
+          assert(editor.getBoundingClientRect().height === paint.getBoundingClientRect().height, 'paint follows increased text spacing');
+        }
+        for (const [element, style] of saved) {
+          if (style === null) element.removeAttribute('style'); else element.setAttribute('style', style);
+        }
+        frame.contentWindow.dispatchEvent(new Event('resize'));
+      }
+    }
+  }
+  const pageRender = [];
+  const builtRoutes = await (await fetch('/__routes.json')).json();
+  assert(Array.isArray(builtRoutes) && builtRoutes.length > 0, 'the render inventory comes from the built HTML files');
+  for (const path of builtRoutes) {
+    frame.src = path;
+    await until(() => frame.contentWindow.location.pathname === path && frame.contentDocument?.readyState === 'complete' && frame.contentDocument.querySelector('h1'), `built page ${path}`);
+    const document = frame.contentDocument;
+    await document.fonts.ready;
+    for (const source of document.querySelectorAll('details.diagram-source')) {
+      assert(!source.querySelector('h1,h2,h3,h4,h5,h6,p,figure,details'), `diagram source must not conceal chapter content: ${path}`);
+      assert(source.querySelector('pre > code'), `diagram source remains available as code: ${path}`);
+    }
+    for (const image of document.querySelectorAll('main img')) { image.loading = 'eager'; await image.decode(); }
+    for (const width of [320, 768, 1280]) {
+      frame.style.width = `${width}px`;
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const available = document.documentElement.clientWidth;
+      assert(document.documentElement.scrollWidth <= available, `built page does not overflow: ${path} at ${width}px`);
+      checkFooterAttribution(document, `${path} at ${width}px`);
+      checkDocumentationTables(document, `${path} at ${width}px`);
+      checkDisclosureType(document, `${path} at ${width}px`);
+      if (document.querySelector('.resource-strip')) checkResourceStrip(document, `${path} at ${width}px`);
+      for (const text of document.querySelectorAll('main h1,main h2,main h3,main p,main li,main summary,main dt,main dd')) {
+        if (text.closest('.table-viewport,.diagram-viewport,pre')) continue;
+        const box = text.getBoundingClientRect();
+        assert(!box.height || box.left >= 0 && box.right <= available + 1, `built page text stays inside the viewport: ${path} at ${width}px; ${text.textContent.slice(0,90)}`);
+      }
+      pageRender.push({path,width});
+    }
+  }
+  for (const path of ['/', '/docs/']) {
+    frame.src = path;
+    await until(() => frame.contentWindow.location.pathname === path && frame.contentDocument?.readyState === 'complete' && frame.contentDocument.querySelector('.site-menu-toggle'), 'navigation resize page');
+    for (const selector of ['.site-menu-toggle', ...(path === '/docs/' ? ['.docs-menu-toggle'] : [])]) {
+      frame.style.width = '390px';
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const trigger = frame.contentDocument.querySelector(selector);
+      const menu = trigger.popoverTargetElement;
+      trigger.click();
+      assert(menu.matches(':popover-open'), `navigation opens before resize: ${selector}`);
+      frame.style.width = '1280px';
+      await until(() => !menu.matches(':popover-open'), `resize closes a hidden navigation: ${selector}`);
+    }
+  }
+  const footerNavigation = await checkFooterNavigation(frame);
+  const sponsorshipNavigation = await checkSponsorshipNavigation(frame);
+  frame.src = selectedExampleUrl;
+  await until(() => frame.contentDocument?.querySelector('[data-example="matrix-products"][aria-pressed="true"]') && frame.contentDocument.querySelector('[data-run-language="javascript"][aria-selected="true"]') && frame.contentDocument.querySelector('[data-run-device="webgpu"][aria-pressed="true"]'), 'a fresh page restores selection from the address');
+  results.push({ name: "primary/project pages and documentation at ten widths, native navigation, responsive retirement, sidebar/code boundaries, non-overlapping controls and increased text spacing", passed: true, navigationFocus, searchChecks, pageRender, footerNavigation, sponsorshipNavigation });
+  await phase("runtime-finished");
+  const report = { passed: true, cases: results };
+  document.querySelector("#result").textContent = JSON.stringify(report, null, 2);
+  if (token) await fetch(`/__result?token=${encodeURIComponent(token)}`, { method: "POST", body: JSON.stringify(report) });
+} catch (error) {
+  const report = { passed: false, error: String(error), cases: results };
+  document.querySelector("#result").textContent = JSON.stringify(report, null, 2);
+  if (token) await fetch(`/__result?token=${encodeURIComponent(token)}`, { method: "POST", body: JSON.stringify(report) });
+}
+</script></html>

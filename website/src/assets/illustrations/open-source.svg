@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" class="artwork" viewBox="0 0 480 280" role="img" aria-label="Source code and its documentation form one open project">
+  <path class="art-arrow" d="M272 140H300M292 132L300 140L292 148"/>
+  <g class="art-shadow">
+    <rect class="art-panel art-outline" x="32" y="56" width="240" height="168" rx="16"/>
+    <path class="art-line" d="M32 92H272"/>
+    <g class="art-detail-fill"><circle cx="52" cy="74" r="4"/><circle cx="68" cy="74" r="4"/><circle cx="84" cy="74" r="4"/></g>
+    <rect class="art-code" x="44" y="104" width="216" height="108" rx="8"/>
+    <path class="art-code-stroke" d="M68 128H100M84 156H132M68 184H100"/>
+    <path class="art-code-light" d="M120 128H196M152 156H228M120 184H168"/>
+  </g>
+  <g class="art-shadow">
+    <path class="art-panel art-outline" d="M320 48H400L440 88V220Q440 232 428 232H320Q308 232 308 220V60Q308 48 320 48Z"/>
+    <path class="art-soft" d="M400 48V76Q400 88 412 88H440Z"/>
+    <path class="art-arrow" d="M340 104L328 116L340 128M368 104L380 116L368 128"/>
+    <path class="art-detail" d="M332 164H412M332 184H388M332 204H404"/>
+  </g>
+</svg>

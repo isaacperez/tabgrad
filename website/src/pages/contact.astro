@@ -1,0 +1,39 @@
+---
+import StarlightPage from "@astrojs/starlight/components/StarlightPage.astro";
+import { Icon } from "@astrojs/starlight/components";
+import PageIntro from "../components/PageIntro.astro";
+import SplitSection from "../components/SplitSection.astro";
+import Illustration from "../components/Illustration.astro";
+import { repositoryUrl, maintainerContact } from "../../scripts/config.mjs";
+---
+<StarlightPage frontmatter={{ title: "Contact", description: "Get in touch with Isaac Pérez about Tabgrad, deep learning projects and professional collaboration.", template: "splash", editUrl: false }}>
+  <div class="not-content marketing">
+    <PageIntro
+      title="Get in touch."
+      description="Have a question about Tabgrad, or an AI project you’d like help with? You can reach me on LinkedIn or X."
+    >
+      <div class="project-actions">
+        <a class="button primary project-text-link" href={maintainerContact.linkedInUrl}><Icon name="linkedin" />Find me on LinkedIn ↗</a>
+        <a class="text-link project-text-link" href={maintainerContact.url}><Icon name="x.com" />Find me on X ↗</a>
+      </div>
+      <Illustration slot="illustration" name="conversation" />
+    </PageIntro>
+    <SplitSection id="work" title="Work with me.">
+      <p>I can help develop deep learning systems and get models into production, through a technical review or by working alongside your team.</p>
+      <p>Tell me what you’re building and what you need help with. For paid work, we’ll agree on the scope and fees before starting.</p>
+      <a class="text-link" href={maintainerContact.linkedInUrl}>Discuss your project on LinkedIn ↗</a>
+    </SplitSection>
+    <SplitSection id="sponsorship" title="Sponsor Tabgrad.">
+      <p>If your team would like to support Tabgrad’s development, get in touch about sponsorship.</p>
+      <div class="project-actions">
+        <a class="text-link" href={maintainerContact.linkedInUrl}>Discuss sponsorship on LinkedIn ↗</a>
+        <a class="text-link" href="/about/#support">Other ways to support Tabgrad →</a>
+      </div>
+    </SplitSection>
+    <SplitSection title="Bugs and ideas.">
+      <p>Report bugs and suggest features on GitHub, where others can join the discussion. For a bug, include a small example, what happened, what you expected and your browser version.</p>
+      <p>For a possible security or privacy issue, follow the <a href={`${repositoryUrl}/security/policy`}>private reporting instructions</a>.</p>
+      <a class="text-link project-text-link" href={`${repositoryUrl}/issues`}><Icon name="github" />Browse or open an issue ↗</a>
+    </SplitSection>
+  </div>
+</StarlightPage>

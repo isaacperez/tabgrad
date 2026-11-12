@@ -1,0 +1,22 @@
+---
+import StarlightPage from "@astrojs/starlight/components/StarlightPage.astro";
+import Runner from "../components/Runner.astro";
+import PageIntro from "../components/PageIntro.astro";
+import NextStep from "../components/NextStep.astro";
+const description =
+  "Choose an example, edit the code and run it in Python or JavaScript.";
+---
+<StarlightPage frontmatter={{ title: "Playground", description, template: "splash", editUrl: false }}>
+  <div class="not-content marketing">
+    <PageIntro compact title="Playground" description={description} />
+    <Runner />
+    <NextStep
+      title="Add Tabgrad to your site."
+      description="Use the complete HTML examples to build a page that runs your own calculations."
+    >
+      <a class="text-link" href="/start/#html">JavaScript example →</a>
+      <a class="text-link" href="/start/#python">Python example →</a>
+      <a class="text-link" href="/docs/">Explore the documentation →</a>
+    </NextStep>
+  </div>
+</StarlightPage>

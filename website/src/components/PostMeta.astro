@@ -1,0 +1,9 @@
+---
+import { formatPostDate } from "../blog/schema";
+interface Props {
+  author: string;
+  date: string;
+}
+const { author, date } = Astro.props;
+---
+<p class="post-meta"><span>{author}</span><time datetime={date}>{formatPostDate(date)}</time></p>
