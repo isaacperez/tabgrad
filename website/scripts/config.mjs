@@ -18,8 +18,10 @@ export const documentDescriptions = {
   "docs/architecture/central-decision.md": "Why Tabgrad shares one semantic runtime across Python and JavaScript, with separate CPU and GPU numerical backends.",
   "docs/architecture/python-observation.md": "How ordinary Python calls wait for GPU results while a separate worker keeps the backend progressing.",
 };
+export const setupNavigation = [
+  ["browser-package", "JavaScript setup"], ["python-host", "Python setup"],
+];
 export const referenceNavigation = [
-  ["browser-package", "Browser package"], ["python-host", "Python setup"],
   ["python-tensors", "Python tensors"], ["webgpu-runtime", "JavaScript WebGPU"],
   ["tensor-view", "Tensor views"],
   ["tensor-copy", "Tensor copy"], ["tensor-sum", "Sum"],
@@ -27,7 +29,7 @@ export const referenceNavigation = [
   ["functional-gradients", "Functional gradients"], ["backward-gradients", "Backward and .grad"],
   ["gradient-recording", "Gradient scopes"], ["sgd", "SGD"],
 ];
-export const references = referenceNavigation.map(([name]) => name);
+export const references = [...setupNavigation, ...referenceNavigation].map(([name]) => name);
 
 /** @param {string} source Repository-relative admitted document. @returns {string} */
 export function documentRoute(source) {

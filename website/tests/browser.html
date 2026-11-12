@@ -1294,6 +1294,13 @@ try {
         assert(bounds.left >= 0 && bounds.right <= document.documentElement.clientWidth, `footer links remain within the page at ${width}px`);
       }
       assert(!/Library v|Docs source \(preview\)/.test(footer.textContent), 'generic footer keeps technical build metadata in its relevant destination');
+      const sidebarLinks = [...document.querySelectorAll('#starlight__sidebar a[href]')];
+      if (sidebarLinks.length) {
+        const destinations = sidebarLinks.map(link => link.getAttribute('href'));
+        assert(new Set(destinations).size === destinations.length, `documentation navigation has one entry per destination: ${path}`);
+        const active = sidebarLinks.filter(link => link.getAttribute('aria-current') === 'page');
+        assert(active.length === 1 && active[0].getAttribute('href') === path, `documentation navigation selects the current destination: ${path}`);
+      }
       if (path === '/docs/') {
         const source = document.querySelector('.docs-source [data-documentation-source]');
         assert(source && /\/blob\/(?:[0-9a-f]{40}|main)\/docs\/README\.md$/.test(source.href), 'documentation links to published repository source independently of the playground package');

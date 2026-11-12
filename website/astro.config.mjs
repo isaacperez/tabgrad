@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { prepareContent } from "./scripts/prepare-content.mjs";
 import { watchGitIndex } from "./scripts/source-watch.mjs";
-import { websiteRoot, repositoryRoot, referenceNavigation } from "./scripts/config.mjs";
+import { websiteRoot, repositoryRoot, setupNavigation, referenceNavigation } from "./scripts/config.mjs";
 import { siteOrigin, socialHead } from "./scripts/publication.mjs";
 import { prepareOutputSocialImages } from "./scripts/social-images.mjs";
 import { fileURLToPath } from "node:url";
@@ -79,8 +79,7 @@ export default defineConfig({
       { label: "Start here", items: [
         { label: "Documentation", slug: "docs" },
         { label: "Get started", link: "/start/" },
-        { label: "JavaScript setup", slug: "docs/reference/browser-package" },
-        { label: "Python setup", slug: "docs/reference/python-host" },
+        ...setupNavigation.map(([name, label]) => ({ label, slug: `docs/reference/${name}` })),
       ] },
       { label: "API reference", collapsed: true, items: [
         { label: "JavaScript API", slug: "docs/javascript-api" },
