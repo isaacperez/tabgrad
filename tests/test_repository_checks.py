@@ -175,7 +175,8 @@ class RepositoryCheckTests(unittest.TestCase):
         self.assertEqual(CHECKS.check_workflow_security(state), [])
         self.assertEqual(
             document["jobs"]["website"]["env"]["TABGRAD_SITE_URL"],
-            "https://example.invalid/",
+            "${{ github.event_name == 'workflow_dispatch' && inputs.publish "
+            "&& vars.TABGRAD_SITE_URL || 'https://example.invalid/' }}",
         )
         self.assertEqual(
             document["jobs"]["website"]["env"]["CHROME_DEVEL_SANDBOX"],

@@ -181,6 +181,10 @@ the tools. Updating them requires native HTTP and real-browser qualification,
 not just a lock update. Setup is explicit with lifecycle scripts and telemetry
 disabled; the selected optional platform packages supply the native executables.
 The [publication procedure](website-publication.md) owns their use and limits.
+The locked transitive sharp/libvips platform packages include LGPL-3.0-or-later
+components. They stay in this operator installation; this change redistributes
+none of those binaries in the site or library. Any future redistribution of
+the tools requires its own component-license and notice review.
 
 `website/package.json` and `website/package-lock.json` select a separate private
 site build. None of these new build tools enter the library's npm distribution.

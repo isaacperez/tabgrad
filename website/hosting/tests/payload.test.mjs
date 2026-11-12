@@ -17,7 +17,7 @@ async function fixture(context, asset = "one") {
   await mkdir(join(source, "_astro"));
   await writeFile(join(source, `_astro/${asset}.js`), `export const value = '${asset}';`);
   const checked = { origin, revision, localChanges: false, files: await inventory(source) };
-  return { root, source, checked, options: { origin, revision, checked, production: false } };
+  return { root, source, checked, options: { origin, revision, checked, production: true } };
 }
 
 test("delivery is the exact checked output and rejects extra files, edits, links and changed identity", async context => {
@@ -64,6 +64,9 @@ test("origin, source and bounded native rules fail closed", async context => {
   const { root, source, options } = await fixture(context);
   await assert.rejects(preparePayload(source, join(root, "origin"), { ...options, origin: "https://other.invalid/" }), /origin/);
   await assert.rejects(preparePayload(source, join(root, "dirty"), { ...options, checked: { ...options.checked, localChanges: true } }), /clean source/);
+  const preview = join(root, "preview");
+  await preparePayload(source, preview, { ...options, production: false, checked: { ...options.checked, localChanges: true } });
+  await assert.rejects(verifyPayload(preview), /nonpublishable/);
   await assert.rejects(preparePayload(source, join(source, "nested"), options), /independent/);
   const files = [];
   for (let index = 0; index < 101; index++) {

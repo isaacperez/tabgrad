@@ -63,7 +63,8 @@ export function fileRecords(entries) {
 export function deliveryManifest(value, production = true) {
   if (!value || typeof value !== "object" || value.format !== 1 || !/^[a-f0-9]{40}$/.test(value.revision)
     || (value.previous !== null && !hashPattern.test(value.previous))
-    || Object.keys(value).sort().join() !== "currentImmutable,files,format,origin,previous,revision") throw new Error("Invalid delivery manifest");
+    || typeof value.publishable !== "boolean" || (production && !value.publishable)
+    || Object.keys(value).sort().join() !== "currentImmutable,files,format,origin,previous,publishable,revision") throw new Error("Invalid or nonpublishable delivery manifest");
   publicationOrigin(value.origin, production);
   fileRecords(value.files);
   const paths = new Set(value.files.map(file => file.path));

@@ -34,7 +34,9 @@ The destination must be new. Reuse an existing result for inspection; choose a
 new output directory through the explicit command/`TABGRAD_WEBSITE_PAYLOAD` for
 another preparation. Do not overwrite an inspected payload. A publication
 candidate requires a clean source revision and a real external origin; a dirty
-local preview cannot be relabelled as one. The ordinary website source tests
+or unpublished local preview cannot be relabelled as one. Check-mode manifests
+are explicitly nonpublishable and the final reader rejects them, independently
+of their origin. The ordinary website source tests
 and type check still apply. The physical GPU check remains separate from CPU
 CI; an unavailable adapter is not a pass.
 

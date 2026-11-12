@@ -53,7 +53,8 @@ export async function preparePayload(source, destination, { checked, origin, rev
   const previousRoot = previous && resolve(previous);
   if ([input, previousRoot].some(root => root && (target === root || target.startsWith(root + sep) || root.startsWith(target + sep)))) throw new Error("Payload directories must be independent");
   const publicOrigin = publicationOrigin(origin, production);
-  if (checked.origin !== publicOrigin || checked.revision !== revision || checked.localChanges || !/^[a-f0-9]{40}$/.test(revision)) throw new Error("Output does not identify the requested clean source and origin");
+  if (checked.origin !== publicOrigin || checked.revision !== revision || typeof checked.localChanges !== "boolean"
+    || (production && checked.localChanges) || !/^[a-f0-9]{40}$/.test(revision)) throw new Error("Output does not identify the requested clean source and origin");
   const current = await inventory(input);
   sameInventory(fileRecords(checked.files), current);
   if (current.some(file => ["_headers", "_redirects", manifestName].includes(file.path)
@@ -79,7 +80,7 @@ export async function preparePayload(source, destination, { checked, origin, rev
     const retained = (predecessor?.manifest.files ?? []).filter(file => previousCurrent.has(file.path) && !currentMap.has(file.path));
     sameInventory([...current, ...retained], await inventory(target));
     await writeFile(join(target, "_headers"), await nativeHeaders(target, await inventory(target)));
-    const manifest = { format: 1, origin: publicOrigin, revision, previous: predecessor?.digest ?? null,
+    const manifest = { format: 1, origin: publicOrigin, revision, publishable: production && !checked.localChanges, previous: predecessor?.digest ?? null,
       currentImmutable: current.filter(file => isImmutableAsset("/" + file.path)).map(file => file.path), files: await inventory(target) };
     await writeFile(join(target, manifestName), JSON.stringify(manifest) + "\n");
     return await verifyPayload(target, { production });
