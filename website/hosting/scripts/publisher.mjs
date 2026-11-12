@@ -3,8 +3,13 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { pathToFileURL } from "node:url";
+import { setTimeout as delay } from "node:timers/promises";
 import { sha256 } from "../../scripts/files.mjs";
 import { manifestName, publicationOrigin, verifyPayload } from "./inventory.mjs";
+
+const observationTimeoutMilliseconds = 15_000;
+const confirmationBudgetMilliseconds = 5 * 60_000;
+const confirmationIntervalMilliseconds = 2_000;
 
 /** Missing configuration and re-runs are inert. This is a local context check;
  * the protected GitHub environment and its admitted reviewers remain required.
@@ -35,10 +40,13 @@ function parseHostingAccount(input) {
 
 /** Observe only the currently served identity, with a deadline and bounded body.
  * No credentials, redirects or cache reuse are allowed at this public boundary.
- * @param {string} origin @returns {Promise<string>} */
-export async function liveDigest(origin) {
-  const response = await fetch(new URL(manifestName, origin), { redirect: "error", cache: "no-store", signal: AbortSignal.timeout(15_000) });
-  if (response.status !== 200 || !response.body) throw new Error("Live delivery identity is unavailable");
+ * @param {string} origin @param {number} [timeoutMilliseconds] @returns {Promise<string>} */
+export async function liveDigest(origin, timeoutMilliseconds = observationTimeoutMilliseconds) {
+  const response = await fetch(new URL(manifestName, origin), { redirect: "error", cache: "no-store", signal: AbortSignal.timeout(timeoutMilliseconds) });
+  if (response.status !== 200 || !response.body) {
+    await response.body?.cancel();
+    throw new Error("Live delivery identity is unavailable");
+  }
   const chunks = [];
   let bytes = 0;
   for await (const chunk of response.body) {
@@ -51,13 +59,41 @@ export async function liveDigest(origin) {
   return sha256(Buffer.concat(chunks));
 }
 
+/** Activation and propagation can follow the upload. Retry only anonymous
+ * observations within one monotonic budget, without retaining response history.
+ * @param {string} origin @param {string} digest
+ * @param {{observe:(origin:string,timeoutMilliseconds?:number)=>Promise<string>,now?:()=>number,wait?:(milliseconds:number)=>Promise<void>}} operations
+ * @returns {Promise<{confirmed:boolean,attempts:number,unavailable:number,different:number}>} */
+async function confirmDelivery(origin, digest, { observe, now = () => performance.now(), wait = delay }) {
+  const deadline = now() + confirmationBudgetMilliseconds;
+  const result = { confirmed: false, attempts: 0, unavailable: 0, different: 0 };
+  for (;;) {
+    const timeout = Math.floor(Math.min(observationTimeoutMilliseconds, deadline - now()));
+    if (timeout < 1) return result;
+    result.attempts++;
+    let observed = null;
+    try { observed = await observe(origin, timeout); }
+    catch { result.unavailable++; }
+    if (observed !== null) {
+      if (observed === digest) {
+        result.confirmed = now() < deadline;
+        return result;
+      }
+      result.different++;
+    }
+    const remaining = deadline - now();
+    if (remaining <= 0) return result;
+    await wait(Math.min(confirmationIntervalMilliseconds, remaining));
+  }
+}
+
 /** A single credential-bearing command, followed only by observations. Once the
  * call starts, any exception or unconfirmed result is unknown: never retry here.
  * Injected operations let local tests inspect this order without using an account.
  * @param {string} root @param {Record<string,string|undefined>} env
- * @param {{deploy:(config:object)=>Promise<number>,observe:(origin:string)=>Promise<string>,record:(value:object)=>Promise<void>}} operations
+ * @param {{deploy:(config:object)=>Promise<number>,observe:(origin:string,timeoutMilliseconds?:number)=>Promise<string>,record:(value:object)=>Promise<void>,now?:()=>number,wait?:(milliseconds:number)=>Promise<void>}} operations
  * @returns {Promise<object>} */
-export async function publishWebsite(root, env, { deploy, observe, record }) {
+export async function publishWebsite(root, env, { deploy, observe, record, now, wait }) {
   const context = publicationContext(env);
   const { manifest, digest } = await verifyPayload(root, { digest: context.digest });
   if (manifest.revision !== context.revision || manifest.origin !== publicationOrigin(env.TABGRAD_SITE_URL)) throw new Error("Publication source or origin changed");
@@ -72,7 +108,8 @@ export async function publishWebsite(root, env, { deploy, observe, record }) {
   try {
     receipt.commandExit = await deploy(config);
     if (receipt.commandExit !== 0) throw new Error("Hosting command did not complete successfully");
-    if (await observe(manifest.origin) !== digest) throw new Error("Published delivery has not been confirmed");
+    receipt.confirmation = await confirmDelivery(manifest.origin, digest, { observe, now, wait });
+    if (!receipt.confirmation.confirmed) throw new Error("Published delivery has not been confirmed within its observation budget");
     receipt.state = "confirmed";
     await record(receipt);
     return receipt;

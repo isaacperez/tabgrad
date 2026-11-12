@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { inventory, preparePayload } from "../scripts/payload.mjs";
-import { publicationContext, hostingAccount, publishWebsite } from "../scripts/publisher.mjs";
+import { publicationContext, hostingAccount, liveDigest, publishWebsite } from "../scripts/publisher.mjs";
 import { acquirePredecessor } from "../scripts/predecessor.mjs";
 
 const revision = "a".repeat(40), origin = "https://site.example.edu/";
@@ -51,6 +51,41 @@ test("the protected handoff publishes once, records before writing, and confirms
   assert.deepEqual(events, [["receipt", "unknown"], ["deploy"], ["observe"], ["receipt", "confirmed"]]);
 });
 
+test("public confirmation tolerates activation and propagation without another deployment", async context => {
+  const { payload, env } = await candidate(context);
+  let elapsed = 0, deployments = 0, observations = 0;
+  const receipts = [];
+  const result = await publishWebsite(payload, env, {
+    now: () => elapsed,
+    async wait(milliseconds) { elapsed += milliseconds; },
+    async record(value) { receipts.push(structuredClone(value)); },
+    async deploy() { deployments++; return 0; },
+    async observe() {
+      observations++;
+      if (observations === 1) throw new Error("synthetic unavailable origin");
+      return observations === 2 ? "c".repeat(64) : env.TABGRAD_DELIVERY_SHA256;
+    },
+  });
+  assert.equal(result.state, "confirmed");
+  assert.equal(deployments, 1);
+  assert.equal(observations, 3);
+  assert.deepEqual(result.confirmation, { confirmed: true, attempts: 3, unavailable: 1, different: 1 });
+  assert.equal(receipts.at(-1).state, "confirmed");
+  assert.ok(elapsed > 0 && elapsed < 300_000);
+});
+
+test("an unavailable public identity releases its response body before another observation", async context => {
+  let cancelled = 0;
+  context.mock.method(globalThis, "fetch", async (_url, options) => {
+    assert.equal(options.redirect, "error");
+    assert.equal(options.cache, "no-store");
+    assert.equal(options.headers, undefined);
+    return new Response(new ReadableStream({ cancel() { cancelled++; } }), { status: 404 });
+  });
+  await assert.rejects(liveDigest(origin), /identity is unavailable/);
+  assert.equal(cancelled, 1);
+});
+
 test("changed output or absent credential fails before the credential-bearing operation", async context => {
   const { payload, env } = await candidate(context);
   let calls = 0;
@@ -64,16 +99,68 @@ test("changed output or absent credential fails before the credential-bearing op
 test("failure, interruption or missing confirmation stays unknown without repeating the call", async context => {
   const { payload, env } = await candidate(context);
   for (const outcome of ["exit", "throw", "unconfirmed"]) {
-    let calls = 0;
+    let calls = 0, observations = 0, elapsed = 0;
     const receipts = [];
     await assert.rejects(publishWebsite(payload, env, {
+      now: () => elapsed,
+      async wait(milliseconds) { elapsed += milliseconds; },
       async record(value) { receipts.push(structuredClone(value)); },
       async deploy() { calls++; if (outcome === "throw") throw new Error("synthetic failure"); return outcome === "exit" ? 1 : 0; },
-      async observe() { return "c".repeat(64); },
+      async observe() { observations++; return "c".repeat(64); },
     }), /unknown/);
     assert.equal(calls, 1);
     assert.equal(receipts.at(-1).state, "unknown");
+    if (outcome === "unconfirmed") {
+      assert.equal(elapsed, 300_000);
+      assert.ok(observations > 1);
+      assert.equal(receipts.at(-1).commandExit, 0);
+      assert.equal(receipts.at(-1).confirmation.confirmed, false);
+      assert.equal(receipts.at(-1).confirmation.different, observations);
+    } else assert.equal(observations, 0);
   }
+});
+
+test("a matching observation arriving after the deadline cannot confirm an upload", async context => {
+  const { payload, env } = await candidate(context);
+  let elapsed = 0, deployments = 0, observations = 0;
+  const receipts = [];
+  await assert.rejects(publishWebsite(payload, env, {
+    now: () => elapsed,
+    async wait() { assert.fail("a late response must not start another wait"); },
+    async record(value) { receipts.push(structuredClone(value)); },
+    async deploy() { deployments++; return 0; },
+    async observe(_origin, timeout) {
+      observations++;
+      assert.ok(timeout > 0 && timeout <= 15_000);
+      elapsed = 300_001;
+      return env.TABGRAD_DELIVERY_SHA256;
+    },
+  }), /unknown/);
+  assert.equal(deployments, 1);
+  assert.equal(observations, 1);
+  assert.equal(receipts.at(-1).commandExit, 0);
+  assert.equal(receipts.at(-1).confirmation.confirmed, false);
+  assert.equal(receipts.at(-1).state, "unknown");
+});
+
+test("the final read is capped by the remaining confirmation budget", async context => {
+  const { payload, env } = await candidate(context);
+  let elapsed = 0, deployments = 0;
+  const timeouts = [];
+  const result = await publishWebsite(payload, env, {
+    now: () => elapsed,
+    async wait(milliseconds) { elapsed += milliseconds; },
+    async record() {},
+    async deploy() { deployments++; return 0; },
+    async observe(_origin, timeout) {
+      timeouts.push(timeout);
+      if (timeouts.length === 1) { elapsed = 294_000; throw new Error("synthetic unavailable origin"); }
+      return env.TABGRAD_DELIVERY_SHA256;
+    },
+  });
+  assert.deepEqual(timeouts, [15_000, 4_000]);
+  assert.equal(deployments, 1);
+  assert.equal(result.state, "confirmed");
 });
 
 test("an update checks the current live predecessor before any credential-bearing call", async context => {
@@ -87,6 +174,21 @@ test("an update checks the current live predecessor before any credential-bearin
   let calls = 0;
   await assert.rejects(publishWebsite(next, nextEnv, { async record() {}, async observe() { return "d".repeat(64); }, async deploy() { calls++; return 0; } }), /live website changed/);
   assert.equal(calls, 0);
+  let observations = 0, elapsed = 0;
+  const result = await publishWebsite(next, nextEnv, {
+    now: () => elapsed, async wait(milliseconds) { elapsed += milliseconds; },
+    async record() {}, async deploy() { calls++; return 0; },
+    async observe() {
+      observations++;
+      if (observations === 1) return env.TABGRAD_DELIVERY_SHA256;
+      assert.equal(calls, 1, "only post-upload reads may be repeated");
+      if (observations === 2) throw new Error("synthetic propagation delay");
+      return digest;
+    },
+  });
+  assert.equal(calls, 1);
+  assert.equal(observations, 3);
+  assert.equal(result.state, "confirmed");
 });
 
 test("malformed private configuration never appears in a public error or reaches deployment", async context => {
