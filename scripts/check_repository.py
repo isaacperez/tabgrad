@@ -66,7 +66,14 @@ WEBSITE_GENERATED_DIRECTORIES = {
     Path("website/src/content/docs"),
     *(
         Path("website/public") / name
-        for name in ("brand", "diagrams", "licenses", "playground", "vendor")
+        for name in (
+            "brand",
+            "diagrams",
+            "examples",
+            "licenses",
+            "playground",
+            "vendor",
+        )
     ),
 }
 TEXT_SUFFIXES = {

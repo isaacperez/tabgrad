@@ -43,6 +43,21 @@ def publication_job_eligible(
 
 
 class RepositoryCheckTests(unittest.TestCase):
+    def test_integration_downloads_keep_the_website_validation_owner(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name in ("python/index.html.txt", "python/python-worker.js.txt"):
+                generated = root / "website/public/examples" / name
+                generated.parent.mkdir(parents=True, exist_ok=True)
+                generated.write_text("exact source download", encoding="utf-8")
+            authored = root / "website/scripts/integration-files.mjs"
+            authored.parent.mkdir(parents=True)
+            authored.write_text("maintained without newline", encoding="utf-8")
+            self.assertEqual(CHECKS.repository_files(root), [authored])
+            failures = CHECKS.check_text_format(root)
+            self.assertEqual(len(failures), 1)
+            self.assertEqual(failures[0].path, authored.relative_to(root))
+
     def test_website_outputs_do_not_become_repository_source(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
