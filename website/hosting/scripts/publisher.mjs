@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { sha256 } from "../../scripts/files.mjs";
-import { manifestName, verifyPayload } from "./inventory.mjs";
+import { manifestName, publicationOrigin, verifyPayload } from "./inventory.mjs";
 
 /** Missing configuration and re-runs are inert. This is a local context check;
  * the protected GitHub environment and its admitted reviewers remain required.
@@ -60,7 +60,7 @@ export async function liveDigest(origin) {
 export async function publishWebsite(root, env, { deploy, observe, record }) {
   const context = publicationContext(env);
   const { manifest, digest } = await verifyPayload(root, { digest: context.digest });
-  if (manifest.revision !== context.revision || manifest.origin !== env.TABGRAD_SITE_URL) throw new Error("Publication source or origin changed");
+  if (manifest.revision !== context.revision || manifest.origin !== publicationOrigin(env.TABGRAD_SITE_URL)) throw new Error("Publication source or origin changed");
   const account = parseHostingAccount(env.TABGRAD_HOST_CONFIG_JSON);
   if (!env.CLOUDFLARE_API_TOKEN?.trim()) throw new Error("A separately admitted hosting credential is required");
   if (context.initial !== (manifest.previous === null)) throw new Error("Initial publication and predecessor disagree");

@@ -103,3 +103,16 @@ test("malformed private configuration never appears in a public error or reaches
   });
   assert.equal(calls, 0);
 });
+
+test("equivalent admitted origin spellings publish consistently and different origins remain rejected", async context => {
+  const { payload, env } = await candidate(context);
+  let calls = 0;
+  const operations = { async record() {}, async observe() { return env.TABGRAD_DELIVERY_SHA256; }, async deploy() { calls++; return 0; } };
+  for (const value of [origin.slice(0, -1), "https://SITE.example.edu:443/"]) {
+    const result = await publishWebsite(payload, { ...env, TABGRAD_SITE_URL: value }, operations);
+    assert.equal(result.state, "confirmed");
+  }
+  assert.equal(calls, 2);
+  await assert.rejects(publishWebsite(payload, { ...env, TABGRAD_SITE_URL: "https://other.example.edu/" }, operations), /origin changed/);
+  assert.equal(calls, 2);
+});
