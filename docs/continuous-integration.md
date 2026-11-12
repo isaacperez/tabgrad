@@ -104,42 +104,47 @@ permissions stated in its file.
 
 ## Website workflow
 
-`.github/workflows/website-checks.yml` owns the private website build package,
-separately from library compilation and publication. It runs for pull requests
-and `main` pushes affecting `website/`, repository Markdown, brand inputs or
-its browser harness/workflow, and on manual dispatch. It has only
-`contents: read`, pinned checkout/setup actions without persisted credentials,
-a 15-minute job bound and cancellation of superseded runs. It has no deploy,
-signing or npm permissions, environment secrets or artifact publication step.
-Merging this source does not configure a hosting service.
+`.github/workflows/website-checks.yml` owns the website independently of library
+compilation and npm publication. PR/main changes to website, Markdown, brand
+or its harness/workflow run the stable `Website checks / website` check.
+Manual dispatch defaults to checks only. All GitHub permissions remain
+`contents: read`; actions are commit-pinned and checkout credentials are not
+persisted. Source integration does not configure or enroll a hosting service.
 
-The `website` job selects `website/.node-version`, npm 11.1.0 and the website
-lock independently of the library lock, disables Astro telemetry, installs
-without lifecycle scripts, and explicitly prepares Puppeteer's locked diagram
-browser. The job validates the installed root-owned Chrome sandbox helper and
-sets its documented permissions as described in
-[development](development.md#prepare-and-preview-the-static-website); the locked
-diagram browser remains sandboxed without changing the runner's AppArmor policy.
-It then runs the documented website type/content check, unit tests,
-static build, emitted-output verification and the actual UI/CPU programs in
-installed Chrome and Firefox. These are the same local commands in
-[development](development.md#prepare-and-preview-the-static-website), not weaker
-CI substitutes. The repository validator registers its complete parsed
-definition and command set; executable drift needs renewed review.
-The job supplies `https://example.invalid/` as a reserved public origin for build
-and verification, so canonical/share URLs, structured metadata, robots discovery
-and sitemap coverage are checked without a deployment address. The verifier
-rejects an explicit origin that differs from the recorded build input.
+The source job selects Node 22.23.4, npm 11.1.0, and separate website/hosting
+locks, installs without lifecycle scripts, disables telemetry and explicitly
+prepares the locked diagram browser. The guarded installed Chrome sandbox
+helper retains the setup described in [development](development.md#prepare-and-preview-the-static-website).
+It runs source types/tests, build and output verification, prepares the native
+payload, tests its HTTP policies/integrity/retention and inert publisher, then
+runs the existing CPU/search/browser controls through native serving in Chrome
+and Firefox. Test fixtures remain in the browser harness; actual app resources
+retain the native server's observed bytes and headers. There is no weaker CI
+substitute. Physical GPU and live-CDN qualification remain explicit checks.
 
-The explicit live-CDN example check is separate from this workflow. It needs
-external service availability and qualifies the HTML integration path; normal
-website checks keep the playground's same-origin matched files.
+Ordinary checks use the reserved origin `https://example.invalid/` without
+hosting secrets or artifact publication. An explicitly enabled manual main run
+can instead prepare a real-origin candidate and request the fixed protected
+`website-publication` environment. That job depends on successful source
+checks, consumes the same run's artifact and expected digest, and receives its
+hosting secrets only on the final command step. It installs only hosting tools,
+not the website's renderer/build chain. Re-runs and nonmain contexts are rejected.
+The existing validator registers the complete parsed workflow and command set;
+changing the pipeline requires complete renewed review.
 
-The stable name is `Website checks / website`. Its path-filtered absence is
-not a test pass. Add any new website input to the workflow's filters and
-reassess coverage; a change to the library alone does not alter this site's
-already pinned published runtime. Host activation, HTTP/header qualification
-and production deployment remain separate work and authority.
+Checks can cancel superseded checks; publication runs share a serialized group
+with cancellation disabled. The source job has a 20-minute bound and publisher
+10 minutes. The [publication procedure](website-publication.md) owns approval,
+private configuration, first/update admission, retained assets, receipts and
+unknown-result recovery. Candidate/result artifacts request 30 days of
+retention and contain no private account configuration. Missing enablement,
+configuration or effective operational admission cannot be treated as a hosted
+success. Actual activation, credentials, DNS and destination qualification
+retain their separate authority boundary.
+
+The check's path-filtered absence is not a pass. Add new website inputs to the
+filters and reassess coverage. Library changes alone do not update the site's
+separately pinned published runtime.
 
 ## Experimental producer workflow
 

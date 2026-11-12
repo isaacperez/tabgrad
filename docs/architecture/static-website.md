@@ -192,8 +192,11 @@ dynamic evaluation for edited JavaScript and Wasm belongs to the executor's
 response policy, not every documentation page. Inline scripts/styles from the
 theme and generated diagrams must be checked together with the actual policy.
 
-HTML revalidation and immutable resource caching have different purposes.
-An immutable URL cannot change bytes. Updates and rollback select coherent
+HTML and resources revalidate, allowing unchanged native ETag/304 reuse. This
+can add validation requests compared with long-lived immutable caching; no
+temporal advantage is claimed. Native prefix rules also apply to 404s and the
+complete resource inventory exceeds their exact-rule quota. An immutable URL
+still cannot change bytes. Updates and rollback select coherent
 website/runtime sets and account for older pages still requesting assets.
 The site does not promise offline operation or introduce a service worker.
 
@@ -208,12 +211,17 @@ structured data derived from the native validated Blog metadata. The documentati
 adapter derives summaries from original introductions or reviewed publication
 metadata; neither creates another editable technical documentation source.
 
-CI builds and checks source changes with a reserved test origin and without
+Ordinary CI builds and checks source changes with a reserved test origin and without
 deployment credentials, including the public URL and sitemap invariants. An authorized
 deployment uses the checked output; host-dependent routes, headers, resource
 loading and recovery need verification at that destination. Static-host limits
 are checked against the actual output. No vendor/account/domain configuration
 belongs in this public contract.
+
+The [publication procedure](../website-publication.md) owns the protected manual
+handoff, bounded predecessor retention and recovery. Its source can be checked
+without an account; activation and actual-host qualification remain separately
+authorized operations, not consequences of merging website source.
 
 ## Alternatives and reconsideration
 

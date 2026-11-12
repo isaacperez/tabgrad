@@ -180,6 +180,13 @@ export async function verifyOutput(root = join(websiteRoot, "dist")) {
   if (files.some((file) => /(?:^|\/)(?:node_modules|\.generated|\.env|scripts)(?:\/|$)/.test(file))) throw new Error("Private/tooling input in static output");
   const report = { htmlPages: pages.size, documents: data.documents.length, diagrams: data.diagrams, localReferences: references, emittedFiles: files.length, runtimeVersion: assets.runtimeVersion, pyodideVersion: assets.pyodideVersion, sourceRevision: data.sourceRevision, localChanges: data.localChanges };
   await writeChanged(join(websiteRoot, ".generated/verification.json"), JSON.stringify(report, null, 2) + "\n");
+  const verifiedFiles = await Promise.all(files.map(async path => {
+    const bytes = await readFile(join(root, path));
+    return { path, sha256: sha256(bytes), bytes: bytes.byteLength };
+  }));
+  await writeChanged(join(websiteRoot, ".generated/verified-files.json"), JSON.stringify({
+    origin: data.publicOrigin, revision: data.sourceRevision, localChanges: data.localChanges, files: verifiedFiles,
+  }) + "\n");
   return report;
 }
 

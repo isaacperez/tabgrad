@@ -45,6 +45,40 @@ def publication_job_eligible(
 
 
 class RepositoryCheckTests(unittest.TestCase):
+    def test_website_publication_is_a_separate_protected_same_run_handoff(self) -> None:
+        loader = CHECKS.RepositoryYamlLoader
+        assert loader is not None
+        workflow = yaml.load(
+            (SCRIPT.parents[1] / CHECKS.WEBSITE_PATH).read_text(), Loader=loader
+        )
+        self.assertEqual(workflow["permissions"], {"contents": "read"})
+        self.assertFalse(
+            workflow["on"]["workflow_dispatch"]["inputs"]["publish"]["default"]
+        )
+        source = workflow["jobs"]["website"]
+        publisher = workflow["jobs"]["website-publication"]
+        self.assertEqual(publisher["needs"], "website")
+        self.assertEqual(publisher["environment"], "website-publication")
+        self.assertNotIn("permissions", source)
+        self.assertNotIn("permissions", publisher)
+        self.assertNotIn("secrets.", json.dumps(source))
+        download = next(
+            step
+            for step in publisher["steps"]
+            if step.get("uses", "").startswith("actions/download-artifact@")
+        )
+        self.assertNotIn("run-id", download["with"])
+        self.assertNotIn("repository", download["with"])
+        self.assertEqual(download["with"]["name"], "website-delivery")
+        credential_steps = [
+            step for step in publisher["steps"] if "secrets." in json.dumps(step)
+        ]
+        self.assertEqual(len(credential_steps), 1)
+        self.assertEqual(
+            credential_steps[0]["env"]["TABGRAD_DELIVERY_SHA256"],
+            "${{ needs.website.outputs.delivery_sha256 }}",
+        )
+
     @unittest.skipUnless(shutil.which("bash"), "Ubuntu website setup requires Bash")
     def test_website_sandbox_guards_precede_the_privileged_command(self) -> None:
         loader = CHECKS.RepositoryYamlLoader
@@ -141,7 +175,8 @@ class RepositoryCheckTests(unittest.TestCase):
         self.assertEqual(CHECKS.check_workflow_security(state), [])
         self.assertEqual(
             document["jobs"]["website"]["env"]["TABGRAD_SITE_URL"],
-            "https://example.invalid/",
+            "${{ github.event_name == 'workflow_dispatch' && inputs.publish "
+            "&& vars.TABGRAD_SITE_URL || 'https://example.invalid/' }}",
         )
         self.assertEqual(
             document["jobs"]["website"]["env"]["CHROME_DEVEL_SANDBOX"],

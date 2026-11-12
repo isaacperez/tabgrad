@@ -518,3 +518,12 @@ the URL; reloading restores the selected preset, not an edited draft. The compac
 Home runner leaves its page address unchanged and retains its existing explicit
 same-tab draft handoff. Contributor qualification procedures remain repository
 links rather than entries in the published usage reference.
+
+## Native hosting preparation
+
+`hosting/` owns the separately locked native emulator, checked payload exporter
+and protected publisher. Its inventory reader has no HTML/build dependency; the
+producer derives native policies from `scripts/delivery.mjs`. See the indexed
+[publication procedure](../docs/website-publication.md) for local qualification,
+source/credential separation, update retention and recovery. Merging this source
+does not create a host, configure credentials or deploy the website.

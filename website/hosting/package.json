@@ -1,0 +1,19 @@
+{
+  "name": "tabgrad-website-hosting",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "npm@11.1.0",
+  "engines": {
+    "node": ">=22.23.4"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "test:browser": "node scripts/browser-check.mjs cpu",
+    "test:gpu": "node scripts/browser-check.mjs gpu"
+  },
+  "dependencies": {
+    "miniflare": "5.20261110.1-beta",
+    "wrangler": "4.160.1"
+  }
+}

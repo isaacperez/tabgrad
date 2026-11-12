@@ -413,23 +413,37 @@ EXPECTED_PRODUCER_TRIAL_SHA256 = (
 )
 WEBSITE_PATH = Path(".github/workflows/website-checks.yml")
 EXPECTED_WEBSITE_SHA256 = (
-    "22d8b6ff669a831d34d2c643551c2a6574f24d803cb6071aaf64ff56962c844f"
+    "8964f5775b8814125adce02519cb08c02ff08051a6bfe028d34ecb512613df7e"
 )
 WEBSITE_COMMANDS = {
-    "npm install --global npm@11.1.0 --ignore-scripts --no-audit --no-fund",
+    "if test -d website/.generated/previous; then\n"
+    "  node website/hosting/scripts/prepare.mjs website/dist "
+    "website/.generated/delivery website/.generated/previous\n"
+    "else\n"
+    "  node website/hosting/scripts/prepare.mjs website/dist "
+    "website/.generated/delivery\n"
+    "fi\n",
+    "node website/hosting/scripts/ci-context.mjs",
+    "node website/hosting/scripts/predecessor.mjs website/dist "
+    "website/.generated/previous",
+    "node website/hosting/scripts/publisher.mjs website/.generated/delivery "
+    "website/.generated/publication-receipt.json",
+    "npm --prefix website run build",
+    "npm --prefix website run check",
+    "npm --prefix website run verify",
+    "npm --prefix website test",
+    "npm --prefix website/hosting run test:browser",
+    "npm --prefix website/hosting test",
     "npm ci --prefix website --ignore-scripts --no-audit --no-fund",
+    "npm ci --prefix website/hosting --ignore-scripts --no-audit --no-fund",
     "npm exec --prefix website -- puppeteer browsers install chrome",
+    "npm install --global npm@11.1.0 --ignore-scripts --no-audit --no-fund",
     'test -f "$CHROME_DEVEL_SANDBOX"\n'
     'test -x "$CHROME_DEVEL_SANDBOX"\n'
     'test ! -L "$CHROME_DEVEL_SANDBOX"\n'
     'test "$(stat -c \'%u\' "$CHROME_DEVEL_SANDBOX")" = 0\n'
     'sudo chmod 4755 "$CHROME_DEVEL_SANDBOX"\n'
     'test -u "$CHROME_DEVEL_SANDBOX"\n',
-    "npm --prefix website run check",
-    "npm --prefix website test",
-    "npm --prefix website run build",
-    "npm --prefix website run verify",
-    "npm --prefix website run test:browser",
 }
 APPROVED_WORKFLOW_PATHS = {
     Path(".github/workflows/repository-checks.yml"),

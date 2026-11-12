@@ -429,9 +429,16 @@ A deployment must qualify its
 origin, headers, rollback and asset retention separately; these commands neither
 configure a host nor publish anything.
 
+For native hosting preparation, use the separately locked tools and local
+commands in [website publication](website-publication.md). That procedure also
+owns real-origin admission, protected activation and recovery; previewing does
+not authorize those external actions.
+
 `check` covers `.astro` templates and maintained TypeScript under `website/src/`.
 It does not statically check the `.mjs` build/test tools, browser fixture or
 JavaScript worker. Those boundaries have documented inputs and focused tests;
+the `.mjs` hosting scripts likewise have source contracts and native/unit checks,
+not a claim of coverage by Astro's TypeScript checker.
 the browser check exercises the actual emitted UI/worker and published artifacts.
 The root runtime checks do not discover or certify this separate package.
 
