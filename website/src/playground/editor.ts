@@ -6,10 +6,14 @@ import "prismjs/components/prism-python.js";
 Prism.manual = true;
 
 function appendToken(document: Document, parent: Node, token: string | Token): void {
-  if (typeof token === "string") { parent.appendChild(document.createTextNode(token)); return; }
+  if (typeof token === "string") {
+    parent.appendChild(document.createTextNode(token));
+    return;
+  }
   const span = document.createElement("span");
   span.classList.add("token", token.type);
-  if (token.alias) span.classList.add(...(Array.isArray(token.alias) ? token.alias : [token.alias]));
+  if (token.alias)
+    span.classList.add(...(Array.isArray(token.alias) ? token.alias : [token.alias]));
   const content = Array.isArray(token.content) ? token.content : [token.content];
   for (const child of content) appendToken(document, span, child);
   parent.appendChild(span);
@@ -17,7 +21,11 @@ function appendToken(document: Document, parent: Node, token: string | Token): v
 
 /** The textarea owns source, selection and input. This view only paints colors. */
 export class SyntaxEditor {
-  constructor(private input: HTMLTextAreaElement, private layer: HTMLPreElement, private notice: HTMLParagraphElement) {
+  constructor(
+    private input: HTMLTextAreaElement,
+    private layer: HTMLPreElement,
+    private notice: HTMLParagraphElement,
+  ) {
     input.addEventListener("scroll", () => this.align());
   }
 
@@ -26,7 +34,8 @@ export class SyntaxEditor {
       const grammar = Prism.languages[language];
       if (!grammar) throw new Error(`Missing syntax grammar: ${language}`);
       const fragment = this.input.ownerDocument.createDocumentFragment();
-      for (const token of Prism.tokenize(this.input.value, grammar)) appendToken(this.input.ownerDocument, fragment, token);
+      for (const token of Prism.tokenize(this.input.value, grammar))
+        appendToken(this.input.ownerDocument, fragment, token);
       this.layer.replaceChildren(fragment);
       this.input.classList.add("syntax-ready");
       this.notice.hidden = true;
@@ -52,8 +61,16 @@ export class SyntaxEditor {
   private align(): void {
     const style = getComputedStyle(this.input);
     const bounds = this.input.getBoundingClientRect();
-    const verticalScrollbar = this.input.offsetWidth - this.input.clientWidth - parseFloat(style.borderLeftWidth) - parseFloat(style.borderRightWidth);
-    const horizontalScrollbar = this.input.offsetHeight - this.input.clientHeight - parseFloat(style.borderTopWidth) - parseFloat(style.borderBottomWidth);
+    const verticalScrollbar =
+      this.input.offsetWidth -
+      this.input.clientWidth -
+      parseFloat(style.borderLeftWidth) -
+      parseFloat(style.borderRightWidth);
+    const horizontalScrollbar =
+      this.input.offsetHeight -
+      this.input.clientHeight -
+      parseFloat(style.borderTopWidth) -
+      parseFloat(style.borderBottomWidth);
     this.layer.style.width = `${bounds.width - verticalScrollbar}px`;
     this.layer.style.height = `${bounds.height - horizontalScrollbar}px`;
     this.layer.scrollTop = this.input.scrollTop;

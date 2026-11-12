@@ -1,15 +1,16 @@
 <svg xmlns="http://www.w3.org/2000/svg" class="artwork" viewBox="0 0 480 280" role="img" aria-label="Two input branches join a calculation and receive separate gradients">
   <g class="art-shadow art-panel art-outline">
-    <rect x="32" y="40" width="112" height="72" rx="16"/>
-    <rect x="32" y="168" width="112" height="72" rx="16"/>
+    <rect x="80" y="64" width="112" height="64" rx="12"/>
+    <rect x="80" y="152" width="112" height="64" rx="12"/>
   </g>
-  <path class="art-detail" d="M56 68H96M56 84H120M56 196H112M56 212H88"/>
-  <path class="art-line" d="M144 76H188Q208 76 208 96V120M144 204H188Q208 204 208 184V160M208 140H304"/>
-  <path class="art-soft" d="M208 112L236 140L208 168L180 140Z"/>
-  <path class="art-arrow" d="M300 140H324M314 130L324 140L314 150"/>
+  <path class="art-detail" d="M104 88H144M104 104H168M104 176H160M104 192H136"/>
+  <path class="art-line" d="M192 96H216A32 32 0 0 1 248 128M192 184H216A32 32 0 0 0 248 152"/>
+  <path class="art-soft" d="M248 112L276 140L248 168L220 140Z"/>
+  <path class="art-arrow" d="M288 140H344M334 130L344 140L334 150"/>
   <g class="art-shadow">
-    <rect class="art-primary" x="336" y="104" width="112" height="72" rx="16"/>
-    <path class="art-code-light" d="M364 140H420"/>
+    <rect class="art-primary" x="360" y="104" width="96" height="72" rx="16"/>
+    <path class="art-code-light" d="M384 140H432"/>
   </g>
-  <path class="art-return" d="M392 104V48Q392 16 360 16H104Q88 16 88 32M80 24L88 32L96 24M392 176V232Q392 264 360 264H104Q88 264 88 248M80 256L88 248L96 256"/>
+  <path class="art-return" d="M408 104V40A16 16 0 0 0 392 24H40A16 16 0 0 0 24 40V80A16 16 0 0 0 40 96H68M58 86L68 96L58 106"/>
+  <path class="art-return" d="M408 176V240A16 16 0 0 1 392 256H40A16 16 0 0 1 24 240V200A16 16 0 0 1 40 184H68M58 174L68 184L58 194"/>
 </svg>

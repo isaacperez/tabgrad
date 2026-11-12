@@ -406,7 +406,7 @@ EXPECTED_PRODUCER_TRIAL_SHA256 = (
 )
 WEBSITE_PATH = Path(".github/workflows/website-checks.yml")
 EXPECTED_WEBSITE_SHA256 = (
-    "751d232188e19fa6426fdd0ad934f5f29bb25eb79ad3a51bf1d677be7b1c2750"
+    "5cf2876858e330e4d58266fe40855c7aec7517af7577ee06c038903983b7325f"
 )
 WEBSITE_COMMANDS = {
     "npm install --global npm@11.1.0 --ignore-scripts --no-audit --no-fund",
@@ -858,6 +858,12 @@ def check_markdown_links(root: Path) -> list[Failure]:
         for match in MARKDOWN_LINK.finditer(text):
             destination = match.group(1).strip("<>")
             if destination.startswith(("#", "http://", "https://", "mailto:")):
+                continue
+            if destination.startswith("/") and path.relative_to(root).is_relative_to(
+                "website/content/blog"
+            ):
+                # Article routes and fragments belong to the built website.
+                # website/scripts/verify-output.mjs checks their actual targets.
                 continue
             destination = unquote(destination.split("#", 1)[0].split("?", 1)[0])
             if not destination:

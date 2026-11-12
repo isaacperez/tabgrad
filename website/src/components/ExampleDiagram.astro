@@ -1,4 +1,5 @@
 ---
+import InlineText from "./InlineText.astro";
 interface Props {
   diagram: { formula: string; terms: { label: string; value: string }[]; explanation: string };
 }
@@ -6,6 +7,11 @@ const { diagram } = Astro.props;
 ---
 <figure class="example-diagram">
   <p class="diagram-formula">{diagram.formula}</p>
-  <dl class="diagram-terms">{diagram.terms.map(term => <div><dt>{term.label}</dt><dd>{term.value}</dd></div>)}</dl>
-  <figcaption>{diagram.explanation} Illustrates the original example.</figcaption>
+  <dl class="diagram-terms">
+    {diagram.terms.map(term => <div>
+      <dt><InlineText text={term.label} /></dt>
+      <dd>{term.value}</dd>
+    </div>)}
+  </dl>
+  <figcaption><InlineText text={diagram.explanation} /></figcaption>
 </figure>

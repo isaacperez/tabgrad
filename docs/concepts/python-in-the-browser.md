@@ -26,7 +26,7 @@ asynchronous programming but are new to browser Python or deep-learning
 runtimes. It explains the mental model before introducing the detailed
 [integration architecture](../architecture/python-integration.md). It is not
 an installation tutorial or a list of supported PyTorch operations; those
-questions belong to [development](../development.md) and
+questions belong to [Python setup](../reference/python-host.md#run-a-complete-cpu-example) and
 [compatibility](../compatibility.md).
 
 ## A browser needs an interpreter, not different Python spelling

@@ -19,7 +19,7 @@
     "test:gpu": "node scripts/gpu-browser-check.mjs"
   },
   "dependencies": {
-    "@tabgrad/tabgrad": "0.2.0",
+    "@tabgrad/tabgrad": "0.3.0",
     "pyodide": "314.0.6"
   },
   "devDependencies": {

@@ -6,20 +6,32 @@ import SplitSection from "../components/SplitSection.astro";
 import Illustration from "../components/Illustration.astro";
 import { repositoryUrl, maintainerContact } from "../../scripts/config.mjs";
 ---
-<StarlightPage frontmatter={{ title: "Contact and professional help", description: "Contact the Tabgrad maintainer about integrations, personalised help, technical reviews and work with your team.", template: "splash", editUrl: false }}>
+<StarlightPage frontmatter={{ title: "Contact", description: "Get in touch with Isaac Pérez about Tabgrad, deep learning projects and professional collaboration.", template: "splash", editUrl: false }}>
   <div class="not-content marketing">
-    <PageIntro title="Need a hand?" accent="Let’s talk." description="Discuss an integration or explore hands-on help for your team with Tabgrad’s maintainer."><a class="button primary project-text-link" href={maintainerContact.url}><Icon name="x.com" />Find me on X ↗</a><Illustration slot="illustration" name="conversation" /></PageIntro>
-    <SplitSection title="Personal guidance.">
-      <p>Ask about a paid session to work through an integration, understand the supported API or review your code together.</p>
-      <p>Share what you’re building, the problem you want to solve and the outcome you’re looking for. A small example is a useful starting point.</p>
+    <PageIntro
+      title="Get in touch."
+      description="Have a question about Tabgrad, or an AI project you’d like help with? You can reach me on LinkedIn or X."
+    >
+      <div class="project-actions">
+        <a class="button primary project-text-link" href={maintainerContact.linkedInUrl}><Icon name="linkedin" />Find me on LinkedIn ↗</a>
+        <a class="text-link project-text-link" href={maintainerContact.url}><Icon name="x.com" />Find me on X ↗</a>
+      </div>
+      <Illustration slot="illustration" name="conversation" />
+    </PageIntro>
+    <SplitSection id="work" title="Work with me.">
+      <p>I can help develop deep learning systems and get models into production, through a technical review or by working alongside your team.</p>
+      <p>Tell me what you’re building and what you need help with. For paid work, we’ll agree on the scope and fees before starting.</p>
+      <a class="text-link" href={maintainerContact.linkedInUrl}>Discuss your project on LinkedIn ↗</a>
     </SplitSection>
-    <SplitSection title="Support for teams.">
-      <p>Discuss a technical review or integration guidance for your browser application. For development work, describe the change your team needs. Sponsorship enquiries are welcome through the same contact.</p>
-      <p>Availability, scope and fees are agreed directly with the maintainer.</p>
-      <a class="text-link" href={maintainerContact.url}>Find {maintainerContact.label} on X ↗</a>
+    <SplitSection id="sponsorship" title="Sponsor Tabgrad.">
+      <p>If your team would like to support Tabgrad’s development, get in touch about sponsorship.</p>
+      <div class="project-actions">
+        <a class="text-link" href={maintainerContact.linkedInUrl}>Discuss sponsorship on LinkedIn ↗</a>
+        <a class="text-link" href="/about/#support">Other ways to support Tabgrad →</a>
+      </div>
     </SplitSection>
     <SplitSection title="Bugs and ideas.">
-      <p>Use GitHub for ordinary bugs and feature suggestions so others can find the discussion. Include a small example, what you expected and your browser version.</p>
+      <p>Report bugs and suggest features on GitHub, where others can join the discussion. For a bug, include a small example, what happened, what you expected and your browser version.</p>
       <p>For a possible security or privacy issue, follow the <a href={`${repositoryUrl}/security/policy`}>private reporting instructions</a>.</p>
       <a class="text-link project-text-link" href={`${repositoryUrl}/issues`}><Icon name="github" />Browse or open an issue ↗</a>
     </SplitSection>

@@ -28,6 +28,7 @@
   --tg-radius-md: 0.5rem;
   --tg-radius-lg: 0.75rem;
   --tg-control-size: 2.75rem; /* Comfortable 44px controls; minimum, not fixed height. */
+  --tg-runner-gutter: var(--tg-space-4);
   --tg-reading-measure: 65ch;
   --tg-intro-measure: 45ch;
   --tg-card-min: 16rem; /* A title and short paragraph must fit comfortably. */

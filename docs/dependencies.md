@@ -195,7 +195,7 @@ real-browser checks from [development](development.md#prepare-and-preview-the-st
 | `unist-util-visit` | `5.2.0` | Syntax-tree traversal, official unist project, MIT |
 | `github-slugger` | `2.0.0` | Preserve GitHub heading anchors, official project, ISC |
 | `parse5` | `8.1.0` | HTML verification and inline-script hashes, official project, MIT |
-| `@tabgrad/tabgrad` | `0.1.3` | Exact published browser distribution, this project's npm package, Apache-2.0 |
+| `@tabgrad/tabgrad` | `0.3.0` | Exact published browser distribution, this project's npm package, Apache-2.0 |
 | `pyodide` | `314.0.6` | Optional on-demand Python runtime; official distribution, MPL-2.0 and the component notices below |
 
 Registry URLs and integrity for all transitive packages belong to the website

@@ -364,17 +364,24 @@ checks follow the existing `TABGRAD_BROWSER`, `TABGRAD_CHROME` and
 | `npm --prefix website run preview` | Serve only that output on `http://127.0.0.1:4322/` with the candidate MIME, CSP and cache rules |
 | `npm --prefix website run test:browser` | Run the built UI's eight CPU examples and lifecycle/error controls in installed Chrome and Firefox |
 | `npm --prefix website run test:gpu` | Explicit physical WebGPU check of the built UI: eight JavaScript/Python programs, public resource feedback, cancellation and recovery; installed nonfallback Chrome by default (`TABGRAD_BROWSER`), secure isolated loopback hosting; unavailable hardware fails |
-| `npm --prefix website run test:cdn` | Explicit live-network check of the documented HTML/CPU example against jsDelivr in installed Chrome and Firefox |
+| `npm --prefix website run test:cdn` | Explicit live-network check of the documented JavaScript and Python HTML/CPU examples against jsDelivr in installed Chrome and Firefox |
 | `node website/scripts/browser-check.mjs --serve` | Expose the same test fixture on an ephemeral loopback port for interactive browser inspection |
 
 `test:cdn` reads the exact HTML block from the browser package guide and adds
-only test reporting after its cleanup. The generated standalone page is
-`website/.generated/cdn-example.html`; the browser observations are saved beside
-it in `cdn-check.json`. Only the test HTML is served locally; all runtime
-requests must use the selected versioned CDN tree, including manifest and Wasm,
-without Python. This opt-in check needs public network access and is separate
+only test reporting after its cleanup. A controlled module that throws on
+import checks the same JavaScript source's visible failure message; the unit
+control also faults setup, calculation and cleanup and checks original errors.
+The Python case reads both named file
+fences from the Python host guide and adds a page observer without changing
+their application code. It checks two successive successful runs and explicitly
+modified worker controls for program errors with partial output, startup errors
+and native WebAssembly instantiation failures. The generated examples are `website/.generated/cdn-example.html` and
+`website/.generated/python-cdn-example/`; observations are saved in
+`website/.generated/cdn-check.json`. Only the test HTML and Python application
+worker are local; runtime and interpreter assets use the selected versioned
+CDN packages. This opt-in check needs public network access and is separate
 from the ordinary website checks, which retain same-origin assets. It qualifies
-the observed example, not CDN availability, all browsers or GPU/Python delivery.
+the observed CPU examples, not CDN availability, all browsers or GPU delivery.
 
 Documentation comes from the GitHub checkout's selected Markdown, not a request
 to GitHub for every visitor. Existing admitted files need no commit to preview
@@ -392,8 +399,20 @@ retain obsolete stylesheet URLs; the separate diagram cache is reused.
 A local preview with
 uncommitted inputs identifies itself as such; a clean build links source to its
 exact Git revision. The package version executed by the playground remains
-separately pinned. No production origin is configured locally, so sitemap
-generation is skipped with an explicit warning. A deployment must qualify its
+separately pinned. Without `TABGRAD_SITE_URL`, no public origin is inferred and
+sitemap generation is skipped with an explicit warning. Supply an HTTPS origin
+without credentials, path, query or fragment to generate canonical/share URLs
+and the sitemap. `TABGRAD_SITE_URL=https://example.invalid npm --prefix website run build`
+qualifies that path locally with a reserved test address; `npm --prefix website run verify`
+checks the resulting routes, images and sitemap against the recorded build input.
+Set the same input during verification to also require that build origin. CI
+does this with the reserved test address; local mode without an origin remains
+available. The static robots file announces a sitemap only when that origin is
+supplied, and Blog structured data uses the same validated article metadata.
+Keep real deployment inputs outside maintained files. The post-build share-card
+renderer uses the already prepared Chrome, self-hosted font and shared design
+sources; it does not download a browser or call an external image service.
+A deployment must qualify its
 origin, headers, rollback and asset retention separately; these commands neither
 configure a host nor publish anything.
 

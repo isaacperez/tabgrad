@@ -13,10 +13,10 @@
 .artwork .art-detail-fill { fill: var(--tg-art-detail); }
 .artwork .art-line { fill: none; stroke: var(--tg-art-line); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .artwork .art-detail { fill: none; stroke: var(--tg-art-detail); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.artwork .art-grid { stroke-linecap: butt; }
 .artwork .art-guides { fill: none; stroke: var(--tg-art-line); stroke-width: 2; stroke-dasharray: 2 10; stroke-linecap: round; }
 .artwork .art-arrow { fill: none; stroke: var(--tg-art-primary); stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
-.artwork .art-return { fill: none; stroke: var(--tg-art-primary); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
-.artwork .art-soft-stroke { fill: none; stroke: var(--tg-art-soft); stroke-width: 8; stroke-linecap: round; }
+.artwork .art-return { fill: none; stroke: var(--tg-art-primary); stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
 .artwork .art-code-stroke, .artwork .art-code-light { fill: none; stroke: var(--tg-code-keyword); stroke-width: 8; stroke-linecap: round; }
 .artwork .art-code-light { stroke: var(--tg-code-text); }
 .artwork .art-code-rule { fill: none; stroke: var(--tg-code-border); stroke-width: 2; }

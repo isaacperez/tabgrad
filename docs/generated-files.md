@@ -59,12 +59,19 @@ checks in the same change as a registered generated path.
   only for a deliberate dependency change; verify with the documented website
   setup/check/build commands. The root library lock is independent.
 - **Ignored outputs:** `website/.astro/`, `.generated/`, `src/content/docs/`,
-  `public/{brand,diagrams,licenses,playground,vendor}/` and `dist/`.
+  `public/{brand,diagrams,examples,licenses,playground,vendor}/` and `dist/`.
   Astro owns its cache and final HTML; `website/scripts/prepare-content.mjs`
-  owns adapted Markdown, source metadata and keyed Mermaid SVG;
+  owns adapted Markdown, source metadata, exact integration downloads and keyed Mermaid SVG;
   `prepare-assets.mjs` owns matched unmodified runtime copies, notices and the
   content-addressed executor. Authored pages, styles, executor and examples
   under `website/src/` are maintained source.
+  The post-build social-image generator owns `dist/social/*.png` and its ignored
+  `.generated/social/` cache, deriving article text from Astro's final validated
+  metadata and paint/type from the shared source styles. Retired article images
+  are pruned. These PNGs and text downloads are generated, not committed assets.
+  Astro's maintained `src/pages/robots.txt.ts` owns `dist/robots.txt`; the shared
+  publication helper supplies its origin-specific sitemap line. BlogPosting data
+  is generated inside each article HTML from the native validated metadata.
 - **Inputs and reproduction:** selected Git-tracked Markdown, brand SVG,
   website sources, exact locked dependency resolution and explicitly prepared
   renderer browser. `npm --prefix website run build` reproduces the site;
@@ -76,6 +83,13 @@ checks in the same change as a registered generated path.
   preparation replaces changed documents and prunes retired generated pages
   and diagrams; asset preparation replaces its generated asset trees. Remove
   only these identified website outputs when a clean rebuild is needed.
+  Preparation and final verification reject undeclared entries, symlinks and
+  non-regular files in the owned `brand/`, `licenses/` and `examples/` public
+  namespaces through `website/scripts/generated-assets.mjs`. Inspect any obsolete
+  generated paths named by the error and remove only confirmed generated files
+  before rebuilding; these checks do not delete entries automatically. Final
+  output also admits the authored `licenses/index.html` route beside the notices.
+  This local build rule does not remove older admitted immutable files from a host.
   Upstream notices copied into output retain the reviewed originals in
   `website/third-party/` and the sources recorded in [dependencies](dependencies.md#website-build-and-browser-assets).
 

@@ -2,6 +2,7 @@
 <h1>Website WebGPU integration</h1><pre id="result">Running…</pre>
 <iframe title="Built GPU playground" src="/playground/" style="width:100%;height:800px"></iframe>
 <script type="module">
+import { checkEditablePythonExamples } from '/__example_checks.mjs';
 const token = new URL(location.href).searchParams.get("token");
 const frame = document.querySelector("iframe");
 const cases = [];
@@ -53,17 +54,35 @@ try {
     assert(code.value === example[language].code, 'GPU source retains explicit device placement');
     const actual = await execute();
     assert(actual === example[language].expected, `${example.id}/${language}: ${actual}`);
-      assert(text('[data-resource-device]') === 'GPU', 'resource feedback names the processor while source retains webgpu');
-      assert(text('[data-resource-state]') === 'GPU work completed', 'success means numerical GPU work drained');
-      assert(Number(text('[data-resource-dispatches]')) > 0, 'public diagnostics observe GPU dispatches');
-      assert(text('[data-resource-remaining]').startsWith('0 B · 0 pending · 0 B'), 'physical session closed with no unconfirmed submissions');
-      assert(!['—', 'Not measured'].includes(text('[data-resource-memory]')), 'both languages report a scoped GPU peak');
-      assert(!page.querySelector('[data-resource-dispatches]').parentElement.hidden, 'real GPU measurements remain visible in both languages');
-      adapter = text('[data-resource-adapter]');
-      assert(adapter.includes('hardware, browser-reported'), 'physical qualification excludes software and undisclosed adapter type');
-      assert(text('[data-resource-program]') !== '', 'program time remains available with GPU measurements');
+    assert(text('[data-resource-device]') === 'GPU', 'resource feedback names the processor while source retains webgpu');
+    assert(text('[data-resource-state]') === 'GPU work completed', 'success means numerical GPU work drained');
+    assert(Number(text('[data-resource-dispatches]')) > 0, 'public diagnostics observe GPU dispatches');
+    assert(text('[data-resource-remaining]').startsWith('0 B · 0 pending · 0 B'), 'physical session closed with no unconfirmed submissions');
+    assert(!['—', 'Not measured', 'Unavailable'].includes(text('[data-resource-memory]')), 'both languages report a scoped GPU peak');
+    assert(page.querySelector('[data-resource-cpu-kernels]').parentElement.hidden && page.querySelector('[data-resource-wasm]').parentElement.hidden, 'GPU details do not attribute CPU bookkeeping to GPU work');
+    assert(!page.querySelector('[data-resource-dispatches]').parentElement.hidden, 'real GPU measurements remain visible in both languages');
+    adapter = text('[data-resource-adapter]');
+    assert(adapter.includes('hardware, browser-reported'), 'physical qualification excludes software and undisclosed adapter type');
+    assert(text('[data-resource-program]') !== '', 'program time remains available with GPU measurements');
+    const summary = page.querySelector('[data-run-summary]');
+    const measurements = summary.textContent;
+    const details = summary.querySelector('details');
+    details.open = true;
+    for (const selector of [`[data-run-language="${language}"]`, '[data-run-device="webgpu"]', `[data-example="${example.id}"]`]) {
+      click(selector);
+      assert(runner.dataset.state === 'complete' && output.textContent.trim() === actual && summary.textContent === measurements && details.open,
+        `reselecting ${selector} must retain the completed output and every actual GPU measurement`);
+    }
+    page.querySelector(`[data-run-language="${language}"]`).dispatchEvent(new KeyboardEvent('keydown', { key: language === 'python' ? 'Home' : 'End', bubbles: true }));
+    assert(summary.textContent === measurements && output.textContent.trim() === actual, 'reselecting the active language with the keyboard retains observations');
     cases.push({ name: `${example.id}/${language}/webgpu`, output: actual, deviceState: text('[data-resource-state]'), memoryPeak: text('[data-resource-memory]') });
   }
+  await checkEditablePythonExamples({ examples: catalog, execute, select(id) {
+    click(`[data-example="${id}"]`); click('[data-run-language="python"]');
+  } });
+  click('[data-run-device="cpu"]');
+  assert(runner.dataset.state === 'idle' && output.textContent === '' && text('[data-resource-memory]') === 'No run yet', 'an actual device change clears the previous run rather than attributing GPU results to CPU');
+  click('[data-run-device="webgpu"]');
   click('[data-run-language="javascript"]');
   assert(await execute('console.log(Array.from(await session.tensor([3, 4]).toArray()));') === '[3,4]', 'GPU session still permits explicit/default CPU work');
   assert(text('[data-resource-state]') === 'Enabled · no GPU calculations', 'acquisition alone is not numerical GPU use');
@@ -72,7 +91,7 @@ try {
   assert(text('[data-resource-state]') === 'GPU work completed' && output.textContent.trim() === '[6]', 'public methods captured before edited program executes');
   cases.push({ name: 'bound diagnostics and cleanup', passed: true });
   await execute('console.log("partial"); await session.tensor([1], {device:"webgpu"}).toArray(); throw new Error("expected GPU failure");', 'error');
-  assert(output.textContent.includes('partial') && output.textContent.includes('expected GPU failure') && text('[data-resource-state]') === 'Run failed', 'partial output survives and failed script cannot claim GPU completion');
+  assert(output.textContent.includes('partial') && page.querySelector('[data-error-details]').textContent.includes('expected GPU failure') && text('[data-resource-state]') === 'Run failed', 'partial output survives and failed script cannot claim GPU completion');
   cases.push({ name: 'GPU failure and partial output', passed: true });
   click('[data-run-language="python"]');
   assert(await execute('print("CPU-only Python")') === 'CPU-only Python', 'enabled GPU service still permits CPU-only Python');
@@ -80,7 +99,7 @@ try {
   assert(text('[data-resource-memory]') === '0 B', 'measured Python GPU zero remains distinct from unavailable memory');
   cases.push({ name: 'Python CPU-only GPU counters are measured zero', passed: true });
   await execute('import torch\nx = torch.tensor([2., 3.], dtype=torch.float32, device="webgpu")\nprint((x*x).tolist())\nraise RuntimeError("expected Python GPU failure")', 'error');
-  assert(output.textContent.includes('[4.0, 9.0]') && output.textContent.includes('expected Python GPU failure'), 'Python keeps values produced before failure');
+  assert(output.textContent.includes('[4.0, 9.0]') && page.querySelector('[data-error-details]').textContent.includes('expected Python GPU failure'), 'Python keeps values produced before failure');
   assert(text('[data-resource-state]') === 'Run failed' && Number(text('[data-resource-dispatches]')) > 0, 'partial Python GPU counters cannot claim successful completion');
   cases.push({ name: 'Python GPU failure preserves real partial observations', passed: true });
   run.click(); click('[data-stop]'); await until(() => !run.disabled, 'Stop during page-owned GPU setup');

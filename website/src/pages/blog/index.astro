@@ -1,0 +1,33 @@
+---
+import StarlightPage from "@astrojs/starlight/components/StarlightPage.astro";
+import { getCollection } from "astro:content";
+import PageIntro from "../../components/PageIntro.astro";
+import Illustration from "../../components/Illustration.astro";
+import PostMeta from "../../components/PostMeta.astro";
+import { sortPosts } from "../../blog/schema";
+const posts = sortPosts(await getCollection("blog"));
+const description = "Notes on Tabgrad and working with AI in the browser.";
+---
+<StarlightPage frontmatter={{ title: "Blog", description, template: "splash", editUrl: false }}>
+  <div class="not-content marketing">
+    <PageIntro compact title="Blog" description={description} />
+    <div class="post-list">
+      {posts.map(post => <article>
+        <a
+          class:list={["link-card post-card", { "illustrated-post": post.data.illustration }]}
+          href={`/blog/${post.id}/`}
+        >
+          <div class="post-card-copy">
+            <PostMeta author={post.data.author} date={post.data.date} />
+            <h2 data-link-title>{post.data.title}</h2>
+            <p>{post.data.description}</p>
+          </div>
+          {post.data.illustration && <div class="post-card-art">
+            <Illustration name={post.data.illustration} />
+          </div>}
+          <span class="text-link post-card-action" data-link-title>Read the article →</span>
+        </a>
+      </article>)}
+    </div>
+  </div>
+</StarlightPage>

@@ -1,8 +1,16 @@
 ---
-interface Props { title: string; description: string }
+interface Props {
+  title: string;
+  description: string;
+}
 const { title, description } = Astro.props;
 ---
 <section class="next-section build-next">
-  <div><h2>{title}</h2><p>{description}</p></div>
-  <div class="next-actions"><slot /></div>
+  <div>
+    <h2>{title}</h2>
+    <p>{description}</p>
+  </div>
+  <div class="next-actions">
+    <slot />
+  </div>
 </section>

@@ -120,6 +120,11 @@ start with [CONTRIBUTING.md](CONTRIBUTING.md).
 The [brand assets and guide](assets/brand/README.md) provide the logo variants,
 color palette and wordmark typography.
 
+## Support
+
+You can support Tabgrad's development on
+[Buy Me a Coffee](https://buymeacoffee.com/isaperbor).
+
 ## License
 
 Tabgrad is licensed under the [Apache License 2.0](LICENSE).

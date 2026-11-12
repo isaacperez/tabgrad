@@ -2,6 +2,7 @@ import { copyFile, cp, mkdir, readFile, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { websiteRoot, repositoryRoot, runtimeVersion, pyodideVersion } from "./config.mjs";
 import { sha256, writeChanged } from "./files.mjs";
+import { brandPaths, componentNoticePath, checkGeneratedAssets } from "./generated-assets.mjs";
 
 /** @param {string} root @param {string} prefix @returns {Promise<Record<string,string>>} */
 async function inventory(root, prefix = "") {
@@ -24,6 +25,7 @@ export async function prepareAssets() {
   if (runtime.name !== "@tabgrad/tabgrad" || runtime.version !== runtimeVersion || interpreter.version !== pyodideVersion) {
     throw new Error("Installed website browser input versions do not match the website contract");
   }
+  await checkGeneratedAssets(join(websiteRoot, "public"), [...brandPaths, componentNoticePath], { allowMissing: true });
   const runtimeDestination = join(websiteRoot, `public/vendor/tabgrad/${runtimeVersion}`);
   const interpreterDestination = join(websiteRoot, `public/vendor/pyodide/${pyodideVersion}`);
   await rm(join(websiteRoot, "public/vendor"), { recursive: true, force: true });
@@ -41,8 +43,8 @@ export async function prepareAssets() {
     await copyFile(join(websiteRoot, "third-party", name), join(interpreterDestination, name));
   }
   await mkdir(join(websiteRoot, "public/brand"), { recursive: true });
-  for (const name of ["tabgrad-logo.svg", "tabgrad-logo-dark.svg", "tabgrad-small.svg"]) {
-    await copyFile(join(repositoryRoot, "assets/brand", name), join(websiteRoot, "public/brand", name));
+  for (const path of brandPaths) {
+    await copyFile(join(repositoryRoot, "assets", path), join(websiteRoot, "public", path));
   }
   const notices = [];
   for (const name of ["astro", "@astrojs/starlight", "pagefind", "astro-expressive-code", "@expressive-code/core", "@expressive-code/plugin-frames", "@expressive-code/plugin-shiki", "prismjs"]) {
@@ -54,7 +56,7 @@ export async function prepareAssets() {
   notices.push("@pagefind/default-ui: same Pagefind project license above. Browser UI sources are included in the exact locked package.");
   notices.push(`Svelte 4 runtime bundled by Pagefind UI (MIT)\nhttps://github.com/sveltejs/svelte\n\n${await readFile(join(websiteRoot, "third-party/SVELTE-LICENSE"), "utf8")}`);
   notices.push(`Inter 4.1 (SIL Open Font License 1.1)\nhttps://github.com/rsms/inter/tree/e3a3d4c57d5ecc01453a575621882a384c1995a3\n\n${await readFile(join(websiteRoot, "third-party/INTER-LICENSE"), "utf8")}`);
-  await writeChanged(join(websiteRoot, "public/licenses/website-components.txt"), notices.join("\n\n--------------------\n\n") + "\n");
+  await writeChanged(join(websiteRoot, "public", componentNoticePath), notices.join("\n\n--------------------\n\n") + "\n");
   const original = await inventory(join(packageRoot, "dist"));
   const copied = await inventory(runtimeDestination);
   for (const [path, hash] of Object.entries(original)) {

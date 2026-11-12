@@ -66,6 +66,10 @@ class RepositoryCheckTests(unittest.TestCase):
             True, {CHECKS.WEBSITE_PATH: document}, frozenset(), ()
         )
         self.assertEqual(CHECKS.check_workflow_security(state), [])
+        self.assertEqual(
+            document["jobs"]["website"]["env"]["TABGRAD_SITE_URL"],
+            "https://example.invalid/",
+        )
         document["jobs"]["website"]["steps"][-1]["run"] = "echo skipped"
         self.assertTrue(CHECKS.check_workflow_security(state))
         document["permissions"]["contents"] = "write"
@@ -635,6 +639,35 @@ class RepositoryCheckTests(unittest.TestCase):
             failures = CHECKS.check_markdown_links(root)
             self.assertEqual(len(failures), 1)
             self.assertIn("docs/missing.md", failures[0].message)
+
+    def test_blog_site_routes_keep_their_website_validation_owner(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            article = root / "website/content/blog/post.md"
+            article.parent.mkdir(parents=True)
+            article.write_text(
+                "[Run](/playground/?language=python#code)\n"
+                "[Source](missing-source.md)\n",
+                encoding="utf-8",
+            )
+            (root / "README.md").write_text(
+                "[Missing](/missing-repository-file.md)\n", encoding="utf-8"
+            )
+            failures = CHECKS.check_markdown_links(root)
+            self.assertEqual(len(failures), 2)
+            self.assertEqual(
+                {failure.path for failure in failures},
+                {Path("README.md"), article.relative_to(root)},
+            )
+            self.assertTrue(
+                any("missing-source.md" in failure.message for failure in failures)
+            )
+            self.assertTrue(
+                any(
+                    "missing-repository-file.md" in failure.message
+                    for failure in failures
+                )
+            )
 
     def test_markdown_links_reject_targets_outside_repository(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

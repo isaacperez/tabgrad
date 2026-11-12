@@ -122,6 +122,10 @@ installed Chrome and Firefox. These are the same local commands in
 [development](development.md#prepare-and-preview-the-static-website), not weaker
 CI substitutes. The repository validator registers its complete parsed
 definition and command set; executable drift needs renewed review.
+The job supplies `https://example.invalid/` as a reserved public origin for build
+and verification, so canonical/share URLs, structured metadata, robots discovery
+and sitemap coverage are checked without a deployment address. The verifier
+rejects an explicit origin that differs from the recorded build input.
 
 The explicit live-CDN example check is separate from this workflow. It needs
 external service availability and qualifies the HTML integration path; normal

@@ -11,6 +11,7 @@ const fixture = "website-gpu-smoke.html";
 const requests = new Set();
 /** @param {string} path @returns {Promise<Buffer>} */
 async function readAsset(path) {
+  if (path === join(websiteRoot, "dist/__example_checks.mjs")) return readFile(join(websiteRoot, "tests/example-checks.mjs"));
   if (path.endsWith("/js-tests/browser/" + fixture)) return readFile(join(websiteRoot, "tests/gpu-browser.html"));
   if (path === join(websiteRoot, "dist/__gpu_examples.json")) {
     const catalog = JSON.parse(await readFile(join(websiteRoot, "src/playground/examples.json"), "utf8"));

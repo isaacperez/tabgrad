@@ -1,17 +1,18 @@
 [
   {
     "id": "first-gradient",
-    "title": "Your first gradient",
-    "summary": "Find how sensitive a calculation is to each input.",
-    "description": "Square two numbers and add them. A gradient measures how the result responds to each input; here it is twice that input. Change [-1, 2] and run again.",
+    "title": "Calculate gradients automatically",
+    "summary": "See how changing an input affects the result.",
+    "description": "Use `backward()` to calculate gradients and read them from `x.grad`. In this sum-of-squares example, each gradient is twice the corresponding value in `x`.",
     "reference": "docs/reference/backward-gradients.md",
+    "referenceLabel": "Gradient reference",
     "source": "README.md",
     "python": {
-      "code": "import torch\n\nx = torch.tensor(\n    [-1.0, 2.0],\n    dtype=torch.float32,\n    device=device,\n    requires_grad=True,\n)\n\nloss = (x * x).sum()\nloss.backward()\n\nprint(x.grad.tolist())  # [-2.0, 4.0]",
+      "code": "import torch\n\nx = torch.tensor(\n    [-1.0, 2.0],\n    dtype=torch.float32,\n    device=device,\n    requires_grad=True,\n)\n\nloss = (x * x).sum()\nloss.backward()\n\nprint(x.grad.tolist())\n# [-2.0, 4.0]",
       "expected": "[-2.0, 4.0]"
     },
     "javascript": {
-      "code": "const x = session.tensor([-1, 2], {\n  device,\n  requiresGrad: true,\n});\n\nconst loss = x.mul(x).sum();\nloss.backward();\n\nconsole.log(Array.from(await x.grad.toArray()));",
+      "code": "const x = session.tensor([-1, 2], { device, requiresGrad: true });\n\nconst loss = x.mul(x).sum();\nloss.backward();\n\nconsole.log(Array.from(await x.grad.toArray()));",
       "expected": "[-2,4]"
     },
     "diagram": {
@@ -30,15 +31,17 @@
           "value": "[-2, 4]"
         }
       ],
-      "explanation": "The gradient is twice each original input."
-    }
+      "explanation": "Each gradient is twice its input: `-1` gives `-2`, and `2` gives `4`. These values describe how the total responds to a small change in each input."
+    },
+    "hint": "Change the values in `x` and compare the gradients."
   },
   {
     "id": "weighted-sum",
-    "title": "A weighted sum",
-    "summary": "Give inputs different weights and see their effect on the result.",
-    "description": "Give [1, 2] weights of [3, 4] to get 11. Change the weights and compare the result and its input gradients.",
+    "title": "Calculate a weighted sum",
+    "summary": "Change the weights and see how they affect the result.",
+    "description": "Weights control how much each value contributes to a sum. This example calculates the total and a gradient for each input.",
     "reference": "docs/reference/functional-gradients.md",
+    "referenceLabel": "Functional gradients reference",
     "source": "docs/reference/browser-package.md",
     "python": {
       "code": "import torch\n\nx = torch.tensor(\n    [1., 2.],\n    dtype=torch.float32,\n    device=device,\n    requires_grad=True,\n)\nweights = torch.tensor([3., 4.], dtype=torch.float32, device=device)\n\nloss = (x * weights).sum()\n(gradient,) = torch.autograd.grad(loss, (x,))\n\nprint(\"loss:\", loss.tolist())\nprint(\"gradient:\", gradient.tolist())",
@@ -64,33 +67,36 @@
           "value": "[3, 4]"
         }
       ],
-      "explanation": "Each weight measures the effect of its input on the total."
-    }
+      "explanation": "The total is `1 × 3 + 2 × 4 = 11`. Increasing the first input by one adds `3` to the total; increasing the second adds `4`. Those are the two gradients."
+    },
+    "hint": "Change `weights` and see how the total and gradients respond."
   },
   {
     "id": "functional-gradients",
-    "title": "Two input gradients",
-    "summary": "Explore how two sets of inputs influence the same result.",
-    "description": "Compare how x and y affect the same result. The Python version checks the original values; update its assertions if you change those inputs.",
+    "title": "Calculate gradients for multiple tensors",
+    "summary": "See how two inputs affect the same result.",
+    "description": "Calculate gradients for `x` and `y` in a single call to `autograd.grad()`. The output shows how each tensor affects the result, with its gradients returned separately as `dx` and `dy`.",
     "reference": "docs/reference/functional-gradients.md",
+    "referenceLabel": "Functional gradients reference",
     "source": "docs/reference/functional-gradients.md",
     "python": {
-      "code": "import torch\n\nx = torch.tensor(\n    [2.0, 3.0],\n    dtype=torch.float32,\n    device=device,\n    requires_grad=True,\n)\ny = torch.tensor(\n    [5.0, 7.0],\n    dtype=torch.float32,\n    device=device,\n    requires_grad=True,\n)\n\nloss = (x * y + x * x).sum()\ndx, dy = torch.autograd.grad(loss, (x, y))\n\nassert dx.tolist() == [9.0, 13.0]\nassert dy.tolist() == [2.0, 3.0]\nassert not dx.requires_grad\n\nprint(\"dx:\", dx.tolist())\nprint(\"dy:\", dy.tolist())",
+      "code": "import torch\n\nx = torch.tensor(\n    [2.0, 3.0],\n    dtype=torch.float32,\n    device=device,\n    requires_grad=True,\n)\ny = torch.tensor(\n    [5.0, 7.0],\n    dtype=torch.float32,\n    device=device,\n    requires_grad=True,\n)\n\nloss = (x * y + x * x).sum()\ndx, dy = torch.autograd.grad(loss, (x, y))\n\nprint(\"dx:\", dx.tolist())\nprint(\"dy:\", dy.tolist())",
       "expected": "dx: [9.0, 13.0]\ndy: [2.0, 3.0]"
     },
     "javascript": {
       "code": "const x = session.tensor([2, 3], {\n  device,\n  requiresGrad: true,\n});\nconst y = session.tensor([5, 7], {\n  device,\n  requiresGrad: true,\n});\n\nconst loss = x.mul(y).add(x.mul(x)).sum();\nconst [dx, dy] = session.grad(loss, [x, y]);\n\nconsole.log(\"dx:\", Array.from(await dx.toArray()));\nconsole.log(\"dy:\", Array.from(await dy.toArray()));",
-      "expected": "dx: [9,13]\ndy: [2,3]"
+      "expected": "dx: [9,13]\ndy: [2,3]",
+      "description": "Calculate gradients for `x` and `y` in a single call to `session.grad()`. The output shows how each tensor affects the result, with its gradients returned separately as `dx` and `dy`."
     },
     "diagram": {
       "formula": "sum(x × y + x × x) = 44",
       "terms": [
         {
-          "label": "x",
+          "label": "`x`",
           "value": "[2, 3]"
         },
         {
-          "label": "y",
+          "label": "`y`",
           "value": "[5, 7]"
         },
         {
@@ -98,18 +104,20 @@
           "value": "dx: [9, 13]\ndy: [2, 3]"
         }
       ],
-      "explanation": "Both inputs influence the same scalar result."
-    }
+      "explanation": "Changing `x` affects both the product and the square, so its gradient includes both effects: `y + 2 × x`. Changing `y` affects only the product, so its gradient is `x`."
+    },
+    "hint": "Change `x` or `y` and compare `dx` and `dy`."
   },
   {
     "id": "matrix-products",
-    "title": "Multiply matrices",
-    "summary": "Multiply two tables of numbers, then explore how their inputs affect the result.",
-    "description": "Multiply a 2×3 matrix by a 3×2 matrix. Each value in seed weights one output; the input gradients measure how their weighted sum changes. Changing seed changes the gradients, not the product. Update the Python assertions if you change its inputs.",
+    "title": "Multiply matrices and calculate gradients",
+    "summary": "Multiply two tables of numbers and explore the result.",
+    "description": "Multiply `a` by `b`, then calculate gradients for both matrices. The output includes the matrix product and the gradients for each input.",
     "reference": "docs/reference/tensor-matmul.md",
+    "referenceLabel": "Matrix multiplication reference",
     "source": "docs/reference/tensor-matmul.md",
     "python": {
-      "code": "import torch\n\na = torch.tensor(\n    [[1., 2., 3.], [4., 5., 6.]],\n    dtype=torch.float32,\n    device=device,\n    requires_grad=True,\n)\nb = torch.tensor(\n    [[7., 8.], [9., 10.], [11., 12.]],\n    dtype=torch.float32,\n    device=device,\n    requires_grad=True,\n)\n\ny = a @ b\nassert y.tolist() == [[58., 64.], [139., 154.]]\n\nseed = torch.tensor([[1., 2.], [3., 4.]], dtype=torch.float32, device=device)\nga, gb = torch.autograd.grad(y, (a, b), grad_outputs=seed)\nassert ga.tolist() == [[23., 29., 35.], [53., 67., 81.]]\nassert gb.tolist() == [[13., 18.], [17., 24.], [21., 30.]]\n\nprint(\"product:\", y.tolist())\nprint(\"dA:\", ga.tolist())\nprint(\"dB:\", gb.tolist())",
+      "code": "import torch\n\na = torch.tensor(\n    [[1., 2., 3.], [4., 5., 6.]],\n    dtype=torch.float32,\n    device=device,\n    requires_grad=True,\n)\nb = torch.tensor(\n    [[7., 8.], [9., 10.], [11., 12.]],\n    dtype=torch.float32,\n    device=device,\n    requires_grad=True,\n)\n\ny = a @ b\n\nseed = torch.tensor([[1., 2.], [3., 4.]], dtype=torch.float32, device=device)\nga, gb = torch.autograd.grad(y, (a, b), grad_outputs=seed)\n\nprint(\"product:\", y.tolist())\nprint(\"dA:\", ga.tolist())\nprint(\"dB:\", gb.tolist())",
       "expected": "product: [[58.0, 64.0], [139.0, 154.0]]\ndA: [[23.0, 29.0, 35.0], [53.0, 67.0, 81.0]]\ndB: [[13.0, 18.0], [17.0, 24.0], [21.0, 30.0]]"
     },
     "javascript": {
@@ -132,7 +140,8 @@
           "value": "[58, 64]\n[139, 154]"
         }
       ],
-      "explanation": "The inner dimensions match; the outer dimensions shape the result. The seed weights the gradients, not this product."
-    }
+      "explanation": "A matrix with `2` rows and `3` columns can multiply one with `3` rows and `2` columns. The result has `2` rows and `2` columns. Changing `seed` adjusts the gradients while leaving the product unchanged."
+    },
+    "hint": "Change `seed` to adjust the output weights used to calculate the gradients."
   }
 ]

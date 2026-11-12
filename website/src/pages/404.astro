@@ -1,0 +1,16 @@
+---
+import StarlightPage from "@astrojs/starlight/components/StarlightPage.astro";
+import PageIntro from "../components/PageIntro.astro";
+const description =
+  "This link may be outdated, or the address may be incorrect. You can return home or browse the documentation.";
+---
+<StarlightPage frontmatter={{ title: "Page not found", description, template: "splash", editUrl: false, head: [{ tag: "meta", attrs: { name: "robots", content: "noindex" } }] }}>
+  <div class="not-content marketing">
+    <PageIntro title="Page not found." description={description}>
+      <div class="next-actions">
+        <a class="button primary" href="/">Go to homepage →</a>
+        <a class="text-link" href="/docs/">Browse the documentation →</a>
+      </div>
+    </PageIntro>
+  </div>
+</StarlightPage>

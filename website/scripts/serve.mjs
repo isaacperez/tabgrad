@@ -7,6 +7,13 @@ import { websiteRoot } from "./config.mjs";
 import { writeChanged } from "./files.mjs";
 import { contentType, deliveryHeaders } from "./delivery.mjs";
 
+/** @param {string} output @param {string} path @returns {Promise<string>} */
+async function outputPath(output, path) {
+  const destination = await realpath(resolve(output, "." + path));
+  if (!destination.startsWith(output + sep)) throw new Error("Invalid route");
+  return destination;
+}
+
 /** Serve only an inspected output tree; never the checkout or a directory listing.
  * @param {string} root @returns {import('node:http').Server}
  */
@@ -15,22 +22,35 @@ export function createPreviewServer(root) {
   return createServer(async (request, response) => {
     if (!["GET", "HEAD"].includes(request.method ?? "")) { response.writeHead(405); response.end("Method not allowed"); return; }
     try {
-      const url = new URL(request.url, "http://localhost");
-      let path = decodeURIComponent(url.pathname);
+      if (!request.url?.startsWith("/")) throw new Error("Invalid route");
+      const url = new URL("http://localhost" + request.url);
+      const decoded = decodeURIComponent(url.pathname);
+      const normalized = decoded.replace(/\/+/g, "/");
+      let path = normalized;
       if (path.includes("\0") || path.includes("\\") || path.split("/").some((part) => part.startsWith("."))) throw new Error("Invalid route");
       if (path.endsWith("/")) path += "index.html";
-      const destination = await realpath(resolve(output, "." + path));
-      if (!destination.startsWith(output + sep)) throw new Error("Invalid route");
-      if ((await stat(destination)).isDirectory()) {
-        const index = await realpath(resolve(destination, "index.html"));
-        if (!index.startsWith(output + sep) || !(await stat(index)).isFile()) throw new Error("Invalid route");
-        response.writeHead(301, { Location: url.pathname + "/" + url.search, "Cache-Control": "no-cache" });
+      const destination = await outputPath(output, path);
+      const directory = (await stat(destination)).isDirectory();
+      if (directory) {
+        const index = await outputPath(output, path + "/index.html");
+        if (!(await stat(index)).isFile()) throw new Error("Invalid route");
+      }
+      if (directory || normalized !== decoded) {
+        const canonical = normalized + (directory ? "/" : "");
+        const location = canonical.split("/").map(encodeURIComponent).join("/") + url.search;
+        response.writeHead(301, { Location: location, "Cache-Control": "no-cache" });
         response.end(); return;
       }
       const bytes = await readFile(destination);
       response.writeHead(200, { "Content-Type": contentType(destination), ...deliveryHeaders(path, path.endsWith(".html") ? bytes.toString("utf8") : "") });
       response.end(request.method === "HEAD" ? undefined : bytes);
     } catch {
+      try {
+        const bytes = await readFile(await outputPath(output, "/404.html"));
+        response.writeHead(404, { "Content-Type": contentType("404.html"), ...deliveryHeaders("/404.html", bytes.toString("utf8")) });
+        response.end(request.method === "HEAD" ? undefined : bytes);
+        return;
+      } catch { /* Keep a plain response when the built recovery page is unavailable. */ }
       response.writeHead(404, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-cache", "X-Content-Type-Options": "nosniff" });
       response.end(request.method === "HEAD" ? undefined : "Not found");
     }

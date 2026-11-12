@@ -13,19 +13,28 @@ localhost during development:
 ```html
 <pre id="output">Loading Tabgrad…</pre>
 <script type="module">
-  import { createRuntimeSession } from "https://cdn.jsdelivr.net/npm/@tabgrad/tabgrad@0.3.0/dist/index.js";
-
-  const session = createRuntimeSession();
-  const x = session.tensor([1, 2, 3]);
-  const total = x.sum();
+  const output = document.getElementById("output");
+  let session;
 
   try {
+    const { createRuntimeSession } = await import(
+      "https://cdn.jsdelivr.net/npm/@tabgrad/tabgrad@0.3.0/dist/index.js"
+    );
+    session = createRuntimeSession();
+    const x = session.tensor([1, 2, 3]);
+    const total = x.sum();
     const [value] = await total.toArray();
-    document.getElementById("output").textContent = `Sum: ${value}`;
+    output.textContent = `Sum: ${value}`;
+  } catch (error) {
+    output.textContent = "Could not run Tabgrad. Check the console for details.";
+    console.error(error);
   } finally {
-    total.close();
-    x.close();
-    await session.close();
+    try {
+      await session?.close();
+    } catch (error) {
+      output.textContent += "\nCould not finish cleanup. Check the console for details.";
+      console.error(error);
+    }
   }
 </script>
 ```
@@ -35,6 +44,13 @@ that module; it does not create a global `Tabgrad` variable. The browser loads
 the matching modules, manifest and CPU WebAssembly from the CDN when needed.
 Python is not loaded. Nothing needs to be installed on your computer, but the
 first visit still downloads the runtime and requires network access.
+
+The import is inside the error boundary so a download failure also produces a
+visible message. Closing the short-lived session releases its resident
+allocations, including those of the example's tensors. Long-lived applications
+should also close individual tensors when they no longer need them. Execution
+and cleanup failures are reported separately, preserving both original errors
+in the browser console.
 
 Keep the exact version and the explicit `dist/index.js` path. This example uses
 jsDelivr's raw package files, not a rewritten bundle, a `+esm` endpoint or an

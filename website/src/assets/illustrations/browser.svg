@@ -14,7 +14,7 @@
     <path class="art-code-stroke" d="M144 236H188M144 264H200M168 292H224M168 320H208M144 348H184"/>
     <path class="art-code-light" d="M208 236H256M220 264H304M244 292H288M228 320H280M204 348H240M144 376H216"/>
   </g>
-  <path class="art-arrow" d="M360 288H404M392 276L404 288L392 300M596 288H648M636 276L648 288L636 300"/>
+  <path class="art-arrow" d="M360 288H432M420 276L432 288L420 300M592 288H656M644 276L656 288L644 300"/>
   <path class="art-faint" d="M448 384L512 352L576 384L512 416Z"/>
   <path class="art-soft" d="M448 384L512 416L576 384V396L512 428L448 396Z"/>
   <path class="art-soft" d="M448 344L512 312L576 344L512 376Z"/>
@@ -30,7 +30,6 @@
     <path class="art-detail" d="M696 204H728M696 216H752"/>
     <path class="art-guides" d="M696 272H824M696 320H824"/>
     <path class="art-line" d="M696 248V368H824"/>
-    <path class="art-soft-stroke" d="M708 344L748 312L780 320L816 264"/>
     <path class="art-arrow" d="M708 344L748 312L780 320L816 264"/>
     <g class="art-primary"><circle cx="708" cy="344" r="5"/><circle cx="748" cy="312" r="5"/><circle cx="780" cy="320" r="5"/><circle cx="816" cy="264" r="5"/></g>
   </g>

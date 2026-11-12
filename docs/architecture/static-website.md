@@ -12,11 +12,12 @@ accepted by the maintainer on 2 November 2026 after independent challenge
 
 ## One website, different reader tasks
 
-The site has five primary destinations: Home introduces Tabgrad and a runnable
+The site separates practical and editorial destinations: Home introduces Tabgrad and a runnable
 example; Get started explains integration into an application; Documentation
 provides concepts, interfaces and deeper technical perspectives; Playground
 lets visitors edit and execute examples; Versions and compatibility identifies
-the selected release and its evidenced limits.
+the selected release and its evidenced limits. Blog publishes articles and
+examples about the project, separately from normative technical documentation.
 
 About and Contact are secondary destinations for the project, its maintainer
 and contribution, sponsorship or professional-help enquiries. They do not
@@ -37,6 +38,9 @@ The maintained brand assets supply the artwork and palette. A shared catalogue
 and execution component connect Home and Playground, while documentation uses
 the existing reader perspectives. Integration programs retain their setup and
 cleanup rather than silently becoming snippets that depend on playground globals.
+The integration page's downloadable files are derived from those same Markdown
+blocks. Source downloads use plain-text URLs and named download links, keeping
+them separate from executable website routes and the search inventory.
 
 ## Repository Markdown is the documentation source
 
@@ -45,6 +49,17 @@ reads its reviewed GitHub checkout; it does not fetch mutable Markdown from
 GitHub in each visitor's browser. The resulting pages remain usable if a
 GitHub API request would fail. Local development reads the same source files
 and refreshes generated content after an edit.
+
+Editorial articles live in `website/content/blog/`. They follow the same
+Git-tracked, symlink-rejected source admission and are copied unchanged into
+an ignored native Astro collection. A filename owns its unique article route;
+validated frontmatter supplies title, summary, author, calendar date and optional
+existing artwork. The shared index and article template render that collection
+at build time. Neither article visits nor local reading fetch Markdown from
+GitHub, acquire a computation device or start an interpreter. New articles and
+edits use the existing source/index watch and do not require an npm release.
+Articles distinguish version-specific capabilities from future goals and link
+to maintained references. They do not replace or extend those contracts.
 
 A publication register identifies admitted sources, routes and navigation.
 Only Git-tracked source files are admitted; new pages enter the local preview
@@ -70,7 +85,9 @@ version. The deployment automation consumes a checked website output after its
 own authorization. It does not become part of the tensor package release.
 The documentation overview identifies its source separately from the version of
 Tabgrad used by examples. Local previews distinguish unpublished edits from the
-linked base revision. Architecture explains accepted design; version-specific
+linked published base revision, including clean local commits that have not
+been pushed. The build records its actual input revision separately. Architecture
+explains accepted design; version-specific
 support records establish implemented support. Unpublished API behavior is not
 silently presented as stable. Historical versions link to their actual source
 and records instead of relabelling current documentation as an archive.
@@ -164,8 +181,8 @@ CI, with unavailable/nonhardware adapters rejected rather than silently skipped.
 
 The output needs HTTPS, correct JavaScript/JSON MIME and `application/wasm`, plus
 same-origin worker URLs. Home and Playground use COOP `same-origin` and COEP
-`require-corp`; their executor and physical GPU worker responses carry COEP
-as well. This admits managed Python GPU shared memory without requiring those
+`require-corp`; their executor and physical GPU workers, and Pagefind’s
+dedicated search worker, carry COEP as well. This admits managed Python GPU shared memory without requiring those
 headers on documentation pages. Effective isolation must be checked in the
 browser, including embedding constraints. Same-origin delivery avoids
 unnecessary broad CORS permissions.
@@ -180,7 +197,19 @@ An immutable URL cannot change bytes. Updates and rollback select coherent
 website/runtime sets and account for older pages still requesting assets.
 The site does not promise offline operation or introduce a service worker.
 
-CI builds and checks source changes without deployment credentials. An authorized
+The production origin is an explicit external build input. Astro/Starlight
+generate canonical URLs and the sitemap from it; an unset input does not invent
+a production address. Shared social metadata uses that same origin. A build-only
+renderer produces sharing PNGs from the brand, shared design styles and native
+validated article metadata. It introduces no visitor-side renderer or remote
+font request. The recovery page is not indexed or listed in the sitemap.
+The same origin supplies sitemap discovery in the static robots file and article
+structured data derived from the native validated Blog metadata. The documentation
+adapter derives summaries from original introductions or reviewed publication
+metadata; neither creates another editable technical documentation source.
+
+CI builds and checks source changes with a reserved test origin and without
+deployment credentials, including the public URL and sitemap invariants. An authorized
 deployment uses the checked output; host-dependent routes, headers, resource
 loading and recovery need verification at that destination. Static-host limits
 are checked against the actual output. No vendor/account/domain configuration

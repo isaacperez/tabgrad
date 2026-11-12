@@ -1,50 +1,107 @@
 ---
 import StarlightPage from "@astrojs/starlight/components/StarlightPage.astro";
-import { Code } from "@astrojs/starlight/components";
+import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 import PageIntro from "../components/PageIntro.astro";
+import Illustration from "../components/Illustration.astro";
 import SplitSection from "../components/SplitSection.astro";
 import NextStep from "../components/NextStep.astro";
 import IntegrationMap from "../components/IntegrationMap.astro";
+import IntegrationSource from "../components/IntegrationSource.astro";
+import { integrationFiles } from "../../scripts/integration-files.mjs";
 import data from "../../.generated/site-data.json";
+const [javascriptFile] = integrationFiles(data);
+const description =
+  "Add Tabgrad to your website and run Python or JavaScript on your visitors’ devices.";
 ---
-<StarlightPage frontmatter={{ title: "Get started", template: "splash", editUrl: false }}>
+<StarlightPage frontmatter={{ title: "Get started", description, template: "splash", editUrl: false }}>
   <div class="not-content marketing">
-    <PageIntro title="Add Tabgrad" accent="to your page." description="Add a calculation to a static HTML page. No npm or build tools required.">
-      <a class="text-link" href="/playground/">Try an example first →</a>
+    <PageIntro title="Get started with Tabgrad" description={description}>
+      <nav class="project-actions" aria-label="Choose an integration example">
+        <a class="text-link" href="#html">JavaScript →</a>
+        <a class="text-link" href="#python">Python →</a>
+      </nav>
+      <Illustration slot="illustration" name="browser" />
     </PageIntro>
     <div class="integration-guide">
-      <SplitSection id="html" label="HTML + JavaScript" title="Copy a working example.">
+      <SplitSection id="html" title="Use Tabgrad from JavaScript">
         <Fragment slot="intro">
-          <p>Paste this block into your HTML body. Serve your page over HTTPS, or localhost, and you’ll see <code>Sum: 6</code>.</p>
-          <p>The browser loads the versioned library and WebAssembly from the CDN. The calculation runs on your visitor’s device.</p>
-          <a class="text-link" href="/docs/reference/browser-package/#use-javascript-directly-in-html">HTML integration guide →</a>
+          <p>This complete HTML example loads Tabgrad from a CDN and displays a calculation on the page. Use it as a starting point for your own site.</p>
         </Fragment>
-        <Code wrap frame="code" title="HTML · ready to copy" code={data.integrationHtml} lang="html" />
+        <ol class="setup-steps">
+          <li>Save the example as <code>index.html</code>.</li>
+          <li>Serve it over HTTPS or localhost and open the page in your browser.</li>
+          <li>The page displays <code>Sum: 6</code>. Change the values in the code and reload to calculate a different total.</li>
+        </ol>
+        <IntegrationSource
+          name="index.html"
+          href="/examples/javascript/index.html.txt"
+          code={javascriptFile.body}
+          lang="html"
+          description="HTML and JavaScript in one file."
+        />
+        <a class="text-link" href="/docs/reference/browser-package/#use-javascript-directly-in-html">HTML integration guide →</a>
       </SplitSection>
-      <SplitSection label="Self-hosting · optional" title="Host the library yourself.">
+      <SplitSection id="python" title="Use Tabgrad from Python">
         <Fragment slot="intro">
-          <p>Prefer to deliver everything from your own site? Get the package and copy its complete <code>dist/</code> tree to a directory such as <code>/vendor/tabgrad/</code>.</p>
-          <p>Replace the CDN URL with <code>/vendor/tabgrad/index.js</code>. Keep the modules, manifests and WebAssembly together.</p>
+          <p>Pyodide runs Python in the browser. This example connects it to Tabgrad, so you can use <code>import torch</code> without installing Python on your computer.</p>
+        </Fragment>
+        <ol class="setup-steps">
+          <li>Save both files in the same folder.</li>
+          <li>Serve the folder over HTTPS or localhost and open <code>index.html</code>.</li>
+          <li>Click <strong>Run Python</strong> to load the runtime and execute the example.</li>
+        </ol>
+        <Tabs>
+          <TabItem label="index.html">
+            <IntegrationSource
+              name="index.html"
+              href="/examples/python/index.html.txt"
+              code={data.integrationPythonHtml}
+              lang="html"
+              description="The page, its Run Python button and the output."
+            />
+          </TabItem>
+          <TabItem label="python-worker.js">
+            <IntegrationSource
+              name="python-worker.js"
+              href="/examples/python/python-worker.js.txt"
+              code={data.integrationPythonWorker}
+              lang="javascript"
+              description="Loads Python and Tabgrad, and contains the Python code to run."
+            />
+          </TabItem>
+        </Tabs>
+        <p>The example prints <code>[-2.0, 4.0]</code>, the gradients calculated by the Python code. To try your own calculation, edit the Python block in <code>python-worker.js</code>, reload the page and run it again.</p>
+        <p>Here, <code>import torch</code> uses Tabgrad, not the official PyTorch package. See <a href="/versions/">what’s available</a> before adapting existing code.</p>
+        <a class="text-link" href="/docs/reference/python-host/#run-a-complete-cpu-example">Python integration guide →</a>
+      </SplitSection>
+      <SplitSection label="Optional" title="Host Tabgrad yourself">
+        <Fragment slot="intro">
+          <p>You can also serve Tabgrad’s files from your own site instead of a CDN. Install the npm package, then copy its complete <code>dist/</code> folder to a path such as <code>/vendor/tabgrad/</code>.</p>
+          <p>Use <code>/vendor/tabgrad/index.js</code> in your import. Keep the supplied folder structure so Tabgrad can find its matching assets.</p>
           <a class="text-link" href="/docs/reference/browser-package/#install-and-serve-your-own-files">Self-hosting guide →</a>
         </Fragment>
-        <Code wrap frame="code" title="Get the files with npm" code={`npm install @tabgrad/tabgrad@${data.runtimeVersion} --ignore-scripts --no-audit --no-fund`} lang="shell" />
-        <div class="integration-note"><h3>Your files, your origin.</h3><p>Serve JavaScript, JSON and WebAssembly with their correct content types. Your visitors still install nothing.</p></div>
-      </SplitSection>
-      <SplitSection label="Optional Python" title="Run Python in the browser.">
-        <Fragment slot="intro">
-          <p>Pyodide provides the Python interpreter. Your application loads it in a worker and connects it to Tabgrad before running this code.</p>
-          <p><code>import torch</code> refers to Tabgrad’s supported API subset. The interpreter runs in the browser, alongside the same tensor runtime.</p>
-          <a class="text-link" href="/docs/reference/python-host/">Set up browser Python →</a>
-        </Fragment>
-        <Code wrap frame="code" title="Python · after setup" code={data.introductoryPython} lang="python" />
+        <Code
+          wrap
+          frame="code"
+          title="Get the files with npm"
+          code={`npm install @tabgrad/tabgrad@${data.runtimeVersion} --ignore-scripts --no-audit --no-fund`}
+          lang="shell"
+        />
       </SplitSection>
       <SplitSection title="How Tabgrad runs.">
-        <Fragment slot="intro"><p>Use JavaScript directly, or connect Python through Pyodide. Both interfaces share Tabgrad’s tensor operations and gradients.</p><a class="text-link" href="/docs/architecture/">Explore the architecture →</a></Fragment>
+        <Fragment slot="intro">
+          <p>JavaScript and Python use the same Tabgrad engine. These examples run on CPU. You can also use a GPU when the browser and device support it.</p>
+          <a class="text-link" href="/docs/architecture/">Explore the architecture →</a>
+        </Fragment>
         <IntegrationMap />
       </SplitSection>
     </div>
-    <NextStep title="Use your GPU." description="GPU mode uses WebGPU, the browser’s GPU interface. Check the browser and hosting requirements before adding it to your site.">
-      <a class="text-link" href="/docs/reference/webgpu-runtime/">GPU setup →</a>
+    <NextStep
+      title="Use your GPU."
+      description="GPU execution requires a browser and device with WebGPU support. Follow the setup guide for your language."
+    >
+      <a class="text-link" href="/docs/reference/webgpu-runtime/">JavaScript GPU setup →</a>
+      <a class="text-link" href="/docs/reference/python-host/#acquire-a-managed-gpu-connection">Python GPU setup →</a>
       <a class="text-link" href="/versions/">Versions and compatibility →</a>
     </NextStep>
   </div>

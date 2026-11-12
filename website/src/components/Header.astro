@@ -4,8 +4,18 @@ import ThemeSelect from "@astrojs/starlight/components/ThemeSelect.astro";
 import { Icon } from "@astrojs/starlight/components";
 import { runtimeVersion, repositoryUrl, packageUrl } from "../../scripts/config.mjs";
 
-const navigation = [["Home", "/"], ["Get started", "/start/"], ["Documentation", "/docs/"], ["Playground", "/playground/"], ["Versions", "/versions/"]];
-const projectNavigation = [["About", "/about/"], ["Contact", "/contact/"]];
+const navigation = [
+  ["Home", "/"],
+  ["Get started", "/start/"],
+  ["Documentation", "/docs/"],
+  ["Playground", "/playground/"],
+  ["Blog", "/blog/"],
+  ["Versions", "/versions/"],
+];
+const projectNavigation = [
+  ["About", "/about/"],
+  ["Contact", "/contact/"],
+];
 const current = Astro.url.pathname;
 ---
 <div class="tabgrad-header">
@@ -14,15 +24,61 @@ const current = Astro.url.pathname;
     <img class="dark-logo" src="/brand/tabgrad-logo-dark.svg" alt="Tabgrad" width="146" height="38" />
   </a>
   <nav aria-label="Main navigation" class="tabgrad-navigation">
-    {navigation.map(([label, href]) => <a href={href} aria-current={(href === "/" ? current === "/" : current.startsWith(href)) ? "page" : undefined}>{label}</a>)}
+    {navigation.map(([label, href]) => <a
+      href={href}
+      aria-current={(href === "/" ? current === "/" : current.startsWith(href)) ? "page" : undefined}
+    >
+      {label}
+    </a>)}
   </nav>
-  <div class="tabgrad-header-actions"><a class="project-icon-link header-repository" href={repositoryUrl} aria-label="Tabgrad on GitHub" title="Tabgrad on GitHub"><Icon name="github" /></a><Search /><div class="header-appearance" title="Change color theme"><ThemeSelect /></div></div>
-  <button class="site-menu-toggle" type="button" popovertarget="tabgrad-site-menu" aria-label="Site navigation"><span>Menu</span><Icon name="bars" class="open-menu" /><Icon name="close" class="close-menu" /></button>
+  <div class="tabgrad-header-actions">
+    <a
+      class="project-icon-link header-repository"
+      href={repositoryUrl}
+      aria-label="Tabgrad on GitHub"
+      title="Tabgrad on GitHub"
+    >
+      <Icon name="github" />
+    </a>
+    <Search />
+    <div class="header-appearance" title="Change color theme">
+      <ThemeSelect />
+    </div>
+  </div>
+  <button
+    class="site-menu-toggle"
+    type="button"
+    popovertarget="tabgrad-site-menu"
+    aria-label="Site navigation"
+  >
+    <span>Menu</span>
+    <Icon name="bars" class="open-menu" />
+    <Icon name="close" class="close-menu" />
+  </button>
   <nav id="tabgrad-site-menu" class="site-menu" popover="auto" aria-label="Site navigation">
-    <div class="site-menu-heading"><span>Explore Tabgrad</span><a href="/versions/">v{runtimeVersion}</a></div>
-    <div class="site-menu-links">{navigation.map(([label, href]) => <a href={href} aria-current={(href === "/" ? current === "/" : current.startsWith(href)) ? "page" : undefined}>{label}</a>)}</div>
-    <div class="site-menu-secondary">{projectNavigation.map(([label, href]) => <a href={href} aria-current={current.startsWith(href) ? "page" : undefined}>{label}</a>)}<a href={repositoryUrl}><Icon name="github" />GitHub ↗</a><a href={packageUrl}><Icon name="npm" />npm ↗</a></div>
-    <div class="site-menu-appearance"><span>Color theme</span><ThemeSelect /></div>
+    <div class="site-menu-heading">
+      <span>Explore Tabgrad</span>
+      <a href="/versions/">v{runtimeVersion}</a>
+    </div>
+    <div class="site-menu-links">
+      {navigation.map(([label, href]) => <a
+        href={href}
+        aria-current={(href === "/" ? current === "/" : current.startsWith(href)) ? "page" : undefined}
+      >
+        {label}
+      </a>)}
+    </div>
+    <div class="site-menu-secondary">
+      {projectNavigation.map(([label, href]) => <a href={href} aria-current={current.startsWith(href) ? "page" : undefined}>
+        {label}
+      </a>)}
+      <a href={repositoryUrl}><Icon name="github" />GitHub ↗</a>
+      <a href={packageUrl}><Icon name="npm" />npm ↗</a>
+    </div>
+    <div class="site-menu-appearance">
+      <span>Color theme</span>
+      <ThemeSelect />
+    </div>
   </nav>
 </div>
 <script>

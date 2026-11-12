@@ -1,12 +1,18 @@
-import { execFile, execFileSync } from "node:child_process";
+import { execFile } from "node:child_process";
 import { mkdir, readdir, readFile, rm, copyFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { promisify } from "node:util";
 import puppeteer from "puppeteer";
 import { collectDocuments, createDocumentIndex, adaptDocument, firstCodeBlock } from "./content.mjs";
-import { websiteRoot, repositoryRoot, repositoryUrl, runtimeVersion, pyodideVersion } from "./config.mjs";
+import { websiteRoot, repositoryRoot, repositoryUrl, runtimeVersion, pyodideVersion, documentDescriptions } from "./config.mjs";
 import { writeChanged, sha256 } from "./files.mjs";
 import { loadIllustration } from "./illustrations.mjs";
+import { documentationSourceContext } from "./source-context.mjs";
+import { diagramSize } from "./diagram-layout.mjs";
+import { prepareBlog } from "./blog.mjs";
+import { integrationFiles } from "./integration-files.mjs";
+import { checkGeneratedAssets } from "./generated-assets.mjs";
+import { siteOrigin } from "./publication.mjs";
 
 const execFileAsync = promisify(execFile);
 const generatedDocs = join(websiteRoot, "src/content/docs");
@@ -30,12 +36,13 @@ async function generatedFiles(root) {
   return result;
 }
 
-/** @param {Map<string, {id:string, definition:string}>} diagrams @param {string} rendererKey @returns {Promise<void>} */
+/** @param {Map<string, {id:string, definition:string}>} diagrams @param {string} rendererKey @returns {Promise<Map<string,{width:number,height:number}>>} */
 async function prepareDiagrams(diagrams, rendererKey) {
   await mkdir(diagramDirectory, { recursive: true });
   const missing = [];
+  const sizes = new Map();
   for (const diagram of diagrams.values()) {
-    try { await readFile(join(diagramDirectory, `${diagram.id}.svg`)); }
+    try { sizes.set(diagram.id, diagramSize(await readFile(join(diagramDirectory, `${diagram.id}.svg`), "utf8"))); }
     catch (error) { if (error.code !== "ENOENT") throw error; missing.push(diagram); }
   }
   if (missing.length) {
@@ -52,6 +59,7 @@ async function prepareDiagrams(diagrams, rendererKey) {
         "--no-font-embed", "--jobs", "1", "--svgId", "tabgrad-diagram", "--quiet",
       ], { cwd: websiteRoot });
       for (let index = 0; index < missing.length; index++) {
+        sizes.set(missing[index].id, diagramSize(await readFile(join(work, `rendered-${index + 1}.svg`), "utf8")));
         await copyFile(join(work, `rendered-${index + 1}.svg`), join(diagramDirectory, `${missing[index].id}.svg`));
       }
     } catch (error) {
@@ -59,30 +67,36 @@ async function prepareDiagrams(diagrams, rendererKey) {
     } finally { await rm(work, { recursive: true, force: true }); }
     console.log(`Rendered ${missing.length} documentation diagrams (renderer ${rendererKey.slice(0, 8)}).`);
   }
+  return sizes;
 }
 
 /** @returns {Promise<{documents: number, diagrams: number, sourceRevision:string}>} */
 export async function prepareContent() {
+  const posts = await prepareBlog(repositoryRoot, join(websiteRoot, ".generated/blog"));
   const cli = JSON.parse(await readFile(join(websiteRoot, "node_modules/@mermaid-js/mermaid-cli/package.json"), "utf8"));
   const browser = JSON.parse(await readFile(join(websiteRoot, "node_modules/puppeteer/package.json"), "utf8"));
   const mermaid = JSON.parse(await readFile(join(websiteRoot, "node_modules/mermaid/package.json"), "utf8"));
   const rendererKey = sha256(JSON.stringify({ cli: cli.version, mermaid: mermaid.version, browser: browser.version, platform: process.platform, arch: process.arch, config: mermaidConfig }));
-  const sourceRevision = execFileSync("git", ["rev-parse", "HEAD"], { cwd: repositoryRoot, encoding: "utf8" }).trim();
-  const localChanges = execFileSync("git", ["status", "--porcelain", "--", "docs", "website", "README.md", "assets/brand"], { cwd: repositoryRoot, encoding: "utf8" }).length > 0;
+  const { sourceRevision, sourceLinkRevision, localChanges } = documentationSourceContext(repositoryRoot);
   const entries = await collectDocuments();
   const documents = createDocumentIndex(entries);
+  for (const source of Object.keys(documentDescriptions)) if (!documents.has(source)) throw new Error(`Editorial summary is not an admitted document: ${source}`);
   const output = [];
+  const adaptedDocuments = [];
   const diagrams = new Map();
   for (const entry of entries) {
-    const adapted = adaptDocument(entry, documents, sourceRevision, { diagramKey: rendererKey });
+    const adapted = adaptDocument(entry, documents, sourceLinkRevision, { diagramKey: rendererKey });
     for (const diagram of adapted.diagrams) diagrams.set(diagram.id, diagram);
     const metadata = documents.get(entry.source);
-    const frontmatter = ["---", `title: ${JSON.stringify(metadata.title)}`, `editUrl: ${localChanges ? "false" : JSON.stringify(`${repositoryUrl}/blob/${sourceRevision}/${entry.source}`)}`, "---", ""].join("\n");
-    output.push({ path: join(generatedDocs, entry.source.replace(/README\.md$/i, "index.md")), body: frontmatter + adapted.markdown });
+    const frontmatter = ["---", `title: ${JSON.stringify(metadata.title)}`, `description: ${JSON.stringify(metadata.description)}`, `editUrl: ${localChanges ? "false" : JSON.stringify(`${repositoryUrl}/blob/${sourceRevision}/${entry.source}`)}`, "---", ""].join("\n");
+    adaptedDocuments.push({ path: join(generatedDocs, entry.source.replace(/README\.md$/i, "index.md")), frontmatter, adapted });
   }
-  await prepareDiagrams(diagrams, rendererKey);
+  const diagramSizes = await prepareDiagrams(diagrams, rendererKey);
+  for (const { path, frontmatter, adapted } of adaptedDocuments) output.push({ path, body: frontmatter + adapted.render(diagramSizes) });
+  const overviewDescription = "Guides and reference for using Tabgrad in the browser.";
   const overview = `---
 title: Documentation
+description: ${JSON.stringify(overviewDescription)}
 editUrl: false
 tableOfContents: false
 ---
@@ -92,53 +106,54 @@ tableOfContents: false
 
 # Tabgrad docs
 
-<p class="docs-lead">Run an example, integrate Tabgrad into a page, or look up the API. Start with the task you have in mind.</p>
+<p class="docs-lead">${overviewDescription}</p>
+<p><a class="text-link" href="/playground/">Try an example in the playground →</a></p>
 </div><div class="docs-overview-art">${(await loadIllustration("learning")).replaceAll("\n", "")}</div></div>
 
 <div class="docs-paths">
 <section class="docs-route">
 
-## Learn by running code
+## Add Tabgrad to your website
 
-Change an input and see what happens. The playground includes Python, JavaScript and an explanation of each result.
+Start with a complete HTML example for JavaScript or Python, then adapt it to your page.
 
-- [Open the playground](/playground/)
-- [Understand tensors and shapes](/docs/concepts/tensor-shape/)
-- [Learn how browser Python works](/docs/concepts/python-in-the-browser/)
-
-</section>
-<section class="docs-route">
-
-## Add Tabgrad to an app
-
-Start with an HTML module import, or serve the files yourself. Add Python when you need it.
-
-- [Get started](/start/)
-- [Use HTML/CDN or serve your own files](/docs/reference/browser-package/)
-- [Set up Python](/docs/reference/python-host/)
-- [Enable GPU execution](/docs/reference/webgpu-runtime/)
+- **[Get started →](/start/)**
+- [JavaScript setup](/docs/reference/browser-package/)
+- [Python setup](/docs/reference/python-host/)
+- GPU: [requirements](/versions/#execution-options) · [JavaScript setup](/docs/reference/webgpu-runtime/) · [Python setup](/docs/reference/python-host/#acquire-a-managed-gpu-connection)
 
 </section>
 <section class="docs-route">
 
-## Find an API
+## Concepts
 
-Find supported operations, their arguments and the behavior you can rely on.
+Understand tensor shapes and how Python runs in the browser.
+
+- [Tensors and shapes](/docs/concepts/tensor-shape/)
+- [Python in the browser](/docs/concepts/python-in-the-browser/)
+
+</section>
+<section class="docs-route">
+
+## Reference
+
+Find supported operations, arguments, results and errors for JavaScript and Python.
 
 - [JavaScript API](/docs/javascript-api/)
+- [Python tensors](/docs/reference/python-tensors/)
 - [Backward and gradients](/docs/reference/backward-gradients/)
 - [PyTorch compatibility](/docs/compatibility/)
 
 </section>
 <section class="docs-route">
 
-## Explore the design
+## Inside Tabgrad
 
-Understand the decisions behind Tabgrad and follow how its parts work together.
+See how the Python interface, tensor runtime and CPU and GPU backends fit together.
 
-- [Architecture](/docs/architecture/) and [concepts](/docs/concepts/)
-- [Components](/docs/components/) and [flows](/docs/flows/)
-- [Versions and compatibility](/versions/)
+- [Architecture](/docs/architecture/)
+- [Components](/docs/components/)
+- [Flows](/docs/flows/)
 
 </section>
 </div>
@@ -146,11 +161,11 @@ Understand the decisions behind Tabgrad and follow how its parts work together.
 
 ## Source and contributing
 
-These pages are built from the repository’s Markdown. Documentation can update independently of the package used by the playground.
+These pages come from the repository’s Markdown. They can change independently of the playground’s package version. Use GitHub to suggest a correction.
 
-${localChanges ? "This local preview includes unpublished edits. The source link shows their base revision.\n" : ""}
+${localChanges ? "This preview includes unpublished changes. GitHub shows the published source.\n" : ""}
 
-<a data-documentation-source href="${repositoryUrl}/blob/${sourceRevision}/docs/README.md">View documentation on GitHub ↗</a> · <a href="${repositoryUrl}/blob/${sourceRevision}/CONTRIBUTING.md">Contribute to the docs ↗</a>
+<a data-documentation-source href="${repositoryUrl}/blob/${sourceLinkRevision}/docs/README.md">View documentation on GitHub ↗</a> · <a href="${repositoryUrl}/blob/${sourceLinkRevision}/CONTRIBUTING.md">Contribute to the docs ↗</a>
 
 </section>
 </div>
@@ -161,17 +176,21 @@ ${localChanges ? "This local preview includes unpublished edits. The source link
   for (const path of await generatedFiles(generatedDocs)) if (!livePaths.has(path)) await rm(path);
   for (const path of await generatedFiles(diagramDirectory)) if (!diagrams.has(relative(diagramDirectory, path).replace(/\.svg$/, ""))) await rm(path);
   const browserGuide = await readFile(join(repositoryRoot, "docs/reference/browser-package.md"), "utf8");
-  const readme = await readFile(join(repositoryRoot, "README.md"), "utf8");
+  const pythonGuide = await readFile(join(repositoryRoot, "docs/reference/python-host.md"), "utf8");
   const information = {
-    sourceRevision, localChanges, runtimeVersion, pyodideVersion,
-    documents: [...documents.values()].map(({ source, title, route, headings }) => ({ source, title, route, headings })),
+    publicOrigin: siteOrigin(process.env.TABGRAD_SITE_URL) ?? null,
+    sourceRevision, sourceLinkRevision, localChanges, runtimeVersion, pyodideVersion, posts,
+    documents: [...documents.values()].map(({ source, title, description, route, headings }) => ({ source, title, description, route, headings })),
     diagrams: diagrams.size, rendererKey,
-    integrationJavaScript: firstCodeBlock(browserGuide, "javascript"),
     integrationHtml: firstCodeBlock(browserGuide, "html"),
-    introductoryPython: firstCodeBlock(readme, "python"),
+    integrationPythonHtml: firstCodeBlock(pythonGuide, "html", "index.html"),
+    integrationPythonWorker: firstCodeBlock(pythonGuide, "javascript", "python-worker.js"),
   };
+  const downloads = integrationFiles(information);
+  await checkGeneratedAssets(join(websiteRoot, "public"), downloads.map(file => file.path), { allowMissing: true });
+  for (const file of downloads) await writeChanged(join(websiteRoot, "public", file.path), file.body);
   await writeChanged(join(websiteRoot, ".generated/site-data.json"), JSON.stringify(information, null, 2) + "\n");
   // Use Astro's public watch hook to rebuild its route table on admission changes.
-  await writeChanged(join(websiteRoot, ".generated/routes.json"), JSON.stringify(information.documents.map(({ route }) => route)) + "\n");
+  await writeChanged(join(websiteRoot, ".generated/routes.json"), JSON.stringify([...information.documents, ...posts].map(({ route }) => route)) + "\n");
   return { documents: documents.size, diagrams: diagrams.size, sourceRevision };
 }

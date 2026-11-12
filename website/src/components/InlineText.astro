@@ -1,0 +1,8 @@
+---
+import { inlineCodeParts } from "../playground/inline-code";
+interface Props {
+  text: string;
+}
+const { text } = Astro.props;
+---
+{inlineCodeParts(text).map(part => part.code ? <code>{part.text}</code> : part.text)}

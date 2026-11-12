@@ -10,7 +10,8 @@ requested input. The runtime does not construct a full Jacobian matrix.
 All numerical operands and the seed belong to one selected device; there is no
 transfer or fallback. GPU use requires an explicitly enabled
 [direct session](webgpu-runtime.md) or [managed Python attachment](python-host.md).
-Omitting a seed creates the unit scalar on the output's device.
+Omitting a seed is supported for a one-element output. It creates a unit-valued
+tensor with the output's shape and device.
 
 The [history component](../components/derivative-history.md) explains ownership;
 the [functional derivative flow](../flows/functional-gradients.md) follows one

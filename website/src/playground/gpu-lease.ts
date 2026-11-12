@@ -7,8 +7,16 @@ export class GpuLease {
 
   async acquire(runtimeBase: string): Promise<WebGpuWorkerController> {
     const base = new URL(runtimeBase, location.origin);
-    if (base.origin !== location.origin || !base.pathname.startsWith("/vendor/tabgrad/") || base.search || base.hash) throw new Error("Invalid same-origin Tabgrad location.");
-    const api = await import(/* @vite-ignore */ new URL("python.js", base).href) as typeof import("@tabgrad/tabgrad/python");
+    if (
+      base.origin !== location.origin ||
+      !base.pathname.startsWith("/vendor/tabgrad/") ||
+      base.search ||
+      base.hash
+    )
+      throw new Error("Invalid same-origin Tabgrad location.");
+    const api = (await import(
+      /* @vite-ignore */ new URL("python.js", base).href
+    )) as typeof import("@tabgrad/tabgrad/python");
     this.cancellation.signal.throwIfAborted();
     const controller = await api.createWebGpuWorker({ signal: this.cancellation.signal });
     this.controller = controller;

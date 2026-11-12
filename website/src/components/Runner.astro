@@ -6,31 +6,136 @@ import { exampleSource } from "../playground/presets";
 import RunControls from "./RunControls.astro";
 import Illustration from "./Illustration.astro";
 import ExampleDiagram from "./ExampleDiagram.astro";
-interface Props { compact?: boolean; id?: string }
+import InlineText from "./InlineText.astro";
+interface Props {
+  compact?: boolean;
+  id?: string;
+}
 const { compact = false, id = "playground" } = Astro.props;
 const initial = examples[0];
-const initialContext = "import torch uses Tabgrad’s supported Python API.";
 ---
-<section class:list={["not-content", "live-runner", { "compact-runner": compact }]} data-runner data-worker-url={assets.workerUrl} data-runtime-base={assets.runtimeBase} data-pyodide-base={assets.pyodideBase} data-runtime-version={assets.runtimeVersion} data-pagefind-ignore>
-  {!compact && <><aside class="example-picker" aria-label="Choose an example">{examples.map((example, index) => <button type="button" data-example={example.id} aria-pressed={index === 0}><Illustration name={example.id} /><span>{example.title}</span></button>)}</aside><div class="runner-introduction"><h2 data-example-title>{initial.title}</h2><p data-example-description>{initial.description}</p></div></>}
+<section
+  class:list={["not-content", "live-runner", { "compact-runner": compact }]}
+  data-runner
+  data-state="idle"
+  data-worker-url={assets.workerUrl}
+  data-runtime-base={assets.runtimeBase}
+  data-pyodide-base={assets.pyodideBase}
+  data-runtime-version={assets.runtimeVersion}
+  data-pagefind-ignore
+>
+  {!compact && <>
+    <details class="disclosure content-disclosure example-chooser" data-example-chooser open>
+      <summary>
+        <span><span class="example-picker-label">Example</span><span data-example-selection>{initial.title}</span></span>
+      </summary>
+      <aside class="example-picker" aria-label="Choose an example">
+        {examples.map((example, index) => <button type="button" data-example={example.id} aria-pressed={index === 0}>
+          <Illustration name={example.id} />
+          <span>{example.title}</span>
+        </button>)}
+      </aside>
+    </details>
+    <div class="runner-introduction">
+      <h2 data-example-title>{initial.title}</h2>
+      <p data-example-description><InlineText text={initial.description} /></p>
+      <p data-example-hint><InlineText text={initial.hint} /></p>
+    </div>
+  </>}
   <div class="runner-workspace ink-surface">
     <div class="runner-toolbar">
-    <div class="code-top"><div class="code-tabs" role="tablist" aria-label="Execution language">
-      {(["python", "javascript"] as const).map((language) => <button id={`${id}-${language}`} type="button" role="tab" aria-selected={language === "python"} tabindex={language === "python" ? 0 : -1} aria-controls={`${id}-panel`} data-run-language={language}>{language === "python" ? "Python" : "JavaScript"}</button>)}
-    </div><div class="editor-tools"><button class="text-button" type="button" aria-label="Reset example code" title="Restore the original example" data-restore>Reset</button><button class="copy-editor" type="button" data-copy-editor>Copy</button></div></div>
-    <RunControls />
+      <div class="code-top">
+        <div class="code-tabs" role="tablist" aria-label="Execution language">
+          {(["python", "javascript"] as const).map((language) => <button
+            id={`${id}-${language}`}
+            type="button"
+            role="tab"
+            aria-selected={language === "python"}
+            tabindex={language === "python" ? 0 : -1}
+            aria-controls={`${id}-panel`}
+            data-run-language={language}
+          >
+            {language === "python" ? "Python" : "JavaScript"}
+          </button>)}
+        </div>
+        <div class="editor-tools">
+          <button
+            class="text-button"
+            type="button"
+            aria-label="Reset example code"
+            title="Restore the original example"
+            data-restore
+          >Reset</button>
+          <button class="copy-editor" type="button" data-copy-editor>Copy</button>
+        </div>
+      </div>
+      <p class="editor-feedback" data-editor-feedback role="status" hidden></p>
+      <RunControls />
+      <p class="run-provenance" data-run-provenance role="status" hidden>Code changed. Output and measurements are from the previous run.</p>
     </div>
-    <RunSummary />
     <div class="runner-body">
-      <div class="runner-input"><div class="panel-header editor-header"><label for={`${id}-code`}>Code</label><span>Editable</span></div><div id={`${id}-panel`} role="tabpanel" aria-labelledby={`${id}-python`} aria-busy="false"><div class="syntax-editor"><pre class="syntax-layer" data-syntax-layer aria-hidden="true"></pre><textarea id={`${id}-code`} class="run-editor" aria-label="Python code" spellcheck="false" rows={compact ? 7 : 8}>{exampleSource(initial, "python", "cpu")}</textarea></div><p class="syntax-notice" data-syntax-notice role="status" hidden></p></div></div>
-      <div class="runner-result"><div class="panel-header output-header"><strong>Output</strong></div><pre id={`${id}-output`} class="run-output" aria-label="Program output" role="region" tabindex="0"></pre></div>
+      <div class="runner-result">
+        <div class="panel-header output-header">
+          <strong>Output</strong>
+        </div>
+        <div id={`${id}-output`} class="run-console" aria-label="Program output" role="region" tabindex="0">
+          <pre class="run-output"></pre>
+          <div class="run-failure" data-run-failure hidden>
+            <p class="output-error" data-error-summary></p>
+            <details class="error-details disclosure">
+              <summary>Full error details</summary>
+              <pre class="output-error" data-error-details></pre>
+            </details>
+          </div>
+        </div>
+        {compact && <>
+          <p class="demo-context"><strong>Original example:</strong> <InlineText text={initial.description} /></p>
+          <RunSummary />
+        </>}
+      </div>
+      <div class="runner-input">
+        <div class="panel-header editor-header">
+          <label for={`${id}-code`}>Code</label>
+          <span>Editable</span>
+        </div>
+        <div id={`${id}-panel`} role="tabpanel" aria-labelledby={`${id}-python`} aria-busy="false">
+          <div class="syntax-editor">
+            <pre class="syntax-layer" data-syntax-layer aria-hidden="true"></pre>
+            <textarea
+              id={`${id}-code`}
+              class="run-editor"
+              aria-label="Python code"
+              spellcheck="false"
+              rows={compact ? 7 : 8}
+            >{exampleSource(initial, "python", "cpu")}</textarea>
+          </div>
+          <p class="syntax-notice" data-syntax-notice role="status" hidden></p>
+        </div>
+      </div>
     </div>
-    <div class="runner-footer"><p class="run-details"></p>
-    <div class="runner-caption"><p class="run-context">{initialContext}</p><span class="runner-version">v{assets.runtimeVersion}</span></div>
-    {!compact && <details class="expected-output"><summary>How the original example works</summary>{examples.map((example, index) => <div data-example-diagram={example.id} hidden={index !== 0}><ExampleDiagram diagram={example.diagram} /></div>)}<strong class="expected-output-label">Expected console output</strong><pre data-expected-output>{initial.python.expected}</pre></details>}
-    <div class="runner-links"><a data-example-reference href="/docs/reference/backward-gradients/">Read the API reference →</a>{compact && <a data-open-playground href="/playground/">Continue in the playground →</a>}</div>
+    {!compact && <RunSummary />}
+    <div class="runner-footer">
+      <p class="run-details"></p>
+      <div class="runner-caption">
+        <p class="run-context"><span data-context-language="python"><code>import torch</code> loads Tabgrad’s supported PyTorch operations.</span><span data-context-language="javascript" hidden>The playground provides <code>session</code> for this JavaScript example.</span></p>
+        <span class="runner-version">v{assets.runtimeVersion}</span>
+      </div>
+      {!compact && <details class="expected-output disclosure">
+        <summary>How this example works</summary>
+        <p data-example-scope>Based on the original code.</p>
+        {examples.map((example, index) => <div data-example-diagram={example.id} hidden={index !== 0}>
+          <ExampleDiagram diagram={example.diagram} />
+        </div>)}
+        <strong class="expected-output-label">Expected console output</strong>
+        <pre data-expected-output>{initial.python.expected}</pre>
+      </details>}
+      <div class="runner-links">
+        <a data-example-reference href={"/" + initial.reference.replace(/\.md$/, "/")}>{initial.referenceLabel} →</a>
+        {compact && <a data-open-playground href="/playground/">Continue in the playground →</a>}
+      </div>
     </div>
   </div>
+  <p class="runner-note">Runs on your device. Only run code you trust. <a href="/docs/concepts/python-in-the-browser/">How browser Python works →</a></p>
 </section>
 <script>
   import "../playground/runner";

@@ -1,7 +1,13 @@
 ---
 import { illustrationMarkup } from "../../scripts/illustrations.mjs";
-interface Props { name: string }
-const drawings = import.meta.glob<string>("../assets/illustrations/*.svg", { query: "?raw", import: "default", eager: true });
+interface Props {
+  name: string;
+}
+const drawings = import.meta.glob<string>("../assets/illustrations/*.svg", {
+  query: "?raw",
+  import: "default",
+  eager: true,
+});
 const svg = drawings[`../assets/illustrations/${Astro.props.name}.svg`];
 if (!svg) throw new Error(`Missing website illustration: ${Astro.props.name}`);
 const markup = illustrationMarkup(Astro.props.name, svg);
