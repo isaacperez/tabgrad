@@ -6,9 +6,11 @@ import { websiteRoot } from "./config.mjs";
 import { contentType, deliveryHeaders } from "./delivery.mjs";
 import { writeChanged } from "./files.mjs";
 import { exampleSource } from "../src/playground/presets.ts";
+import { nativeAssets } from "./native-assets.mjs";
 
 const fixture = "website-gpu-smoke.html";
 const requests = new Set();
+const native = nativeAssets(process.env.TABGRAD_WEBSITE_NATIVE_ORIGIN, join(websiteRoot, "dist"));
 /** @param {string} path @returns {Promise<Buffer>} */
 async function readAsset(path) {
   if (path === join(websiteRoot, "dist/__example_checks.mjs")) return readFile(join(websiteRoot, "tests/example-checks.mjs"));
@@ -22,6 +24,7 @@ async function readAsset(path) {
   }
   if (path === join(websiteRoot, "dist/__requests.json")) return Buffer.from(JSON.stringify([...requests]));
   requests.add(relative(join(websiteRoot, "dist"), path));
+  if (native.read) return native.read(path);
   return readFile((await stat(path)).isDirectory() ? join(path, "index.html") : path);
 }
 const server = await startBrowserServer([fixture], {
@@ -29,6 +32,7 @@ const server = await startBrowserServer([fixture], {
   assetHeaders(path, body) {
     if (path === "/" + fixture) return { "content-type": "text/html", "Cross-Origin-Opener-Policy": "same-origin", "Cross-Origin-Embedder-Policy": "require-corp" };
     if (path === "/__gpu_examples.json") return { "content-type": "application/json" };
+    if (native.read && !["/__requests.json", "/__example_checks.mjs"].includes(path)) return native.headers(path);
     const html = path.endsWith("/") || path.endsWith(".html");
     return { "content-type": contentType(html ? "index.html" : path), ...deliveryHeaders(path, html ? body.toString("utf8") : "") };
   },
@@ -46,5 +50,5 @@ try {
     reports.push({ browser: browser.name, version, result });
     console.log(`${version}: physical WebGPU website integration passed`);
   }
-  await writeChanged(join(websiteRoot, ".generated/gpu-browser-check.json"), JSON.stringify(reports, null, 2) + "\n");
+  await writeChanged(join(websiteRoot, `.generated/${native.read ? "native-" : ""}gpu-browser-check.json`), JSON.stringify(reports, null, 2) + "\n");
 } finally { await server.close(); }

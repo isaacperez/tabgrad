@@ -25,7 +25,6 @@ export function scriptHashes(html) {
 export function deliveryHeaders(path, html = "") {
   const worker = /^\/playground\/executor-[a-f0-9]{64}\.worker\.js$/.test(path);
   const scripts = worker ? "'self' 'unsafe-eval' 'wasm-unsafe-eval'" : ["'self'", "'wasm-unsafe-eval'", ...(html ? scriptHashes(html) : [])].join(" ");
-  const immutable = /^\/(?:vendor\/[^/]+\/[^/]+\/|diagrams\/[a-f0-9]{64}\.svg$|_astro\/)/.test(path) || worker;
   const executionPage = ["/", "/index.html", "/playground/", "/playground/index.html"].includes(path);
   const gpuWorker = /^\/vendor\/tabgrad\/[^/]+\/webgpu-worker\.js$/.test(path);
   const searchWorker = path === "/pagefind/pagefind-worker.js";
@@ -35,7 +34,7 @@ export function deliveryHeaders(path, html = "") {
     "Content-Security-Policy": `default-src 'self'; script-src ${scripts}; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self'`,
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "no-referrer",
-    "Cache-Control": immutable ? "public, max-age=31536000, immutable" : "no-cache",
+    "Cache-Control": "no-cache",
   };
 }
 

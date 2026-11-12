@@ -19,24 +19,39 @@ on:
       - 'scripts/browser-harness.mjs'
       - '.github/workflows/website-checks.yml'
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Prepare and request protected website publication
+        type: boolean
+        default: false
+      initial:
+        description: First publication only; requires separate operational authorization
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 concurrency:
-  group: website-checks-${{ github.ref }}
-  cancel-in-progress: true
+  group: website-${{ github.event_name == 'workflow_dispatch' && inputs.publish && 'publication' || github.ref }}
+  cancel-in-progress: ${{ !(github.event_name == 'workflow_dispatch' && inputs.publish) }}
 
 jobs:
   website:
     name: website
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 20
+    outputs:
+      delivery_sha256: ${{ steps.delivery.outputs.delivery_sha256 }}
     env:
       ASTRO_TELEMETRY_DISABLED: '1'
       PUPPETEER_SKIP_DOWNLOAD: 'true'
       CHROME_DEVEL_SANDBOX: /opt/google/chrome/chrome-sandbox
-      TABGRAD_SITE_URL: 'https://example.invalid/'
+      WRANGLER_SEND_METRICS: 'false'
+      TABGRAD_WEBSITE_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.publish && 'publish' || 'check' }}
+      TABGRAD_WEBSITE_ENABLED: ${{ vars.TABGRAD_WEBSITE_ENABLED }}
+      TABGRAD_WEBSITE_INITIAL: ${{ inputs.initial && 'true' || 'false' }}
+      TABGRAD_SITE_URL: ${{ github.event_name == 'workflow_dispatch' && inputs.publish && vars.TABGRAD_SITE_URL || 'https://example.invalid/' }}
     steps:
       - name: Check out website and documentation sources
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -47,10 +62,14 @@ jobs:
         with:
           node-version-file: website/.node-version
           check-latest: false
+      - name: Admit the explicit preparation context
+        run: node website/hosting/scripts/ci-context.mjs
       - name: Select the pinned npm
         run: npm install --global npm@11.1.0 --ignore-scripts --no-audit --no-fund
       - name: Install website dependencies without lifecycle scripts
         run: npm ci --prefix website --ignore-scripts --no-audit --no-fund
+      - name: Install the isolated locked hosting tools without lifecycle scripts
+        run: npm ci --prefix website/hosting --ignore-scripts --no-audit --no-fund
       - name: Prepare the locked diagram browser explicitly
         run: npm exec --prefix website -- puppeteer browsers install chrome
       - name: Prepare the installed Chrome sandbox helper
@@ -69,5 +88,74 @@ jobs:
         run: npm --prefix website run build
       - name: Verify emitted links, diagrams and runtime bytes
         run: npm --prefix website run verify
-      - name: Test real CPU examples in installed Chrome and Firefox
-        run: npm --prefix website run test:browser
+      - name: Capture only the current public immutable predecessor
+        if: env.TABGRAD_WEBSITE_MODE == 'publish' && !inputs.initial
+        run: node website/hosting/scripts/predecessor.mjs website/dist website/.generated/previous
+      - name: Prepare the exact static delivery from the verified output
+        id: delivery
+        run: |
+          if test -d website/.generated/previous; then
+            node website/hosting/scripts/prepare.mjs website/dist website/.generated/delivery website/.generated/previous
+          else
+            node website/hosting/scripts/prepare.mjs website/dist website/.generated/delivery
+          fi
+      - name: Test native response policies, identity, retention and inert publication
+        run: npm --prefix website/hosting test
+      - name: Test real CPU examples and search through native serving in Chrome and Firefox
+        run: npm --prefix website/hosting run test:browser
+      - name: Preserve the checked payload for the protected publisher
+        if: env.TABGRAD_WEBSITE_MODE == 'publish'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: website-delivery
+          path: website/.generated/delivery/
+          if-no-files-found: error
+          include-hidden-files: false
+          retention-days: 30
+
+  website-publication:
+    name: website-publication
+    needs: website
+    if: github.event_name == 'workflow_dispatch' && inputs.publish && vars.TABGRAD_WEBSITE_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: website-publication
+    steps:
+      - name: Check out the same reviewed publisher
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Select the website Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.1
+        with:
+          node-version-file: website/.node-version
+          check-latest: false
+      - name: Select the pinned npm
+        run: npm install --global npm@11.1.0 --ignore-scripts --no-audit --no-fund
+      - name: Install only locked hosting dependencies
+        run: npm ci --prefix website/hosting --ignore-scripts --no-audit --no-fund
+      - name: Download the payload checked in this same run
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: website-delivery
+          path: website/.generated/delivery
+      - name: Verify identity again and publish once after approval
+        env:
+          TABGRAD_WEBSITE_ENABLED: ${{ vars.TABGRAD_WEBSITE_ENABLED }}
+          TABGRAD_WEBSITE_MODE: publish
+          TABGRAD_WEBSITE_INITIAL: ${{ inputs.initial && 'true' || 'false' }}
+          TABGRAD_SITE_URL: ${{ vars.TABGRAD_SITE_URL }}
+          TABGRAD_DELIVERY_SHA256: ${{ needs.website.outputs.delivery_sha256 }}
+          TABGRAD_HOST_CONFIG_JSON: ${{ secrets.TABGRAD_HOST_CONFIG_JSON }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.TABGRAD_WEBSITE_TOKEN }}
+          WRANGLER_SEND_METRICS: 'false'
+        run: node website/hosting/scripts/publisher.mjs website/.generated/delivery website/.generated/publication-receipt.json
+      - name: Preserve the bounded public result even after an uncertain call
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: website-publication-result
+          path: website/.generated/publication-receipt.json
+          if-no-files-found: ignore
+          retention-days: 30

@@ -170,6 +170,18 @@ lockfile contents, license, and build size.
 
 ### Website build and browser assets
 
+The separate private `website/hosting/package.json` and lock select Wrangler
+`4.160.1` (official Cloudflare `workers-sdk`, MIT OR Apache-2.0) and its native
+test dependency Miniflare `5.20261110.1-beta` (MIT), including workerd
+`1.20261110.1` (Apache-2.0) and esbuild `0.28.2` (MIT). Registry origins,
+integrities and all platform packages are fixed by that lock. These are
+operator/local-test dependencies, never browser assets, library package content
+or additional website component notices. Their installed licenses remain with
+the tools. Updating them requires native HTTP and real-browser qualification,
+not just a lock update. Setup is explicit with lifecycle scripts and telemetry
+disabled; the selected optional platform packages supply the native executables.
+The [publication procedure](website-publication.md) owns their use and limits.
+
 `website/package.json` and `website/package-lock.json` select a separate private
 site build. None of these new build tools enter the library's npm distribution.
 The website owner maintains this resolution and its component notices; removing

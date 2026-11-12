@@ -7,10 +7,12 @@ import { contentType, deliveryHeaders } from "./delivery.mjs";
 import { writeChanged, sha256 } from "./files.mjs";
 import { firstCodeBlock } from "./content.mjs";
 import { outputFiles } from "./verify-output.mjs";
+import { nativeAssets } from "./native-assets.mjs";
 
 import { exampleSource } from "../src/playground/presets.ts";
 const fixture = "website-smoke.html";
 const requestedAssets = new Set();
+const native = nativeAssets(process.env.TABGRAD_WEBSITE_NATIVE_ORIGIN, join(websiteRoot, "dist"));
 const pythonHost = await readFile(join(repositoryRoot, "docs/reference/python-host.md"), "utf8");
 const diagnosticsSection = pythonHost.split("## Read local runtime observations\n")[1]?.split("\n## ")[0];
 assert.ok(diagnosticsSection, "the documented local diagnostics section exists");
@@ -53,6 +55,7 @@ async function readAsset(path) {
   }
   if (path === join(websiteRoot, "dist/__requests.json")) return Buffer.from(JSON.stringify([...requestedAssets]));
   requestedAssets.add(relative(join(websiteRoot, "dist"), path));
+  if (native.read) return native.read(path);
   return readFile((await stat(path)).isDirectory() ? join(path, "index.html") : path);
 }
 const server = await startBrowserServer([fixture], {
@@ -60,6 +63,7 @@ const server = await startBrowserServer([fixture], {
   assetHeaders(path, body) {
     // The fixture drives the app; app and worker retain the preview's real CSP.
     if (path === "/" + fixture || path === "/__examples.json") return { "content-type": contentType(path) };
+    if (native.read && ![diagnosticsPath, "/__diagnostics-worker.json", "/__routes.json", "/__blog-example.json", "/__requests.json", "/__example_checks.mjs"].includes(path)) return native.headers(path);
     const html = path.endsWith("/") || path.endsWith(".html");
     return { "content-type": contentType(html ? "index.html" : path), ...deliveryHeaders(path, html ? body.toString("utf8") : "") };
   },
@@ -82,7 +86,7 @@ try {
       reports.push({ browser: browser.name, version, result });
       console.log(`${version}: website CPU integration passed`);
     }
-    await writeChanged(join(websiteRoot, ".generated/browser-check.json"), JSON.stringify(reports, null, 2) + "\n");
+    await writeChanged(join(websiteRoot, `.generated/${native.read ? "native-" : ""}browser-check.json`), JSON.stringify(reports, null, 2) + "\n");
     await server.close();
   }
 } catch (error) { await server.close(); throw error; }

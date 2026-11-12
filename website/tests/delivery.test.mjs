@@ -21,7 +21,7 @@ test("document policy admits only its inline scripts; edited eval belongs to the
   assert.ok(!policy.includes("'unsafe-eval'"));
   const worker = deliveryHeaders(`/playground/executor-${"a".repeat(64)}.worker.js`);
   assert.ok(worker["Content-Security-Policy"].includes("'unsafe-eval'"));
-  assert.match(worker["Cache-Control"], /immutable/);
+  assert.equal(worker["Cache-Control"], "no-cache");
   assert.equal(deliveryHeaders("/index.html")["Cache-Control"], "no-cache");
 });
 
