@@ -413,12 +413,18 @@ EXPECTED_PRODUCER_TRIAL_SHA256 = (
 )
 WEBSITE_PATH = Path(".github/workflows/website-checks.yml")
 EXPECTED_WEBSITE_SHA256 = (
-    "75f7417aaf2043ab83258dc98365b4a10103a9142be01fff2ed852d943967e88"
+    "22d8b6ff669a831d34d2c643551c2a6574f24d803cb6071aaf64ff56962c844f"
 )
 WEBSITE_COMMANDS = {
     "npm install --global npm@11.1.0 --ignore-scripts --no-audit --no-fund",
     "npm ci --prefix website --ignore-scripts --no-audit --no-fund",
     "npm exec --prefix website -- puppeteer browsers install chrome",
+    'test -f "$CHROME_DEVEL_SANDBOX"\n'
+    'test -x "$CHROME_DEVEL_SANDBOX"\n'
+    'test ! -L "$CHROME_DEVEL_SANDBOX"\n'
+    'test "$(stat -c \'%u\' "$CHROME_DEVEL_SANDBOX")" = 0\n'
+    'sudo chmod 4755 "$CHROME_DEVEL_SANDBOX"\n'
+    'test -u "$CHROME_DEVEL_SANDBOX"\n',
     "npm --prefix website run check",
     "npm --prefix website test",
     "npm --prefix website run build",

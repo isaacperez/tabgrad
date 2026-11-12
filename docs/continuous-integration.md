@@ -116,7 +116,8 @@ Merging this source does not configure a hosting service.
 The `website` job selects `website/.node-version`, npm 11.1.0 and the website
 lock independently of the library lock, disables Astro telemetry, installs
 without lifecycle scripts, and explicitly prepares Puppeteer's locked diagram
-browser. The job reuses the installed Chrome sandbox helper as documented in
+browser. The job validates the installed root-owned Chrome sandbox helper and
+sets its documented permissions as described in
 [development](development.md#prepare-and-preview-the-static-website); the locked
 diagram browser remains sandboxed without changing the runner's AppArmor policy.
 It then runs the documented website type/content check, unit tests,

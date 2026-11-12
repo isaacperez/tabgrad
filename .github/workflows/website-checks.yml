@@ -53,6 +53,14 @@ jobs:
         run: npm ci --prefix website --ignore-scripts --no-audit --no-fund
       - name: Prepare the locked diagram browser explicitly
         run: npm exec --prefix website -- puppeteer browsers install chrome
+      - name: Prepare the installed Chrome sandbox helper
+        run: |
+          test -f "$CHROME_DEVEL_SANDBOX"
+          test -x "$CHROME_DEVEL_SANDBOX"
+          test ! -L "$CHROME_DEVEL_SANDBOX"
+          test "$(stat -c '%u' "$CHROME_DEVEL_SANDBOX")" = 0
+          sudo chmod 4755 "$CHROME_DEVEL_SANDBOX"
+          test -u "$CHROME_DEVEL_SANDBOX"
       - name: Check website types and generated content
         run: npm --prefix website run check
       - name: Test website source and serving contracts

@@ -2,6 +2,8 @@ import ast
 import hashlib
 import json
 import re
+import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -43,6 +45,62 @@ def publication_job_eligible(
 
 
 class RepositoryCheckTests(unittest.TestCase):
+    @unittest.skipUnless(shutil.which("bash"), "Ubuntu website setup requires Bash")
+    def test_website_sandbox_guards_precede_the_privileged_command(self) -> None:
+        loader = CHECKS.RepositoryYamlLoader
+        assert loader is not None
+        workflow = yaml.load(
+            (SCRIPT.parents[1] / CHECKS.WEBSITE_PATH).read_text(), Loader=loader
+        )
+        command = next(
+            step["run"]
+            for step in workflow["jobs"]["website"]["steps"]
+            if step["name"] == "Prepare the installed Chrome sandbox helper"
+        )
+        # Observe guard reachability without running sudo, stat or chmod.
+        harness = (
+            'export CHROME_DEVEL_SANDBOX="$1"\n'
+            'stat() { printf "%s" "$SIMULATED_UID"; }\n'
+            'sudo() { printf "privileged-command\\n"; }\n'
+        )
+        bash = shutil.which("bash")
+        assert bash is not None
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            executable = root / "helper"
+            executable.write_text("fixture", encoding="utf-8")
+            executable.chmod(0o755)
+            non_executable = root / "not-executable"
+            non_executable.write_text("fixture", encoding="utf-8")
+            link = root / "link"
+            link.symlink_to(executable)
+            for candidate, owner, allowed in (
+                (executable, "0", True),
+                (root / "missing", "0", False),
+                (root, "0", False),
+                (link, "0", False),
+                (non_executable, "0", False),
+                (executable, "1000", False),
+            ):
+                with self.subTest(candidate=candidate.name, owner=owner):
+                    result = subprocess.run(
+                        [
+                            bash,
+                            "-e",
+                            "-c",
+                            harness + command,
+                            "guard-test",
+                            str(candidate),
+                        ],
+                        env={"SIMULATED_UID": owner},
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                    )
+                    self.assertEqual("privileged-command" in result.stdout, allowed)
+                    # A stubbed chmod cannot satisfy the real setuid postcondition.
+                    self.assertNotEqual(result.returncode, 0)
+
     def test_integration_downloads_keep_the_website_validation_owner(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

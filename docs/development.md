@@ -354,13 +354,15 @@ failure. Ubuntu's AppArmor policy can prevent the downloaded Chrome for Testing
 from using user namespaces. When Google Chrome is already installed, Chromium
 [documents using its existing sandbox helper](https://chromium.googlesource.com/chromium/src/+/main/docs/security/apparmor-userns-restrictions.md)
 through `CHROME_DEVEL_SANDBOX=/opt/google/chrome/chrome-sandbox`. The website CI
-uses that helper on its ephemeral Ubuntu runner, retaining the locked renderer
-and requiring actual browser startup. It uses Chromium's older SUID sandbox,
+requires that installed helper to be a regular executable owned by root, rejects
+a symbolic link, and sets its documented `4755` mode on the ephemeral Ubuntu
+runner. It retains the locked renderer and requires actual browser startup.
+It uses Chromium's older SUID sandbox,
 which upstream distinguishes from the user-namespace sandbox and describes as
 potentially weaker; this is not a claim that the two mechanisms are equivalent.
-This does not install a privileged helper,
-change AppArmor or enable unsandboxed execution. Other hosts must provide a
-working sandbox through their separately authorized setup.
+This does not install a helper, change AppArmor or enable unsandboxed execution.
+Other hosts must provide a working sandbox through their separately authorized
+setup.
 The independently installed Chrome and Firefox used by integration
 checks follow the existing `TABGRAD_BROWSER`, `TABGRAD_CHROME` and
 `TABGRAD_FIREFOX` selection above.
