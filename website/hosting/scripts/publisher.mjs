@@ -25,6 +25,14 @@ export function hostingAccount(value) {
   return value;
 }
 
+/** JSON parser diagnostics may quote their input. Never retain the private
+ * original in a public error, stack or cause.
+ * @param {string|undefined} input @returns {{account_id:string,name:string}} */
+function parseHostingAccount(input) {
+  try { return hostingAccount(JSON.parse(input ?? "null")); }
+  catch { throw new Error("Invalid private hosting configuration"); }
+}
+
 /** Observe only the currently served identity, with a deadline and bounded body.
  * No credentials, redirects or cache reuse are allowed at this public boundary.
  * @param {string} origin @returns {Promise<string>} */
@@ -53,7 +61,7 @@ export async function publishWebsite(root, env, { deploy, observe, record }) {
   const context = publicationContext(env);
   const { manifest, digest } = await verifyPayload(root, { digest: context.digest });
   if (manifest.revision !== context.revision || manifest.origin !== env.TABGRAD_SITE_URL) throw new Error("Publication source or origin changed");
-  const account = hostingAccount(JSON.parse(env.TABGRAD_HOST_CONFIG_JSON ?? "null"));
+  const account = parseHostingAccount(env.TABGRAD_HOST_CONFIG_JSON);
   if (!env.CLOUDFLARE_API_TOKEN?.trim()) throw new Error("A separately admitted hosting credential is required");
   if (context.initial !== (manifest.previous === null)) throw new Error("Initial publication and predecessor disagree");
   if (!context.initial && await observe(manifest.origin) !== manifest.previous) throw new Error("The live website changed since preparation");

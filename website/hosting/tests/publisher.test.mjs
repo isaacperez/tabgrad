@@ -88,3 +88,18 @@ test("an update checks the current live predecessor before any credential-bearin
   await assert.rejects(publishWebsite(next, nextEnv, { async record() {}, async observe() { return "d".repeat(64); }, async deploy() { calls++; return 0; } }), /live website changed/);
   assert.equal(calls, 0);
 });
+
+test("malformed private configuration never appears in a public error or reaches deployment", async context => {
+  const { payload, env } = await candidate(context);
+  const marker = "SYNTHETIC_PRIVATE_CONFIG_MARKER";
+  let calls = 0;
+  await assert.rejects(publishWebsite(payload, { ...env, TABGRAD_HOST_CONFIG_JSON: marker + "{" }, {
+    async record() {}, async observe() { return env.TABGRAD_DELIVERY_SHA256; }, async deploy() { calls++; return 0; },
+  }), error => {
+    assert.equal(error.message, "Invalid private hosting configuration");
+    assert.ok(!String(error.stack).includes(marker));
+    assert.equal(error.cause, undefined);
+    return true;
+  });
+  assert.equal(calls, 0);
+});
