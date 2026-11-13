@@ -1,10 +1,11 @@
 ---
 import Search from "@astrojs/starlight/components/Search.astro";
-import ThemeAppearance from "./ThemeAppearance.astro";
+import ThemeSelect from "@astrojs/starlight/components/ThemeSelect.astro";
 import { Icon } from "@astrojs/starlight/components";
 import { runtimeVersion, repositoryUrl, packageUrl } from "../../scripts/config.mjs";
 
 const navigation = [
+  ["Home", "/"],
   ["Get started", "/start/"],
   ["Documentation", "/docs/"],
   ["Playground", "/playground/"],
@@ -18,14 +19,14 @@ const projectNavigation = [
 const current = Astro.url.pathname;
 ---
 <div class="tabgrad-header">
-  <a href="/" class="tabgrad-brand" aria-label="Tabgrad home" aria-current={current === "/" ? "page" : undefined}>
+  <a href="/" class="tabgrad-brand" aria-label="Tabgrad home">
     <img class="light-logo" src="/brand/tabgrad-logo.svg" alt="Tabgrad" width="146" height="38" />
     <img class="dark-logo" src="/brand/tabgrad-logo-dark.svg" alt="Tabgrad" width="146" height="38" />
   </a>
   <nav aria-label="Main navigation" class="tabgrad-navigation">
     {navigation.map(([label, href]) => <a
       href={href}
-      aria-current={current.startsWith(href) ? "page" : undefined}
+      aria-current={(href === "/" ? current === "/" : current.startsWith(href)) ? "page" : undefined}
     >
       {label}
     </a>)}
@@ -41,7 +42,7 @@ const current = Astro.url.pathname;
     </a>
     <Search />
     <div class="header-appearance" title="Change color theme">
-      <ThemeAppearance />
+      <ThemeSelect />
     </div>
   </div>
   <button
@@ -62,7 +63,7 @@ const current = Astro.url.pathname;
     <div class="site-menu-links">
       {navigation.map(([label, href]) => <a
         href={href}
-        aria-current={current.startsWith(href) ? "page" : undefined}
+        aria-current={(href === "/" ? current === "/" : current.startsWith(href)) ? "page" : undefined}
       >
         {label}
       </a>)}
@@ -76,7 +77,7 @@ const current = Astro.url.pathname;
     </div>
     <div class="site-menu-appearance">
       <span>Color theme</span>
-      <ThemeAppearance />
+      <ThemeSelect />
     </div>
   </nav>
 </div>
