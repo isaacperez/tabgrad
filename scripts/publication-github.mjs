@@ -17,14 +17,16 @@ export function publicationGithub({ repository, token, origin = "https://api.git
   let checkedWorkflowPair;
 
   async function request(route, { method = "GET", body, binary = false, absent = false,
-    upload = false, maxBytes = maxResponseBytes, signal: requestSignal } = {}) {
+    upload = false, maxBytes = maxResponseBytes, signal: requestSignal, workflowDispatch = false } = {}) {
     requirePublication(typeof route === "string" && (route === "" || route.startsWith("/"))
       && !route.includes("..") && !route.includes("#") && !route.includes("\\"), "PUBLICATION_GITHUB_ROUTE");
     requirePublication(!readOnly || method === "GET", "PUBLICATION_GITHUB_READ_ONLY");
+    requirePublication(!workflowDispatch || (method === "POST" && route.startsWith("/actions/workflows/")
+      && route.endsWith("/dispatches") && body?.ref === "main"), "PUBLICATION_GITHUB_ROUTE");
     const url = new URL(`${prefix}${route}`, base);
     if (upload && base.hostname === "api.github.com") url.hostname = "uploads.github.com";
     const headers = { Authorization: `Bearer ${token}`, Accept: binary ? "application/octet-stream" : "application/vnd.github+json",
-      "X-GitHub-Api-Version": "2022-11-28" };
+      "X-GitHub-Api-Version": workflowDispatch ? "2026-03-10" : "2022-11-28" };
     if (body !== undefined) headers["Content-Type"] = upload ? "application/octet-stream" : "application/json";
     const signals = [AbortSignal.timeout(timeoutMs), signal, requestSignal].filter(value => value !== undefined);
     const options = { method, headers, redirect: "manual", signal: AbortSignal.any(signals),
@@ -56,7 +58,7 @@ export function publicationGithub({ repository, token, origin = "https://api.git
       const raw = Buffer.concat(chunks);
       observations.push({ route, method, status: response.status, sha256: sha256(raw), byteLength: raw.length });
       if (absent && response.status === 404) return null;
-      requirePublication(response.status === (method === "POST" ? 201 : method === "DELETE" ? 204 : 200),
+      requirePublication(response.status === (workflowDispatch ? 200 : method === "POST" ? 201 : method === "DELETE" ? 204 : 200),
         "PUBLICATION_GITHUB_RESPONSE");
       if (binary) return raw;
       if (response.status === 204) return null;
@@ -126,10 +128,18 @@ export function publicationGithub({ repository, token, origin = "https://api.git
     return tree;
   }
 
-  async function prerequisites(plan) {
+  async function prerequisites(plan, { frozen = false } = {}) {
     const current = await request("/git/ref/heads/main");
     requirePublication(current.ref === "refs/heads/main" && current.object?.type === "commit"
-      && current.object.sha === plan.publisher.revision, "PUBLICATION_MAIN_MOVED");
+      && /^[a-f0-9]{40}$/.test(current.object.sha), "PUBLICATION_MAIN_MOVED");
+    if (frozen) {
+      requirePublication(plan.schemaVersion === 3, "PUBLICATION_TAG_POLICY_REQUIRED");
+      if (current.object.sha !== plan.publisher.revision) {
+        const comparison = await request(`/compare/${plan.publisher.revision}...${current.object.sha}`);
+        requirePublication(["ahead", "identical"].includes(comparison.status)
+          && comparison.merge_base_commit?.sha === plan.publisher.revision, "PUBLICATION_MAIN_MOVED");
+      }
+    } else requirePublication(current.object.sha === plan.publisher.revision, "PUBLICATION_MAIN_MOVED");
     if (plan.candidate.sourceRevision !== plan.publisher.revision) {
       const pair = `${plan.candidate.sourceRevision}:${plan.publisher.revision}`;
       if (checkedWorkflowPair !== pair) {
@@ -139,7 +149,7 @@ export function publicationGithub({ repository, token, origin = "https://api.git
         // changes workflow files would require that authority at release creation.
         requirePublication(target !== null && target === main, "PUBLICATION_WORKFLOWS_WRITE_REQUIRED");
         const after = await request("/git/ref/heads/main");
-        requirePublication(after.object?.sha === plan.publisher.revision, "PUBLICATION_MAIN_MOVED");
+        requirePublication(after.object?.sha === (frozen ? current.object.sha : plan.publisher.revision), "PUBLICATION_MAIN_MOVED");
         checkedWorkflowPair = pair;
       }
     }
@@ -216,4 +226,25 @@ export function publicationGithub({ repository, token, origin = "https://api.git
     }
   }
   return { request, pages, visibility, tagRevision, prerequisites, state, write, observations };
+}
+
+/** Whole keyed collections, rejecting changing/incomplete totals and duplicate identifiers. */
+export async function githubCollection(api, route, key) {
+  const values = [], seen = new Set(); let expected;
+  for (let page = 1; page <= 100; page++) {
+    const result = await api.request(`${route}${route.includes("?") ? "&" : "?"}per_page=100&page=${page}`);
+    const rows = result?.[key];
+    requirePublication(Number.isSafeInteger(result?.total_count) && result.total_count >= 0 && result.total_count <= 10000
+      && Array.isArray(rows) && rows.length <= 100 && (expected === undefined || expected === result.total_count),
+    "PUBLICATION_PREPARATION_PAGINATION");
+    expected = result.total_count;
+    for (const row of rows) {
+      requirePublication(Number.isSafeInteger(row?.id) && row.id > 0 && !seen.has(row.id), "PUBLICATION_PREPARATION_PAGINATION");
+      seen.add(row.id); values.push(row);
+    }
+    requirePublication(values.length <= expected, "PUBLICATION_PREPARATION_PAGINATION");
+    if (values.length === expected) return values;
+    requirePublication(rows.length === 100, "PUBLICATION_PREPARATION_PAGINATION");
+  }
+  throw Object.assign(new Error("PUBLICATION_PREPARATION_PAGINATION"), { code: "PUBLICATION_PREPARATION_PAGINATION" });
 }

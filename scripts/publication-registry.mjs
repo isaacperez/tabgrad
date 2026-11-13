@@ -160,5 +160,6 @@ export function admitPublishedConsumers({ plan, candidate, reports, association 
   requirePublication(association?.status === "passed" && association.originalProofSha256 === plan.producer.archiveProofSha256,
     "PUBLICATION_REGISTRY_PROVENANCE_MISMATCH");
   return { schemaVersion: 1, status: "passed", candidate: plan.candidate,
-    reports, association };
+    reports, association, ...(plan.schemaVersion === 3 ? { gpuQualification: {
+      input: "supplied-archive", evidenceSha256: plan.qualification.evidenceSha256 } } : {}) };
 }

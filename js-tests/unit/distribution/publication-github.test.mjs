@@ -139,3 +139,17 @@ for (const scenario of ["reject", "redirect", "disconnect", "timeout", "invalid-
     assert.equal(f.calls.length, 1);
   });
 }
+
+test("workflow dispatch uses its qualified response contract without changing legacy POST semantics", async () => {
+  for (const status of [200, 201, 204]) {
+    let calls = 0;
+    const api = publicationGithub({ repository: "example/project", token: "fixture-not-a-credential", fetcher: async (_url, options) => {
+      calls++; assert.equal(options.headers["X-GitHub-Api-Version"], "2026-03-10");
+      return new Response(status === 204 ? null : JSON.stringify({ workflow_run_id: 601 }), { status });
+    } });
+    const pending = api.request("/actions/workflows/release-publication.yml/dispatches", { method: "POST", workflowDispatch: true, body: { ref: "main", inputs: {} } });
+    if (status === 200) assert.equal((await pending).workflow_run_id, 601);
+    else await assert.rejects(pending, { code: "PUBLICATION_GITHUB_RESPONSE", dispatched: true });
+    assert.equal(calls, 1);
+  }
+});

@@ -3,6 +3,7 @@ import { dirname, join, resolve, sep } from "node:path";
 import { deliveryHeaders } from "../../scripts/delivery.mjs";
 import { isImmutableAsset } from "../../scripts/asset-identity.mjs";
 import { hostingLimits, manifestName, publicationOrigin, inventory, fileRecords, sameInventory, verifyPayload as verifyInventory } from "./inventory.mjs";
+import { releaseIdentity } from "../../scripts/release-input.mjs";
 import { readPredecessor } from "./predecessor.mjs";
 export { hostingLimits, manifestName, publicationOrigin, inventory, deliveryManifest } from "./inventory.mjs";
 
@@ -48,19 +49,22 @@ export async function verifyPayload(root, options = {}) {
  * @param {string} source @param {string} destination
  * @param {{checked:object,origin:string,revision:string,previous?:string,production?:boolean}} options
  * @returns {Promise<{manifest:object,digest:string}>} */
-export async function preparePayload(source, destination, { checked, origin, revision, previous, production = true }) {
+export async function preparePayload(source, destination, { checked, origin, revision, previous, production = true, rollback = false }) {
   const input = resolve(source), target = resolve(destination);
   const previousRoot = previous && resolve(previous);
   if ([input, previousRoot].some(root => root && (target === root || target.startsWith(root + sep) || root.startsWith(target + sep)))) throw new Error("Payload directories must be independent");
   const publicOrigin = publicationOrigin(origin, production);
   if (checked.origin !== publicOrigin || checked.revision !== revision || typeof checked.localChanges !== "boolean"
     || (production && checked.localChanges) || !/^[a-f0-9]{40}$/.test(revision)) throw new Error("Output does not identify the requested clean source and origin");
+  const release = checked.release && releaseIdentity(checked.release);
+  if (release && !/^[a-f0-9]{40}$/.test(checked.recipeRevision)) throw new Error("Release recipe changed");
   const current = await inventory(input);
   sameInventory(fileRecords(checked.files), current);
   if (current.some(file => ["_headers", "_redirects", manifestName].includes(file.path)
     || /(?:^|\/)(?:node_modules|scripts|local|\.env|wrangler)(?:[./-]|$)/.test(file.path))) throw new Error("Hosting/private configuration in raw website output");
   const predecessor = previousRoot && await readPredecessor(previousRoot, production);
   if (predecessor && predecessor.manifest.origin !== publicOrigin) throw new Error("Predecessor origin differs");
+  if (production && predecessor?.manifest.format === 2 && !release && !rollback) throw new Error("Select the completed release or explicitly authorize a rollback");
   const currentMap = new Map(current.map(file => [file.path, file]));
   for (const old of predecessor?.manifest.files ?? []) {
     if (isImmutableAsset("/" + old.path) && currentMap.has(old.path) && currentMap.get(old.path).sha256 !== old.sha256) throw new Error("Immutable URL changed bytes");
@@ -80,7 +84,7 @@ export async function preparePayload(source, destination, { checked, origin, rev
     const retained = (predecessor?.manifest.files ?? []).filter(file => previousCurrent.has(file.path) && !currentMap.has(file.path));
     sameInventory([...current, ...retained], await inventory(target));
     await writeFile(join(target, "_headers"), await nativeHeaders(target, await inventory(target)));
-    const manifest = { format: 1, origin: publicOrigin, revision, publishable: production && !checked.localChanges, previous: predecessor?.digest ?? null,
+    const manifest = { format: release ? 2 : 1, ...(release ? { release, recipeRevision: checked.recipeRevision } : {}), origin: publicOrigin, revision, publishable: production && !checked.localChanges, previous: predecessor?.digest ?? null,
       currentImmutable: current.filter(file => isImmutableAsset("/" + file.path)).map(file => file.path), files: await inventory(target) };
     await writeFile(join(target, manifestName), JSON.stringify(manifest) + "\n");
     return await verifyPayload(target, { production });

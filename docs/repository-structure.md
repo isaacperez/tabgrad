@@ -312,7 +312,7 @@ Git transport, object creation and readback. These contributor tools never enter
 library builds or signing inputs; their [reference](reference/release-record.md)
 links to the release policy's separate operational trust requirements.
 
-`scripts/release-publication.mjs` binds the manual publication roles to actual
+`scripts/release-publication.mjs` binds manual and approved tag publication roles to actual
 GitHub context and admitted configuration; its workflow owns job order and
 permissions. `publication-plan.mjs` owns the closed plan and effect identities;
 `publication-authority.mjs` owns live admission; `publication-admission.mjs` and
@@ -337,6 +337,17 @@ and materializes only inspected original bytes in its separate read-only manual
 workflow. It shares the existing history reader, not a second record or trust
 admission. Its artifact-metadata observation supplies the existing publication
 handoff fields; service use remains separately authorized.
+`release-readiness.mjs` owns frozen pre-tag approval and provider-correlated
+readiness/tag identities. `tag-delivery.mjs` owns the bounded request/controller
+handoff; it dispatches the existing publisher rather than executing tagged code
+with publishing privileges. `publication-control.mjs` shares the existing live
+protection/approval observations between preparation and later admission.
+`release-website.mjs` observes a known completed public release and acquires its
+exact registry tree for the existing website builder. The website's explicit
+release input owns content/runtime selection, while its manifest and publisher
+preserve distinct source, recipe and target identities. These are contributor
+and delivery tools, excluded from the library package and browser artifacts.
+
 The [publication reference](reference/release-publication.md) describes these
 interfaces and the maintainer procedure; the release policy remains primary.
 

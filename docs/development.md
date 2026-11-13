@@ -459,8 +459,21 @@ checks do not depend on shell activation or an unprepared global interpreter.
 
 | Purpose | Command | Requirements |
 | --- | --- | --- |
+| Select, receive or compose ordinary release inputs | `node scripts/prepare-release.mjs select ROOT`, `node scripts/prepare-release.mjs activate ROOT`, `node scripts/prepare-release.mjs compose ROOT` | Existing qualified controller profile, explicit admitted environment and originals; tag activation preserves the approved plan; no installation or publication |
+| Format the approved annotated-tag message | `node scripts/tag-delivery.mjs message READY_DIRECTORY ARTIFACT_METADATA_JSON NEW_TAG_MESSAGE_JSON` | Retained inspected readiness and metadata; writes a new message only, no tag or service write |
+| Request and coordinate tag delivery | `node scripts/tag-delivery.mjs request`, `node scripts/tag-delivery.mjs select ROOT`, `node scripts/tag-delivery.mjs dispatch ROOT` | Exact provider-bound contexts, enabled enrolled profile and separate operational authority; select is read-only, dispatch retains one intent/result and never retries unknown outcomes |
+| Acquire a completed release for the website | `node scripts/release-website.mjs COMPLETION_JSON NEW_OUTPUT_DIRECTORY` | Explicit completion artifact/hash/provider inputs, root Node22.12.0 and npm11.1.0; verifies completed immutable release and exact isolated registry installation, no publish; website build uses its own profile afterward |
+
 | Install locked development dependencies | `python -m pip install --only-binary=:all: --require-hashes -r requirements-dev.lock` | An active Python 3.11 virtual environment; writes only to that environment and the package manager's ordinary cache |
 | Prepare isolated Python tooling in a clean CI checkout | `python -m venv .venv && .venv/bin/python -m pip install --only-binary=:all: --require-hashes -r requirements-dev.lock` | Selected Python 3.11 interpreter and a fresh checkout; creates `.venv` and downloads locked packages; setup only |
+| Activate selected release transport | `node scripts/prepare-release.mjs activate "$RUNNER_TEMP/tabgrad-publication"` | Same qualified controller and selected originals; tag mode preserves approved input bytes and derives actual execution |
+| Request tag delivery | `node scripts/tag-delivery.mjs request` | Read-only first-attempt tag workflow; no publication credential |
+| Select approved tag readiness | `node scripts/tag-delivery.mjs select "$RUNNER_TEMP/tabgrad-tag-delivery"` | Qualified main controller and enrolled provider inputs; no service write |
+| Dispatch approved tag delivery | `node scripts/tag-delivery.mjs dispatch "$RUNNER_TEMP/tabgrad-tag-delivery"` | Same original readiness; one intent/dispatch with unknown preserved, separate operational authority |
+| Check native candidate marker output | `test -n "$CANDIDATE_SHA"` | Successful preparation role's bound hash, recorded in its native step name |
+| Check native readiness selection output | `test -n "$READINESS_SHA"` | Selected provider-bound readiness; successful native step conservatively consumes that selection |
+| Check native dispatch output | `test -n "$RELEASE_RUN"` | Actual successful dispatch response run ID; a missing response never invents an ID |
+| Check native completion output | `test -n "$COMPLETION_SHA"` | Successful GitHub completion descriptor hash, recorded before website admission |
 | Format maintained Python files | `.venv/bin/python -m ruff format scripts tests python` | The prepared repository tooling environment; rewrites files in place |
 | Check maintained Python formatting | `.venv/bin/python -m ruff format --check scripts tests python` | The prepared repository tooling environment; read-only |
 | Lint maintained Python files | `.venv/bin/python -m ruff check scripts tests python` | The prepared repository tooling environment; read-only |

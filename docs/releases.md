@@ -233,7 +233,9 @@ covers. Approval may be given by the person initiating dispatch; do not describe
 that as independent human approval. Independent technical review remains
 required.
 
-Use one approved `workflow_dispatch` entry for ordinary registry publication.
+Use the maintained `workflow_dispatch` publisher for registry publication. It
+can be started manually, or by the admitted tag controller after protected
+pre-tag preparation under the [tag procedure](reference/release-publication.md#deliver-an-approved-candidate-from-its-tag).
 A release event must not start another publisher. Revalidate mutable authority,
 source/candidate identities, evidence and known registry/GitHub-completion
 blockers before effects. Resolve effective registry, package identity,
@@ -256,8 +258,11 @@ The protected approval binds the exact generated plan, reviewed main recipe,
 candidate, effects and run/attempt. It replaces the separate per-release recipe
 pin; it does not enroll new actors, roots, clients or protections. Qualification
 validity remains independently bounded and is never renewed by generating a
-snapshot. Keep the producer/signing and publication starts separate, without
-adding an automatic trigger, secret writer or orchestration privilege.
+snapshot. Manual profiles keep separate producer/signing and publication starts.
+The tag-delivery profile moves qualification, signing and the human candidate
+approval before the tag, and delegates only the approved continuation to the
+fixed controller. It adds no secret writer or publishing identity to tag-source
+code.
 
 Select an exact eligible producer for the reviewed version/source. Reject
 ambiguity or require an explicit already identified run; never infer the latest
@@ -266,6 +271,14 @@ notes rather than edited into an archive. Physical GPU qualification, where
 declared, must still come from the admitted maintainer/device path for the
 exact candidate. A later installed-registry receipt cannot substitute for
 pre-publication supplied-archive evidence.
+
+A tag fixes released source; `main` remains integration. The approved recipe,
+original bytes, finite validity and website target cannot be substituted after
+tagging. The tag path retains the actual pre-tag GPU observation and checks the
+post-npm installed bytes and CPU consumers without claiming another physical
+GPU execution. npm and public GitHub completion precede website delivery;
+website failure must not replay completed package effects. See the maintained
+tag procedure for its distinct schemas, actors and recovery.
 
 The closed-plan v1 epoch remains explicit for existing/manual recovery. Stable
 v2 resolution is unapproved until the provider-correlated protected review;

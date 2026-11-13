@@ -186,6 +186,7 @@ export async function verifyOutput(root = join(websiteRoot, "dist")) {
   }));
   await writeChanged(join(websiteRoot, ".generated/verified-files.json"), JSON.stringify({
     origin: data.publicOrigin, revision: data.sourceRevision, localChanges: data.localChanges, files: verifiedFiles,
+    ...(data.release ? { release: data.release, recipeRevision: data.recipeRevision } : {}),
   }) + "\n");
   return report;
 }

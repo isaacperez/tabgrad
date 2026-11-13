@@ -2,6 +2,7 @@ import { lstat, readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { isImmutableAsset } from "../../scripts/asset-identity.mjs";
 import { sha256 } from "../../scripts/files.mjs";
+import { releaseIdentity } from "../../scripts/release-input.mjs";
 import { siteOrigin } from "../../scripts/publication.mjs";
 
 export const manifestName = "website-delivery.json";
@@ -61,10 +62,12 @@ export function fileRecords(entries) {
 
 /** @param {unknown} value @param {boolean} production @returns {object} */
 export function deliveryManifest(value, production = true) {
-  if (!value || typeof value !== "object" || value.format !== 1 || !/^[a-f0-9]{40}$/.test(value.revision)
+  if (!value || typeof value !== "object" || ![1, 2].includes(value.format) || !/^[a-f0-9]{40}$/.test(value.revision)
     || (value.previous !== null && !hashPattern.test(value.previous))
     || typeof value.publishable !== "boolean" || (production && !value.publishable)
-    || Object.keys(value).sort().join() !== "currentImmutable,files,format,origin,previous,publishable,revision") throw new Error("Invalid or nonpublishable delivery manifest");
+    || Object.keys(value).sort().join() !== (value.format === 2 ? "currentImmutable,files,format,origin,previous,publishable,recipeRevision,release,revision" : "currentImmutable,files,format,origin,previous,publishable,revision")) throw new Error("Invalid or nonpublishable delivery manifest");
+  if (value.format === 2 && !/^[a-f0-9]{40}$/.test(value.recipeRevision)) throw new Error("Release documentation source differs");
+  if (value.format === 2) releaseIdentity(value.release);
   publicationOrigin(value.origin, production);
   fileRecords(value.files);
   const paths = new Set(value.files.map(file => file.path));

@@ -368,10 +368,11 @@ EXPECTED_HISTORY_SHA256 = (
     "1233f7d445d7d5d2c6aac157c75c9e2cb1cb34a81b3aac6b4864ec057c1226cb"
 )
 EXPECTED_PUBLICATION_SHA256 = (
-    "b5909ee9bb5d76aef1707c56d9f580b2a69fb3a447853f5e0334562f04fcc8ca"
+    "0232d25b8e792d296d0d7af7aca7a1a44bff251894c2726f8869b5298eac49f2"
 )
 PUBLICATION_PERMISSIONS = {"contents": "read", "actions": "read", "issues": "read"}
 PUBLICATION_JOB_PERMISSIONS = {
+    "website": {"contents": "read", "actions": "read"},
     **{
         name: {**PUBLICATION_PERMISSIONS, "contents": "write"}
         for name in ("admit", "gate", "observe", "complete")
@@ -379,6 +380,7 @@ PUBLICATION_JOB_PERMISSIONS = {
     "npm": {**PUBLICATION_PERMISSIONS, "id-token": "write"},
 }
 PUBLICATION_POST_JOB_PREREQUISITES = {
+    "website": ("precheck", "complete"),
     "consume": ("precheck", "admit", "observe"),
     "complete": ("precheck", "admit", "observe", "consume"),
 }
@@ -389,7 +391,7 @@ PUBLICATION_PRIVATE_INPUTS = (
 )
 PUBLICATION_PREPARATION_COMMANDS = {
     f'node scripts/prepare-release.mjs {role} "$RUNNER_TEMP/tabgrad-publication"'
-    for role in ("select", "compose")
+    for role in ("select", "activate", "compose")
 }
 PUBLICATION_ROLE_COMMANDS = {
     f'node scripts/release-publication.mjs {role} "$RUNNER_TEMP/tabgrad-publication"'
@@ -412,11 +414,28 @@ PUBLICATION_ROLE_COMMANDS = {
 EXPECTED_PRODUCER_TRIAL_SHA256 = (
     "8dfd9c921ab8ee54e17421212140cb7ed601eab64c2de96b73a13e48d807850c"
 )
+TAG_REQUEST_PATH = Path(".github/workflows/tag-request.yml")
+TAG_DELIVERY_PATH = Path(".github/workflows/tag-delivery.yml")
+EXPECTED_TAG_REQUEST_SHA256 = (
+    "403c32e15bac90f0af0023a1ca1155cc8f2bd737abcde075e772d4985ab49637"
+)
+EXPECTED_TAG_DELIVERY_SHA256 = (
+    "ae1083b80821dc4946279e695a15a04362c5026890abe3c05631292cc39482b6"
+)
+TAG_COMMANDS = {
+    "node scripts/tag-delivery.mjs request",
+    'node scripts/tag-delivery.mjs select "$RUNNER_TEMP/tabgrad-tag-delivery"',
+    'node scripts/tag-delivery.mjs dispatch "$RUNNER_TEMP/tabgrad-tag-delivery"',
+    'test -n "$READINESS_SHA"',
+    'test -n "$RELEASE_RUN"',
+}
 WEBSITE_PATH = Path(".github/workflows/website-checks.yml")
 EXPECTED_WEBSITE_SHA256 = (
-    "8964f5775b8814125adce02519cb08c02ff08051a6bfe028d34ecb512613df7e"
+    "6cc540030d64e5c7eaeef4fce66729bf83b6b08b8bf69226cb89d54607f72f42"
 )
 WEBSITE_COMMANDS = {
+    'node scripts/release-website.mjs "$RUNNER_TEMP/tabgrad-site-completion/site-completion.json" "$RUNNER_TEMP/tabgrad-site-runtime"',
+    'echo "TABGRAD_WEBSITE_RELEASE_INPUT=$RELEASE_INPUT" >> "$GITHUB_ENV"',
     "if test -d website/.generated/previous; then\n"
     "  node website/hosting/scripts/prepare.mjs website/dist "
     "website/.generated/delivery website/.generated/previous\n"
@@ -452,6 +471,8 @@ APPROVED_WORKFLOW_PATHS = {
     PUBLICATION_PATH,
     HISTORY_PATH,
     WEBSITE_PATH,
+    TAG_REQUEST_PATH,
+    TAG_DELIVERY_PATH,
 }
 CI_INSTALL_COMMAND = (
     "python -m venv .venv && .venv/bin/python -m pip install --only-binary=:all: --require-hashes "
@@ -560,6 +581,8 @@ PUBLICATION_COMMANDS = {
     CI_PUBLICATION_PREPARE_COMMAND,
     ".venv/bin/python scripts/prepare_provenance_client.py "
     '"$RUNNER_TEMP/tabgrad-provenance-client"',
+    'test -n "$CANDIDATE_SHA"',
+    'test -n "$COMPLETION_SHA"',
     *PUBLICATION_ROLE_COMMANDS,
     *PUBLICATION_PREPARATION_COMMANDS,
 }
@@ -1325,6 +1348,11 @@ def check_publication_post_jobs(
             )
             + " }}"
         )
+        if name == "website":
+            expected = (
+                expected.removesuffix(" }}")
+                + " && needs.precheck.outputs.tagged == 'true' }}"
+            )
         condition = job.get("if") if is_yaml_mapping(job) else None
         if not isinstance(condition, str) or " ".join(condition.split()) != expected:
             failures.append(
@@ -1351,16 +1379,21 @@ def check_workflow_security(state: YamlRepositoryState) -> list[Failure]:
         is_publication = relative == PUBLICATION_PATH
         is_history = relative == HISTORY_PATH
         is_website = relative == WEBSITE_PATH
+        is_tag = relative in (TAG_REQUEST_PATH, TAG_DELIVERY_PATH)
         if is_publication:
             failures.extend(check_publication_private_inputs(relative, document))
             failures.extend(check_publication_post_jobs(relative, document))
         expected_permissions = {"contents": "read"}
-        if is_producer_trial or is_publication or is_history or is_website:
+        if is_producer_trial or is_publication or is_history or is_website or is_tag:
             expected_permissions = (
                 PUBLICATION_PERMISSIONS
                 if is_publication
-                else {"contents": "read"}
+                else {"contents": "read", "actions": "read"}
                 if is_website
+                else {"contents": "read", "actions": "write", "issues": "read"}
+                if relative == TAG_DELIVERY_PATH
+                else {"contents": "read"}
+                if is_tag
                 else {"contents": "read", "actions": "read"}
             )
             try:
@@ -1368,7 +1401,11 @@ def check_workflow_security(state: YamlRepositoryState) -> list[Failure]:
                     document, sort_keys=True, separators=(",", ":"), allow_nan=False
                 ).encode()
                 matches_definition = hashlib.sha256(definition).hexdigest() == (
-                    EXPECTED_WEBSITE_SHA256
+                    EXPECTED_TAG_REQUEST_SHA256
+                    if relative == TAG_REQUEST_PATH
+                    else EXPECTED_TAG_DELIVERY_SHA256
+                    if relative == TAG_DELIVERY_PATH
+                    else EXPECTED_WEBSITE_SHA256
                     if is_website
                     else EXPECTED_HISTORY_SHA256
                     if is_history
@@ -1435,6 +1472,8 @@ def check_workflow_security(state: YamlRepositoryState) -> list[Failure]:
         )
         failures.extend(action_failures)
         for _, action in actions:
+            if is_publication and action == "./.github/workflows/website-checks.yml":
+                continue
             if not FULL_COMMIT_ACTION.fullmatch(action):
                 failures.append(
                     Failure(
@@ -1468,7 +1507,9 @@ def check_ci_workflow(
     failures.extend(command_failures)
     for workflow_path, command in all_run_commands:
         registered_commands = (
-            WEBSITE_COMMANDS
+            TAG_COMMANDS
+            if workflow_path in (TAG_REQUEST_PATH, TAG_DELIVERY_PATH)
+            else WEBSITE_COMMANDS
             if workflow_path == WEBSITE_PATH
             else HISTORY_COMMANDS
             if workflow_path == HISTORY_PATH
@@ -1559,6 +1600,7 @@ def check_ci_command_documentation(root: Path) -> list[Failure]:
         | PRODUCER_TRIAL_COMMANDS
         | PUBLICATION_COMMANDS
         | HISTORY_COMMANDS
+        | TAG_COMMANDS
         if command not in documented_commands
     )
     if not missing_commands:

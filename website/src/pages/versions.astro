@@ -13,6 +13,8 @@ const releases = [
   ["0.1.1", "Build correction"],
   ["0.1.0", "First public distribution"],
 ];
+if (data.release && !releases.some(([version]) => version === data.runtimeVersion))
+  releases.unshift([data.runtimeVersion, `Tabgrad ${data.runtimeVersion}`]);
 const currentRelease = releases.findIndex(([version]) => version === data.runtimeVersion);
 if (currentRelease < 0)
   throw new Error(`Update the published release history for ${data.runtimeVersion}.`);

@@ -38,8 +38,8 @@ function output(value, deadline) {
 export function validatePublicationPlan(input, now = Date.now()) {
   const p = structuredClone(input);
   requirePublication(exactPublicationKeys(p, ["schemaVersion", "operation", "authority", "owner", "window",
-    "candidate", "producer", "publisher", "npm", "github", "qualification", "continuation"])
-    && [1, 2].includes(p.schemaVersion) && [p.operation, p.authority, p.owner].every(value => matches(digest, value)),
+    "candidate", "producer", "publisher", "npm", "github", "qualification", "continuation", ...(p.schemaVersion === 3 ? ["website"] : [])])
+    && [1, 2, 3].includes(p.schemaVersion) && [p.operation, p.authority, p.owner].every(value => matches(digest, value)),
   "PUBLICATION_PLAN_INVALID");
   requirePublication(exactPublicationKeys(p.window, ["start", "deadline"])
     && instant(p.window.start) && instant(p.window.deadline)
@@ -85,7 +85,7 @@ export function validatePublicationPlan(input, now = Date.now()) {
     && p.github.prerelease === false && typeof p.github.latest === "boolean" && matches(digest, p.github.notesSha256)
     && exactPublicationKeys(p.github.before, ["tagRevision", "releaseId"])
     && (p.github.before.tagRevision === null || p.github.before.tagRevision === p.candidate.sourceRevision)
-    && (p.schemaVersion !== 2 || p.github.before.tagRevision === p.candidate.sourceRevision)
+    && (p.schemaVersion === 1 || p.github.before.tagRevision === p.candidate.sourceRevision)
     && (p.github.before.releaseId === null || matches(id, p.github.before.releaseId))
     && Array.isArray(p.github.assets) && p.github.assets.length === 6, "PUBLICATION_GITHUB_INVALID");
   const assetNames = new Set();
@@ -101,12 +101,15 @@ export function validatePublicationPlan(input, now = Date.now()) {
   }
   requirePublication(["archive", "inventory", "archive-proof", "inventory-proof", "evidence", "checksums"]
     .every(kind => kinds.has(kind)) && assetBytes <= 128 * 1024 * 1024, "PUBLICATION_ASSET_INVALID");
-  requirePublication(exactPublicationKeys(p.qualification, ["browsers", "gpu", "evidenceSha256"])
+  requirePublication(exactPublicationKeys(p.qualification, ["browsers", "gpu", "evidenceSha256", ...(p.schemaVersion === 3 ? ["registryGpu"] : [])])
     && Array.isArray(p.qualification.browsers) && p.qualification.browsers.length > 0
     && new Set(p.qualification.browsers).size === p.qualification.browsers.length
     && p.qualification.browsers.every(browser => ["Chrome", "Firefox"].includes(browser))
-    && typeof p.qualification.gpu === "boolean" && matches(digest, p.qualification.evidenceSha256),
+    && typeof p.qualification.gpu === "boolean" && matches(digest, p.qualification.evidenceSha256)
+    && (p.schemaVersion !== 3 || (p.qualification.gpu === true && p.qualification.registryGpu === false)),
   "PUBLICATION_QUALIFICATION_INVALID");
+  requirePublication(p.schemaVersion !== 3 || (exactPublicationKeys(p.website, ["configurationSha256", "originSha256"])
+    && Object.values(p.website).every(value => matches(digest, value))), "PUBLICATION_WEBSITE_INVALID");
   requirePublication(p.continuation === null || (exactPublicationKeys(p.continuation, ["operation", "evidenceSha256"])
     && matches(digest, p.continuation.operation) && matches(digest, p.continuation.evidenceSha256)
     && p.continuation.operation !== p.operation), "PUBLICATION_CONTINUATION_INVALID");
@@ -132,7 +135,7 @@ export function publicationEffects(plan) {
     { kind: "npm-publish", ...common, registry: plan.npm.registry, name: plan.candidate.name,
       channel: plan.npm.channel, access: plan.npm.access },
     // V1 effect identities and histories remain unchanged, including old tag calls.
-    ...(plan.schemaVersion === 2 ? [] : [
+    ...([2, 3].includes(plan.schemaVersion) ? [] : [
       { kind: "github-tag", ...common, tag: plan.github.tag, sourceRevision: plan.candidate.sourceRevision },
     ]),
     { kind: "github-draft", ...common, tag: plan.github.tag, notesSha256: plan.github.notesSha256,
@@ -144,12 +147,18 @@ export function publicationEffects(plan) {
   return effects.map(effect => ({ ...effect, identity: sha256(canonicalBytes(effect)) }));
 }
 
+/** Preparation always checks the original candidate; registry consumers have their own phase. */
+export function publicationRequiresGpu(plan, input = "supplied-archive") {
+  return plan.qualification.gpu && (input !== "registry-version" || plan.qualification.registryGpu !== false);
+}
+
 /** Independent provider/controller observation; a supplied matching sidecar is not authentication. */
 export function verifyPublicationAuthority(plan, planSha256, observation, expectedPolicySha256, now = Date.now()) {
+  const tagged = observation?.schemaVersion === 2;
   requirePublication(matches(digest, planSha256) && matches(digest, expectedPolicySha256)
     && exactPublicationKeys(observation, ["schemaVersion", "planSha256", "authority", "owner", "window",
-    "writerPolicySha256", "repository", "workflow", "revision", "runId", "runAttempt", "approved"])
-    && observation.schemaVersion === 1 && observation.planSha256 === planSha256
+      "writerPolicySha256", "repository", "workflow", "revision", "runId", "runAttempt", "approved", ...(tagged ? ["preparation"] : [])])
+    && (tagged ? plan.schemaVersion === 3 : observation.schemaVersion === 1) && observation.planSha256 === planSha256
     && observation.authority === plan.authority && observation.owner === plan.owner
     && isDeepStrictEqual(observation.window, plan.window)
     && observation.writerPolicySha256 === expectedPolicySha256
@@ -157,4 +166,9 @@ export function verifyPublicationAuthority(plan, planSha256, observation, expect
     && observation.revision === plan.publisher.revision && matches(id, observation.runId)
     && matches(id, observation.runAttempt) && observation.approved === true
     && Date.parse(plan.window.start) <= now && now < Date.parse(plan.window.deadline), "PUBLICATION_AUTHORITY_INVALID");
+  requirePublication(!tagged || (exactPublicationKeys(observation.preparation,
+    ["runId", "readinessSha256", "approvalSha256", "requestRun", "controllerRun", "tagObjectSha"])
+    && [observation.preparation.runId, observation.preparation.requestRun, observation.preparation.controllerRun].every(value => matches(id, value))
+    && [observation.preparation.readinessSha256, observation.preparation.approvalSha256].every(value => matches(digest, value))
+    && matches(commit, observation.preparation.tagObjectSha)), "PUBLICATION_AUTHORITY_INVALID");
 }
