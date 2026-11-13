@@ -23,16 +23,7 @@ body { font-optical-sizing: auto; }
 .header-appearance label { color: var(--muted); }
 .header-appearance:hover label { color: var(--ink); }
 .header-appearance select { width: var(--tg-control-size); min-height: var(--tg-control-size); margin: 0; padding: 0; color: transparent; border-radius: var(--tg-radius-md); }
-.theme-control { display: inline-block; position: relative; }
-.theme-control .label-icon { visibility: hidden; }
-.theme-symbol { position: absolute; inset-block-start: 50%; inset-inline-start: 0; transform: translateY(-50%); color: var(--muted); font-size: var(--tg-text-interface); line-height: 1; pointer-events: none; }
-.theme-control:is(:hover, :focus-within) .theme-symbol { color: var(--ink); }
-.theme-symbol > .theme-symbol-light { display: none; }
-.theme-symbol > .theme-symbol-dark { display: block; }
-[data-theme="light"] .theme-symbol > .theme-symbol-light { display: block; }
-[data-theme="light"] .theme-symbol > .theme-symbol-dark { display: none; }
-.header-appearance .theme-control { display: block; width: 100%; }
-.header-appearance .theme-symbol { inset-inline-start: 50%; transform: translate(-50%, -50%); font-size: var(--sl-text-lg); }
+.header-appearance .label-icon { left: 50%; right: auto; transform: translate(-50%, -50%); font-size: var(--sl-text-lg); }
 .header-appearance .caret { display: none; }
 /* Icon controls use the same underline and focus tokens as the text links. */
 .tabgrad-header-actions :is(.project-icon-link, .header-appearance) { position: relative; background: transparent; }
@@ -111,17 +102,13 @@ body { font-optical-sizing: auto; }
 .marketing button, .marketing select, .marketing textarea { font: inherit; }
 .marketing button { cursor: pointer; }
 .marketing button:disabled { cursor: default; opacity: 0.5; }
-.marketing .hero { display: grid; gap: var(--tg-space-4); padding: var(--tg-space-8) 0 var(--tg-space-12); }
-.hero-intro { display: grid; gap: var(--tg-space-3); align-items: start; }
-.hero-copy { display: grid; gap: var(--tg-space-6); justify-items: start; min-width: 0; }
-.hero h1 { margin: 0; text-wrap: balance; }
-.hero-art { align-self: center; justify-self: center; min-width: 0; width: 100%; max-width: var(--tg-art-scene-size); }
-.hero-summary { display: grid; gap: var(--tg-space-2); }
-.marketing .hero-summary > p { margin: 0; }
+.marketing .hero { display: grid; gap: var(--tg-space-8); padding: var(--tg-space-8) 0 var(--tg-space-12); }
+.hero-intro { display: grid; gap: var(--tg-space-6); align-items: start; }
+.hero h1 { margin: 0 0 var(--tg-space-6); text-wrap: balance; }
+.hero-art { align-self: center; justify-self: center; min-width: 0; width: 100%; max-width: var(--tg-art-support-size); }
 .hero-description { font-size: var(--tg-text-lead); line-height: var(--sl-line-height); max-width: var(--tg-intro-measure); }
 .marketing .hero-scope { font-size: var(--tg-text-interface); max-width: var(--tg-intro-measure); }
-:is(.action-links, .project-actions) { display: flex; flex-wrap: wrap; align-items: center; gap: var(--tg-space-4) var(--tg-space-6); }
-:is(.action-links, .project-actions, .next-actions) > a { display: inline-flex; align-items: center; min-height: var(--tg-control-size); }
+.hero-buttons { display: flex; flex-wrap: wrap; gap: var(--tg-space-3); align-items: center; margin: var(--tg-space-6) 0; }
 :is(.marketing, .tabgrad-footer) .button { display: inline-flex; align-items: center; justify-content: center; gap: var(--tg-space-3); min-height: var(--tg-control-size); border: 1px solid var(--line); border-radius: var(--tg-radius-sm); padding: var(--tg-space-2) var(--tg-space-4); font-size: var(--sl-text-base); font-weight: 600; line-height: 1.5; text-decoration: none; white-space: normal; }
 :is(.marketing, .tabgrad-footer) .button.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); }
 :is(.marketing, .tabgrad-footer) .button.secondary { background: transparent; color: var(--ink); }
@@ -165,6 +152,7 @@ body { font-optical-sizing: auto; }
 .section-intro > h2:last-child { margin-bottom: 0; }
 .setup-steps { display: grid; gap: var(--tg-space-3); margin-block: var(--tg-space-6); padding-inline-start: var(--tg-space-6); color: var(--muted); }
 .setup-steps li::marker { color: var(--accent-text); font-weight: 600; }
+.project-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--tg-space-4) var(--tg-space-6); }
 .integration-guide { display: grid; }
 .integration-source { margin-block-end: var(--tg-space-6); border: 1px solid var(--line); border-radius: var(--tg-radius-lg); background: var(--surface); overflow: hidden; }
 .integration-file { display: flex; flex-wrap: wrap; align-items: start; justify-content: space-between; gap: var(--tg-space-4); padding: var(--tg-space-6); }
@@ -322,7 +310,6 @@ starlight-tabs [role="tab"] { font-size: var(--tg-text-interface); min-height: v
 /* 70rem keeps two readable code/intro panes and their shared gutter. Below it,
    compact navigation and single panes avoid squeezing content. */
 @media (min-width: 70rem) {
-  .marketing .hero { gap: var(--tg-space-8); }
   .hero-intro { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--tg-space-8); align-items: center; }
   .hero-art { max-width: var(--tg-art-hero-size); }
   .example-gallery { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -358,7 +345,6 @@ starlight-tabs [role="tab"] { font-size: var(--tg-text-interface); min-height: v
 /* Starlight's documentation index retains a separate, labelled book control.
    Its reserved width belongs to the header frame, not an action's margin. */
 @media (width < 50rem) {
-  .hero-actions { flex-direction: column; align-items: flex-start; }
   :root { --tg-logo-width: 7.5rem; }
   [data-has-sidebar] header.header:has(.tabgrad-header) { padding-inline-end: var(--sl-nav-pad-x); }
   .site-menu-toggle { padding: var(--tg-space-2); }

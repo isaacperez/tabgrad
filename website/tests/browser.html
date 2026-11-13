@@ -9,7 +9,6 @@ const token = new URL(location.href).searchParams.get("token");
 const frame = document.querySelector("iframe");
 const results = [];
 const navigationFocus = { visible: 0, unavailable: 0 };
-const openingActionGaps = [];
 const pageTitleScale = new Map();
 const phase = (value) => token ? fetch(`/__phase?token=${encodeURIComponent(token)}`, { method: "POST", body: JSON.stringify({ phase: value }) }) : Promise.resolve();
 async function until(predicate, description, milliseconds = 30000) {
@@ -20,48 +19,6 @@ async function until(predicate, description, milliseconds = 30000) {
   }
 }
 function assert(value, message) { if (!value) throw new Error(message); }
-function checkResolvedThemeIcon(document) {
-  const resolved = document.documentElement.dataset.theme;
-  for (const picker of document.querySelectorAll('starlight-theme-select')) {
-    const control = picker.closest('.theme-control');
-    assert(control, 'the shared theme control presents the resolved appearance rather than a laptop preference icon');
-    const icons = [...control.querySelectorAll('.theme-symbol > svg')];
-    const visible = icons.filter(icon => document.defaultView.getComputedStyle(icon).display !== 'none');
-    assert(visible.length === 1 && visible[0].classList.contains(`theme-symbol-${resolved}`), `one sun/moon icon follows the resolved ${resolved} appearance`);
-    assert(control.querySelector('.theme-symbol').getAttribute('aria-hidden') === 'true' && picker.querySelector('label .sr-only').textContent.trim(), 'decorative appearance preserves the native selector accessible name');
-  }
-}
-async function checkThemeAppearance(frame) {
-  let document = frame.contentDocument;
-  const original = document.querySelector('starlight-theme-select select').value;
-  for (const selection of ['dark', 'light', 'auto']) {
-    const picker = document.querySelector('starlight-theme-select select');
-    picker.value = selection;
-    picker.dispatchEvent(new frame.contentWindow.Event('change', { bubbles: true }));
-    const resolved = selection === 'auto' ? (frame.contentWindow.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark') : selection;
-    await until(() => document.documentElement.dataset.theme === resolved, 'resolved theme choice');
-    assert([...document.querySelectorAll('starlight-theme-select select')].every(select => select.value === selection), 'desktop and compact theme selectors remain synchronized');
-    checkResolvedThemeIcon(document);
-  }
-  // The provider owns system observation. Exercise both possible resolved roots,
-  // separately from the actual browser preference tested by the auto selection.
-  const actual = document.documentElement.dataset.theme;
-  for (const resolved of ['dark', 'light']) {
-    document.documentElement.dataset.theme = resolved;
-    checkResolvedThemeIcon(document);
-  }
-  document.documentElement.dataset.theme = actual;
-  const picker = document.querySelector('starlight-theme-select select');
-  picker.value = 'dark';
-  picker.dispatchEvent(new frame.contentWindow.Event('change', { bubbles: true }));
-  frame.contentWindow.location.reload();
-  await until(() => frame.contentDocument !== document && frame.contentDocument?.readyState === 'complete' && frame.contentDocument.querySelector('starlight-theme-select select')?.value === 'dark', 'explicit theme survives reload');
-  document = frame.contentDocument;
-  checkResolvedThemeIcon(document);
-  const restored = document.querySelector('starlight-theme-select select');
-  restored.value = original;
-  restored.dispatchEvent(new frame.contentWindow.Event('change', { bubbles: true }));
-}
 function paintedPixel(scale, value) { return Math.round(value * scale); }
 function startsWithCompactSource(runner) {
   return runner.classList.contains('compact-runner') && runner.dataset.state === 'idle'
@@ -812,7 +769,6 @@ try {
   await phase("application-started");
   assert((await fetch('/blog/')).ok, 'the static website provides the Markdown blog index');
   await until(() => frame.contentDocument?.querySelector("[data-run]")?.disabled === false, "playground ready");
-  await checkThemeAppearance(frame);
   await checkCompactExampleChooser(frame);
   await checkBusyChooserFocus(frame);
   const page = frame.contentDocument;
@@ -1057,10 +1013,6 @@ try {
       assert(document.querySelector('.build-next .button.primary').getAttribute('href') === '/start/', 'the closing integration action opens the shared JavaScript/Python choice');
       const scope = hero.querySelector('.hero-scope');
       assert(scope.children.length === 1 && scope.textContent === scope.querySelector('a[href="/versions/"]').textContent && !hero.querySelector('.project-facts'), 'hero keeps one compact compatibility link without a source/license block');
-      assert(scope.closest('.hero-summary')?.querySelector('.hero-description') && scope.textContent === 'See supported PyTorch features', 'compatibility is secondary introduction text rather than another arrow action');
-      const actions = [...hero.querySelectorAll('.hero-actions > a')];
-      assert(actions.length === 2 && actions[0].getAttribute('href') === '/playground/' && actions[1].getAttribute('href') === '/start/' && actions[1].textContent === 'Get started →', 'the two opening actions distinguish trial from integration with consistent names');
-      assert(cases[0].getAttribute('href') === '/docs/' && !cases[0].textContent.includes('Open playground'), 'the first use introduces the documentation rather than repeating the opening playground action');
       assert(footerLinks.some(link => link.href === 'https://github.com/isaacperez/tabgrad'), 'project source remains reachable from footer navigation');
       const questions = [...document.querySelectorAll('.question-list > details')];
       assert(questions.length === 5, 'Home provides the five practical adoption questions');
@@ -1145,22 +1097,6 @@ try {
         assert(type === pageTitleScale.get(width), `entry titles share their type role across Home, Docs and PageIntro: ${path} at ${width}px; ${type}`);
       }
       checkHeader(document, `${path} at ${width}px`);
-      checkResolvedThemeIcon(document);
-      assert(!document.querySelector('.tabgrad-navigation a[href="/"], .site-menu-links a[href="/"]') && document.querySelector('.tabgrad-brand[href="/"]'), 'the shared brand retains the home destination without a duplicate primary item');
-      for (const action of document.querySelectorAll(':is(.action-links, .project-actions, .next-actions) > a')) {
-        const bounds = action.getBoundingClientRect();
-        if (bounds.width) assert(bounds.height >= 44, `grouped actions share the comfortable control size: ${path} at ${width}px`);
-      }
-      if (path === '/') {
-        const actions = [...document.querySelectorAll('.hero-actions > a')].map(a => a.getBoundingClientRect());
-        const group = frame.contentWindow.getComputedStyle(document.querySelector('.hero-actions'));
-        const stacked = width < 800;
-        const gap = stacked ? actions[1].top - actions[0].bottom : actions[1].left - actions[0].right;
-        const expected = parseFloat(stacked ? group.rowGap : group.columnGap);
-        const scale = frame.contentWindow.devicePixelRatio;
-        openingActionGaps.push({ width, stacked, gap, expected, scale });
-        assert(paintedPixel(scale, gap) >= paintedPixel(scale, expected), `opening actions retain their ${stacked ? 'row' : 'column'} gap at painted-pixel precision: ${JSON.stringify(openingActionGaps.at(-1))}`);
-      }
       await checkNavigation(document, `${path} at ${width}px`);
       checkEditorToolbar(document, `${path} at ${width}px`);
       checkRunControls(document, `${path} at ${width}px`);
@@ -1506,7 +1442,7 @@ try {
   const sponsorshipNavigation = await checkSponsorshipNavigation(frame);
   frame.src = selectedExampleUrl;
   await until(() => frame.contentDocument?.querySelector('[data-example="matrix-products"][aria-pressed="true"]') && frame.contentDocument.querySelector('[data-run-language="javascript"][aria-selected="true"]') && frame.contentDocument.querySelector('[data-run-device="webgpu"][aria-pressed="true"]'), 'a fresh page restores selection from the address');
-  results.push({ name: "primary/project pages and documentation at ten widths, native navigation, responsive retirement, sidebar/code boundaries, non-overlapping controls and increased text spacing", passed: true, navigationFocus, openingActionGaps, searchChecks, pageRender, footerNavigation, sponsorshipNavigation });
+  results.push({ name: "primary/project pages and documentation at ten widths, native navigation, responsive retirement, sidebar/code boundaries, non-overlapping controls and increased text spacing", passed: true, navigationFocus, searchChecks, pageRender, footerNavigation, sponsorshipNavigation });
   await phase("runtime-finished");
   const report = { passed: true, cases: results };
   document.querySelector("#result").textContent = JSON.stringify(report, null, 2);

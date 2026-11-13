@@ -188,19 +188,10 @@ introductions and long-form documentation/legal reading retain their measures.
 Spacing follows a short quarter-rem scale; corner radii and comfortable control
 sizes are shared. Measures in `ch` constrain introductions and prose. These are
 explicit design choices, not values mandated by an accessibility standard.
-Grouped actions share their spacing and minimum interaction size; the homepage
-stacks its two actions at the existing compact breakpoint. Its compatibility
-reference belongs to the introduction's secondary text rather than another
-action row. The brand link owns the home destination in the shared header.
 The brand violet is used for large display text and decoration; small accent
 text and links use the theme's contrasting text accent. The secondary theme
 picker uses Starlight's small-text role, with the same comfortable control
 height as the primary controls.
-The registered `ThemeAppearance` wraps Starlight's native selector in the header
-and documentation menu, including the compact controls.
-Starlight still owns selection, persistence, synchronization and system changes.
-The shared sun/moon presentation reads the resolved root theme through CSS,
-including in automatic mode, without another state owner or client listener.
 Borders, grid track counts and the syntax view's measured geometry express
 their own layout meaning and are not arbitrary offsets to conceal in tokens.
 

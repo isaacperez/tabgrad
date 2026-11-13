@@ -74,7 +74,7 @@ export default defineConfig({
     description: "Run Python or JavaScript calculations in your browser, without a local installation. Tabgrad independently implements a documented subset of PyTorch.",
     favicon: "/brand/tabgrad-small.svg",
     customCss: ["./src/styles/site.css"],
-    components: { Header: "./src/components/Header.astro", ThemeSelect: "./src/components/ThemeAppearance.astro", MobileMenuToggle: "./src/components/MobileMenuToggle.astro", PageTitle: "./src/components/PageTitle.astro", Footer: "./src/components/Footer.astro" },
+    components: { Header: "./src/components/Header.astro", MobileMenuToggle: "./src/components/MobileMenuToggle.astro", PageTitle: "./src/components/PageTitle.astro", Footer: "./src/components/Footer.astro" },
     sidebar: [
       { label: "Start here", items: [
         { label: "Documentation", slug: "docs" },
