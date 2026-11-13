@@ -12,6 +12,11 @@ Tabgrad is not affiliated with or endorsed by the PyTorch Foundation. It is an
 independent implementation of a documented subset of the PyTorch Python API for
 browser execution.
 
+Try Tabgrad in the [playground](https://tabgrad.com/playground/), read the
+[documentation](https://tabgrad.com/docs/), or
+[add it to your page](https://tabgrad.com/start/). The JavaScript package is
+available on [npm](https://www.npmjs.com/package/@tabgrad/tabgrad).
+
 ## Purpose
 
 Tabgrad is designed to let people write familiar Python tensor and neural
@@ -48,7 +53,7 @@ the official PyTorch package. Public packages and distributions use the
 Tabgrad name and are not published as `torch`.
 
 The [browser package guide](docs/reference/browser-package.md) explains how to
-install and serve an inspected candidate. The
+load Tabgrad from a CDN or serve the matching prebuilt files yourself. The
 [0.3.0 source and support record](docs/reference/release-0.3.0.md) identifies its
 bounded API and qualification; registry availability is verified separately.
 
