@@ -107,7 +107,7 @@ tableOfContents: false
 # Tabgrad docs
 
 <p class="docs-lead">${overviewDescription}</p>
-<p><a class="text-link" href="/playground/">Try an example in the playground →</a></p>
+<p><a class="text-link" href="/playground/">Try an example in the playground&nbsp;→</a></p>
 </div><div class="docs-overview-art">${(await loadIllustration("learning")).replaceAll("\n", "")}</div></div>
 
 <div class="docs-paths">
