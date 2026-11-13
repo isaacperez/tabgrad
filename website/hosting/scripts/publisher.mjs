@@ -8,6 +8,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { sha256 } from "../../scripts/files.mjs";
 import { canonicalBytes } from "../../../scripts/release-record-data.mjs";
 import { completedRelease, releaseSiteIdentity, observeCompletedRelease } from "../../../scripts/release-website.mjs";
+import { publicationFile } from "../../../scripts/publication-admission.mjs";
 import { publicationGithub } from "../../../scripts/publication-github.mjs";
 import { manifestName, publicationOrigin, verifyPayload } from "./inventory.mjs";
 
@@ -103,7 +104,7 @@ export async function publishWebsite(root, env, { deploy, observe, record, now, 
   if ((manifest.format === 2 ? manifest.recipeRevision : manifest.revision) !== context.revision || manifest.origin !== publicationOrigin(env.TABGRAD_SITE_URL)) throw new Error("Publication source or origin changed");
   const account = parseHostingAccount(env.TABGRAD_HOST_CONFIG_JSON);
   if (manifest.format === 2) {
-    const descriptor = JSON.parse(await readFile(env.TABGRAD_WEBSITE_COMPLETION, "utf8"));
+    const descriptor = JSON.parse(await publicationFile(env.TABGRAD_WEBSITE_COMPLETION, 8 * 1024 * 1024));
     const selected = completedRelease(descriptor);
     if ((env.TABGRAD_WEBSITE_RELEASE_RECOVERY === "true" ? manifest.revision !== context.revision : manifest.revision !== manifest.release.sourceRevision)
       || selected.sha256 !== env.TABGRAD_COMPLETION_SHA256
