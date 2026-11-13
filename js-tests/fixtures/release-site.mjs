@@ -32,4 +32,3 @@ export async function siteFixture(t, { website } = {}) {
   const api = f.api;
   return { ...f, environment: { ...f.environment, GITHUB_RUN_ID: "601" }, descriptor, selected, artifact, current, api };
 }
-
