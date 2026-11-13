@@ -155,6 +155,8 @@ Read the documents in this order when learning the architecture:
    [Float32 matrix products](float32-matrix-product.md) defines the shared
    sequential accumulation, internal derivative orientations and explicit
    native numerical differences for a dense two-dimensional product.
+   [Broadcast addition](broadcast-addition.md) separates shared index geometry,
+   receiving-gradient identity and backend-specific grouped-sum arithmetic.
 7. [WebAssembly CPU backend](webassembly-cpu-backend.md) develops the CPU branch:
    Rust-authored kernels, prebuilt scalar and vector modules, the private binary
    interface, memory ownership, and optional worker constraints.
