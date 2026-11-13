@@ -347,7 +347,7 @@ class RepositoryCheckTests(unittest.TestCase):
         self,
     ) -> None:
         jobs = self.publication_workflow()["jobs"]
-        results = dict.fromkeys(
+        results: dict[str, str] = dict.fromkeys(
             ("precheck", "admit", "npm", "bootstrap", "complete"), "success"
         )
         self.assertFalse(
