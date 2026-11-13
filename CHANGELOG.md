@@ -7,6 +7,13 @@ established by the corresponding verified release record.
 
 ## Unreleased
 
+### Added
+
+- Publication plans can preserve an existing exact-source version tag without
+  trying to create it again. Earlier plans retain their original effect
+  identities and unresolved-call history
+  ([#432](https://github.com/isaacperez/tabgrad/issues/432)).
+
 ### Fixed
 
 - Release consumers wait for an unavailable registry attestation within the

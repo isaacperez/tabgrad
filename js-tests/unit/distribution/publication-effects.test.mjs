@@ -4,13 +4,14 @@ import { publicationPlanFixture } from "../../fixtures/publication.mjs";
 import { publicationAuthorityDocument, publicationCandidateIdentity, publicationEffects } from "../../../scripts/publication-plan.mjs";
 import { canonicalBytes, sha256 } from "../../../scripts/release-record-data.mjs";
 import { checkPublicationGithubState, completeGithubPublication, npmCallReceipt, prepareNpmCall,
-  requireNpmCallReceipt, requireNpmIntent } from "../../../scripts/publication-effects.mjs";
+  requireNpmCallReceipt, requireNpmIntent, requirePublicationRecordAdmission } from "../../../scripts/publication-effects.mjs";
 import { admitNpmManifest } from "../../../scripts/publication-npm.mjs";
 
-function controllerFixture(context) {
+function controllerFixture(context, { tagged = false } = {}) {
   const { publicationPlan: plan } = publicationPlanFixture();
+  if (tagged) { plan.schemaVersion = 2; plan.github.before.tagRevision = plan.candidate.sourceRevision; }
   const effects = publicationEffects(plan), complete = new Set(), log = [];
-  let release = null, tagRevision = null, latestId = null, unsettled = false;
+  let release = null, tagRevision = tagged ? plan.candidate.sourceRevision : null, latestId = null, unsettled = false;
   const assets = [];
   const record = { effects, complete, head: "f".repeat(40),
     async intent(effect) { assert.equal(unsettled, false); unsettled = true; log.push(["intent", effect.kind]); return "d".repeat(64); },
@@ -97,6 +98,82 @@ test("policy model: conflicting tag or inaccessible/unowned release cannot be ad
     { tagRevision: "0".repeat(40), release: null, assets: [] },
     { tagRevision: null, release: { id: 7 }, assets: [] },
   ]) assert.throws(() => checkPublicationGithubState(f.plan, state, f.record.complete, f.notes));
+});
+
+test("preexisting-tag completion verifies consumers and publishes without any tag write", async () => {
+  const f = controllerFixture(undefined, { tagged: true });
+  const handoff = await prepareNpmCall(f);
+  await f.record.observe(handoff.call, f.record.effects[0], "verified-effect");
+  const result = await completeGithubPublication(f);
+  assert.equal(result.status, "passed");
+  const writes = f.log.filter(entry => entry[0] === "write").map(entry => entry[1]);
+  assert.deepEqual(writes, ["github-draft", ...Array(6).fill("github-asset"), "github-public"]);
+  assert.ok(f.log.findIndex(entry => entry[0] === "registry-consumers")
+    < f.log.findIndex(entry => entry[0] === "write"));
+  f.log.length = 0;
+  await completeGithubPublication(f);
+  assert.equal(f.log.some(entry => entry[0] === "write"), false);
+});
+
+for (const revision of [null, "f".repeat(40)]) {
+  test(`preexisting-tag drift rejects before npm and before the next GitHub effect: ${revision}`, async () => {
+    const f = controllerFixture(undefined, { tagged: true });
+    const original = f.inspectGithub;
+    f.inspectGithub = async () => ({ ...await original(), tagRevision: revision });
+    await assert.rejects(prepareNpmCall(f), { code: "PUBLICATION_TAG_CONFLICT" });
+    assert.equal(f.log.some(entry => entry[0] === "intent"), false);
+    f.record.complete.add(f.record.effects[0].identity);
+    await assert.rejects(completeGithubPublication(f), { code: "PUBLICATION_TAG_CONFLICT" });
+    assert.equal(f.log.some(entry => entry[0] === "write"), false);
+  });
+}
+
+test("preexisting-tag completion retains one unknown failed draft and never recreates a tag", async () => {
+  const f = controllerFixture(undefined, { tagged: true });
+  f.record.complete.add(f.record.effects[0].identity);
+  f.write = async effect => {
+    f.log.push(["write", effect.kind]);
+    throw Object.assign(new Error("fixture"), { dispatched: true });
+  };
+  await assert.rejects(completeGithubPublication(f), /fixture/);
+  assert.deepEqual(f.log.filter(entry => entry[0] === "write"), [["write", "github-draft"]]);
+  assert.deepEqual(f.log.at(-1), ["observe", "github-draft", "unknown"]);
+  assert.equal(f.log.filter(entry => entry[0] === "intent").length, 1);
+});
+
+test("tag drift after a confirmed asset retains progress and prevents later writes", async () => {
+  const f = controllerFixture(undefined, { tagged: true });
+  f.record.complete.add(f.record.effects[0].identity);
+  const write = f.write, inspect = f.inspectGithub;
+  let missing = false;
+  f.inspectGithub = async () => ({ ...await inspect(), ...(missing ? { tagRevision: null } : {}) });
+  f.write = async effect => {
+    const result = await write(effect);
+    if (effect.kind === "github-asset") missing = true;
+    return result;
+  };
+  await assert.rejects(completeGithubPublication(f), { code: "PUBLICATION_TAG_CONFLICT" });
+  assert.deepEqual(f.log.filter(entry => entry[0] === "write"), [["write", "github-draft"], ["write", "github-asset"]]);
+  assert.equal(f.record.complete.size, 3);
+  assert.deepEqual(f.log.at(-1), ["observe", "github-asset", "verified-effect"]);
+});
+
+test("changing plan version cannot adopt an old admission with an unresolved tag call", () => {
+  const { publicationPlan: legacy, authority } = publicationPlanFixture();
+  legacy.github.before.tagRevision = legacy.candidate.sourceRevision;
+  authority.planSha256 = sha256(canonicalBytes(legacy));
+  const tag = publicationEffects(legacy).find(effect => effect.kind === "github-tag");
+  const replay = { checkpoint: { activeOperation: legacy.operation }, operations: [{ operation: legacy.operation,
+    closure: null, admission: { owner: legacy.owner, window: legacy.window,
+      candidate: publicationCandidateIdentity(legacy),
+      authority: sha256(canonicalBytes(publicationAuthorityDocument(legacy, authority))) },
+    calls: [{ call: "e".repeat(64), intent: { effect: tag.identity }, outcome: "unknown", observations: 0 }] }] };
+  requirePublicationRecordAdmission(legacy, replay, authority);
+  const plan = { ...legacy, schemaVersion: 2 };
+  assert.throws(() => requirePublicationRecordAdmission(plan, replay, authority), { code: "PUBLICATION_RECORD_ADMISSION_INVALID" });
+  const changedAuthority = { ...authority, planSha256: sha256(canonicalBytes(plan)) };
+  assert.throws(() => requirePublicationRecordAdmission(plan, replay, changedAuthority), { code: "PUBLICATION_RECORD_ADMISSION_INVALID" });
+  assert.equal(replay.operations[0].calls[0].outcome, "unknown");
 });
 
 test("intent binding rejects replacements and any prior outcome/observation", () => {

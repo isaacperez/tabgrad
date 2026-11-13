@@ -39,7 +39,7 @@ export function validatePublicationPlan(input, now = Date.now()) {
   const p = structuredClone(input);
   requirePublication(exactPublicationKeys(p, ["schemaVersion", "operation", "authority", "owner", "window",
     "candidate", "producer", "publisher", "npm", "github", "qualification", "continuation"])
-    && p.schemaVersion === 1 && [p.operation, p.authority, p.owner].every(value => matches(digest, value)),
+    && [1, 2].includes(p.schemaVersion) && [p.operation, p.authority, p.owner].every(value => matches(digest, value)),
   "PUBLICATION_PLAN_INVALID");
   requirePublication(exactPublicationKeys(p.window, ["start", "deadline"])
     && instant(p.window.start) && instant(p.window.deadline)
@@ -85,6 +85,7 @@ export function validatePublicationPlan(input, now = Date.now()) {
     && p.github.prerelease === false && typeof p.github.latest === "boolean" && matches(digest, p.github.notesSha256)
     && exactPublicationKeys(p.github.before, ["tagRevision", "releaseId"])
     && (p.github.before.tagRevision === null || p.github.before.tagRevision === p.candidate.sourceRevision)
+    && (p.schemaVersion !== 2 || p.github.before.tagRevision === p.candidate.sourceRevision)
     && (p.github.before.releaseId === null || matches(id, p.github.before.releaseId))
     && Array.isArray(p.github.assets) && p.github.assets.length === 6, "PUBLICATION_GITHUB_INVALID");
   const assetNames = new Set();
@@ -130,7 +131,10 @@ export function publicationEffects(plan) {
   const effects = [
     { kind: "npm-publish", ...common, registry: plan.npm.registry, name: plan.candidate.name,
       channel: plan.npm.channel, access: plan.npm.access },
-    { kind: "github-tag", ...common, tag: plan.github.tag, sourceRevision: plan.candidate.sourceRevision },
+    // V1 effect identities and histories remain unchanged, including old tag calls.
+    ...(plan.schemaVersion === 2 ? [] : [
+      { kind: "github-tag", ...common, tag: plan.github.tag, sourceRevision: plan.candidate.sourceRevision },
+    ]),
     { kind: "github-draft", ...common, tag: plan.github.tag, notesSha256: plan.github.notesSha256,
       prerelease: plan.github.prerelease, latest: plan.github.latest },
     ...plan.github.assets.map(asset => ({ kind: "github-asset", ...common, tag: plan.github.tag, asset })),

@@ -5,7 +5,10 @@ import { exactPublicationKeys, publicationAuthorityDocument, publicationCandidat
 /** A read observation never settles an earlier write's outcome. */
 export function checkPublicationGithubState(plan, state, complete, notes) {
   const effects = publicationEffects(plan);
-  const done = kind => complete.has(effects.find(effect => effect.kind === kind).identity);
+  const done = kind => {
+    const effect = effects.find(value => value.kind === kind);
+    return effect !== undefined && complete.has(effect.identity);
+  };
   const tagExpected = done("github-tag") ? plan.candidate.sourceRevision : plan.github.before.tagRevision;
   requirePublication(state.tagRevision === tagExpected, "PUBLICATION_TAG_CONFLICT");
   if (state.release === null) {
