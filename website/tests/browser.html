@@ -365,6 +365,18 @@ function checkDocumentationTables(document, context) {
     assert(document.defaultView.getComputedStyle(table).display === 'table', `header and body retain native column alignment: ${context}`);
   }
 }
+function checkDocumentationIntroAction(document, context) {
+  const link = document.querySelector('.docs-overview-intro a.text-link');
+  if (!link) return;
+  const text = link.firstChild;
+  const label = text.textContent;
+  const ending = label.match(/(\S+)\s+→$/u);
+  assert(ending, `documentation action retains its text and arrow: ${context}`);
+  const word = document.createRange(), arrow = document.createRange();
+  word.setStart(text, ending.index); word.setEnd(text, ending.index + ending[1].length);
+  arrow.setStart(text, label.length - 1); arrow.setEnd(text, label.length);
+  assert(word.getBoundingClientRect().top === arrow.getBoundingClientRect().top, `documentation action arrow stays with its final word: ${context}`);
+}
 function checkDisclosureType(document, context) {
   const interfaceSize = document.defaultView.getComputedStyle(document.querySelector('.tabgrad-header-actions button[data-open-modal]')).fontSize;
   for (const summary of document.querySelectorAll('.disclosure > summary')) {
@@ -1128,6 +1140,7 @@ try {
       checkUseCaseCards(document, `${path} at ${width}px`);
       checkUnillustratedIntro(document, `${path} at ${width}px`);
       checkDocumentationTables(document, `${path} at ${width}px`);
+      checkDocumentationIntroAction(document, `${path} at ${width}px`);
       checkDisclosureType(document, `${path} at ${width}px`);
       checkQuestionLayout(document, `${path} at ${width}px`);
       for (const [image, authoredWidth] of diagramSizes) {
