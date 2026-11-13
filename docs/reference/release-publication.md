@@ -84,7 +84,8 @@ authenticate the party which installed them.
 ## Stable profile and execution contract
 
 `publication-authority.mjs` owns both explicit schema epochs. The role entry
-accepts a closed v1 plan or the v2 plan/execution files generated below.
+accepts explicit closed-plan inputs under a v1 policy or the plan/execution
+files generated under a v2 policy below.
 Supplying a v2 profile without that execution file fails with
 `PUBLICATION_EXECUTION_REQUIRED`. Neither epoch grants activation authority
 or writes secrets.
@@ -405,6 +406,28 @@ qualification. Unsupported prereleases or transitions require a separate
 reviewed profile; this command does not infer them. The publication window must
 fit every input's effective validity. Revalidation cannot renew original
 signing authority or silently extend an approved publication window.
+
+### Publish against an existing version tag
+
+Publication-plan `schemaVersion: 2` requires
+`github.before.tagRevision` to equal `candidate.sourceRevision`. It preserves
+that existing tag and schedules no tag-creation effect. The tag must still
+resolve to that exact source before npm, between GitHub effects and at final
+verification. An absent or changed tag rejects; the publisher never repairs or
+recreates it. Tag resolution does not prove who authorized the publication.
+All existing approval, producer-proof, consumer and control-history admission
+requirements remain applicable.
+
+Plan version `1` retains its original effect list and identities, including
+`github-tag`, even if its starting state names the source. Do not edit an
+admitted plan, reinterpret an earlier tag call as complete, or discard an
+unknown result to switch versions. A new plan needs its own exact admission
+against the retained history; it cannot settle an old call.
+
+This plan version is independent of the enrolled policy/profile version and
+the execution-document version. Ordinary version/source composition still
+produces plan version `1`; accepting a version `2` draft does not install a tag
+trigger, change signing or GPU qualification, or authorize publication.
 
 The six final assets are archive, inventory, archive proof, inventory proof,
 producer evidence packet and checksums. The evidence packet preserves ten exact

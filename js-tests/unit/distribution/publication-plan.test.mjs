@@ -83,3 +83,36 @@ test("effect identity binds every asset and proof but permits a new approved con
   assert.notEqual(publicationCandidateIdentity(p), publicationCandidateIdentity(f.publicationPlan));
   assert(publicationEffects(p).every((x, i) => x.identity !== before[i].identity));
 });
+
+test("preexisting-tag plan has an explicit version and preserves the remaining effect identities", () => {
+  const { publicationPlan: legacy, now } = publicationPlanFixture();
+  const plan = structuredClone(legacy);
+  plan.schemaVersion = 2;
+  plan.github.before.tagRevision = plan.candidate.sourceRevision;
+  assert.deepEqual(validatePublicationPlan(plan, now), plan);
+  assert.deepEqual(publicationEffects(plan), publicationEffects(legacy).filter(effect => effect.kind !== "github-tag"));
+});
+
+for (const revision of [null, "", "f".repeat(40)]) {
+  test(`preexisting-tag plan rejects an unbound starting tag: ${revision}`, () => {
+    const { publicationPlan: plan, now } = publicationPlanFixture();
+    plan.schemaVersion = 2;
+    plan.github.before.tagRevision = revision;
+    assert.throws(() => validatePublicationPlan(plan, now), { code: "PUBLICATION_GITHUB_INVALID" });
+  });
+}
+
+for (const version of [0, 3, "2"]) test(`publication plan rejects unsupported version ${JSON.stringify(version)}`, () => {
+  const { publicationPlan: plan, now } = publicationPlanFixture();
+  plan.schemaVersion = version;
+  assert.throws(() => validatePublicationPlan(plan, now), { code: "PUBLICATION_PLAN_INVALID" });
+});
+
+test("legacy plans retain the tag effect even when their starting state names that source", () => {
+  const { publicationPlan: plan, now } = publicationPlanFixture();
+  const before = publicationEffects(plan);
+  plan.github.before.tagRevision = plan.candidate.sourceRevision;
+  validatePublicationPlan(plan, now);
+  assert.deepEqual(publicationEffects(plan), before);
+  assert.equal(before[1].kind, "github-tag");
+});
