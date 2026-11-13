@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import { writeFile, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -5,6 +6,9 @@ import { spawn } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import { sha256 } from "../../scripts/files.mjs";
+import { canonicalBytes } from "../../../scripts/release-record-data.mjs";
+import { completedRelease, releaseSiteIdentity, observeCompletedRelease } from "../../../scripts/release-website.mjs";
+import { publicationGithub } from "../../../scripts/publication-github.mjs";
 import { manifestName, publicationOrigin, verifyPayload } from "./inventory.mjs";
 
 const observationTimeoutMilliseconds = 15_000;
@@ -93,11 +97,22 @@ async function confirmDelivery(origin, digest, { observe, now = () => performanc
  * @param {string} root @param {Record<string,string|undefined>} env
  * @param {{deploy:(config:object)=>Promise<number>,observe:(origin:string,timeoutMilliseconds?:number)=>Promise<string>,record:(value:object)=>Promise<void>,now?:()=>number,wait?:(milliseconds:number)=>Promise<void>}} operations
  * @returns {Promise<object>} */
-export async function publishWebsite(root, env, { deploy, observe, record, now, wait }) {
+export async function publishWebsite(root, env, { deploy, observe, record, now, wait, releaseApi }) {
   const context = publicationContext(env);
   const { manifest, digest } = await verifyPayload(root, { digest: context.digest });
-  if (manifest.revision !== context.revision || manifest.origin !== publicationOrigin(env.TABGRAD_SITE_URL)) throw new Error("Publication source or origin changed");
+  if ((manifest.format === 2 ? manifest.recipeRevision : manifest.revision) !== context.revision || manifest.origin !== publicationOrigin(env.TABGRAD_SITE_URL)) throw new Error("Publication source or origin changed");
   const account = parseHostingAccount(env.TABGRAD_HOST_CONFIG_JSON);
+  if (manifest.format === 2) {
+    const descriptor = JSON.parse(await readFile(env.TABGRAD_WEBSITE_COMPLETION, "utf8"));
+    const selected = completedRelease(descriptor);
+    if ((env.TABGRAD_WEBSITE_RELEASE_RECOVERY === "true" ? manifest.revision !== context.revision : manifest.revision !== manifest.release.sourceRevision)
+      || selected.sha256 !== env.TABGRAD_COMPLETION_SHA256
+      || !isDeepStrictEqual(releaseSiteIdentity(descriptor), manifest.release)
+      || sha256(canonicalBytes(account)) !== selected.plan.website.configurationSha256
+      || sha256(Buffer.from(manifest.origin)) !== selected.plan.website.originSha256) throw new Error("Approved website target or release changed");
+    await observeCompletedRelease({ descriptor, environment: env, artifact: { id: env.TABGRAD_COMPLETION_ID,
+      sha256: env.TABGRAD_COMPLETION_DIGEST }, api: releaseApi ?? publicationGithub({ repository: env.GITHUB_REPOSITORY, token: env.GH_TOKEN, readOnly: true }) });
+  }
   if (!env.CLOUDFLARE_API_TOKEN?.trim()) throw new Error("A separately admitted hosting credential is required");
   if (context.initial !== (manifest.previous === null)) throw new Error("Initial publication and predecessor disagree");
   if (!context.initial && await observe(manifest.origin) !== manifest.previous) throw new Error("The live website changed since preparation");

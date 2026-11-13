@@ -9,8 +9,10 @@ const checked = JSON.parse(await readFile(resolve("website/.generated/verified-f
 const production = process.env.TABGRAD_WEBSITE_MODE === "publish";
 buildContext(process.env);
 if (production && Boolean(previous) !== (process.env.TABGRAD_WEBSITE_INITIAL === "false")) throw new Error("Predecessor selection changed");
+if (checked.release && checked.recipeRevision !== process.env.GITHUB_SHA) throw new Error("Website recipe changed");
 const { digest, manifest } = await preparePayload(source, destination, {
-  checked, origin: process.env.TABGRAD_SITE_URL, revision: process.env.GITHUB_SHA ?? checked.revision, previous, production,
+  checked, origin: process.env.TABGRAD_SITE_URL, revision: checked.release ? checked.revision : process.env.GITHUB_SHA ?? checked.revision, previous, production,
+  rollback: process.env.TABGRAD_WEBSITE_ROLLBACK === "true",
 });
 if (process.env.GITHUB_OUTPUT) await appendFile(process.env.GITHUB_OUTPUT, `delivery_sha256=${digest}\n`);
 const current = new Set(checked.files.map(file => file.path));

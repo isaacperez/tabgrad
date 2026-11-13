@@ -96,3 +96,23 @@ test("predecessor acquisition reuses identical bytes and rejects changed, absent
   }
   await assert.rejects(boundedBody(new Response("too many bytes"), 3), /budget/);
 });
+
+test("release manifests preserve separate source/recipe identity and explicit restoration keeps both runtime generations", async context => {
+  const { root, source, checked, options } = await fixture(context);
+  const identity = { schemaVersion: 1, completionSha256: "a".repeat(64), operation: "a".repeat(64), planSha256: "b".repeat(64),
+    sourceRevision: options.revision, recipeRevision: "d".repeat(40), runId: "123", attempt: "1", version: "0.4.0",
+    inventorySha256: "e".repeat(64), archiveSha512: "f".repeat(128) };
+  const first = join(root, "manual-first"); await preparePayload(source, first, options);
+  const firstPrevious = join(root, "manual-previous");
+  await acquirePredecessor(origin, source, firstPrevious, async url => new Response(await readFile(join(first, url.pathname))));
+  const released = join(root, "release-second");
+  const result = await preparePayload(source, released, { ...options, previous: firstPrevious, checked: { ...checked, release: identity, recipeRevision: identity.recipeRevision } });
+  assert.equal(result.manifest.format, 2); assert.deepEqual(result.manifest.release, identity);
+  const releasePrevious = join(root, "release-previous");
+  await acquirePredecessor(origin, source, releasePrevious, async url => new Response(await readFile(join(released, url.pathname))));
+  const restored = join(root, "manual-third");
+  await assert.rejects(preparePayload(source, restored, { ...options, previous: releasePrevious }), /explicitly authorize a rollback/);
+  const restore = await preparePayload(source, restored, { ...options, previous: releasePrevious, rollback: true });
+  assert.equal(restore.manifest.format, 1); assert.equal(restore.manifest.previous, result.digest);
+  await assert.rejects(preparePayload(source, join(root, "bad-source"), { ...options, checked: { ...checked, release: { ...identity, sourceRevision: "invalid" } } }));
+});

@@ -1,0 +1,30 @@
+name: Tag release request
+run-name: Release tag ${{ github.ref_name }}
+
+'on':
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  request:
+    name: request-tag-delivery
+    if: vars.TABGRAD_TAG_DELIVERY_ENABLED == 'true' && github.run_attempt == '1'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out the requested source without publishing credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Select the request Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          check-latest: false
+      - name: Check the tag and source request
+        run: node scripts/tag-delivery.mjs request
+        env:
+          TABGRAD_TAG_DELIVERY_ENABLED: ${{ vars.TABGRAD_TAG_DELIVERY_ENABLED }}

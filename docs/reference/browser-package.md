@@ -85,8 +85,8 @@ without rebuilding it. That check does not publish a package or authenticate
 its producer.
 
 For a version whose public registry delivery has been verified, install its
-exact version rather than relying on a moving channel. For the selected `0.3.0`
-identity, that command is:
+exact version rather than relying on a moving channel. The reference installation
+uses the same version as the HTML example:
 
 ```console
 npm install @tabgrad/tabgrad@0.3.0 --ignore-scripts --no-audit --no-fund
@@ -94,8 +94,8 @@ npm install @tabgrad/tabgrad@0.3.0 --ignore-scripts --no-audit --no-fund
 
 This command describes the named installation path; source metadata and local
 candidate tests do not establish registry availability. The
-[0.3.0 source and support record](https://github.com/isaacperez/tabgrad/blob/main/docs/reference/release-0.3.0.md)
-defines its bounded API and evidence. Both installation paths use the same
+[versioned support records](../releases.md#maintain-release-notes) define the bounded API
+and evidence for each release. Both installation paths use the same
 matched asset tree and application responsibilities below.
 
 Copy the installed package's complete `dist/` tree into an application-owned

@@ -797,3 +797,127 @@ A failed, missing or unknown effect retains its original evidence. Inspect the
 identified call and destination before continuation; rerunning a job or freeing
 its slot grants no retry authority. Follow separately admitted recovery without
 resetting history, replacing an archive or extending an expired window.
+
+## Deliver an approved candidate from its tag
+
+This ordinary-version path prepares and approves before the tag, then delivers
+npm → verified installation → public GitHub release → the matching website.
+It reuses the producer, publication roles and static publisher. It does not
+make a tag push into a credential-bearing execution of tagged source.
+The manual v1/v2 paths above retain their original admission and recovery rules.
+
+### Enroll and qualify once, separately
+
+Use stable profile schema 3, extending schema 2 with `tagDelivery`:
+
+- `environment`: the ID/name/snapshot of `tabgrad-tag-publication`;
+- `websiteEnvironment`: the ID/name/snapshot of `website-tag-publication`;
+- `website`: `configurationSha256` of canonical private hosting configuration
+  and `originSha256` of the normalized public HTTPS origin, including `/`.
+
+Both automatic environments admit only the `main` branch and have no pending
+review or wait rule. The human decision is the earlier protected candidate
+approval. Retain the existing reviewed `tabgrad-npm-publication` and
+`website-publication` environments for manual work. Enroll the new live snapshots,
+qualified controller/client/dispatch mechanism, credential placement, costs and
+retention only with operational authority. Enable `TABGRAD_TAG_DELIVERY_ENABLED`
+last; existing publication and website enablement are also required. Merging
+source neither configures these services nor qualifies their real behavior.
+
+The website secrets remain environment secrets in each admitted website
+environment, without repository duplicates. The reusable call declares only the
+two named aliases; its final job receives the selected environment's values.
+No hosting credential reaches package qualification or the tag request/controller.
+The controller has Actions-write only to dispatch the existing main publisher,
+plus read access to repository/issues. It has no npm OIDC or hosting identity.
+
+### Prepare and approve before creating the tag
+
+1. Merge the useful, version-ready source with its notes and support record.
+   `main` remains integration; it does not have to equal the latest release.
+2. Use the maintained producer on that exact source. Qualify the retained archive
+   on CPU and physical GPU, sign its two subjects and verify the original proofs.
+3. Dispatch the existing publication recipe on `main` with exact `version`,
+   `source_revision`, optional identified `producer_run` and `prepare_only=true`.
+   Precheck derives and verifies the plan; the protected approval comment binds
+   its hash and the preparation run. Admission verifies originals and reads the
+   control history, but does not open an operation or create npm intent.
+4. Inspect the successful `tabgrad-candidate-ready-RUN-1` artifact, its provider
+   ID/digest and finite validity. It contains original input bytes, original
+   approval and `candidate-ready.json`. The unpredictable readiness nonce is
+   bound by the successful native `Candidate ready SHA256` step. An ordinary
+   artifact upload, failed job or self-reported JSON approval is insufficient.
+
+Plan schema 3 binds the intended existing tag/source, recipe, target hashes and
+`qualification.registryGpu=false`, while retaining `qualification.gpu=true`.
+This describes distinct observations: real supplied-archive GPU qualification
+before the tag, and exact registry/archive/provenance/full installed-tree plus
+CPU consumer checks after npm. There is no post-npm physical GPU claim or wait.
+
+The candidate source must contain the reviewed tag request and website input
+contract. Source CI, website checks and release-specific support claims remain
+required. Neither a new tag nor a generated plan repairs missing source checks.
+
+### Create one annotated tag and follow delivery
+
+Download the approved artifact and its provider metadata as data. Generate its
+canonical annotation without creating any tag:
+
+```console
+node scripts/tag-delivery.mjs message READY_DIRECTORY ARTIFACT_METADATA_JSON NEW_TAG_MESSAGE_JSON
+```
+
+The annotation identifies version, source commit and readiness run/artifact/
+transport/file hashes. Inspect it, then create an **annotated**, unsigned `vX.Y.Z`
+tag at that source using the exact message file (`git tag --cleanup=verbatim`),
+and push only that tag with explicit publication authority. Lightweight, nested,
+changed or noncanonical annotations reject. The ordinary tag path admits three
+numeric version components; prereleases keep their explicit manual channel path.
+Do not move/delete/recreate a consumed tag to retry delivery.
+
+The read-only tag workflow requests delivery. A default-main controller verifies
+the actual source/actor/tag/approval/artifact/history and fixed recipe before one
+API dispatch. It retains intent and correlates GitHub's response to the actual
+publisher run. Controllers serialize without cancellation. A successful native
+selection marker consumes that readiness conservatively, including when its
+controller later fails or loses the dispatch response; another request cannot
+silently reuse it. This is provider-correlated coordination, not an atomic
+transaction across GitHub and npm.
+
+The main publisher preserves frozen plan bytes and records its actual execution
+separately from the earlier approval. Execution schema 2 and authority observation
+schema 2 bind both original preparation and actual tag request/controller/current
+run, including the exact annotated tag object and readiness. Original manual
+schemas are not converted. A changed main recipe before admission rejects;
+later main may advance after the admitted execution, without replacing its code.
+The control record still admits actual npm/GitHub effects and preserves unknowns.
+
+After successful GitHub completion, the same publisher calls the existing
+website workflow at its own recipe commit. The callee observes the completed
+GitHub role and native completion hash, original artifact and immutable public
+release; it does not wait for the still-running aggregate run. It installs the
+exact registry package with the root acquisition profile, then switches to the
+website build profile. Documentation and website source come from the tagged
+commit, while hosting code remains the admitted recipe. No package rebuild,
+repack or maintained lock rewrite occurs after the tag.
+
+### Keep partial outcomes and recover only the missing stage
+
+Inspect the controller result, actual publisher run, control record and website
+receipt. A failed/unknown dispatch or write is not authority to repeat it; a
+matching destination does not settle the earlier call. Reuse the maintained
+forward-recovery procedure when needed. Never restart the entire pipeline because
+the website failed after npm/GitHub succeeded.
+
+For site-only recovery, manually dispatch `website-checks.yml` with `publish=true`
+and the retained `completion_run`, `completion_id`, `completion_digest` and
+`completion_sha256`. It reobserves successful immutable completion and pairs that exact runtime
+with the current reviewed website/Markdown source under the manual approval.
+This also supports independent documentation and presentation updates. No npm or
+GitHub publication is repeated. The manual approval admits the current reviewed
+site recipe; the manifest retains both that recipe and the original completed
+publisher identity. It never relabels the old release as a new execution.
+An intentional return to the reference/manual website uses its existing gate
+and explicit `rollback=true`; ordinary manual work cannot silently downgrade a
+release-bound site. Inspect/qualify new automatic environments and live service
+handoffs before claiming end-to-end operational success.

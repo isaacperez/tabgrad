@@ -1,6 +1,7 @@
 import { copyFile, cp, mkdir, readFile, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { websiteRoot, repositoryRoot, runtimeVersion, pyodideVersion } from "./config.mjs";
+import { websiteRoot, repositoryRoot, runtimeVersion, pyodideVersion, releaseInput } from "./config.mjs";
+import { verifyPackageDirectory } from "../../scripts/package-artifact.mjs";
 import { sha256, writeChanged } from "./files.mjs";
 import { brandPaths, componentNoticePath, checkGeneratedAssets } from "./generated-assets.mjs";
 
@@ -18,7 +19,8 @@ async function inventory(root, prefix = "") {
 
 /** @returns {Promise<void>} */
 export async function prepareAssets() {
-  const packageRoot = join(websiteRoot, "node_modules/@tabgrad/tabgrad");
+  const packageRoot = releaseInput?.packageDirectory ?? join(websiteRoot, "node_modules/@tabgrad/tabgrad");
+  if (releaseInput) await verifyPackageDirectory(packageRoot, releaseInput.inventory);
   const interpreterRoot = join(websiteRoot, "node_modules/pyodide");
   const runtime = JSON.parse(await readFile(join(packageRoot, "package.json"), "utf8"));
   const interpreter = JSON.parse(await readFile(join(interpreterRoot, "package.json"), "utf8"));

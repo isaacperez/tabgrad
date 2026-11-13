@@ -6,7 +6,7 @@ import { canonicalBytes, sha256 } from "./release-record-data.mjs";
 import { requirePublication } from "./publication-plan.mjs";
 import { admitPublicationPolicy, observePublicationPreparation, observePublicationPrecheck, observePublicationProducer,
   resolvePublicationExecution, corroboratePublicationExecution } from "./publication-authority.mjs";
-import { publicationGithub } from "./publication-github.mjs";
+import { githubCollection as releasePreparationPages, publicationGithub } from "./publication-github.mjs";
 import { publicationRegistry } from "./publication-registry.mjs";
 import { publicationFile, validatePublicationQualification } from "./publication-admission.mjs";
 import { preparePublicationPlan } from "./prepare-publication-plan.mjs";
@@ -14,6 +14,7 @@ import { publicationContext } from "./release-publication.mjs";
 import { readProducerInventory } from "./package-provenance.mjs";
 import { publicationHistoryInput, publicationRecordConfig, transferPublicationHistory } from "./publication-controller.mjs";
 import { releaseRecord } from "./release-record.mjs";
+import { selectTagCandidate, activateTagCandidate } from "./tag-delivery.mjs";
 
 const id = value => typeof value === "string" && /^[1-9][0-9]*$/.test(value);
 const commit = value => typeof value === "string" && /^(?!0{40}$)[a-f0-9]{40}$/.test(value);
@@ -21,26 +22,7 @@ const version = value => typeof value === "string" && /^(0|[1-9][0-9]*)\.(0|[1-9
 const producerWorkflow = ".github/workflows/producer-trial.yml";
 const sourceWorkflow = ".github/workflows/repository-checks.yml";
 
-/** Whole keyed collections, rejecting changing/incomplete totals and duplicate identifiers. */
-export async function releasePreparationPages(api, route, key) {
-  const values = [], seen = new Set(); let expected;
-  for (let page = 1; page <= 100; page++) {
-    const result = await api.request(`${route}${route.includes("?") ? "&" : "?"}per_page=100&page=${page}`);
-    const rows = result?.[key];
-    requirePublication(Number.isSafeInteger(result?.total_count) && result.total_count >= 0 && result.total_count <= 10000
-      && Array.isArray(rows) && rows.length <= 100 && (expected === undefined || expected === result.total_count),
-    "PUBLICATION_PREPARATION_PAGINATION");
-    expected = result.total_count;
-    for (const row of rows) {
-      requirePublication(Number.isSafeInteger(row?.id) && row.id > 0 && !seen.has(row.id), "PUBLICATION_PREPARATION_PAGINATION");
-      seen.add(row.id); values.push(row);
-    }
-    requirePublication(values.length <= expected, "PUBLICATION_PREPARATION_PAGINATION");
-    if (values.length === expected) return values;
-    requirePublication(rows.length === 100, "PUBLICATION_PREPARATION_PAGINATION");
-  }
-  throw Object.assign(new Error("PUBLICATION_PREPARATION_PAGINATION"), { code: "PUBLICATION_PREPARATION_PAGINATION" });
-}
+export { githubCollection as releasePreparationPages } from "./publication-github.mjs";
 
 export function selectReleaseProducer(runs, source, repositoryId, explicit = "") {
   requirePublication(commit(source) && (explicit === "" || id(explicit)), "PUBLICATION_PREPARATION_INTENT");
@@ -119,6 +101,9 @@ async function preparationState(environment, clock) {
     && environment.TABGRAD_PUBLICATION_CONFIRMATION === "release-publication", "PUBLICATION_DISABLED");
   const profile = admitPublicationPolicy(Buffer.from(environment.TABGRAD_RELEASE_POLICY_JSON ?? ""),
     environment.TABGRAD_RELEASE_POLICY_SHA256, clock());
+  requirePublication([undefined, "", "false", "true"].includes(environment.TABGRAD_RELEASE_PREPARE_ONLY), "PUBLICATION_PREPARATION_INTENT");
+  const prepareOnly = environment.TABGRAD_RELEASE_PREPARE_ONLY === "true";
+  requirePublication(!prepareOnly || profile.schemaVersion === 3, "PUBLICATION_TAG_POLICY_REQUIRED");
   const intent = environment.TABGRAD_RELEASE_VERSION ?? "", source = environment.TABGRAD_RELEASE_SOURCE ?? "";
   if (profile.schemaVersion === 1) {
     requirePublication(intent === "" && source === "", "PUBLICATION_MIXED_EPOCHS"); return { legacy: true };
@@ -130,11 +115,18 @@ async function preparationState(environment, clock) {
   requirePublication(typeof repository === "string" && /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository), "PUBLICATION_PREPARATION_CONTEXT");
   const evidence = Buffer.from(environment.TABGRAD_RELEASE_QUALIFICATION_JSON ?? "");
   requirePublication(sha256(evidence) === profile.operationalEvidence.sha256, "PUBLICATION_OPERATIONAL_EVIDENCE_UNAVAILABLE");
-  return { legacy: false, profile, version: intent, source, repository, context };
+  return { legacy: false, profile, version: intent, source, repository, context, prepareOnly };
 }
 
 /** No provider write, npm identity, artifact execution or approval. */
 export async function selectReleaseInputs(root, environment, { clock = Date.now, api: suppliedApi } = {}) {
+  if (environment.TABGRAD_TAG_REQUEST_RUN) {
+    requirePublication(!environment.TABGRAD_RELEASE_VERSION && !environment.TABGRAD_RELEASE_SOURCE
+      && ["TABGRAD_PUBLICATION_PLAN_JSON", "TABGRAD_PUBLICATION_PLAN_SHA256", "TABGRAD_PUBLICATION_NOTES", "TABGRAD_PUBLICATION_QUALIFICATION_JSON",
+        "TABGRAD_RELEASE_PRODUCER_RUN", "TABGRAD_RELEASE_HISTORY_ARTIFACT", "TABGRAD_RELEASE_PHYSICAL_COMMENT"].every(key => !environment[key])
+      && environment.TABGRAD_RELEASE_PREPARE_ONLY !== "true", "PUBLICATION_MIXED_EPOCHS");
+    return selectTagCandidate(root, environment, { clock, api: suppliedApi });
+  }
   const state = await preparationState(environment, clock);
   if (state.legacy) return { mode: "legacy" };
   requirePublication(isAbsolute(root), "PUBLICATION_PREPARATION_ROOT");
@@ -172,11 +164,23 @@ export async function selectReleaseInputs(root, environment, { clock = Date.now,
   const selection = { schemaVersion: 1, publisher: { revision: context.revision, runId: context.runId, attempt: context.attempt },
     source, version: state.version, name: metadata.name, owner: owner.ownerSha256, notesSha256: sha256(Buffer.from(notes)), start,
     producerRun: String(producer.id), outputs, history, recordHead: head.object.sha, sourceChecks: checks,
-    issue, physicalComment: environment.TABGRAD_RELEASE_PHYSICAL_COMMENT ?? "" };
+    issue, physicalComment: environment.TABGRAD_RELEASE_PHYSICAL_COMMENT ?? "", prepareOnly: state.prepareOnly };
   await mkdir(root, { mode: 0o700 });
   await writeFile(join(root, "selection.json"), canonicalBytes(selection), { flag: "wx", mode: 0o600 });
   return { mode: "intent", data_id: outputs.data.id, proofs_id: outputs.proofs.id, verification_id: outputs.corroboration.id,
     producer_run: selection.producerRun, history_id: history.id, history_run: history.runId };
+}
+
+/** Resolve the selected transport after the optional ready artifact has been received. */
+export async function activateReleaseInputs(root, environment, options = {}) {
+  if (environment.TABGRAD_TAG_REQUEST_RUN) return activateTagCandidate(root, environment, options);
+  const state = await preparationState(environment, options.clock ?? Date.now);
+  if (state.legacy) return { mode: "legacy" };
+  const s = JSON.parse(await publicationFile(join(root, "selection.json"), 65536));
+  requirePublication(s.publisher.runId === state.context.runId && s.publisher.revision === state.context.revision
+    && s.source === state.source && s.version === state.version && s.prepareOnly === state.prepareOnly, "PUBLICATION_PREPARATION_CHANGED");
+  return { mode: "intent", data_id: s.outputs.data.id, proofs_id: s.outputs.proofs.id,
+    verification_id: s.outputs.corroboration.id, producer_run: s.producerRun, history_id: s.history.id, history_run: s.history.runId };
 }
 
 export async function composeReleaseInputs(root, environment, { clock = Date.now, api: suppliedApi, registry: suppliedRegistry,
@@ -186,7 +190,7 @@ export async function composeReleaseInputs(root, environment, { clock = Date.now
   const { profile, context, repository } = state;
   const api = suppliedApi ?? publicationGithub({ repository, token: environment.GH_TOKEN, readOnly: true });
   const s = JSON.parse(await publicationFile(join(root, "selection.json"), 65536));
-  requirePublication(s.source === state.source && s.version === state.version && s.publisher.revision === context.revision
+  requirePublication(s.source === state.source && s.version === state.version && s.prepareOnly === state.prepareOnly && s.publisher.revision === context.revision
     && s.publisher.runId === context.runId && s.publisher.attempt === context.attempt, "PUBLICATION_PREPARATION_CHANGED");
   const metadata = JSON.parse(await sourceFile(api, "package.json", state.source));
   const notes = releaseNotes((await sourceFile(api, "CHANGELOG.md", state.source)).toString(), state.version, repository, state.source);
@@ -220,17 +224,18 @@ export async function composeReleaseInputs(root, environment, { clock = Date.now
   const qualification = [cpu, gpu];
   const registry = suppliedRegistry ?? publicationRegistry();
   const before = await registry.startingState(candidate.name, candidate.version, "latest");
-  const draft = { schemaVersion: 1, owner: s.owner, window: { start: s.start, deadline },
+  const draft = { schemaVersion: state.prepareOnly ? 3 : 1, owner: s.owner, window: { start: s.start, deadline },
     candidate: { name: s.name, version: s.version, sourceRevision: s.source },
     producer: { verification: proofPlan, ...s.outputs },
     publisher: { repository, workflow: profile.workflow, revision: context.revision,
       clientSha256: profile.clients.npm, githubClientSha256: profile.clients.controller },
     npm: { registry: "https://registry.npmjs.org/", channel: "latest", access: "public", mode: "oidc", before },
-    github: { repository, tag: `v${s.version}`, latest: true, prerelease: false, before: { tagRevision: null, releaseId: null },
+    github: { repository, tag: `v${s.version}`, latest: true, prerelease: false, before: { tagRevision: state.prepareOnly ? s.source : null, releaseId: null },
       assets: [["archive", candidate.tarball.path], ["inventory", "candidate.json"], ["archive-proof", "archive-proof.json"],
         ["inventory-proof", "inventory-proof.json"], ["evidence", "producer-evidence.json"], ["checksums", "release-checksums.txt"]]
         .map(([kind, name]) => ({ kind, name })) },
-    qualification: { browsers: ["Chrome", "Firefox"], gpu: true }, continuation: null };
+    qualification: { browsers: ["Chrome", "Firefox"], gpu: true, ...(state.prepareOnly ? { registryGpu: false } : {}) },
+    continuation: null, ...(state.prepareOnly ? { website: profile.tagDelivery.website } : {}) };
   await mkdir(join(root, "input"), { mode: 0o700 });
   await writeFile(join(root, "input/notes.md"), notes, { flag: "wx", mode: 0o600 });
   await writeFile(join(root, "input/qualification.json"), canonicalBytes(qualification), { flag: "wx", mode: 0o600 });
@@ -255,7 +260,7 @@ export async function composeReleaseInputs(root, environment, { clock = Date.now
   for (const name of ["plan.json", "notes.md", "qualification.json", "producer-evidence.json", "release-checksums.txt", "execution.json"]) {
     await cp(join(root, "composed/input", name), join(root, "input", name));
   }
-  return { plan_sha256: prepared.planSha256, mode: "oidc" };
+  return { plan_sha256: prepared.planSha256, mode: state.prepareOnly ? "prepared" : "oidc" };
 }
 
 /** Exact single-line Actions handoff; data values are not shell or workflow source. */
@@ -268,17 +273,18 @@ export async function writeReleasePreparationOutputs(result, environment) {
 
 async function main() {
   const [command, root] = process.argv.slice(2);
-  requirePublication(process.argv.length === 4 && ["select", "compose"].includes(command), "PUBLICATION_PREPARATION_USAGE");
+  requirePublication(process.argv.length === 4 && ["select", "activate", "compose"].includes(command), "PUBLICATION_PREPARATION_USAGE");
   requirePublication(process.execArgv.length === 0 && ["NODE_OPTIONS", "NODE_PATH", "NODE_EXTRA_CA_CERTS", "NODE_USE_ENV_PROXY"]
     .every(key => !process.env[key]) && process.env.NODE_TLS_REJECT_UNAUTHORIZED !== "0", "PUBLICATION_PROCESS_PROFILE");
   requirePublication(process.env.TABGRAD_PUBLICATION_ENABLED === "true"
     && process.env.TABGRAD_PUBLICATION_CONFIRMATION === "release-publication", "PUBLICATION_DISABLED");
   const profile = admitPublicationPolicy(Buffer.from(process.env.TABGRAD_RELEASE_POLICY_JSON ?? ""), process.env.TABGRAD_RELEASE_POLICY_SHA256);
-  if (profile.schemaVersion === 2) requirePublication(process.version === "v22.12.0"
+  if ([2, 3].includes(profile.schemaVersion)) requirePublication(process.version === "v22.12.0"
     && sha256(await readFile(process.execPath)) === profile.clients.controller, "PUBLICATION_RECIPE_RUNTIME");
   process.env.GIT_ASKPASS = fileURLToPath(new URL("./release-record-askpass.mjs", import.meta.url));
   if (process.env.GH_TOKEN) process.env.GITHUB_TOKEN = process.env.GH_TOKEN;
-  const result = command === "select" ? await selectReleaseInputs(root, process.env) : await composeReleaseInputs(root, process.env);
+  const result = command === "select" ? await selectReleaseInputs(root, process.env)
+    : command === "activate" ? await activateReleaseInputs(root, process.env) : await composeReleaseInputs(root, process.env);
   await writeReleasePreparationOutputs(result, process.env);
   process.stdout.write(`${JSON.stringify(result)}\n`);
 }

@@ -387,3 +387,24 @@ npm identity, write permission or signature operation. A skipped job on a
 reviewed unaffected change is not evidence of client execution. Its stable name is
 `Repository checks / publication-client`; it is not made a required ruleset
 check by this document. The four existing stable checks retain their meaning.
+
+## Coordinate release tags
+
+The read-only `tag-request.yml` runs on ordinary version tags. Its completed
+request wakes `tag-delivery.yml` on default `main`; tagged source receives no
+publishing identity. The controller serializes selections, corroborates original
+pre-tag approval and provider identities, and makes at most one bounded dispatch
+to `release-publication.yml`. Its Actions-write permission is dispatch authority,
+not npm OIDC or hosting access. All definitions and commands remain registered
+for complete review in the repository checker.
+
+The existing publication workflow supports protected `prepare_only` with no
+operation/intent, automatic delivery of that frozen candidate, and legacy manual
+paths. Only successful GitHub completion calls the existing website workflow at
+the same recipe commit, with declared inputs and two explicit secret aliases.
+The called workflow retains the caller's event/ref/SHA; source checkout does not
+change recipe identity. Its read-only build receives the released runtime and
+Markdown, while only its final environment job receives hosting credentials.
+See the [tag procedure](reference/release-publication.md#deliver-an-approved-candidate-from-its-tag)
+for enrollment, phase-specific GPU evidence, partial outcomes and site-only
+recovery. New source and offline tests do not establish live qualification.

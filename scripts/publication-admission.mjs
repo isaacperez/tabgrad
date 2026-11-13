@@ -5,7 +5,7 @@ import { isDeepStrictEqual } from "node:util";
 import { readProducerInventory, verifyPackageProvenance } from "./package-provenance.mjs";
 import { inspectTrialPacket } from "./producer-trial.mjs";
 import { admitNpmManifest } from "./publication-npm.mjs";
-import { requirePublication } from "./publication-plan.mjs";
+import { requirePublication, publicationRequiresGpu } from "./publication-plan.mjs";
 import { canonicalBytes, sha256 } from "./release-record-data.mjs";
 
 export async function publicationFile(path, maxBytes) {
@@ -32,10 +32,11 @@ function sameCandidate(report, candidate, inventorySha256) {
 }
 
 export function validatePublicationQualification(reports, candidate, plan, input = "supplied-archive") {
-  requirePublication(Array.isArray(reports) && reports.length === (plan.qualification.gpu ? 2 : 1),
+  const gpu = publicationRequiresGpu(plan, input);
+  requirePublication(Array.isArray(reports) && reports.length === (gpu ? 2 : 1),
     "PUBLICATION_QUALIFICATION_MISMATCH");
   const required = [{ gpu: false, browsers: plan.qualification.browsers, profiles: ["direct", "python", "prerequisite"] },
-    ...(plan.qualification.gpu ? [{ gpu: true, browsers: ["Chrome"], profiles: ["gpu", "origin"] }] : [])];
+    ...(gpu ? [{ gpu: true, browsers: ["Chrome"], profiles: ["gpu", "origin"] }] : [])];
   for (const expected of required) {
     const matches = reports.filter(report => report.requested?.gpu === expected.gpu);
     requirePublication(matches.length === 1, "PUBLICATION_QUALIFICATION_MISMATCH");

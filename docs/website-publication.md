@@ -1,7 +1,8 @@
 # Publish the static website
 
 This procedure is for the maintainer delivering the reviewed website output.
-It is independent of library releases. Markdown or presentation changes do not
+It supports manual delivery and the
+[completed-release handoff](reference/release-publication.md#deliver-an-approved-candidate-from-its-tag). Markdown or presentation changes do not
 require publishing another npm package. The [website contract](architecture/static-website.md)
 owns presentation and execution; this procedure owns the delivery handoff.
 
@@ -193,3 +194,39 @@ Native behavior and quotas follow the provider's [static assets documentation](h
 [header format](https://developers.cloudflare.com/workers/static-assets/headers/),
 [limits](https://developers.cloudflare.com/workers/platform/limits/) and
 [deployment tool](https://github.com/cloudflare/workers-sdk/tree/main/packages/wrangler).
+
+## Build a release-matched website
+
+The release publisher calls this same workflow only after its GitHub completion
+role succeeds. Its closed completion descriptor preserves original inventory
+bytes, plan, actual publisher and immutable release identity. The website reads
+and corroborates that descriptor, the native successful role/hash and exact
+artifact/run, then acquires the exact named registry package using the existing
+root Node/npm profile. The acquired owned tree survives only through this build;
+its temporary local path never appears in public metadata.
+
+One explicit release input selects runtime version, package root and source
+identity across assets, Header, Versions, runner and integration downloads. The
+website toolchain lock remains independent and unchanged. Documentation is read
+from tracked Markdown at the released source, including clean detached checkouts;
+the hosting recipe retains its own commit identity. Only the two integration
+guides bind exact Tabgrad package specifiers to that selected runtime when rendered
+for the web; standalone Markdown keeps its explicit reference-version example.
+Other versioned support records, numbers and interpreter pins are not rewritten.
+
+Delivery manifest format 2 adds the public release binding and distinguishes
+documentation source from recipe. Format 1 remains the manual format. Both keep
+full output hashes and the existing single-generation predecessor retention.
+The final publisher rechecks completion, target hashes, live predecessor and
+payload bytes before its one hosting call. A disabled or misconfigured automatic
+path fails; it is not a completed tag-to-web delivery.
+
+The automatic job uses separately enrolled `website-tag-publication`, main-only
+without a post-tag human wait. The pre-tag protected plan supplies its authority;
+manual delivery/recovery keeps `website-publication`. Neither the source change
+nor a passing local model creates or qualifies those effective protections.
+Manual site-only recovery or presentation updates select the retained completion
+inputs and pair its runtime with the current reviewed main source. The manifest
+keeps that content/recipe revision separate from the package source. Automatic
+delivery always requires docs and package source to match. The tag procedure
+describes this path and explicit manual rollback. npm/GitHub outcomes remain complete when a later website step fails.

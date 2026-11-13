@@ -102,7 +102,7 @@ for (const revision of [null, "", "f".repeat(40)]) {
   });
 }
 
-for (const version of [0, 3, "2"]) test(`publication plan rejects unsupported version ${JSON.stringify(version)}`, () => {
+for (const version of [0, 4, "2"]) test(`publication plan rejects unsupported version ${JSON.stringify(version)}`, () => {
   const { publicationPlan: plan, now } = publicationPlanFixture();
   plan.schemaVersion = version;
   assert.throws(() => validatePublicationPlan(plan, now), { code: "PUBLICATION_PLAN_INVALID" });
@@ -115,4 +115,20 @@ test("legacy plans retain the tag effect even when their starting state names th
   validatePublicationPlan(plan, now);
   assert.deepEqual(publicationEffects(plan), before);
   assert.equal(before[1].kind, "github-tag");
+});
+
+test("tag delivery retains candidate GPU qualification and separately selects registry CPU consumers", () => {
+  const { publicationPlan: plan, now } = publicationPlanFixture();
+  plan.schemaVersion = 3;
+  plan.github.before.tagRevision = plan.candidate.sourceRevision;
+  plan.qualification.gpu = true;
+  plan.qualification.registryGpu = false;
+  plan.website = { configurationSha256: "c".repeat(64), originSha256: "d".repeat(64) };
+  assert.deepEqual(validatePublicationPlan(plan, now), plan);
+  assert.equal(publicationEffects(plan).some(effect => effect.kind === "github-tag"), false);
+  for (const mutate of [p => { p.qualification.gpu = false; }, p => { p.qualification.registryGpu = true; },
+    p => { delete p.website; }, p => { p.website.originSha256 = "invalid"; }]) {
+    const changed = structuredClone(plan); mutate(changed);
+    assert.throws(() => validatePublicationPlan(changed, now));
+  }
 });

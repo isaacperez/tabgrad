@@ -2,6 +2,26 @@ name: Release publication
 'on':
   workflow_dispatch:
     inputs:
+      prepare_only:
+        description: Prepare and approve a candidate before tagging; do not publish
+        required: false
+        type: boolean
+        default: false
+      release_tag:
+        description: Automatic delivery; exact annotated version tag
+        required: false
+        type: string
+      tag_request_run:
+        description: Automatic delivery; original tag request run
+        required: false
+        type: string
+      tag_object:
+        description: Exact annotated tag object captured by the controller
+        type: string
+      tag_controller_run:
+        description: Automatic delivery; original main controller run
+        required: false
+        type: string
       version:
         description: 'Ordinary release: version already committed at the selected source'
         required: false
@@ -54,6 +74,12 @@ concurrency:
   group: tabgrad-release-publication
   cancel-in-progress: false
 env:
+  TABGRAD_TAG_DELIVERY_ENABLED: ${{ vars.TABGRAD_TAG_DELIVERY_ENABLED }}
+  TABGRAD_RELEASE_PREPARE_ONLY: ${{ inputs.prepare_only && 'true' || 'false' }}
+  TABGRAD_RELEASE_TAG: ${{ inputs.release_tag }}
+  TABGRAD_TAG_REQUEST_RUN: ${{ inputs.tag_request_run }}
+  TABGRAD_TAG_OBJECT: ${{ inputs.tag_object }}
+  TABGRAD_TAG_CONTROLLER_RUN: ${{ inputs.tag_controller_run }}
   TABGRAD_PUBLICATION_ENABLED: ${{ vars.TABGRAD_PUBLICATION_ENABLED }}
   TABGRAD_PUBLICATION_CONFIRMATION: ${{ inputs.confirmation }}
   TABGRAD_PUBLICATION_PLAN_JSON: ${{ inputs.plan_json }}
@@ -83,14 +109,30 @@ jobs:
         node-version-file: .node-version
         check-latest: false
     - name: Select exact release intent and original metadata
-      id: selection
+      id: request
       run: node scripts/prepare-release.mjs select "$RUNNER_TEMP/tabgrad-publication"
       env:
         TABGRAD_RELEASE_POLICY_JSON: ${{ secrets.TABGRAD_RELEASE_POLICY_JSON }}
         TABGRAD_RELEASE_POLICY_SHA256: ${{ secrets.TABGRAD_RELEASE_POLICY_SHA256 }}
         TABGRAD_RELEASE_QUALIFICATION_JSON: ${{ secrets.TABGRAD_RELEASE_QUALIFICATION_JSON }}
+    - name: Receive the identified approved candidate
+      if: steps.request.outputs.mode == 'tag'
+      uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      with:
+        artifact-ids: ${{ steps.request.outputs.readiness_id }}
+        run-id: ${{ steps.request.outputs.readiness_run }}
+        github-token: ${{ github.token }}
+        path: ${{ runner.temp }}/tabgrad-publication/candidate-ready
+        digest-mismatch: error
+    - name: Resolve the selected original transport and actual execution
+      id: selection
+      run: node scripts/prepare-release.mjs activate "$RUNNER_TEMP/tabgrad-publication"
+      env:
+        TABGRAD_RELEASE_POLICY_JSON: ${{ secrets.TABGRAD_RELEASE_POLICY_JSON }}
+        TABGRAD_RELEASE_POLICY_SHA256: ${{ secrets.TABGRAD_RELEASE_POLICY_SHA256 }}
+        TABGRAD_RELEASE_QUALIFICATION_JSON: ${{ secrets.TABGRAD_RELEASE_QUALIFICATION_JSON }}
     - name: Receive selected original candidate
-      if: steps.selection.outputs.mode == 'intent'
+      if: steps.selection.outputs.mode != 'legacy'
       uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
       with:
         artifact-ids: ${{ steps.selection.outputs.data_id }}
@@ -99,7 +141,7 @@ jobs:
         path: ${{ runner.temp }}/tabgrad-publication/data
         digest-mismatch: error
     - name: Receive selected original proofs
-      if: steps.selection.outputs.mode == 'intent'
+      if: steps.selection.outputs.mode != 'legacy'
       uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
       with:
         artifact-ids: ${{ steps.selection.outputs.proofs_id }}
@@ -108,7 +150,7 @@ jobs:
         path: ${{ runner.temp }}/tabgrad-publication/proofs
         digest-mismatch: error
     - name: Receive selected original corroboration
-      if: steps.selection.outputs.mode == 'intent'
+      if: steps.selection.outputs.mode != 'legacy'
       uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
       with:
         artifact-ids: ${{ steps.selection.outputs.verification_id }}
@@ -117,7 +159,7 @@ jobs:
         path: ${{ runner.temp }}/tabgrad-publication/verification
         digest-mismatch: error
     - name: Receive selected complete history carrier
-      if: steps.selection.outputs.mode == 'intent'
+      if: steps.selection.outputs.mode != 'legacy'
       uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
       with:
         artifact-ids: ${{ steps.selection.outputs.history_id }}
@@ -135,7 +177,7 @@ jobs:
         TABGRAD_RELEASE_QUALIFICATION_JSON: ${{ secrets.TABGRAD_RELEASE_QUALIFICATION_JSON }}
     - name: Retain exact generated public inputs
       id: input
-      if: steps.selection.outputs.mode == 'intent'
+      if: steps.selection.outputs.mode != 'legacy'
       uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
       with:
         name: tabgrad-publication-preparation-${{ github.run_id }}-${{ github.run_attempt }}
@@ -150,7 +192,7 @@ jobs:
         TABGRAD_RELEASE_POLICY_JSON: ${{ secrets.TABGRAD_RELEASE_POLICY_JSON }}
         TABGRAD_RELEASE_POLICY_SHA256: ${{ secrets.TABGRAD_RELEASE_POLICY_SHA256 }}
         TABGRAD_RELEASE_QUALIFICATION_JSON: ${{ secrets.TABGRAD_RELEASE_QUALIFICATION_JSON }}
-        TABGRAD_PUBLICATION_PLAN_SHA256: ${{ inputs.plan_sha256 || steps.composed.outputs.plan_sha256 }}
+        TABGRAD_PUBLICATION_PLAN_SHA256: ${{ inputs.plan_sha256 || steps.composed.outputs.plan_sha256 || steps.selection.outputs.plan_sha256 }}
     env:
       GH_TOKEN: ${{ github.token }}
     if: ${{ vars.TABGRAD_PUBLICATION_ENABLED == 'true' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.run_attempt == '1' && inputs.confirmation == 'release-publication' }}
@@ -165,6 +207,7 @@ jobs:
       approval: ${{ steps.role.outputs.approval }}
       plan_sha256: ${{ steps.role.outputs.plan_sha256 }}
       input_id: ${{ steps.input.outputs.artifact-id }}
+      tagged: ${{ steps.role.outputs.tagged }}
   admit:
     name: admit-publication
     runs-on: ubuntu-24.04
@@ -240,12 +283,17 @@ jobs:
         TABGRAD_RELEASE_QUALIFICATION_JSON: ${{ secrets.TABGRAD_RELEASE_QUALIFICATION_JSON }}
         TABGRAD_RECORD_INPUT: ${{ runner.temp }}/tabgrad-publication/initial-history
         TABGRAD_PROVENANCE_CLIENT: ${{ runner.temp }}/tabgrad-provenance-client/gh
+    - name: Candidate ready ${{ steps.role.outputs.candidate_sha }}
+      if: inputs.prepare_only && steps.role.outcome == 'success'
+      run: test -n "$CANDIDATE_SHA"
+      env:
+        CANDIDATE_SHA: ${{ steps.role.outputs.candidate_sha }}
     - name: Preserve admission and available original history
       id: retained
       if: ${{ always() && steps.role.outcome != 'skipped' }}
       uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
       with:
-        name: tabgrad-publication-admission-${{ github.run_id }}-${{ github.run_attempt }}
+        name: ${{ inputs.prepare_only && 'tabgrad-candidate-ready' || 'tabgrad-publication-admission' }}-${{ github.run_id }}-${{ github.run_attempt }}
         path: ${{ runner.temp }}/tabgrad-publication/public-output
         overwrite: false
         if-no-files-found: error
@@ -253,7 +301,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       TABGRAD_PUBLICATION_PLAN_SHA256: ${{ inputs.plan_sha256 || needs.precheck.outputs.plan_sha256 }}
-    environment: tabgrad-npm-publication
+    environment: ${{ needs.precheck.outputs.tagged == 'true' && 'tabgrad-tag-publication' || 'tabgrad-npm-publication' }}
     permissions:
       contents: write
       actions: read
@@ -516,7 +564,7 @@ jobs:
       TABGRAD_ADMISSION_DIGEST: ${{ needs.admit.outputs.digest }}
       TABGRAD_ADMISSION_SHA256: ${{ needs.admit.outputs.admission_sha }}
       TABGRAD_PUBLICATION_PLAN_SHA256: ${{ inputs.plan_sha256 || needs.precheck.outputs.plan_sha256 }}
-    if: ${{ needs.precheck.outputs.mode != 'observe' }}
+    if: ${{ needs.precheck.outputs.mode != 'observe' && needs.precheck.outputs.mode != 'prepared' }}
     permissions:
       contents: write
       actions: read
@@ -583,7 +631,7 @@ jobs:
       TABGRAD_NPM_RESULT_DIGEST: ${{ needs.npm.outputs.digest || needs.bootstrap.outputs.digest }}
       TABGRAD_NPM_JOB_RESULT: ${{ needs.precheck.outputs.mode == 'bootstrap' && needs.bootstrap.result || needs.npm.result }}
       TABGRAD_PUBLICATION_PLAN_SHA256: ${{ inputs.plan_sha256 || needs.precheck.outputs.plan_sha256 }}
-    if: ${{ always() && !cancelled() && needs.admit.result == 'success' }}
+    if: ${{ always() && !cancelled() && needs.admit.result == 'success' && needs.precheck.outputs.mode != 'prepared' }}
     permissions:
       contents: write
       actions: read
@@ -676,6 +724,10 @@ jobs:
       artifact_id: ${{ steps.retained.outputs.artifact-id }}
       digest: ${{ steps.retained.outputs.artifact-digest }}
   complete:
+    outputs:
+      artifact_id: ${{ steps.retained.outputs.artifact-id }}
+      artifact_digest: ${{ steps.retained.outputs.artifact-digest }}
+      completion_sha256: ${{ steps.role.outputs.completion_sha256 }}
     name: complete-github-release
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -752,6 +804,11 @@ jobs:
         TABGRAD_RELEASE_POLICY_SHA256: ${{ secrets.TABGRAD_RELEASE_POLICY_SHA256 }}
         TABGRAD_RELEASE_QUALIFICATION_JSON: ${{ secrets.TABGRAD_RELEASE_QUALIFICATION_JSON }}
         TABGRAD_RECORD_INPUT: ${{ runner.temp }}/tabgrad-publication/observed/evidence
+    - name: Completed release ${{ steps.role.outputs.completion_sha256 }}
+      if: steps.role.outputs.completion_sha256 != ''
+      run: test -n "$COMPLETION_SHA"
+      env:
+        COMPLETION_SHA: ${{ steps.role.outputs.completion_sha256 }}
     - name: Preserve final or partial completion and original history
       id: retained
       if: ${{ always() && steps.role.outcome != 'skipped' }}
@@ -774,3 +831,20 @@ jobs:
       contents: write
       actions: read
       issues: read
+
+  website:
+    needs: [precheck, complete]
+    if: ${{ always() && !cancelled() && needs.precheck.result == 'success' && needs.complete.result == 'success' && needs.precheck.outputs.tagged == 'true' }}
+    uses: ./.github/workflows/website-checks.yml
+    permissions:
+      contents: read
+      actions: read
+    with:
+      publish: true
+      completion_id: ${{ needs.complete.outputs.artifact_id }}
+      completion_digest: ${{ needs.complete.outputs.artifact_digest }}
+      completion_sha256: ${{ needs.complete.outputs.completion_sha256 }}
+      completion_run: ${{ github.run_id }}
+    secrets:
+      TABGRAD_HOST_CONFIG_JSON: ${{ secrets.TABGRAD_HOST_CONFIG_JSON }}
+      TABGRAD_WEBSITE_TOKEN: ${{ secrets.TABGRAD_WEBSITE_TOKEN }}

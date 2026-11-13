@@ -7,6 +7,11 @@ established by the corresponding verified release record.
 
 ## Unreleased
 
+- Add approved pre-tag candidate preparation and coordinated tag delivery through
+  npm, immutable GitHub completion and a version-matched website, preserving
+  manual publication and site recovery. Service activation remains separate.
+
+
 ### Added
 
 - Publication plans can preserve an existing exact-source version tag without

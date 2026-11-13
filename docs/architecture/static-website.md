@@ -218,7 +218,7 @@ loading and recovery need verification at that destination. Static-host limits
 are checked against the actual output. No vendor/account/domain configuration
 belongs in this public contract.
 
-The [publication procedure](../website-publication.md) owns the protected manual
+The [publication procedure](../website-publication.md) owns protected manual and completed-release
 handoff, bounded predecessor retention and recovery. Its source can be checked
 without an account; activation and actual-host qualification remain separately
 authorized operations, not consequences of merging website source.

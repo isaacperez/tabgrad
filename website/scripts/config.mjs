@@ -1,4 +1,5 @@
 import { fileURLToPath } from "node:url";
+import { readReleaseInput } from "./release-input.mjs";
 import { resolve } from "node:path";
 
 export const websiteRoot = fileURLToPath(new URL("..", import.meta.url));
@@ -7,7 +8,9 @@ export const repositoryUrl = "https://github.com/isaacperez/tabgrad";
 export const packageUrl = "https://www.npmjs.com/package/@tabgrad/tabgrad";
 export const maintainerContact = { label: "@isaperbor", url: "https://x.com/isaperbor", linkedInUrl: "https://www.linkedin.com/in/isaperbor/" };
 export const supportUrl = "https://buymeacoffee.com/isaperbor";
-export const runtimeVersion = "0.3.0";
+export const referenceRuntimeVersion = "0.3.0";
+export const releaseInput = readReleaseInput(process.env.TABGRAD_WEBSITE_RELEASE_INPUT);
+export const runtimeVersion = releaseInput?.release.version ?? referenceRuntimeVersion;
 export const pyodideVersion = "314.0.6";
 
 export const documentDirectories = ["concepts", "architecture", "components", "flows"];

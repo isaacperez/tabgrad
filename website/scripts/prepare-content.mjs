@@ -4,7 +4,7 @@ import { join, relative } from "node:path";
 import { promisify } from "node:util";
 import puppeteer from "puppeteer";
 import { collectDocuments, createDocumentIndex, adaptDocument, firstCodeBlock } from "./content.mjs";
-import { websiteRoot, repositoryRoot, repositoryUrl, runtimeVersion, pyodideVersion, documentDescriptions } from "./config.mjs";
+import { websiteRoot, repositoryRoot, repositoryUrl, runtimeVersion, pyodideVersion, documentDescriptions, releaseInput, referenceRuntimeVersion } from "./config.mjs";
 import { writeChanged, sha256 } from "./files.mjs";
 import { loadIllustration } from "./illustrations.mjs";
 import { documentationSourceContext } from "./source-context.mjs";
@@ -12,6 +12,7 @@ import { diagramSize } from "./diagram-layout.mjs";
 import { prepareBlog } from "./blog.mjs";
 import { integrationFiles } from "./integration-files.mjs";
 import { checkGeneratedAssets } from "./generated-assets.mjs";
+import { bindIntegrationVersion } from "./release-input.mjs";
 import { siteOrigin } from "./publication.mjs";
 
 const execFileAsync = promisify(execFile);
@@ -77,7 +78,7 @@ export async function prepareContent() {
   const browser = JSON.parse(await readFile(join(websiteRoot, "node_modules/puppeteer/package.json"), "utf8"));
   const mermaid = JSON.parse(await readFile(join(websiteRoot, "node_modules/mermaid/package.json"), "utf8"));
   const rendererKey = sha256(JSON.stringify({ cli: cli.version, mermaid: mermaid.version, browser: browser.version, platform: process.platform, arch: process.arch, config: mermaidConfig }));
-  const { sourceRevision, sourceLinkRevision, localChanges } = documentationSourceContext(repositoryRoot);
+  const { sourceRevision, sourceLinkRevision, localChanges } = documentationSourceContext(repositoryRoot, releaseInput && { sourceRevision: releaseInput.sourceRevision });
   const entries = await collectDocuments();
   const documents = createDocumentIndex(entries);
   for (const source of Object.keys(documentDescriptions)) if (!documents.has(source)) throw new Error(`Editorial summary is not an admitted document: ${source}`);
@@ -85,7 +86,7 @@ export async function prepareContent() {
   const adaptedDocuments = [];
   const diagrams = new Map();
   for (const entry of entries) {
-    const adapted = adaptDocument(entry, documents, sourceLinkRevision, { diagramKey: rendererKey });
+    const adapted = adaptDocument({ ...entry, body: bindIntegrationVersion(entry.source, entry.body, referenceRuntimeVersion, runtimeVersion) }, documents, sourceLinkRevision, { diagramKey: rendererKey });
     for (const diagram of adapted.diagrams) diagrams.set(diagram.id, diagram);
     const metadata = documents.get(entry.source);
     const frontmatter = ["---", `title: ${JSON.stringify(metadata.title)}`, `description: ${JSON.stringify(metadata.description)}`, `editUrl: ${localChanges ? "false" : JSON.stringify(`${repositoryUrl}/blob/${sourceRevision}/${entry.source}`)}`, "---", ""].join("\n");
@@ -180,11 +181,12 @@ ${localChanges ? "This preview includes unpublished changes. GitHub shows the pu
   const information = {
     publicOrigin: siteOrigin(process.env.TABGRAD_SITE_URL) ?? null,
     sourceRevision, sourceLinkRevision, localChanges, runtimeVersion, pyodideVersion, posts,
+    release: releaseInput?.release ?? null, recipeRevision: releaseInput?.recipeRevision ?? null,
     documents: [...documents.values()].map(({ source, title, description, route, headings }) => ({ source, title, description, route, headings })),
     diagrams: diagrams.size, rendererKey,
-    integrationHtml: firstCodeBlock(browserGuide, "html"),
-    integrationPythonHtml: firstCodeBlock(pythonGuide, "html", "index.html"),
-    integrationPythonWorker: firstCodeBlock(pythonGuide, "javascript", "python-worker.js"),
+    integrationHtml: firstCodeBlock(bindIntegrationVersion("docs/reference/browser-package.md", browserGuide, referenceRuntimeVersion, runtimeVersion), "html"),
+    integrationPythonHtml: firstCodeBlock(bindIntegrationVersion("docs/reference/python-host.md", pythonGuide, referenceRuntimeVersion, runtimeVersion), "html", "index.html"),
+    integrationPythonWorker: firstCodeBlock(bindIntegrationVersion("docs/reference/python-host.md", pythonGuide, referenceRuntimeVersion, runtimeVersion), "javascript", "python-worker.js"),
   };
   const downloads = integrationFiles(information);
   await checkGeneratedAssets(join(websiteRoot, "public"), downloads.map(file => file.path), { allowMissing: true });

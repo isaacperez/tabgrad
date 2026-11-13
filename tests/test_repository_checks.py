@@ -18,7 +18,12 @@ SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "check_repository.py"
 
 
 def publication_job_eligible(
-    job: dict[str, Any], results: dict[str, str], *, cancelled: bool = False
+    job: dict[str, Any],
+    results: dict[str, str],
+    *,
+    cancelled: bool = False,
+    mode: str = "oidc",
+    tagged: bool = False,
 ) -> bool:
     """Evaluate only the release recipe's conjunction profile, not arbitrary Actions."""
     condition = job.get("if")
@@ -35,6 +40,10 @@ def publication_job_eligible(
             values.append(True)
         elif term == "!cancelled()":
             values.append(not cancelled)
+        elif term == "needs.precheck.outputs.mode != 'prepared'":
+            values.append(mode != "prepared")
+        elif term == "needs.precheck.outputs.tagged == 'true'":
+            values.append(tagged)
         elif match := re.fullmatch(r"needs\.([a-z_]+)\.result == 'success'", term):
             values.append(results.get(match[1]) == "success")
         else:
@@ -51,14 +60,19 @@ class RepositoryCheckTests(unittest.TestCase):
         workflow = yaml.load(
             (SCRIPT.parents[1] / CHECKS.WEBSITE_PATH).read_text(), Loader=loader
         )
-        self.assertEqual(workflow["permissions"], {"contents": "read"})
+        self.assertEqual(
+            workflow["permissions"], {"contents": "read", "actions": "read"}
+        )
         self.assertFalse(
             workflow["on"]["workflow_dispatch"]["inputs"]["publish"]["default"]
         )
         source = workflow["jobs"]["website"]
         publisher = workflow["jobs"]["website-publication"]
         self.assertEqual(publisher["needs"], "website")
-        self.assertEqual(publisher["environment"], "website-publication")
+        self.assertEqual(
+            publisher["environment"],
+            "${{ inputs.completion_id != '' && github.workflow_ref == format('{0}/.github/workflows/release-publication.yml@refs/heads/main', github.repository) && 'website-tag-publication' || 'website-publication' }}",
+        )
         self.assertNotIn("permissions", source)
         self.assertNotIn("permissions", publisher)
         self.assertNotIn("secrets.", json.dumps(source))
@@ -175,7 +189,7 @@ class RepositoryCheckTests(unittest.TestCase):
         self.assertEqual(CHECKS.check_workflow_security(state), [])
         self.assertEqual(
             document["jobs"]["website"]["env"]["TABGRAD_SITE_URL"],
-            "${{ github.event_name == 'workflow_dispatch' && inputs.publish "
+            "${{ inputs.publish "
             "&& vars.TABGRAD_SITE_URL || 'https://example.invalid/' }}",
         )
         self.assertEqual(
@@ -327,6 +341,41 @@ class RepositoryCheckTests(unittest.TestCase):
         self.assertEqual(
             jobs["gate"]["steps"][-1]["name"],
             "Permission SHA256 ${{ steps.permission.outputs.permission_sha }}",
+        )
+
+    def test_prepared_candidate_cannot_record_or_publish_and_site_requires_complete_tag_delivery(
+        self,
+    ) -> None:
+        jobs = self.publication_workflow()["jobs"]
+        results = dict.fromkeys(
+            ("precheck", "admit", "npm", "bootstrap", "complete"), "success"
+        )
+        self.assertFalse(
+            publication_job_eligible(jobs["observe"], results, mode="prepared")
+        )
+        self.assertTrue(publication_job_eligible(jobs["website"], results, tagged=True))
+        self.assertFalse(
+            publication_job_eligible(jobs["website"], results, tagged=False)
+        )
+        self.assertFalse(
+            publication_job_eligible(
+                jobs["website"], results, tagged=True, cancelled=True
+            )
+        )
+        self.assertFalse(
+            publication_job_eligible(
+                jobs["website"], {**results, "complete": "failure"}, tagged=True
+            )
+        )
+        self.assertEqual(
+            jobs["website"]["uses"], "./.github/workflows/website-checks.yml"
+        )
+        self.assertEqual(
+            jobs["website"]["permissions"], {"contents": "read", "actions": "read"}
+        )
+        self.assertEqual(
+            set(jobs["website"]["secrets"]),
+            {"TABGRAD_HOST_CONFIG_JSON", "TABGRAD_WEBSITE_TOKEN"},
         )
 
     def test_initial_history_registers_only_its_read_only_inert_delivery(self) -> None:
@@ -490,7 +539,7 @@ class RepositoryCheckTests(unittest.TestCase):
             ),
             ("vars.TABGRAD_PUBLICATION_ENABLED == 'true'", "true"),
             ("github.run_attempt == '1'", "true"),
-            ("environment: tabgrad-npm-publication", "environment: other"),
+            ("'tabgrad-npm-publication'", "'other'"),
             ("contents: write", "contents: read"),
             ("id-token: write", "id-token: read"),
             ("digest-mismatch: error", "digest-mismatch: warn"),
