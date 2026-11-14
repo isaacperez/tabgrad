@@ -116,7 +116,9 @@ try {
           assert.deepEqual([...await survivor.toArray()], [34]);
           survivor.close();
           survivor = null;
-          assert.equal(session.diagnostics().liveTensorHandles, baseline + 1);
+          // Success deliberately drops one escaped gradient exposure. A failed
+          // recipe must retire its unreturned result before returning, without GC.
+          assert.equal(session.diagnostics().liveTensorHandles, baseline + Number(!nestedError));
           assert.equal(other.diagnostics().liveTensorHandles, 1);
           assert.equal(closing.diagnostics().liveTensorHandles, 0);
           // Dereferencing while polling would pin a target for the host job.

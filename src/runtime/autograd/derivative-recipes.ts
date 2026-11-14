@@ -1,6 +1,27 @@
 import type { DerivativeOperations, DerivativeRecipe } from "./derivative-history.js";
 import { TabgradError, throwCleanupFailures } from "../../shared/errors.js";
 
+/** History cannot retire a calculated value that its recipe never returned. */
+function withBorrowedOperand<Value, Gradient>(saved: Value, operations: DerivativeOperations<Value, Gradient>,
+  calculate: (operand: Gradient) => Gradient, message: string): Gradient {
+  const operand = operations.borrow(saved);
+  let result!: Gradient;
+  let produced = false;
+  let failures: unknown[] | undefined;
+  try { result = calculate(operand); produced = true; }
+  catch (error) { failures = [error]; }
+  try { operations.close(operand); }
+  catch (error) { (failures ??= []).push(error); }
+  if (failures !== undefined) {
+    if (produced) {
+      try { operations.close(result); }
+      catch (error) { failures.push(error); }
+    }
+    throwCleanupFailures(failures, message);
+  }
+  return result;
+}
+
 /** Addition and contiguous views both pass incoming values in the input shape. */
 export const IDENTITY_DERIVATIVE: DerivativeRecipe = Object.freeze({
   savedOperands: () => [],
@@ -24,9 +45,8 @@ export const MUL_DERIVATIVE: DerivativeRecipe = Object.freeze({
   apply<Value, Gradient>(incoming: Gradient, saved: readonly Value[], _shape: readonly number[],
     operations: DerivativeOperations<Value, Gradient>): Gradient {
     if (saved.length !== 1) throw new TabgradError("CONSUMED_HISTORY", "Multiplication requires its saved operand.");
-    const operand = operations.borrow(saved[0]!);
-    try { return operations.mul(incoming, operand); }
-    finally { operations.close(operand); }
+    return withBorrowedOperand(saved[0]!, operations, operand => operations.mul(incoming, operand),
+      "Multiplication derivative construction and cleanup failed.");
   },
 });
 
@@ -36,25 +56,9 @@ export const MATMUL_DERIVATIVE: DerivativeRecipe = Object.freeze({
   apply<Value, Gradient>(incoming: Gradient, saved: readonly Value[], _shape: readonly number[],
     operations: DerivativeOperations<Value, Gradient>, position: number): Gradient {
     if (saved.length !== 1) throw new TabgradError("CONSUMED_HISTORY", "Matrix multiplication requires its saved operand.");
-    const operand = operations.borrow(saved[0]!);
-    let result!: Gradient;
-    let produced = false;
-    let failures: unknown[] | undefined;
-    try {
-      result = position === 0 ? operations.matmul(incoming, operand, "right") : operations.matmul(operand, incoming, "left");
-      produced = true;
-    } catch (error) { failures = [error]; }
-    try { operations.close(operand); }
-    catch (error) { (failures ??= []).push(error); }
-    if (failures !== undefined) {
-      // History cannot own a result that this recipe never returned.
-      if (produced) {
-        try { operations.close(result); }
-        catch (error) { failures.push(error); }
-      }
-      throwCleanupFailures(failures, "Matrix derivative construction and cleanup failed.");
-    }
-    return result;
+    return withBorrowedOperand(saved[0]!, operations, operand => position === 0
+      ? operations.matmul(incoming, operand, "right") : operations.matmul(operand, incoming, "left"),
+    "Matrix derivative construction and cleanup failed.");
   },
 });
 
