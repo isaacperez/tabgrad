@@ -3,10 +3,9 @@ import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { hasSimdInstructions } from "./helpers/wasm-instructions.mjs";
 
 const distributionRoot = fileURLToPath(new URL("../../../dist/", import.meta.url));
-
-// The SIMD byte-marker case is a bounded artifact check, not instruction decoding.
 
 test("the raw ABI rejects invalid ranges and output aliasing", async () => {
   const bytes = await readFile(join(distributionRoot, "wasm/kernels-scalar.wasm"));
@@ -31,6 +30,19 @@ test("the build keeps SIMD instructions out of the scalar module", async () => {
   const scalar = await readFile(join(distributionRoot, "wasm/kernels-scalar.wasm"));
   const simd = await readFile(join(distributionRoot, "wasm/kernels-simd128.wasm"));
 
-  assert.equal(scalar.includes(0xfd), false);
-  assert.equal(simd.includes(0xfd), true);
+  assert.equal(hasSimdInstructions(scalar), false);
+  assert.equal(hasSimdInstructions(simd), true);
+});
+
+test("SIMD inspection distinguishes code prefixes from constants and custom-section bytes", () => {
+  const header = [0, 97, 115, 109, 1, 0, 0, 0];
+  const declaration = [1, 4, 1, 96, 0, 0, 3, 2, 1, 0];
+  // i32.const2147483645 has LEB bytes fd ff ff ff07, then drop/end.
+  const scalar = new Uint8Array([...header, ...declaration, 10, 11, 1, 9, 0, 65, 253, 255, 255, 255, 7, 26, 11,
+    0, 3, 1, 120, 253]);
+  const simd = new Uint8Array([...header, ...declaration, 10, 23, 1, 21, 0, 253, 12, ...Array(16).fill(0), 26, 11]);
+  assert.equal(scalar.includes(0xfd), true);
+  assert.equal(hasSimdInstructions(scalar), false);
+  assert.equal(hasSimdInstructions(simd), true);
+  assert.throws(() => hasSimdInstructions(scalar.slice(0, -1)), WebAssembly.CompileError);
 });
