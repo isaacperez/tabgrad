@@ -4,7 +4,7 @@ import { WEBGPU_SIGNIFICAND_PRODUCT_SOURCE } from "./significand-product.js";
 export const WEBGPU_MULTIPLICATION_WORKGROUP_SIZE = 64;
 
 /** A full 24-by-24-bit product, rounded once without WGSL float relaxation. */
-export const WEBGPU_MULTIPLICATION_SOURCE = `${WEBGPU_SIGNIFICAND_PRODUCT_SOURCE}
+export const WEBGPU_MULTIPLICATION_ARITHMETIC_SOURCE = `${WEBGPU_SIGNIFICAND_PRODUCT_SOURCE}
 // Distances are at least 23. Normal and subnormal outputs use one rounding
 // step, including all discarded bits, rather than rounding twice on underflow.
 fn round_product(product: vec2<u32>, distance: u32) -> u32 {
@@ -69,6 +69,9 @@ fn multiply_binary32(left: u32, right: u32) -> u32 {
   return sign | (u32(exponent) << 23u) | (rounded & 0x7fffffu);
 }
 
+`;
+
+export const WEBGPU_MULTIPLICATION_SOURCE = `${WEBGPU_MULTIPLICATION_ARITHMETIC_SOURCE}
 @group(0) @binding(0) var<storage, read> left: array<u32>;
 @group(0) @binding(1) var<storage, read> right: array<u32>;
 @group(0) @binding(2) var<storage, read_write> output: array<u32>;

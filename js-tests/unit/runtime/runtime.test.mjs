@@ -436,7 +436,7 @@ test("multiplication rejects malformed admission without retaining work", async 
   const other = createRuntimeSession();
   const input = session.tensor([1, 2]);
   const foreign = other.tensor([1, 2]);
-  const mismatch = session.tensor([1, 2], { shape: [1, 2] });
+  const mismatch = session.tensor([1, 2, 3], { shape: [1, 3] });
   const broadcastable = session.tensor([1]);
   const closed = session.tensor([1, 2]); closed.close();
   const before = session.diagnostics();
@@ -447,7 +447,10 @@ test("multiplication rejects malformed admission without retaining work", async 
   assert.throws(() => input.mul(), TypeError);
   assert.throws(() => input.mul(input, undefined), TypeError);
   assert.throws(() => input.mul(foreign), { code: "DIFFERENT_SESSION" });
-  for (const value of [mismatch, broadcastable]) assert.throws(() => input.mul(value), { code: "SHAPE_MISMATCH" });
+  assert.throws(() => input.mul(mismatch), { code: "SHAPE_MISMATCH" });
+  const projected = input.mul(broadcastable);
+  assert.deepEqual(projected.shape, [2]);
+  projected.close();
   assert.throws(() => input.mul(closed), { code: "CLOSED_TENSOR" });
   assert.throws(() => closed.mul(input), { code: "CLOSED_TENSOR" });
   assert.deepEqual(session.diagnostics(), before);
@@ -1135,7 +1138,7 @@ test("rejects unsupported operations synchronously during admission", async () =
     (error) => error instanceof TabgradError
       && error.code === "SHAPE_MISMATCH"
       && error.details.operation === "add"
-      && error.details.contract === "equal-shape",
+      && error.details.contract === "broadcast-shape",
   );
   assert.throws(
     () => two.add(closed),
@@ -1257,18 +1260,23 @@ test("contiguous shape validation preserves empty metadata and rejects all inval
   }
 });
 
-test("equal element counts never substitute for equal full shapes", async () => {
+test("equal element counts still obey complete broadcast geometry", async () => {
   const session = createRuntimeSession();
   const foreign = createRuntimeSession();
   try {
-    for (const [data, leftShape, rightShape] of [
-      [[1], [], [1]], [[1, 2], [2], [1, 2]], [[], [0], [2, 0]],
-      [[], [0, 2], [0, 3]], [[1], [1, 1], [1]],
+    for (const [data, leftShape, rightShape, outputShape] of [
+      [[1], [], [1], [1]], [[1, 2], [2], [1, 2], [1, 2]], [[], [0], [2, 0], [2, 0]],
+      [[], [0, 2], [0, 3], null], [[1], [1, 1], [1], [1, 1]],
     ]) {
       const left = session.tensor(data, { shape: leftShape });
       const right = session.tensor(data, { shape: rightShape });
       const other = foreign.tensor(data, { shape: leftShape });
-      assert.throws(() => left.add(right), { code: "SHAPE_MISMATCH" });
+      if (outputShape === null) assert.throws(() => left.add(right), { code: "SHAPE_MISMATCH" });
+      else {
+        const result = left.add(right);
+        assert.deepEqual(result.shape, outputShape);
+        result.close();
+      }
       assert.throws(() => left.add(other), { code: "DIFFERENT_SESSION" });
       left.close();
       assert.throws(() => left.add(right), { code: "CLOSED_TENSOR" });
@@ -2444,14 +2452,20 @@ for (const failureCase of [
   { name: "missing expansion export", code: "BACKEND_ABI_MISMATCH", moduleOptions: { omitExpandExport: true } },
   { name: "missing coefficient addition export", code: "BACKEND_ABI_MISMATCH", moduleOptions: { omitAlphaAddExport: true } },
   { name: "missing matrix export", code: "BACKEND_ABI_MISMATCH", moduleOptions: { omitMatmulExport: true } },
-  { name: "missing matrix capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: 31 } },
+  { name: "missing broadcast addition export", code: "BACKEND_ABI_MISMATCH", moduleOptions: { omitBroadcastAddExport: true } },
+  { name: "missing broadcast multiplication export", code: "BACKEND_ABI_MISMATCH", moduleOptions: { omitBroadcastMulExport: true } },
+  { name: "missing receiving export", code: "BACKEND_ABI_MISMATCH", moduleOptions: { omitReceiveExport: true } },
+  { name: "missing broadcast capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: 255 & ~64 } },
+  { name: "missing receiving capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: 255 & ~128 } },
+  { name: "stale pre-broadcast module profile", code: "BACKEND_MANIFEST_INVALID", manifestTransform: manifest => ({ ...manifest, moduleVersion: 6 }) },
+  { name: "missing matrix capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: 255 & ~32 } },
   { name: "stale pre-matrix module profile", code: "BACKEND_MANIFEST_INVALID", manifestTransform: manifest => ({ ...manifest, moduleVersion: 5 }) },
-  { name: "missing coefficient addition capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: 15 } },
-  { name: "missing expansion capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: 7 } },
+  { name: "missing coefficient addition capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: 255 & ~16 } },
+  { name: "missing expansion capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: 255 & ~8 } },
   { name: "missing mul export", code: "BACKEND_ABI_MISMATCH", moduleOptions: { omitMulExport: true } },
-  { name: "missing mul capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: 3 } },
+  { name: "missing mul capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: 255 & ~4 } },
   { name: "missing sum export", code: "BACKEND_ABI_MISMATCH", moduleOptions: { omitSumExport: true } },
-  { name: "missing sum capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: 1 } },
+  { name: "missing sum capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: 255 & ~2 } },
   {
     name: "incompatible ABI version",
     code: "BACKEND_ABI_MISMATCH",

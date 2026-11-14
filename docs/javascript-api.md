@@ -31,7 +31,7 @@ including contraction, numerical association, empty inputs and both gradients.
 
 `Tensor.mul(right)` is documented in the
 [multiplication reference](reference/tensor-multiplication.md). It takes one
-equal-shape tensor and returns a deferred elementwise product.
+broadcast-compatible tensor and returns a deferred elementwise product.
 
 `RuntimeSession.grad(output, inputs, gradient?)` is documented in the
 [functional gradient reference](reference/functional-gradients.md). It returns
@@ -141,9 +141,17 @@ and contiguous storage.
 
 `left.add(right)` validates both operands synchronously and returns a new
 tensor handle. It does not prepare or submit numerical backend work.
-The operands must be open, belong to the same session and device, and have equal shapes.
-Equal element counts alone are insufficient, including for zero-element shapes
-and scalar versus one-element vector. No broadcasting is performed.
+The operands must be open, belong to the same session and device, and have
+broadcast-compatible shapes. Align dimensions from the right: each pair must
+be equal or include a singleton; missing leading axes act as singletons.
+For example, `[2, 1]` and `[3]` produce `[2, 3]`, and a scalar `[]` can pair
+with any supported shape. Zero with one produces zero, but empty payloads
+still require compatibility at every axis. Equal element counts alone are
+insufficient. The inferred output must fit the selected device independently
+of its inputs. No expanded input tensor is required.
+The same rule applies to `mul`; [broadcasting and receiving gradients](architecture/broadcasting.md)
+defines numerical and identity distinctions when gradients reduce back to an
+input shape. Seeds and persistent gradient assignments still require exact shapes.
 The runtime checks handle identity in its module-private registry: inheriting
 from `Tensor.prototype` or wrapping a tensor in a JavaScript `Proxy` does not
 forge a valid handle. Invalid handles fail with `INVALID_TENSOR` before backend

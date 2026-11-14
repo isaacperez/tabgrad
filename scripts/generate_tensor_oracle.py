@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Protocol, cast
 
 from backward_oracle import backward_cases
+from broadcast_oracle import broadcast_cases, broadcast_composition_cases
 from gradient_identity_oracle import (
     COMMON as GRADIENT_IDENTITY_SOURCE,
 )
@@ -1347,6 +1348,8 @@ def generate() -> str:
                 "backwardCases": backward_cases(oracle),
                 "sgdCases": sgd_cases(oracle),
                 "matmulCases": matmul_cases(oracle),
+                "broadcastCases": broadcast_cases(oracle),
+                "broadcastCompositions": broadcast_composition_cases(oracle),
                 "copyCases": copy_cases(oracle),
                 "noGradCases": no_grad_cases(oracle),
                 "noGradViewCases": no_grad_view_cases(oracle),

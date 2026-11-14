@@ -537,6 +537,8 @@ def check_mul():
         assert result.tolist() == [[10., -6.], [0., -4.]]
     assert x.mul(y).sum().tolist() == 0.
     assert (x.view(4).mul(x.view(4)) + y.view(4)).sum().tolist() == 42.
+    assert x.mul(torch.tensor([2.], dtype=torch.float32)).tolist() == [[4., -6.], [0., 8.]]
+    assert x.mul(torch.tensor([2., 3.], dtype=torch.float32)).tolist() == [[4., -9.], [0., 12.]]
     assert torch.Tensor.__mul__(x, object()) is NotImplemented
     malformed = ["torch.mul()", "torch.mul(x)", "torch.mul(x, y, x)",
         "torch.mul(x, other=y, input=x)", "torch.mul(x, y, alpha=1)",
@@ -545,6 +547,7 @@ def check_mul():
         "torch.Tensor.mul(object.__new__(torch.Tensor), x)",
         "torch.mul(x, object.__new__(torch.Tensor))", "x.mul(2)",
         "torch.mul(2, x)", "torch.mul(x, 2)", "x * 2", "2 * x"]
+    gc.collect()
     before = session.diagnostics()
     for expression in malformed:
         try:
@@ -554,7 +557,7 @@ def check_mul():
         else:
             raise AssertionError(expression)
     for expression in ["torch.mul(x, y, out=x)", "x.mul(y.view(4))",
-                       "x.mul(torch.tensor([2.], dtype=torch.float32))"]:
+                       "x.mul(torch.tensor([2., 3., 4.], dtype=torch.float32))"]:
         try:
             eval(expression)
         except RuntimeError:
@@ -1291,7 +1294,12 @@ shared = [1, 2]
 tensor = torch.tensor([shared, shared], dtype=torch.float32)
 assert tensor.shape == (2, 2)
 assert tensor.tolist() == [[1., 2.], [1., 2.]]
-for left_data, right_data in [(1, [1]), ([[1, 2]], [1, 2]), ([], [[]])]:
+for left_data, right_data, expected_shape in [(1, [1], (1,)), ([[1, 2]], [1, 2], (1, 2)), ([], [[]], (1, 0))]:
+    left = torch.tensor(left_data, dtype=torch.float32)
+    right = torch.tensor(right_data, dtype=torch.float32)
+    for operation in (lambda: left + right, lambda: left.add(right), lambda: torch.add(left, right)):
+        assert operation().shape == expected_shape
+for left_data, right_data in [([1, 2, 3], [1, 2]), ([[1, 2]], [[1, 2, 3]]), ([[], []], [[], [], []])]:
     left = torch.tensor(left_data, dtype=torch.float32)
     right = torch.tensor(right_data, dtype=torch.float32)
     for operation in (lambda: left + right, lambda: left.add(right), lambda: torch.add(left, right)):
@@ -1300,7 +1308,7 @@ for left_data, right_data in [(1, [1]), ([[1, 2]], [1, 2]), ([], [[]])]:
         except RuntimeError:
             pass
         else:
-            raise AssertionError('accepted different full shapes')
+            raise AssertionError('accepted incompatible broadcast shapes')
 assert torch._runtime_session.diagnostics().kernelCalls == 0
 # Traverse deeper than Python's recursion limit, using only one numeric element.
 deep = 3
@@ -1318,7 +1326,7 @@ assert observed == 6.0
     await binding.close();
     for (const name of ["torch", "cycle", "indirect", "NumericSubclass", "bad_inputs", "data",
       "before", "after", "shared", "tensor", "left_data", "right_data", "left", "right",
-      "operation", "deep", "deep_tensor", "observed", "_"]) {
+      "operation", "expected_shape", "deep", "deep_tensor", "observed", "_"]) {
       if (interpreter.globals.has(name)) interpreter.globals.delete(name);
     }
   }

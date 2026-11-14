@@ -63,7 +63,7 @@ a creation-only value, so the explicitly selected device is not bypassed by
 a host-copy shortcut. Whole-storage `view(shape)` changes metadata without
 copying numerical data or performing a GPU dispatch.
 
-GPU `add` accepts two tensors with equal shape on the same device. Repeated
+GPU `add` accepts two broadcast-compatible tensors on the same device. Repeated
 operands, branches and deferred chains follow the shared value/storage rules.
 Its precise rounding and exceptional-value contract is the
 [binary32 addition decision](../architecture/webgpu-float32-addition.md),
@@ -83,7 +83,7 @@ with captured internal orientation; there is no host transpose or fallback.
 Output capacity is checked independently of inputs and each dispatch owns its
 immutable 16-byte geometry packet until physical completion.
 
-GPU `mul` accepts the same equal-shape operands and composes with addition,
+GPU `mul` accepts the same broadcast-compatible operands and composes with addition,
 views and total sum. The [multiplication reference](tensor-multiplication.md)
 owns its call forms, exact stored-binary32 product rounding and exclusions.
 

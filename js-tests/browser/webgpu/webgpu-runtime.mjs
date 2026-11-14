@@ -15,6 +15,7 @@ import { checkGpuSGDArithmetic, checkGpuSGDResources, checkGpuSGDMixedDevices } 
 import { checkSGDCase, isDirectSGDCase } from "../helpers/sgd-cases.mjs";
 import { checkSGDFixedOwners } from "../helpers/sgd-lifetime.mjs";
 import { getTestRuntimeOwnership } from "/testing.js";
+import { checkBroadcastCases } from "../helpers/broadcast-cases.mjs";
 import { checkMatrixCases, checkMatrixTraining, checkMatrixPending, checkMatrixBackend } from "../helpers/matrix-cases.mjs";
 import { WebGpuBackend } from "/backends/webgpu/webgpu-backend.js";
 import { ExecutableProgram } from "/execution/executable-program.js";
@@ -153,6 +154,7 @@ async function exercise(session) {
   const response = await fetch("/helpers/functional-gradient-oracle.json");
   check(response.ok, "Native functional oracle unavailable");
   const oracle = await response.json();
+  const broadcast = await checkBroadcastCases(session, oracle.broadcastCases, "webgpu", oracle.broadcastCompositions);
   await checkFunctionalGradients(session, oracle, "webgpu");
   for (const fixture of oracle.gradientProgressCases) await checkGradientProgress(session, fixture, "webgpu");
   await checkGpuCopy(session);
@@ -260,7 +262,7 @@ async function exercise(session) {
   const sgdResources = await checkGpuSGDResources(session);
   const sgdSavedControl = await checkSGDFixedOwners(session, 65, getTestRuntimeOwnership, getTestRuntimeSemanticOwnership, "webgpu", completeRuntimeSession);
   await completeRuntimeSession(session);
-  return { backwardResources, sgdArithmetic, sgdCases, sgdResources, sgdSavedControl, matrixNumerics, matrixTraining, matrixPending };
+  return { backwardResources, sgdArithmetic, sgdCases, sgdResources, sgdSavedControl, matrixNumerics, matrixTraining, matrixPending, broadcast };
 }
 
 let session;
@@ -269,7 +271,7 @@ try {
   await send("__phase", { phase: "assets-loaded" });
   session = await createWebGpuRuntimeSession();
   await send("__phase", { phase: "runtime-started" });
-  const { backwardResources, sgdArithmetic, sgdCases, sgdResources, sgdSavedControl, matrixNumerics, matrixTraining, matrixPending } = await exercise(session);
+  const { backwardResources, sgdArithmetic, sgdCases, sgdResources, sgdSavedControl, matrixNumerics, matrixTraining, matrixPending, broadcast } = await exercise(session);
   await session.close();
   const adapter = await navigator.gpu.requestAdapter();
   const backend = new WebGpuBackend(await adapter.requestDevice());
@@ -282,7 +284,7 @@ try {
   check(diagnostics.liveTensorHandles === 0 && diagnostics.liveTensorValues === 0
     && diagnostics.liveMaterializationRecords === 0 && diagnostics.liveRequestLeases === 0, "Semantic resources did not retire");
   await send("__phase", { phase: "runtime-finished" });
-  await send("__result", { ok: true, diagnostics, backwardResources, sgdArithmetic, sgdCases, sgdResources, sgdSavedControl, matrixNumerics, matrixTraining, matrixPending, matrixBackend });
+  await send("__result", { ok: true, diagnostics, backwardResources, sgdArithmetic, sgdCases, sgdResources, sgdSavedControl, matrixNumerics, matrixTraining, matrixPending, matrixBackend, broadcast });
 } catch (error) {
   await session?.close();
   await send("__result", { ok: false, error: { message: error.message, code: error.code, details: error.details } });

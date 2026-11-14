@@ -260,7 +260,9 @@ class Tensor:
             _raise_view_history_failure(error)
             failure = cast("_bridge.RuntimeException", error)
             if failure.js_error.code == "SHAPE_MISMATCH":
-                raise RuntimeError("Tensor shapes must match for addition.") from error
+                raise RuntimeError(
+                    "Tensor shapes must be broadcast-compatible for addition."
+                ) from error
             raise
 
     def __add__(self, other: object) -> Tensor | NotImplementedType:
@@ -269,7 +271,7 @@ class Tensor:
         return self.add(other)
 
     def mul(self, other: object) -> Tensor:
-        """Admit an equal-shape tensor product without observing its payload."""
+        """Admit a broadcast-compatible tensor product without observing its payload."""
         left = _require_mul_input(self)
         right = _require_mul_input(other)
         try:
@@ -279,7 +281,7 @@ class Tensor:
             failure = cast("_bridge.RuntimeException", error)
             if failure.js_error.code == "SHAPE_MISMATCH":
                 raise RuntimeError(
-                    "Tensor shapes must match for multiplication."
+                    "Tensor shapes must be broadcast-compatible for multiplication."
                 ) from error
             raise
 
@@ -580,7 +582,7 @@ def tensor(
 def add(
     input: object, other: object, *, alpha: object = 1, out: object = None
 ) -> Tensor:
-    """Admit equal-shape out-of-place addition through the shared runtime."""
+    """Admit broadcast-compatible out-of-place addition through the shared runtime."""
     if not isinstance(input, Tensor):
         raise TypeError("Tabgrad addition requires two tensors.")
     if out is not None:
@@ -594,7 +596,7 @@ def sum(input: object) -> Tensor:
 
 
 def mul(input: object, other: object, *, out: object = None) -> Tensor:
-    """Multiply equal-shape tensors out of place; only out=None is supported."""
+    """Multiply broadcast-compatible tensors out of place; only out=None is supported."""
     left = _require_mul_input(input)
     if out is not None:
         raise RuntimeError("Tabgrad multiplication requires out=None.")

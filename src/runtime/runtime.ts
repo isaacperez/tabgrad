@@ -20,8 +20,11 @@ import type { ExecutionBackend, ResidentAllocation, TensorDevice } from "../exec
 import { WebGpuBackend, type WebGpuDiagnostics, type WebGpuExecutionBackend } from "../backends/webgpu/webgpu-backend.js";
 export type { TensorDevice } from "../execution/backend.js";
 import { DerivativeHistory, type DerivativeNode, type DerivativePlan, type DerivativeRecipe } from "./autograd/derivative-history.js";
-import { COPY_DERIVATIVE, COPY_SLICES_DERIVATIVE, REBASED_VIEW_DERIVATIVE, IDENTITY_DERIVATIVE, PASS_DERIVATIVE, MUL_DERIVATIVE, MATMUL_DERIVATIVE, SUM_DERIVATIVE } from "./autograd/derivative-recipes.js";
+import { COPY_DERIVATIVE, COPY_SLICES_DERIVATIVE, REBASED_VIEW_DERIVATIVE, IDENTITY_DERIVATIVE, POINTWISE_PASS_DERIVATIVE, MUL_DERIVATIVE, MATMUL_DERIVATIVE, SUM_DERIVATIVE } from "./autograd/derivative-recipes.js";
 import { matrixGeometry } from "../execution/matrix-geometry.js";
+import { BroadcastCapacityError, type BroadcastGeometry, type ReceivingGeometry } from "../execution/broadcast-geometry.js";
+import { operationShapePolicy } from "../execution/operation-shapes.js";
+import { pointwiseDerivative } from "./autograd/pointwise-derivative.js";
 import { copyTensorShape, equalTensorShapes, inferViewShape, tensorElementCount } from "./tensor-shape.js";
 import { createSGD, type SGD, type SGDOptions, type SGDParameterGroup } from "./sgd.js";
 import type { OptimizerCapture, OptimizerLease, OptimizerParameterCapture } from "./optimizer-lease.js";
@@ -88,6 +91,7 @@ export interface RuntimeDiagnostics {
 interface AdmittedOperation {
   readonly record: OperationRecord;
   readonly outputMetadata: TensorMetadata;
+  readonly broadcast?: BroadcastGeometry;
 }
 
 function invalidTensorData(cause?: unknown): TabgradError {
@@ -508,7 +512,7 @@ export class Tensor {
     return runtimeSessionAccess(state.session).binary(ADD_OPERATION, state, right);
   }
 
-  /** Multiply corresponding elements of equal-shape tensors without observing them. */
+  /** Multiply broadcast-compatible tensors without observing them. */
   mul(right: Tensor): Tensor {
     const state = requireTensorState(this);
     if (arguments.length !== 1) {
@@ -571,6 +575,7 @@ export interface BackwardOptions {
 
 class BinaryOperationDefinition implements NumericalOperationDefinition {
   readonly pure = true;
+  readonly shapePolicy;
 
   constructor(
     readonly name: "add" | "mul" | "matmul",
@@ -579,7 +584,7 @@ class BinaryOperationDefinition implements NumericalOperationDefinition {
     readonly description: "addition" | "multiplication" | "matrix multiplication",
     readonly derivative: DerivativeRecipe,
     readonly matrixFlags?: number,
-  ) {}
+  ) { this.shapePolicy = operationShapePolicy(loweredKind); }
 
   admit(
     session: RuntimeSession,
@@ -652,6 +657,7 @@ class BinaryOperationDefinition implements NumericalOperationDefinition {
       );
     }
     let outputShape = leftValue.shape;
+    let broadcast: BroadcastGeometry | undefined;
     if (this.matrixFlags !== undefined) {
       if (leftValue.shape.length !== 2 || rightValue.shape.length !== 2) {
         throw new TabgradError("INVALID_SHAPE", "Matrix multiplication supports only two-dimensional inputs.", {
@@ -665,6 +671,15 @@ class BinaryOperationDefinition implements NumericalOperationDefinition {
       }
       const geometry = matrixGeometry(leftValue.shape, rightValue.shape, this.matrixFlags);
       outputShape = Object.freeze([geometry.rows, geometry.columns]);
+    } else if (this.shapePolicy !== undefined) {
+      try { broadcast = this.shapePolicy.plan([leftValue.shape, rightValue.shape]); }
+      catch (error) {
+        throw new TabgradError(error instanceof BroadcastCapacityError ? "RESOURCE_EXHAUSTED" : "SHAPE_MISMATCH",
+          "Pointwise output requires compatible broadcast shapes and safe element arithmetic.", {
+            operation: this.name, contract: "broadcast-shape", leftShape: leftValue.shape, rightShape: rightValue.shape,
+          }, error);
+      }
+      outputShape = broadcast.shape;
     } else if (!equalTensorShapes(leftValue.shape, rightValue.shape)) {
       throw new TabgradError(
         "SHAPE_MISMATCH",
@@ -683,6 +698,7 @@ class BinaryOperationDefinition implements NumericalOperationDefinition {
       rightValue,
     ];
     return Object.freeze({
+      ...(broadcast === undefined ? {} : { broadcast }),
       record: new OperationRecord(this, inputs, undefined, this.matrixFlags),
       outputMetadata: Object.freeze({
         shape: outputShape,
@@ -695,7 +711,7 @@ class BinaryOperationDefinition implements NumericalOperationDefinition {
 }
 
 const ADD_OPERATION = Object.freeze(new BinaryOperationDefinition(
-  "add", "Tensor.add", "add-f32", "addition", PASS_DERIVATIVE,
+  "add", "Tensor.add", "add-f32", "addition", POINTWISE_PASS_DERIVATIVE,
 ));
 const MUL_OPERATION = Object.freeze(new BinaryOperationDefinition(
   "mul", "Tensor.mul", "mul-f32", "multiplication", MUL_DERIVATIVE,
@@ -737,6 +753,10 @@ const EXPAND_OPERATION: NumericalOperationDefinition = Object.freeze({
   name: "expand", provenanceSource: "DerivativeHistory.sum", loweredKind: "expand-f32", pure: true,
 });
 
+const RECEIVE_OPERATION: NumericalOperationDefinition = Object.freeze({
+  name: "reduce", provenanceSource: "DerivativeHistory.receive", loweredKind: "reduce-f32", pure: true,
+});
+
 /** Canonical metadata admission; a view introduces no numerical dependency. */
 class ViewOperationDefinition {
   readonly derivative = IDENTITY_DERIVATIVE;
@@ -755,6 +775,11 @@ const VIEW_OPERATION = Object.freeze(new ViewOperationDefinition());
 function isPromiseLike<Result>(value: Result | PromiseLike<Result>): value is PromiseLike<Result> {
   return value !== null && (typeof value === "object" || typeof value === "function")
     && "then" in value && typeof value.then === "function";
+}
+
+/** Conservative retain-before-release budget used by ordinary capture admission. */
+function capturedAdmissionOwners(inputs: number, extraOwners = 0): number {
+  return inputs * 10 + extraOwners + 2;
 }
 
 export class RuntimeSession {
@@ -1426,11 +1451,22 @@ export class RuntimeSession {
     requestedOwners: number, controls: number, effects: number, destinations: ReadonlySet<TensorIdentity>, device: TensorDevice): void {
     let nodeElements = 0;
     let edgeElements = 0;
+    let localProductBytes = 0, receivingOwners = 0;
     for (const node of plan.order) {
       nodeElements += tensorElementCount(node.shape);
       for (const input of node.inputs) {
         if (input !== null && plan.needed.has(input)) edgeElements += tensorElementCount(input.shape);
       }
+      const pointwise = node.recipe?.pointwise;
+      if (pointwise !== undefined) node.inputs.forEach((input, position) => {
+        const projection = pointwise.receivers[position]!;
+        if (input === null || !plan.needed.has(input) || projection.exact) return;
+        receivingOwners += capturedAdmissionOwners(1);
+        if (!equalTensorShapes(projection.shape, projection.originalShape)) receivingOwners += capturedAdmissionOwners(1, 4);
+        // The old contribution bound covers the receiving payload. A local
+        // product in the larger output domain survives as the reduction input.
+        if (!pointwise.aliasesIncoming) localProductBytes += tensorElementCount(node.shape) * 4;
+      });
     }
     const output = plan.order.at(-1);
     const outputElements = output === undefined ? 0 : tensorElementCount(output.shape);
@@ -1440,8 +1476,11 @@ export class RuntimeSession {
     // credit. Fanout after a reduction defeats a node-only payload estimate.
     // Keep larger old reservations and the separate binary-recipe owner bound.
     const additionalBytes = (explicitSeed === undefined ? 4 : 0)
-      + Math.max(nodeElements * 20, edgeElements * 8 + outputElements * 4);
-    const slots = plan.order.length * 20 + requestedOwners + 10;
+      + Math.max(nodeElements * 20, edgeElements * 8 + outputElements * 4) + localProductBytes;
+    // Reserve the ordinary unary capture bound for each reduction and, only
+    // when needed, its restoration alias/view. These use the same admission
+    // budget as those calls, with no retirement credit or fitted new constant.
+    const slots = plan.order.length * 20 + receivingOwners + requestedOwners + 10;
     let additionalOwners = slots * (controls + 1);
     const refinedOwners = slots * (controls - effects + 1) + effects * 4;
     const owners = this.#updateOwnerCount();
@@ -1470,7 +1509,10 @@ export class RuntimeSession {
     if (explicitSeed !== undefined && this.#materializations.get(explicitSeed.value)?.kind !== "host") return false;
     let edges = 0;
     for (const node of plan.order) {
-      if (node.recipe !== null && node.recipe !== PASS_DERIVATIVE && node.recipe !== IDENTITY_DERIVATIVE
+      const pointwise = node.recipe?.pointwise;
+      if (pointwise !== undefined && (!pointwise.aliasesIncoming || node.inputs.some((input, position) =>
+        input !== null && plan.needed.has(input) && !pointwise.receivers[position]!.exact))) return false;
+      if (pointwise === undefined && node.recipe !== null && node.recipe !== IDENTITY_DERIVATIVE
         && node.recipe !== COPY_DERIVATIVE && node.recipe !== COPY_SLICES_DERIVATIVE) return false;
       const owner = this.#gradientReceiver(node, destinations);
       if (owner !== undefined && owner.gradient !== null) return false;
@@ -1530,6 +1572,8 @@ export class RuntimeSession {
 
   #derivativeOperations(device: TensorDevice = "cpu") {
     return {
+      shape: (value: Tensor) => requireTensorState(value).shape,
+      receive: (value: Tensor, projection: ReceivingGeometry) => this.#receivePointwise(value, projection),
       borrow: (value: TensorValue) => this.#borrowValue(value),
       clone: (value: Tensor, shape: readonly number[]) => this.#cloneDerivative(value, shape),
       rebase: (value: Tensor, shape: readonly number[]) => this.#rebaseDerivative(value, shape),
@@ -1557,6 +1601,27 @@ export class RuntimeSession {
       close: (value: Tensor) => value.close(),
       inherit: (value: Tensor, source: Tensor) => this.#attachTensorControls(value, [requireTensorState(source).value.outcomes]),
     };
+  }
+
+  #receivePointwise(value: Tensor, projection: ReceivingGeometry): Tensor {
+    const state = requireTensorState(value);
+    this.#requireComputation(state.value, RECEIVE_OPERATION);
+    this.#checkCapturedAdmission([state.value], projection.shape);
+    const base = this.#recordOperation({ record: new OperationRecord(RECEIVE_OPERATION, [state.value]),
+      outputMetadata: { shape: projection.shape, dtype: state.value.dtype, device: state.value.device, layout: state.value.layout } });
+    if (equalTensorShapes(projection.shape, projection.originalShape)) return base;
+    // Scalars are plain; non-scalar rank restoration has a fresh no-grad base.
+    let result: Tensor | undefined, failures: unknown[] | undefined;
+    try { result = projection.originalShape.length === 0 ? this.#cloneDerivative(base, [])
+      : this.noGrad(() => base.view(projection.originalShape)); }
+    catch (error) { failures = [error]; }
+    try { base.close(); }
+    catch (error) { (failures ??= []).push(error); }
+    if (failures !== undefined) {
+      if (result !== undefined) try { result.close(); } catch (error) { failures.push(error); }
+      throwCleanupFailures(failures, "Receiving reduction and shape restoration failed.");
+    }
+    return result!;
   }
 
   #zeros(shape: readonly number[], device: TensorDevice): Tensor {
@@ -1603,6 +1668,9 @@ export class RuntimeSession {
   }
 
   #combineIncoming(left: Tensor, right: Tensor): Tensor {
+    if (!equalTensorShapes(requireTensorState(left).shape, requireTensorState(right).shape)) {
+      throw new TabgradError("SHAPE_MISMATCH", "Incoming gradient accumulation requires exact shapes.");
+    }
     const source = requireTensorState(left).identity;
     const reusable = this.#canAcquireIncoming(source) && source.family.identities === 1;
     const result = this.noGrad(() => left.add(right));
@@ -1636,6 +1704,9 @@ export class RuntimeSession {
   #accumulateGradient(owner: TensorIdentity, incoming: Tensor, share: boolean): void {
     if (this.#mutationFailure !== undefined) {
       throw new TabgradError("MUTATION_FAILED", "A failed write prevents further updates in this session.", {}, this.#mutationFailure.error);
+    }
+    if (!equalTensorShapes(owner.shape, requireTensorState(incoming).shape)) {
+      throw new TabgradError("SHAPE_MISMATCH", "A gradient must have its receiver's exact shape.");
     }
     let acquired: Tensor;
     const prior = owner.gradient;
@@ -1917,7 +1988,7 @@ export class RuntimeSession {
     if (this.#writers.references === 0) return;
     const outcomes = captureWriterOutcomes(values.map(value => value.outcomes));
     if (outcomes.length !== 0) {
-      this.#checkUpdateCapacity((values.length * 10 + extraOwners + 2) * (outcomes.length + 1),
+      this.#checkUpdateCapacity(capturedAdmissionOwners(values.length, extraOwners) * (outcomes.length + 1),
         shape === undefined ? 0 : tensorElementCount(shape) * 4);
     }
   }
@@ -1995,11 +2066,11 @@ export class RuntimeSession {
     this.#assertOpen();
     const admitted = definition.admit(this, left, rightHandle);
     this.#requireComputation(admitted.record.inputs[0]!, definition);
-    if (definition.matrixFlags !== undefined) {
+    if (definition.matrixFlags !== undefined || admitted.broadcast !== undefined) {
       const backend = this.#backendFor(admitted.outputMetadata.device, definition.name);
       const bytes = tensorElementCount(admitted.outputMetadata.shape) * Float32Array.BYTES_PER_ELEMENT;
       if (!Number.isSafeInteger(bytes) || bytes > backend.capabilities.maximumTensorBytes) {
-        throw new TabgradError("RESOURCE_EXHAUSTED", "Matrix output exceeds the selected device's tensor limit.", {
+        throw new TabgradError("RESOURCE_EXHAUSTED", "Operation output exceeds the selected device's tensor limit.", {
           operation: definition.name, device: admitted.outputMetadata.device, byteLength: bytes,
           maximumTensorBytes: backend.capabilities.maximumTensorBytes,
         });
@@ -2008,7 +2079,8 @@ export class RuntimeSession {
     const right = requireTensorState(rightHandle);
     this.#checkCapturedAdmission(admitted.record.inputs, admitted.outputMetadata.shape);
     const history = !this.#recording || (!left.requiresGrad && !right.requiresGrad) ? null
-      : this.#history.record(admitted.outputMetadata.shape, definition.derivative,
+      : this.#history.record(admitted.outputMetadata.shape, admitted.broadcast === undefined ? definition.derivative
+        : pointwiseDerivative(definition.derivative, admitted.broadcast, definition.derivative === POINTWISE_PASS_DERIVATIVE),
         [left.history, right.history], admitted.record.inputs);
     return this.#recordOperation(admitted, history);
   }

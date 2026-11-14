@@ -212,6 +212,18 @@ remain bounded by the underlying operation references. Oracle cases use small,
 exactly representable values to establish derivative semantics rather than
 claiming bitwise equivalence for every floating-point graph.
 
+Pointwise addition and multiplication share [broadcast geometry and a receiving
+adapter](../architecture/broadcasting.md). Local contributions have the complete
+output shape before reduction; each input receives only the source positions
+that reused it. A real reduction owns fresh storage, including leading-axis
+removal with one term. Non-scalar rank restoration is a no-grad view of the
+keep-dimension result; a scalar is plain. Exact-shape addition retains incoming
+identity instead. Thus negative zero and alias behavior can distinguish an
+actual reduction from an identity. Each receiving group uses its backend's
+documented sum arithmetic, with explicit native/cross-device differences.
+Explicit seeds, restored contributions and accumulation still require complete
+exact shapes. Copy, matrix and total-sum derivative rules remain separate.
+
 Functional calls do not automatically accumulate leaf gradients. On CPU and WebGPU, already
 retained nonleaves can receive contributions, including at input cutoffs; the
 [backward reference](backward-gradients.md) owns persistent slot behavior.
@@ -222,6 +234,6 @@ Basic [SGD](sgd.md) consumes assigned gradients on CPU or an enabled WebGPU
 device, with same-device resets and updates. Its supported options and
 [GPU qualification](../compatibility.md#gpu-sgd-evidence) remain bounded by
 that reference.
-Higher-order graphs, JVP, public broadcasting, axis reduction and
+Higher-order graphs, JVP, public axis reduction and
 broader dtype/device/layout remain excluded. These exclusions do not change
 ordinary nontracking computation or introduce a backend fallback.

@@ -72,16 +72,23 @@ test("multiplication preserves empty, full and partial launch boundaries", async
   }
 });
 
-test("multiplication admission rejects shapes and foreign sessions without retained work", async (context) => {
+test("multiplication admits broadcasting and rejects incompatible shapes or foreign sessions without retained work", async (context) => {
   const session = await openSession(context, executionDevice());
   const other = await openSession(context, executionDevice());
   try {
     const input = session.tensor([1, 2], { device: "webgpu" });
-    const mismatch = session.tensor([1, 2], { shape: [1, 2], device: "webgpu" });
+    const rankAdded = session.tensor([1, 2], { shape: [1, 2], device: "webgpu" });
     const broadcastable = session.tensor([1], { device: "webgpu" });
+    const mismatch = session.tensor([1, 2, 3], { device: "webgpu" });
+    const emptyMismatch = session.tensor([], { shape: [2, 0], device: "webgpu" });
     const foreign = other.tensor([1, 2], { device: "webgpu" });
+    for (const [tensor, shape] of [[rankAdded, [1, 2]], [broadcastable, [2]]]) {
+      const result = input.mul(tensor);
+      assert.deepEqual(result.shape, shape);
+      result.close();
+    }
     const before = session.diagnostics();
-    for (const tensor of [mismatch, broadcastable]) assert.throws(() => input.mul(tensor), { code: "SHAPE_MISMATCH" });
+    for (const tensor of [mismatch, emptyMismatch]) assert.throws(() => input.mul(tensor), { code: "SHAPE_MISMATCH" });
     assert.throws(() => input.mul(foreign), { code: "DIFFERENT_SESSION" });
     assert.deepEqual(session.diagnostics(), before);
   } finally { await session.close(); await other.close(); }

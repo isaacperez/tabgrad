@@ -1,9 +1,11 @@
 import { WriterOutcome, captureWriterOutcomes, retainWriterOutcomes, releaseWriterOutcomes } from "../writer-outcome.js";
 import { TabgradError, throwCleanupFailures } from "../../shared/errors.js";
+import type { BroadcastGeometry, ReceivingGeometry } from "../../execution/broadcast-geometry.js";
 
 /** A canonical operation supplies its saved-operand selection and local VJP. */
 export interface DerivativeRecipe {
   readonly consumesHistory?: boolean;
+  readonly pointwise?: Readonly<{ geometry: BroadcastGeometry; receivers: readonly ReceivingGeometry[]; aliasesIncoming: boolean }>;
   savedOperands(position: number): readonly number[];
   apply<Value, Gradient>(
     incoming: Gradient, saved: readonly Value[], shape: readonly number[],
@@ -67,6 +69,8 @@ function derivativePriority<Value>(node: DerivativeNode<Value>): number {
 
 /** Numerical and handle ownership stays with the runtime's ordinary admission path. */
 export interface DerivativeOperations<Value, Gradient> {
+  shape?(value: Gradient): readonly number[];
+  receive?(value: Gradient, projection: ReceivingGeometry): Gradient;
   borrow(value: Value): Gradient;
   clone(value: Gradient, shape: readonly number[]): Gradient;
   rebase(value: Gradient, shape: readonly number[]): Gradient;

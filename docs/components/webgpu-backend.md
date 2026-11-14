@@ -61,7 +61,7 @@ must not treat that retention as disposable scratch.
 
 ### Elementwise kernel launch geometry
 
-A workgroup is the set of shader invocations launched together. Addition and
+A workgroup is the set of shader invocations launched together. Dense addition and
 multiplication each process one element per invocation along a single dimension,
 so each launch width connects two physical facts: how many elements one group can
 cover, and how many groups the host must dispatch for a given output. That
@@ -95,6 +95,23 @@ unsigned binary32 arithmetic. Another computation may own different geometry; th
 operation-specific constant is not a runtime-wide launch policy or a kernel
 registry. Changing its value would still require device-limit, dispatch and
 numerical qualification, not just changing a shared declaration.
+
+[Broadcast forward](../architecture/broadcasting.md) adds one immutable storage
+parameter buffer. It specializes arithmetic by operation kind, while using
+common coalesced address projection. Four adjacent values share an invocation
+when the common inner run is divisible by four; otherwise each invocation
+handles one value. Cache keys do not include rank or shape.
+
+Receiving reduction shares the exact integer sum helpers. It derives ordered
+group/term projections and uses private staged partials when terms exceed one
+stage. Dispatch windows carry global group/chunk offsets in separately owned,
+immutable uniforms. Tensor extent, parameter size, group-times-chunk products,
+partial size and dispatch limits are checked independently. Parameters and
+partials retire with the invocation's known drain; loss preserves unknown
+completion accounting. They never become persistent tensor history or a
+shape-keyed cache. Preparation validates every known capability before starting
+compilation and attributes failures to the actual requesting program slot,
+including cached compilation failures.
 
 ### Preparation and observation
 

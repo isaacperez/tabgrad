@@ -6,6 +6,9 @@ import { CpuArtifactLoader, type KernelExports } from "./artifact-loader.js";
 import type { BackendDiagnostics, WasmVariant } from "./cpu-types.js";
 import { InvocationStorage } from "./invocation-storage.js";
 import { CpuAllocation, LinearMemoryAllocator, MAXIMUM_ADDRESS } from "./linear-memory.js";
+import { pointwiseGeometry, receivingGeometry } from "../../execution/broadcast-geometry.js";
+import { operationShapePolicy } from "../../execution/operation-shapes.js";
+import { pointwisePacket, receivingPacket } from "./broadcast-packet.js";
 
 export type { BackendDiagnostics, WasmVariant } from "./cpu-types.js";
 
@@ -15,13 +18,14 @@ interface BackendContext {
   readonly exports: KernelExports;
   readonly allocator: LinearMemoryAllocator;
   readonly variant: WasmVariant;
+  readonly maximumBytes: number;
   poisoned: boolean;
 }
 
 export class WebAssemblyCpuBackend implements ExecutionBackend {
   readonly synchronousObservation = true;
   readonly capabilities: BackendCapabilities = Object.freeze({
-    device: "cpu", computations: Object.freeze(["add-f32", "add-alpha-f32", "mul-f32", "sum-f32", "expand-f32", "matmul-f32"] as const),
+    device: "cpu", computations: Object.freeze(["add-f32", "add-alpha-f32", "mul-f32", "sum-f32", "expand-f32", "matmul-f32", "reduce-f32"] as const),
     gradients: true, maximumTensorBytes: MAXIMUM_ADDRESS,
   });
   readonly #artifactLoader: CpuArtifactLoader;
@@ -143,10 +147,32 @@ export class WebAssemblyCpuBackend implements ExecutionBackend {
         // output storage, including at the final use of an input.
         const output = context.allocator.allocate(length * Float32Array.BYTES_PER_ELEMENT);
         allocations.set(computation.output, output);
+        let parameters: Uint32Array | undefined;
+        if (computation.kind === "reduce-f32") {
+          parameters = receivingPacket(receivingGeometry(pointwiseGeometry([
+            program.values[computation.inputs[0]!]!.shape, value.shape,
+          ]), 1), context.maximumBytes);
+        } else if ((computation.kind === "add-f32" || computation.kind === "mul-f32") && length !== 0
+          && inputs.some(input => input.byteLength !== length * 4)) {
+          parameters = pointwisePacket(operationShapePolicy(computation.kind)!.plan(
+            computation.inputs.map(slot => program.values[slot]!.shape),
+          ), context.maximumBytes);
+        }
+        // Parameter construction/allocation is not a kernel trap. Create views
+        // only after the last allocation that can grow and detach Wasm memory.
+        let packet: CpuAllocation | undefined;
+        if (parameters !== undefined) {
+          packet = context.allocator.allocate(parameters.byteLength);
+          try { new Uint32Array(context.memory.buffer, packet.offset, parameters.length).set(parameters); }
+          catch (error) { context.allocator.release(packet); throw error; }
+        }
         let status: number;
         try {
           if (computation.kind !== "matmul-f32" || length !== 0) this.#kernelCalls += 1;
           switch (computation.kind) {
+            case "reduce-f32":
+              status = context.exports.tabgrad_receive_f32(inputs[0]!.offset, output.offset, packet!.offset, parameters!.length);
+              break;
             case "matmul-f32": {
               const left = program.values[computation.inputs[0]!]!.shape;
               const right = program.values[computation.inputs[1]!]!.shape;
@@ -167,9 +193,9 @@ export class WebAssemblyCpuBackend implements ExecutionBackend {
               status = context.exports.tabgrad_expand_f32(inputs[0]!.offset, output.offset, length);
               break;
             case "add-f32":
-              status = context.exports.tabgrad_add_f32(
+              status = packet === undefined ? context.exports.tabgrad_add_f32(
                 inputs[0]!.offset, inputs[1]!.offset, output.offset, length,
-              );
+              ) : context.exports.tabgrad_broadcast_add_f32(inputs[0]!.offset, inputs[1]!.offset, output.offset, packet.offset, parameters!.length);
               break;
             case "sum-f32":
               status = context.exports.tabgrad_sum_f32(
@@ -178,9 +204,9 @@ export class WebAssemblyCpuBackend implements ExecutionBackend {
               );
               break;
             case "mul-f32":
-              status = context.exports.tabgrad_mul_f32(
+              status = packet === undefined ? context.exports.tabgrad_mul_f32(
                 inputs[0]!.offset, inputs[1]!.offset, output.offset, length,
-              );
+              ) : context.exports.tabgrad_broadcast_mul_f32(inputs[0]!.offset, inputs[1]!.offset, output.offset, packet.offset, parameters!.length);
               break;
           }
         } catch (error) {
@@ -196,7 +222,7 @@ export class WebAssemblyCpuBackend implements ExecutionBackend {
             },
             error,
           );
-        }
+        } finally { if (packet !== undefined) context.allocator.release(packet); }
         if (status !== 0) {
           throw new TabgradError(
             "BACKEND_STATUS_ERROR",
@@ -285,6 +311,7 @@ export class WebAssemblyCpuBackend implements ExecutionBackend {
           this.#generation,
         ),
         variant: artifact.variant,
+        maximumBytes: artifact.maximumPages * 65_536,
         poisoned: false,
       };
       this.#context = context;
