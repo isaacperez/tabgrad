@@ -6,7 +6,7 @@ successfully while producing a result that violates the tensor operation's
 meaning. Tabgrad therefore distinguishes the numerical contract from the kernel
 used to implement it.
 
-This decision defines tensor-only, equal-shape, contiguous `float32` addition on
+This decision defines the numerical meaning of tensor-only contiguous `float32` addition on
 an explicitly selected WebGPU target. It explains what an implementation must
 preserve, why native shader addition alone is not a sufficient portable guarantee,
 and where optimization remains possible. It is an architectural requirement,
@@ -61,8 +61,10 @@ Removing an intermediate allocation does not remove that semantic boundary.
 Scalar tensors have one such element; empty tensors have no elements to add and
 retain the ordinary shape and lifecycle rules.
 
-The domain does not include broadcasting, promotion to another dtype, a scaled
-addition argument, mutation, transfer semantics or GPU differentiation. Other
+The [broadcasting contract](broadcasting.md) defines compatible operand shapes
+and receiving gradients while preserving this per-pair arithmetic. This
+numerical decision does not define promotion to another dtype, a scaled
+addition argument, mutation or transfer semantics. Other
 operation families define their own precise numerical domains. In particular,
 this decision does not prescribe a reduction order for a sum or matrix product,
 require integer emulation for every GPU kernel, or promise universal bitwise

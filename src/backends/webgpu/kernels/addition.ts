@@ -2,7 +2,7 @@
 export const WEBGPU_ADDITION_WORKGROUP_SIZE = 64;
 
 /** Binary32 addition via unsigned arithmetic: no WGSL floating-point relaxation. */
-export const WEBGPU_ADDITION_SOURCE = `
+export const WEBGPU_ADDITION_ARITHMETIC_SOURCE = `
 fn shift_right_jam(value: u32, distance: u32) -> u32 {
   if distance == 0u { return value; }
   if distance >= 32u { return select(0u, 1u, value != 0u); }
@@ -48,6 +48,9 @@ fn add_binary32(left: u32, right: u32) -> u32 {
   return sign | (exponent << 23u) | (rounded & 0x7fffffu);
 }
 
+`;
+
+export const WEBGPU_ADDITION_SOURCE = `${WEBGPU_ADDITION_ARITHMETIC_SOURCE}
 @group(0) @binding(0) var<storage, read> left: array<u32>;
 @group(0) @binding(1) var<storage, read> right: array<u32>;
 @group(0) @binding(2) var<storage, read_write> output: array<u32>;

@@ -1,5 +1,7 @@
 import type { TensorDevice } from "./backend.js";
 import { assertMatrixFlags, matrixGeometry } from "./matrix-geometry.js";
+import { operationShapePolicy } from "./operation-shapes.js";
+import { pointwiseGeometry } from "./broadcast-geometry.js";
 
 export type ProgramSlot = number;
 
@@ -21,7 +23,7 @@ export interface ProgramValue {
 }
 
 export interface LoweredComputation {
-  readonly kind: "add-f32" | "add-alpha-f32" | "mul-f32" | "sum-f32" | "expand-f32" | "matmul-f32";
+  readonly kind: "add-f32" | "add-alpha-f32" | "mul-f32" | "sum-f32" | "expand-f32" | "matmul-f32" | "reduce-f32";
   /** Captured binary32 coefficient; present only for add-alpha-f32. */
   readonly alphaBits?: number;
   /** Required for matmul-f32, absent for all other computations. */
@@ -50,34 +52,34 @@ function copyProgramValue(value: ProgramValue): ProgramValue {
   return Object.freeze(captured);
 }
 
-function matrixValueElements(value: ProgramValue, counts: Map<ProgramSlot, number>): number {
+function valueElements(value: ProgramValue, counts: Map<ProgramSlot, number>): number {
   const known = counts.get(value.slot);
   if (known !== undefined) return known;
   if (value.shape.some(dimension => !Number.isSafeInteger(dimension) || dimension < 0)) {
-    throw new TypeError("Matrix storage requires nonnegative safe dimensions.");
+    throw new TypeError("Program storage requires nonnegative safe dimensions.");
   }
   const count = value.shape.includes(0) ? 0 : value.shape.reduce((size, dimension) => size * dimension, 1);
-  if (!Number.isSafeInteger(count)) throw new TypeError("Matrix storage exceeds safe element arithmetic.");
+  if (!Number.isSafeInteger(count)) throw new TypeError("Program storage exceeds safe element arithmetic.");
   counts.set(value.slot, count);
   return count;
 }
 
-function requireMatrixValue(slot: ProgramSlot, values: readonly ProgramValue[], counts: Map<ProgramSlot, number>): ProgramValue {
+function requireContiguousValue(slot: ProgramSlot, values: readonly ProgramValue[], counts: Map<ProgramSlot, number>): ProgramValue {
   const value = values[slot];
   if (!Number.isSafeInteger(slot) || slot < 0 || value === undefined || value.slot !== slot
     || value.dtype !== "float32" || value.layout !== "contiguous"
     || (value.device !== "cpu" && value.device !== "webgpu")
     || !Number.isSafeInteger(value.storageSlot) || value.storageSlot < 0
     || (value.source !== "binding" && value.source !== "computed" && value.source !== "alias")) {
-    throw new TypeError("Matrix values require valid slots and float32 contiguous metadata.");
+    throw new TypeError("Program values require valid slots and float32 contiguous metadata.");
   }
   const storage = values[value.storageSlot];
   if (storage === undefined || storage.slot !== value.storageSlot || storage.storageSlot !== storage.slot
     || (storage.source !== "binding" && storage.source !== "computed")
     || storage.dtype !== value.dtype || storage.device !== value.device || storage.layout !== value.layout
     || (value.source === "alias" ? value.storageSlot === slot : value.storageSlot !== slot)
-    || matrixValueElements(value, counts) !== matrixValueElements(storage, counts)) {
-    throw new TypeError("Matrix aliases must cover their canonical storage exactly.");
+    || valueElements(value, counts) !== valueElements(storage, counts)) {
+    throw new TypeError("Program aliases must cover their canonical storage exactly.");
   }
   return value;
 }
@@ -85,10 +87,10 @@ function requireMatrixValue(slot: ProgramSlot, values: readonly ProgramValue[], 
 function assertMatrixComputation(values: readonly ProgramValue[], computation: LoweredComputation,
   result: ProgramSlot, counts: Map<ProgramSlot, number>): void {
   if (computation.inputs.length !== 2) throw new TypeError("Matrix multiplication requires two inputs.");
-  const left = requireMatrixValue(computation.inputs[0]!, values, counts);
-  const right = requireMatrixValue(computation.inputs[1]!, values, counts);
-  const output = requireMatrixValue(computation.output, values, counts);
-  const selected = requireMatrixValue(result, values, counts);
+  const left = requireContiguousValue(computation.inputs[0]!, values, counts);
+  const right = requireContiguousValue(computation.inputs[1]!, values, counts);
+  const output = requireContiguousValue(computation.output, values, counts);
+  const selected = requireContiguousValue(result, values, counts);
   const geometry = matrixGeometry(left.shape, right.shape, computation.matrixFlags!);
   if (output.source !== "computed" || output.storageSlot !== output.slot
     || output.storageSlot === left.storageSlot || output.storageSlot === right.storageSlot
@@ -99,8 +101,29 @@ function assertMatrixComputation(values: readonly ProgramValue[], computation: L
   }
 }
 
+function assertShapedComputation(values: readonly ProgramValue[], computation: LoweredComputation,
+  result: ProgramSlot, counts: Map<ProgramSlot, number>): void {
+  const policy = operationShapePolicy(computation.kind);
+  const reduction = computation.kind === "reduce-f32";
+  if (computation.inputs.length !== (reduction ? 1 : 2)) throw new TypeError("Shaped computation has invalid arity.");
+  const inputs = computation.inputs.map(slot => requireContiguousValue(slot, values, counts));
+  const output = requireContiguousValue(computation.output, values, counts);
+  const selected = requireContiguousValue(result, values, counts);
+  const expected = reduction ? inputs[0]!.shape : policy!.plan(inputs.map(value => value.shape)).shape;
+  if (output.source !== "computed" || output.storageSlot !== output.slot
+    || inputs.some(input => input.storageSlot === output.storageSlot || input.device !== output.device)
+    || selected.device !== output.device || output.shape.length !== expected.length
+    || (!reduction && output.shape.some((dimension, axis) => dimension !== expected[axis]))) {
+    throw new TypeError("Shaped output must own distinct storage with its captured shape and device.");
+  }
+  if (reduction) {
+    const geometry = pointwiseGeometry([expected, output.shape]);
+    if (geometry.shape.some((dimension, axis) => dimension !== expected[axis])) throw new TypeError("Receiving shape cannot expand its source.");
+  }
+}
+
 export class ExecutableProgram {
-  readonly formatVersion = 7;
+  readonly formatVersion = 8;
   readonly domain: "webassembly-cpu" | "webgpu";
   readonly values: readonly ProgramValue[];
   readonly computations: readonly LoweredComputation[];
@@ -119,7 +142,7 @@ export class ExecutableProgram {
     this.domain = this.values[result]?.device === "webgpu" ? "webgpu" : "webassembly-cpu";
     const inputUseCounts = new Array<number>(this.values.length).fill(0);
     const storageUseCounts = new Array<number>(this.values.length).fill(0);
-    let matrixCounts: Map<ProgramSlot, number> | undefined;
+    let elementCounts: Map<ProgramSlot, number> | undefined;
     this.computations = Object.freeze(
       computations.map((computation) => {
         const captured = { ...computation };
@@ -128,8 +151,11 @@ export class ExecutableProgram {
         captured.inputs = Object.freeze([...captured.inputs]);
         captured.provenance = Object.freeze({ ...captured.provenance });
         if (captured.kind === "matmul-f32") {
-          matrixCounts ??= new Map();
-          assertMatrixComputation(this.values, captured, result, matrixCounts);
+          elementCounts ??= new Map();
+          assertMatrixComputation(this.values, captured, result, elementCounts);
+        } else if (operationShapePolicy(captured.kind) !== undefined || captured.kind === "reduce-f32") {
+          elementCounts ??= new Map();
+          assertShapedComputation(this.values, captured, result, elementCounts);
         }
         for (const input of captured.inputs) {
           inputUseCounts[input]! += 1;

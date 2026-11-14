@@ -149,6 +149,11 @@ occurrences; public diagnostics retain their established shape. Logical counters
 establish no timing or total process-memory guarantee.
 
 Basic [SGD](sgd.md) consumes these gradients on CPU or enabled WebGPU.
+For pointwise addition and multiplication, [broadcast receiving](../architecture/broadcasting.md)
+restores each contribution to its captured input shape before the existing
+accumulator sees it. Persistent slot identity, repeated targets, version
+checks and already committed progress retain the rules above; broadcasting
+does not permit mismatched seeds or gradient assignments.
 Broader optimizers and modes, public retention hooks, higher-order graphs, JVP,
-broader dtypes/layouts, cross-device transfers and general broadcasting
+broader dtypes/layouts, cross-device transfers and broadcasting for other families
 remain outside this boundary.

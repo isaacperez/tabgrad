@@ -57,6 +57,15 @@ external dimensions once; formation and the backend consume admitted metadata.
 The [shape concept](../concepts/tensor-shape.md) explains why equal payload sizes
 do not imply interchangeable shapes.
 
+The executable format is version 8. Reconstructing pointwise addition or
+multiplication applies the same registered family shape policy as admission,
+checks the complete inferred output shape, and retains distinct output storage.
+Internal `reduce-f32` computations express a same-rank keep-dimension receiving
+result; they do not expose a public axis-reduction API. Logical shapes determine
+the relation, while backend preparation derives private coalesced packets.
+No physical strides, tensor payload or arbitrary frontend callback enter the
+serialized program. Views restore a reduced result's original rank separately.
+
 `ExecutableProgram` also derives frozen `inputUseCounts` from its selected
 computations. Each input position contributes one use, including repeated
 positions referring to the same slot. The runtime and backend share these

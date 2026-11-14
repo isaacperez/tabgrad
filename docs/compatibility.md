@@ -77,7 +77,7 @@ identify the implementation, environment and conformance evidence it claims.
 Tabgrad can establish its own browser integration behavior without claiming
 that the behavior implements a PyTorch interface. The direct contract in the
 [JavaScript tensor API](javascript-api.md)—session and tensor creation,
-equal-shape contiguous CPU `float32` addition and multiplication, total sum, functional gradients,
+broadcast-compatible contiguous CPU `float32` addition and multiplication, total sum, functional gradients,
 asynchronous observation, diagnostics,
 and explicit close—is such an interface. Its tests establish Tabgrad's
 JavaScript and WebAssembly behavior only. The names are not `torch` names, and
@@ -129,14 +129,14 @@ GPU support to dimensional reductions, gradients or untested environments,
 and does not itself establish a release's support status.
 
 The [multiplication reference](reference/tensor-multiplication.md) defines the
-tensor-only equal-shape product. Native `mulCases` and `mulOperations` record
+tensor-only broadcast-compatible product. Native `mulCases` and `mulOperations` record
 operand/result float32 bits, metadata and positional/keyword forms. Exact bit
 comparison excludes NaN payload identity; signed zero, subnormal/underflow,
 overflow, non-finite products and separate multiply-add rounding have dedicated
 cases. Raw scalar/SIMD and real Pyodide tests consume this evidence. Direct
 runtime and Chrome/Firefox tests exercise composition, aliases, cleanup and
 ordinary Python observation, including both CPU variants in interpreter workers
-with JSPI disabled. Broadcasting, host-number operands, mutation, promotion and
+with JSPI disabled. Host-number operands, mutation, promotion and
 higher-order gradients remain explicit subset exclusions rather than claimed PyTorch errors.
 Physical GPU product qualification additionally compares an independent exact
 BigInt oracle across independently varied input exponents and repeated
@@ -573,6 +573,34 @@ cycles retire transient history, captures, controls and counted buffers.
 Results are separate from physical drain and from private device memory.
 These bounded observations do not qualify every GPU/compiler, private VRAM/RSS,
 isolated kernel timing, broader optimizers or full model training.
+
+## Pointwise broadcasting evidence
+
+[Broadcasting and receiving gradients](architecture/broadcasting.md) defines
+out-of-place tensor addition and multiplication on CPU and explicit WebGPU.
+Native `broadcastCases` preserve source, complete output/input-gradient shapes,
+tracking, stored words and Python incoming-object identity for 46 controls
+(5,468 stored words per backend run). They vary scalars, unequal ranks,
+singleton placement, separated reused axes, empty dimensions, negative-zero
+seeds and inner tails independently. `broadcastCompositions` additionally records
+matrix-plus-bias training, repeated targets, captured seed/operand mutation and
+bias progress before a later saved-version failure.
+
+Exactly representable controls use exact words; they do not imply universal
+native or cross-device equality. The accepted numerical contract retains
+the contrary cancellation and overflow results of each backend's sum. CPU
+raw controls compare projected receiving subsequences with the existing dense
+sum, including the 128-term split. Physical GPU controls cover staged groups
+and a `[2, 65536]` to `[65536]` receiver across dispatch windows.
+
+Malformed program/raw packets and independent extents, capacity before capture,
+failure rollback and owned temporary retirement have separate controls.
+Synthetic ternary/channel tests exercise common geometry, real CPU traversal
+and the receiving adapter without exposing another public operation. They do
+not qualify arbitrary family bindings or general batched matrices. Structural
+counts establish the stated traversal and ownership boundaries, not latency,
+RSS or physical VRAM. The research timings remain bounded resident prototype
+comparisons; they are not production Python or full-model guarantees.
 
 ## Two-dimensional matrix-product evidence
 

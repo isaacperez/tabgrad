@@ -41,7 +41,7 @@ Use [Total tensor sum](tensor-sum.md) for reduction signatures, scalar results,
 floating-point accumulation, empty inputs, numerical comparison and CPU limits.
 
 Use [Elementwise tensor multiplication](tensor-multiplication.md) for tensor
-product signatures, equal-shape inputs, numerical behavior and CPU limits.
+product signatures, broadcast-compatible inputs, numerical behavior and device limits.
 
 Use [Two-dimensional matrix products](tensor-matmul.md) for contraction geometry,
 sequential FMA, CPU/GPU calls, both first-order derivatives and exclusions.

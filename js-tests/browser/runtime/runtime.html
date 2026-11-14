@@ -11,6 +11,7 @@
       import { checkSGDCase, isDirectSGDCase } from "/helpers/sgd-cases.mjs";
       import { checkSGDHostGuards, checkSGDFaults, checkSGDFixedOwners } from "/helpers/sgd-lifetime.mjs";
       import { checkBackwardLifetime, checkBackwardFaults, checkBackwardCleanup } from "/helpers/backward-lifetime.mjs";
+      import { checkBroadcastCases } from "/helpers/broadcast-cases.mjs";
       import { checkMatrixCases, checkMatrixTraining, checkMatrixPending } from "/helpers/matrix-cases.mjs";
       import { completeRuntimeSession } from "/runtime/runtime.js";
       const parameters = new URLSearchParams(location.search);
@@ -277,6 +278,7 @@
           await checkGradientProgress(session, fixture);
         }
         const backwardOracle = await (await fetch('/helpers/python-copy-oracle.json')).json();
+        if ((await checkBroadcastCases(session, backwardOracle.broadcastCases, "cpu", backwardOracle.broadcastCompositions)).cases !== 46) throw new Error('Native broadcast corpus');
         for (const fixture of backwardOracle.backwardCases.filter(isDirectBackwardCase)) {
           await checkBackwardCase(session, fixture, getTestTensorVersion);
         }

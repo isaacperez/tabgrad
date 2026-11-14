@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const copyAssets = ["helpers/python-readme-case.mjs", "helpers/readme-example.py", "helpers/functional-gradient-cases.mjs", "helpers/python-copy-cases.mjs", "helpers/python-copy-oracle.json", "helpers/gradient-progress-cases.mjs", "helpers/backward-cases.mjs", "helpers/python-tensor-device.mjs", "helpers/backward-lifetime.mjs", "helpers/sgd-cases.mjs", "helpers/sgd-lifetime.mjs", "helpers/python-matrix-cases.mjs", "helpers/python-view-cases.mjs", "helpers/matrix-cases.mjs", "helpers/float32-matrix-oracle.mjs", "helpers/float32-coefficient-oracle.mjs"];
+const copyAssets = ["helpers/python-readme-case.mjs", "helpers/readme-example.py", "helpers/functional-gradient-cases.mjs", "helpers/python-copy-cases.mjs", "helpers/python-copy-oracle.json", "helpers/gradient-progress-cases.mjs", "helpers/backward-cases.mjs", "helpers/python-tensor-device.mjs", "helpers/backward-lifetime.mjs", "helpers/sgd-cases.mjs", "helpers/sgd-lifetime.mjs", "helpers/python-matrix-cases.mjs", "helpers/broadcast-cases.mjs", "helpers/python-view-cases.mjs", "helpers/matrix-cases.mjs", "helpers/float32-matrix-oracle.mjs", "helpers/float32-coefficient-oracle.mjs"];
 async function readReadmePythonExample() {
   const readme = await readFile(new URL("../README.md", import.meta.url), "utf8");
   const source = readme.match(/## Python experience\n[\s\S]*?```python\n([\s\S]*?)\n```/)?.[1];

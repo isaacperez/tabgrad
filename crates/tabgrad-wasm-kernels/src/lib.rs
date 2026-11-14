@@ -9,6 +9,8 @@ mod expansion;
 mod fused_multiply_add;
 mod matrix_product;
 mod multiplication;
+mod pointwise;
+mod receiving;
 mod reduction;
 
 #[panic_handler]

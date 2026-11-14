@@ -23,7 +23,11 @@ pub extern "C" fn tabgrad_sum_f32(input_offset: u32, output_offset: u32, length:
     // SAFETY: the input range and distinct scalar output are aligned and valid.
     // A zero-length input is never dereferenced, including one at memory's end.
     unsafe {
-        (output_offset as *mut f32).write(sum_f32(input_offset as *const f32, length as usize));
+        (output_offset as *mut f32).write(sum_f32(
+            &ContiguousSource(input_offset as *const f32),
+            0,
+            length as usize,
+        ));
     }
     STATUS_OK
 }
@@ -33,54 +37,84 @@ pub extern "C" fn tabgrad_sum_f32(input_offset: u32, output_offset: u32, length:
 // 26 subdivision frames for a u32 length, and no temporary tensor allocation.
 const SUM_LEAF_ELEMENTS: usize = 128;
 
-unsafe fn sum_f32(input: *const f32, length: usize) -> f32 {
+/// The sum owns association; an access source owns validated address projection.
+pub(crate) trait SumSource {
+    unsafe fn load(&self, index: usize) -> f32;
+    #[cfg(target_feature = "simd128")]
+    unsafe fn load4(&self, index: usize) -> core::arch::wasm32::v128 {
+        // SAFETY: the caller guarantees four valid logical source positions.
+        unsafe {
+            core::arch::wasm32::f32x4(
+                self.load(index),
+                self.load(index + 1),
+                self.load(index + 2),
+                self.load(index + 3),
+            )
+        }
+    }
+}
+
+pub(crate) struct ContiguousSource(pub(crate) *const f32);
+impl SumSource for ContiguousSource {
+    unsafe fn load(&self, index: usize) -> f32 {
+        unsafe { self.0.add(index).read() }
+    }
+    #[cfg(target_feature = "simd128")]
+    unsafe fn load4(&self, index: usize) -> core::arch::wasm32::v128 {
+        unsafe { core::arch::wasm32::v128_load(self.0.add(index).cast()) }
+    }
+}
+
+pub(crate) unsafe fn sum_f32<S: SumSource>(source: &S, start: usize, length: usize) -> f32 {
     if length > SUM_LEAF_ELEMENTS {
         let middle = (length / 2) & !3;
         // SAFETY: both subranges partition the caller's validated input range.
-        return unsafe { sum_f32(input, middle) + sum_f32(input.add(middle), length - middle) };
+        return unsafe {
+            sum_f32(source, start, middle) + sum_f32(source, start + middle, length - middle)
+        };
     }
     // SAFETY: the caller established a valid input range.
-    unsafe { sum_leaf_f32(input, length) }
+    unsafe { sum_leaf_f32(source, start, length) }
 }
 
 #[cfg(not(target_feature = "simd128"))]
-unsafe fn sum_leaf_f32(input: *const f32, length: usize) -> f32 {
+unsafe fn sum_leaf_f32<S: SumSource>(source: &S, start: usize, length: usize) -> f32 {
     let mut lanes = [0.0_f32; 4];
     let vector_end = length - length % 4;
     let mut index = 0;
     while index < vector_end {
         for (lane, accumulator) in lanes.iter_mut().enumerate() {
             // SAFETY: the caller established a valid range and index + lane < length.
-            *accumulator += unsafe { input.add(index + lane).read() };
+            *accumulator += unsafe { source.load(start + index + lane) };
         }
         index += 4;
     }
     let mut result = (lanes[0] + lanes[1]) + (lanes[2] + lanes[3]);
     while index < length {
         // SAFETY: index remains inside the caller's validated range.
-        result += unsafe { input.add(index).read() };
+        result += unsafe { source.load(start + index) };
         index += 1;
     }
     result
 }
 
 #[cfg(target_feature = "simd128")]
-unsafe fn sum_leaf_f32(input: *const f32, length: usize) -> f32 {
-    use core::arch::wasm32::{f32x4_add, f32x4_extract_lane, f32x4_splat, v128, v128_load};
+unsafe fn sum_leaf_f32<S: SumSource>(source: &S, start: usize, length: usize) -> f32 {
+    use core::arch::wasm32::{f32x4_add, f32x4_extract_lane, f32x4_splat};
 
     let mut lanes = f32x4_splat(0.0);
     let vector_end = length - length % 4;
     let mut index = 0;
     while index < vector_end {
         // SAFETY: four complete elements remain; v128_load permits unaligned vectors.
-        lanes = f32x4_add(lanes, unsafe { v128_load(input.add(index).cast::<v128>()) });
+        lanes = f32x4_add(lanes, unsafe { source.load4(start + index) });
         index += 4;
     }
     let mut result = (f32x4_extract_lane::<0>(lanes) + f32x4_extract_lane::<1>(lanes))
         + (f32x4_extract_lane::<2>(lanes) + f32x4_extract_lane::<3>(lanes));
     while index < length {
         // SAFETY: index remains inside the caller's validated range.
-        result += unsafe { input.add(index).read() };
+        result += unsafe { source.load(start + index) };
         index += 1;
     }
     result

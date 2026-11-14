@@ -29,7 +29,7 @@ Total reduction has its own [sum reference](tensor-sum.md), covering
 `Tensor.sum()` and `torch.sum(input)`, scalar results and numerical limits.
 Elementwise products use `*`, `Tensor.mul(other)` or `torch.mul(input, other)`;
 the [multiplication reference](tensor-multiplication.md) owns their signatures,
-equal-shape domain and numerical limits.
+broadcast-compatible domain and numerical limits.
 The [functional gradient reference](functional-gradients.md) defines
 `torch.autograd.grad`, tracked creation and first-order result ownership.
 
@@ -105,11 +105,15 @@ operator = left + right
 ```
 
 `torch.add(input, other, *, alpha=1, out=None)` and
-`Tensor.add(other, *, alpha=1)` require two equal-shape float32 tensors on the
+`Tensor.add(other, *, alpha=1)` require two broadcast-compatible float32 tensors on the
 same supported device. GPU admission also requires an attached, ready backend.
-There is no broadcasting, Python-number operand, promotion or in-place result.
-Two scalar tensors can be added; a scalar tensor and a one-element vector
-cannot. Every dimension must match, even for tensors with zero elements.
+Align dimensions from the right: each pair must be equal or include a
+singleton; missing leading axes act as singletons. Thus `[2, 1]` plus `[3]`
+produces `[2, 3]`, and a scalar tensor can pair with a vector or matrix.
+Zero with one produces zero; all other axes must still be compatible.
+There is no Python-number operand, promotion or in-place result. The inferred
+output has its own device-capacity check. [Broadcasting](../architecture/broadcasting.md)
+also defines how gradients reduce to the complete original input shape.
 The numeric `alpha` value must equal one and cannot be a boolean. Only the
 functional spelling accepts `out`, and only its `None` value is accepted.
 
@@ -120,7 +124,7 @@ wrappers become ordinary expression temporaries.
 
 Tensor `+` returns `NotImplemented` for an unrecognized right-hand operand so
 Python can try that operand's reflected method. This is dispatch behavior, not
-support for scalar broadcasting. An unresolved operator raises Python's normal
+support for host-number operands. An unresolved operator raises Python's normal
 `TypeError`.
 
 ## Observe numerical values

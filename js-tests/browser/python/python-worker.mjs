@@ -5,6 +5,7 @@ import { pythonSumGradientAliasChecks, pythonGradientProvenanceChecks, pythonFun
 import { pythonBackwardChecks } from "/helpers/backward-cases.mjs";
 import { pythonSGDChecks } from "/helpers/sgd-cases.mjs";
 import { pythonReadmeCheck } from "/helpers/python-readme-case.mjs";
+import { pythonBroadcastChecks } from "/helpers/broadcast-cases.mjs";
 import { pythonMatrixChecks, pythonMatrixNumericalChecks } from "/helpers/python-matrix-cases.mjs";
 import { pythonViewMetadataChecks, pythonViewBoundaryChecks } from "/helpers/python-view-cases.mjs";
 import { getTestTensorVersion, getTestRuntimeOwnership, getTestRuntimeSemanticOwnership } from "/testing.js";
@@ -83,6 +84,7 @@ else:
       await replacement.runPythonAsync(pythonViewBoundaryChecks());
       await replacement.runPythonAsync(pythonMatrixChecks(backwardOracle));
       await replacement.runPythonAsync(pythonMatrixNumericalChecks());
+      await replacement.runPythonAsync(pythonBroadcastChecks(backwardOracle.broadcastCases, "cpu", backwardOracle.broadcastCompositions));
       const readmeResponse = await fetch("/helpers/readme-example.py");
       if (!readmeResponse.ok) throw new Error("README Python example is unavailable");
       await replacement.runPythonAsync(pythonReadmeCheck(await readmeResponse.text()));

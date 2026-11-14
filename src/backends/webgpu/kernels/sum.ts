@@ -9,14 +9,8 @@ export const WEBGPU_SUM_WORKGROUP_BYTES = WEBGPU_SUM_PARTIAL_BYTES * WEBGPU_SUM_
  * input count needs <309, so ten two's-complement words cannot overflow.
  * Flags describe explicit input specials, independently of finite overflow.
  */
-export const WEBGPU_SUM_SOURCE = `
+export const WEBGPU_EXACT_SUM_ARITHMETIC_SOURCE = `
 struct Accumulator { words: array<u32, 10>, flags: u32 }
-struct Parameters { count: u32, final_stage: u32, partial_input: u32, padding: u32 }
-@group(0) @binding(0) var<storage, read> input: array<u32>;
-@group(0) @binding(1) var<storage, read_write> output: array<u32>;
-@group(0) @binding(2) var<uniform> parameters: Parameters;
-var<workgroup> partials: array<Accumulator, ${WEBGPU_SUM_WORKGROUP_SIZE}>;
-
 fn negate(value: Accumulator) -> Accumulator {
   var result = value;
   var carry = 1u;
@@ -59,15 +53,6 @@ fn decode(bits: u32) -> Accumulator {
   return result;
 }
 
-fn load_partial(index: u32) -> Accumulator {
-  var result: Accumulator;
-  if index >= parameters.count { return result; }
-  if parameters.partial_input == 0u { return decode(input[index]); }
-  for (var word = 0u; word < 10u; word++) { result.words[word] = input[index * 11u + word]; }
-  result.flags = input[index * 11u + 10u];
-  return result;
-}
-
 fn rounded(value: Accumulator) -> u32 {
   if (value.flags & 1u) != 0u || (value.flags & 6u) == 6u { return 0x7fc00000u; }
   if (value.flags & 2u) != 0u { return 0x7f800000u; }
@@ -104,6 +89,24 @@ fn rounded(value: Accumulator) -> u32 {
   let exponent = high - 22u;
   if exponent >= 255u { return sign | 0x7f800000u; }
   return sign | (exponent << 23u) | (top & 0x7fffffu);
+}
+
+`;
+
+export const WEBGPU_SUM_SOURCE = `${WEBGPU_EXACT_SUM_ARITHMETIC_SOURCE}
+struct Parameters { count: u32, final_stage: u32, partial_input: u32, padding: u32 }
+@group(0) @binding(0) var<storage, read> input: array<u32>;
+@group(0) @binding(1) var<storage, read_write> output: array<u32>;
+@group(0) @binding(2) var<uniform> parameters: Parameters;
+var<workgroup> partials: array<Accumulator, ${WEBGPU_SUM_WORKGROUP_SIZE}>;
+
+fn load_partial(index: u32) -> Accumulator {
+  var result: Accumulator;
+  if index >= parameters.count { return result; }
+  if parameters.partial_input == 0u { return decode(input[index]); }
+  for (var word = 0u; word < 10u; word++) { result.words[word] = input[index * 11u + word]; }
+  result.flags = input[index * 11u + 10u];
+  return result;
 }
 
 @compute @workgroup_size(${WEBGPU_SUM_WORKGROUP_SIZE})
