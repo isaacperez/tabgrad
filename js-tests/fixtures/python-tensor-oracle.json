@@ -58498,6 +58498,139 @@
           5.0
         ]
       }
+    },
+    {
+      "name": "view:0",
+      "source": "\nx = torch.tensor([1.0, 1.0], dtype=torch.float32).view([1, 2])\nb = torch.tensor([0.0, 0.0], dtype=torch.float32, requires_grad=True).view([2])\nseed = torch.tensor([1.0, 1.0], dtype=torch.float32).view([1, 2])\nout = x + b\ngradient, = torch.autograd.grad(out, (b,), grad_outputs=seed)\nbefore = gradient.view(-1).tolist()\ntracked = torch.tensor([7.0, 7.0], dtype=torch.float32, requires_grad=True).view([2])\ntry:\n    gradient.copy_(tracked)\nexcept RuntimeError:\n    rejected = True\nelse:\n    rejected = False\nreport = {'before': before, 'rejected': rejected, 'after': gradient.view(-1).tolist(), 'tracking': gradient.requires_grad}\n",
+      "expected": {
+        "before": [
+          1.0,
+          1.0
+        ],
+        "rejected": true,
+        "after": [
+          1.0,
+          1.0
+        ],
+        "tracking": false
+      },
+      "inputShape": [
+        1,
+        2
+      ],
+      "receiverShape": [
+        2
+      ]
+    },
+    {
+      "name": "view:1",
+      "source": "\nx = torch.tensor([1.0, 1.0, 1.0, 1.0], dtype=torch.float32).view([2, 2])\nb = torch.tensor([0.0, 0.0], dtype=torch.float32, requires_grad=True).view([2])\nseed = torch.tensor([1.0, 1.0, 1.0, 1.0], dtype=torch.float32).view([2, 2])\nout = x + b\ngradient, = torch.autograd.grad(out, (b,), grad_outputs=seed)\nbefore = gradient.view(-1).tolist()\ntracked = torch.tensor([7.0, 7.0], dtype=torch.float32, requires_grad=True).view([2])\ntry:\n    gradient.copy_(tracked)\nexcept RuntimeError:\n    rejected = True\nelse:\n    rejected = False\nreport = {'before': before, 'rejected': rejected, 'after': gradient.view(-1).tolist(), 'tracking': gradient.requires_grad}\n",
+      "expected": {
+        "before": [
+          2.0,
+          2.0
+        ],
+        "rejected": true,
+        "after": [
+          2.0,
+          2.0
+        ],
+        "tracking": false
+      },
+      "inputShape": [
+        2,
+        2
+      ],
+      "receiverShape": [
+        2
+      ]
+    },
+    {
+      "name": "view:2",
+      "source": "\nx = torch.tensor([1.0, 1.0, 1.0, 1.0], dtype=torch.float32).view([2, 2])\nb = torch.tensor([0.0, 0.0], dtype=torch.float32, requires_grad=True).view([1, 2])\nseed = torch.tensor([1.0, 1.0, 1.0, 1.0], dtype=torch.float32).view([2, 2])\nout = x + b\ngradient, = torch.autograd.grad(out, (b,), grad_outputs=seed)\nbefore = gradient.view(-1).tolist()\ntracked = torch.tensor([7.0, 7.0], dtype=torch.float32, requires_grad=True).view([1, 2])\ntry:\n    gradient.copy_(tracked)\nexcept RuntimeError:\n    rejected = True\nelse:\n    rejected = False\nreport = {'before': before, 'rejected': rejected, 'after': gradient.view(-1).tolist(), 'tracking': gradient.requires_grad}\n",
+      "expected": {
+        "before": [
+          2.0,
+          2.0
+        ],
+        "rejected": false,
+        "after": [
+          7.0,
+          7.0
+        ],
+        "tracking": true
+      },
+      "inputShape": [
+        2,
+        2
+      ],
+      "receiverShape": [
+        1,
+        2
+      ]
+    },
+    {
+      "name": "view:3",
+      "source": "\nx = torch.tensor([1.0], dtype=torch.float32).view([1, 1])\nb = torch.tensor([0.0], dtype=torch.float32, requires_grad=True).view([])\nseed = torch.tensor([1.0], dtype=torch.float32).view([1, 1])\nout = x + b\ngradient, = torch.autograd.grad(out, (b,), grad_outputs=seed)\nbefore = gradient.view(-1).tolist()\ntracked = torch.tensor([7.0], dtype=torch.float32, requires_grad=True).view([])\ntry:\n    gradient.copy_(tracked)\nexcept RuntimeError:\n    rejected = True\nelse:\n    rejected = False\nreport = {'before': before, 'rejected': rejected, 'after': gradient.view(-1).tolist(), 'tracking': gradient.requires_grad}\n",
+      "expected": {
+        "before": [
+          1.0
+        ],
+        "rejected": false,
+        "after": [
+          7.0
+        ],
+        "tracking": true
+      },
+      "inputShape": [
+        1,
+        1
+      ],
+      "receiverShape": []
+    },
+    {
+      "name": "view:4",
+      "source": "\nx = torch.tensor([1.0], dtype=torch.float32).view([1, 1])\nb = torch.tensor([0.0], dtype=torch.float32, requires_grad=True).view([1])\nseed = torch.tensor([1.0], dtype=torch.float32).view([1, 1])\nout = x + b\ngradient, = torch.autograd.grad(out, (b,), grad_outputs=seed)\nbefore = gradient.view(-1).tolist()\ntracked = torch.tensor([7.0], dtype=torch.float32, requires_grad=True).view([1])\ntry:\n    gradient.copy_(tracked)\nexcept RuntimeError:\n    rejected = True\nelse:\n    rejected = False\nreport = {'before': before, 'rejected': rejected, 'after': gradient.view(-1).tolist(), 'tracking': gradient.requires_grad}\n",
+      "expected": {
+        "before": [
+          1.0
+        ],
+        "rejected": true,
+        "after": [
+          1.0
+        ],
+        "tracking": false
+      },
+      "inputShape": [
+        1,
+        1
+      ],
+      "receiverShape": [
+        1
+      ]
+    },
+    {
+      "name": "view:5",
+      "source": "\nx = torch.tensor([], dtype=torch.float32).view([0, 2])\nb = torch.tensor([0.0, 0.0], dtype=torch.float32, requires_grad=True).view([2])\nseed = torch.tensor([], dtype=torch.float32).view([0, 2])\nout = x + b\ngradient, = torch.autograd.grad(out, (b,), grad_outputs=seed)\nbefore = gradient.view(-1).tolist()\ntracked = torch.tensor([7.0, 7.0], dtype=torch.float32, requires_grad=True).view([2])\ntry:\n    gradient.copy_(tracked)\nexcept RuntimeError:\n    rejected = True\nelse:\n    rejected = False\nreport = {'before': before, 'rejected': rejected, 'after': gradient.view(-1).tolist(), 'tracking': gradient.requires_grad}\n",
+      "expected": {
+        "before": [
+          0.0,
+          0.0
+        ],
+        "rejected": true,
+        "after": [
+          0.0,
+          0.0
+        ],
+        "tracking": false
+      },
+      "inputShape": [
+        0,
+        2
+      ],
+      "receiverShape": [
+        2
+      ]
     }
   ],
   "copyCases": [

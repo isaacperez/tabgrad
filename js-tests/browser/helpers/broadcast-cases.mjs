@@ -95,6 +95,17 @@ async function checkComposition(session, fixture, device) {
       let failed = false;
       try { out.backward(); } catch (error) { check(error.code === "SAVED_VERSION_MISMATCH", "wrong saved-version failure"); failed = true; }
       report = { failed, x: x.grad === null, bias: await array(keep(b.grad)) };
+    } else if (fixture.name.startsWith("view:")) {
+      const shape = fixture.inputShape, target = fixture.receiverShape;
+      const size = dimensions => dimensions.reduce((count, dimension) => count * dimension, 1);
+      const x = tensor(new Float32Array(size(shape)).fill(1), shape), b = tensor(new Float32Array(size(target)), target, true);
+      const seed = tensor(new Float32Array(size(shape)).fill(1), shape), out = keep(x.add(b));
+      const [gradient] = session.grad(out, [b], seed); keep(gradient);
+      const before = await array(gradient), tracked = tensor(new Float32Array(size(target)).fill(7), target, true);
+      let rejected = false;
+      try { gradient.copy_(tracked); }
+      catch (error) { check(error.code === "INPLACE_VIEW", "wrong receiving view error"); rejected = true; }
+      report = { before, rejected, after: await array(gradient), tracking: gradient.requiresGrad };
     } else {
       const x = tensor([2, 3], [2, 1], true), b = tensor([4, 5, 6], [1, 3], true), out = keep(x.mul(b));
       const seed = tensor([1, 1, 1, 1, 1, 1], [2, 3]);

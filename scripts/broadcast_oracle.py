@@ -99,9 +99,44 @@ with torch.no_grad():
     b.copy_(torch.tensor([[9., 9., 9.]], dtype=torch.float32))
 report = {'output': out.view(-1).tolist(), 'x': gx.view(-1).tolist(), 'bias': gb.view(-1).tolist(), 'repeat': repeated.view(-1).tolist()}
 """
+    view_shapes = {
+        f"view:{index}": (shape, target)
+        for index, (shape, target) in enumerate(
+            [
+                ([1, 2], [2]),
+                ([2, 2], [2]),
+                ([2, 2], [1, 2]),
+                ([1, 1], []),
+                ([1, 1], [1]),
+                ([0, 2], [2]),
+            ]
+        )
+    }
+    for name, (shape, target) in view_shapes.items():
+        sources[name] = f"""
+x = torch.tensor({[1.0] * prod(shape)!r}, dtype=torch.float32).view({shape!r})
+b = torch.tensor({[0.0] * prod(target)!r}, dtype=torch.float32, requires_grad=True).view({target!r})
+seed = torch.tensor({[1.0] * prod(shape)!r}, dtype=torch.float32).view({shape!r})
+out = x + b
+gradient, = torch.autograd.grad(out, (b,), grad_outputs=seed)
+before = gradient.view(-1).tolist()
+tracked = torch.tensor({[7.0] * prod(target)!r}, dtype=torch.float32, requires_grad=True).view({target!r})
+try:
+    gradient.copy_(tracked)
+except RuntimeError:
+    rejected = True
+else:
+    rejected = False
+report = {{'before': before, 'rejected': rejected, 'after': gradient.view(-1).tolist(), 'tracking': gradient.requires_grad}}
+"""
     cases: list[dict[str, object]] = []
     for name, source in sources.items():
         namespace: dict[str, object] = {"torch": oracle}
         exec(source, namespace)
-        cases.append({"name": name, "source": source, "expected": namespace["report"]})
+        case = {"name": name, "source": source, "expected": namespace["report"]}
+        if name in view_shapes:
+            case.update(
+                inputShape=view_shapes[name][0], receiverShape=view_shapes[name][1]
+            )
+        cases.append(case)
     return cases

@@ -584,7 +584,10 @@ tracking, stored words and Python incoming-object identity for 46 controls
 singleton placement, separated reused axes, empty dimensions, negative-zero
 seeds and inner tails independently. `broadcastCompositions` additionally records
 matrix-plus-bias training, repeated targets, captured seed/operand mutation and
-bias progress before a later saved-version failure.
+bias progress before a later saved-version failure. Six receiving-provenance
+controls compare tracked-source copy guards: leading-axis removal yields a
+no-grad view, while aligned keep-dimension and scalar results remain plain.
+They observe public behavior without adding a Python base-inspection API.
 
 Exactly representable controls use exact words; they do not imply universal
 native or cross-device equality. The accepted numerical contract retains
