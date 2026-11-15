@@ -1,6 +1,6 @@
 import type { TensorDevice } from "./backend.js";
 import { assertMatrixFlags, matrixGeometry } from "./matrix-geometry.js";
-import { operationShapePolicy } from "./operation-shapes.js";
+import { operationShapeContract, assertOperationArity } from "./operation-shapes.js";
 import { pointwiseGeometry } from "./broadcast-geometry.js";
 
 export type ProgramSlot = number;
@@ -103,13 +103,15 @@ function assertMatrixComputation(values: readonly ProgramValue[], computation: L
 
 function assertShapedComputation(values: readonly ProgramValue[], computation: LoweredComputation,
   result: ProgramSlot, counts: Map<ProgramSlot, number>): void {
-  const policy = operationShapePolicy(computation.kind);
+  const contract = operationShapeContract(computation.kind);
   const reduction = computation.kind === "reduce-f32";
-  if (computation.inputs.length !== (reduction ? 1 : 2)) throw new TypeError("Shaped computation has invalid arity.");
+  if (reduction) {
+    if (computation.inputs.length !== 1) throw new TypeError("Shaped computation has invalid arity.");
+  } else assertOperationArity(contract!, computation.inputs.length);
   const inputs = computation.inputs.map(slot => requireContiguousValue(slot, values, counts));
   const output = requireContiguousValue(computation.output, values, counts);
   const selected = requireContiguousValue(result, values, counts);
-  const expected = reduction ? inputs[0]!.shape : policy!.plan(inputs.map(value => value.shape)).shape;
+  const expected = reduction ? inputs[0]!.shape : contract!.policy.plan(inputs.map(value => value.shape)).shape;
   if (output.source !== "computed" || output.storageSlot !== output.slot
     || inputs.some(input => input.storageSlot === output.storageSlot || input.device !== output.device)
     || selected.device !== output.device || output.shape.length !== expected.length
@@ -153,7 +155,7 @@ export class ExecutableProgram {
         if (captured.kind === "matmul-f32") {
           elementCounts ??= new Map();
           assertMatrixComputation(this.values, captured, result, elementCounts);
-        } else if (operationShapePolicy(captured.kind) !== undefined || captured.kind === "reduce-f32") {
+        } else if (operationShapeContract(captured.kind) !== undefined || captured.kind === "reduce-f32") {
           elementCounts ??= new Map();
           assertShapedComputation(this.values, captured, result, elementCounts);
         }

@@ -23,7 +23,7 @@ import { DerivativeHistory, type DerivativeNode, type DerivativePlan, type Deriv
 import { COPY_DERIVATIVE, COPY_SLICES_DERIVATIVE, REBASED_VIEW_DERIVATIVE, IDENTITY_DERIVATIVE, POINTWISE_PASS_DERIVATIVE, MUL_DERIVATIVE, MATMUL_DERIVATIVE, SUM_DERIVATIVE } from "./autograd/derivative-recipes.js";
 import { matrixGeometry } from "../execution/matrix-geometry.js";
 import { BroadcastCapacityError, type BroadcastGeometry, type ReceivingGeometry } from "../execution/broadcast-geometry.js";
-import { operationShapePolicy } from "../execution/operation-shapes.js";
+import { operationShapeContract, assertOperationArity } from "../execution/operation-shapes.js";
 import { pointwiseDerivative } from "./autograd/pointwise-derivative.js";
 import { copyTensorShape, equalTensorShapes, inferViewShape, tensorElementCount } from "./tensor-shape.js";
 import { createSGD, type SGD, type SGDOptions, type SGDParameterGroup } from "./sgd.js";
@@ -584,7 +584,11 @@ class BinaryOperationDefinition implements NumericalOperationDefinition {
     readonly description: "addition" | "multiplication" | "matrix multiplication",
     readonly derivative: DerivativeRecipe,
     readonly matrixFlags?: number,
-  ) { this.shapePolicy = operationShapePolicy(loweredKind); }
+  ) {
+    const contract = operationShapeContract(loweredKind);
+    if (contract !== undefined) assertOperationArity(contract, 2);
+    this.shapePolicy = contract?.policy;
+  }
 
   admit(
     session: RuntimeSession,

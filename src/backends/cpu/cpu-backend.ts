@@ -7,7 +7,7 @@ import type { BackendDiagnostics, WasmVariant } from "./cpu-types.js";
 import { InvocationStorage } from "./invocation-storage.js";
 import { CpuAllocation, LinearMemoryAllocator, MAXIMUM_ADDRESS } from "./linear-memory.js";
 import { pointwiseGeometry, receivingGeometry } from "../../execution/broadcast-geometry.js";
-import { operationShapePolicy } from "../../execution/operation-shapes.js";
+import { operationShapeContract } from "../../execution/operation-shapes.js";
 import { pointwisePacket, receivingPacket } from "./broadcast-packet.js";
 
 export type { BackendDiagnostics, WasmVariant } from "./cpu-types.js";
@@ -154,7 +154,7 @@ export class WebAssemblyCpuBackend implements ExecutionBackend {
           ]), 1), context.maximumBytes);
         } else if ((computation.kind === "add-f32" || computation.kind === "mul-f32") && length !== 0
           && inputs.some(input => input.byteLength !== length * 4)) {
-          parameters = pointwisePacket(operationShapePolicy(computation.kind)!.plan(
+          parameters = pointwisePacket(operationShapeContract(computation.kind)!.policy.plan(
             computation.inputs.map(slot => program.values[slot]!.shape),
           ), context.maximumBytes);
         }

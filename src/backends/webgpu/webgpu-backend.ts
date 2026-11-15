@@ -10,7 +10,7 @@ import { WEBGPU_EXPANSION_SOURCE, WEBGPU_EXPANSION_WORKGROUP_SIZE } from "./kern
 import { WEBGPU_SUM_SOURCE, WEBGPU_SUM_GROUP_ELEMENTS, WEBGPU_SUM_PARTIAL_BYTES, WEBGPU_SUM_WORKGROUP_BYTES, WEBGPU_SUM_WORKGROUP_SIZE } from "./kernels/sum.js";
 import { ExecutionTicket } from "../../execution/execution-ticket.js";
 import { pointwiseGeometry, receivingGeometry } from "../../execution/broadcast-geometry.js";
-import { operationShapePolicy } from "../../execution/operation-shapes.js";
+import { operationShapeContract } from "../../execution/operation-shapes.js";
 import { pointwiseParameters, receivingParameters, receivingStages } from "./broadcast-dispatch.js";
 import { WEBGPU_BROADCAST_ADDITION_SOURCE, WEBGPU_BROADCAST_MULTIPLICATION_SOURCE, WEBGPU_POINTWISE_WORKGROUP_SIZE } from "./kernels/broadcast.js";
 import { WEBGPU_RECEIVING_SOURCE, WEBGPU_RECEIVING_UNIFORM_BYTES } from "./kernels/receiving.js";
@@ -60,6 +60,18 @@ interface GpuReadback {
 
 type WebGpuComputationKind = LoweredComputation["kind"];
 type WebGpuPipelineKind = WebGpuComputationKind | "broadcast-add-f32" | "broadcast-mul-f32";
+
+const PIPELINE_SOURCES: Readonly<Record<WebGpuPipelineKind, string>> = Object.freeze({
+  "add-f32": WEBGPU_ADDITION_SOURCE,
+  "add-alpha-f32": WEBGPU_COEFFICIENT_ADDITION_SOURCE,
+  "mul-f32": WEBGPU_MULTIPLICATION_SOURCE,
+  "sum-f32": WEBGPU_SUM_SOURCE,
+  "expand-f32": WEBGPU_EXPANSION_SOURCE,
+  "matmul-f32": WEBGPU_MATRIX_SOURCE,
+  "reduce-f32": WEBGPU_RECEIVING_SOURCE,
+  "broadcast-add-f32": WEBGPU_BROADCAST_ADDITION_SOURCE,
+  "broadcast-mul-f32": WEBGPU_BROADCAST_MULTIPLICATION_SOURCE,
+});
 
 /** Owns the acquired device, its private buffers, pipelines and physical completion. */
 export class WebGpuBackend implements WebGpuExecutionBackend {
@@ -184,15 +196,7 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
 
   async #compile(kind: WebGpuPipelineKind): Promise<void> {
     const pipeline = await this.#checked("preparation", () => {
-      const code = kind === "reduce-f32" ? WEBGPU_RECEIVING_SOURCE
-        : kind === "broadcast-add-f32" ? WEBGPU_BROADCAST_ADDITION_SOURCE
-        : kind === "broadcast-mul-f32" ? WEBGPU_BROADCAST_MULTIPLICATION_SOURCE
-        : kind === "sum-f32" ? WEBGPU_SUM_SOURCE
-        : kind === "matmul-f32" ? WEBGPU_MATRIX_SOURCE
-        : kind === "mul-f32" ? WEBGPU_MULTIPLICATION_SOURCE
-        : kind === "add-alpha-f32" ? WEBGPU_COEFFICIENT_ADDITION_SOURCE
-        : kind === "expand-f32" ? WEBGPU_EXPANSION_SOURCE : WEBGPU_ADDITION_SOURCE;
-      const module = this.#device.createShaderModule({ code });
+      const module = this.#device.createShaderModule({ code: PIPELINE_SOURCES[kind] });
       return this.#device.createComputePipelineAsync({ layout: "auto", compute: { module, entryPoint: "main" } });
     });
     this.assertAvailable();
@@ -387,7 +391,7 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
     inputs: readonly GpuAllocation[], output: GpuAllocation, storage: GpuInvocationStorage, kind: WebGpuPipelineKind): void {
     const pipeline = this.#pipelines.get(kind);
     if (pipeline === undefined) throw new Error("Broadcast computation was not prepared.");
-    const words = pointwiseParameters(operationShapePolicy(computation.kind)!.plan(
+    const words = pointwiseParameters(operationShapeContract(computation.kind)!.policy.plan(
       computation.inputs.map(slot => program.values[slot]!.shape),
     ), this.#limits);
     const groups = Math.ceil(output.byteLength / 4 / words[2]! / WEBGPU_POINTWISE_WORKGROUP_SIZE);
