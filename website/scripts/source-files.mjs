@@ -13,6 +13,21 @@ async function checkSourcePath(root, source, checked) {
   }
 }
 
+/** Read one explicitly named data input only after tracked-path and symlink admission.
+ * @param {string} root @param {string} source @param {boolean} optional
+ * @returns {Promise<string|undefined>} */
+export async function readTrackedSource(root, source, optional = false) {
+  if (typeof source !== "string" || /[\u0000-\u001f\\:]/.test(source)
+    || source.split("/").some(part => !part || part === "." || part === "..")) throw new Error("Unsafe public source path");
+  const paths = execFileSync("git", ["ls-files", "-z", "--", source], { cwd: root, encoding: "utf8" }).split("\0");
+  if (!paths.includes(source)) {
+    if (optional) return undefined;
+    throw new Error(`Public data input is not tracked: ${source}`);
+  }
+  await checkSourcePath(root, source, new Set());
+  return readFile(join(root, source), "utf8");
+}
+
 /** Read current Markdown bytes only after Git membership and symlink admission.
  * @param {string} root
  * @param {string} directory

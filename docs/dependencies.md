@@ -200,6 +200,8 @@ real-browser checks from [development](development.md#prepare-and-preview-the-st
 | `@astrojs/starlight` | `0.42.8` | Documentation navigation, search and theme, official `withastro/starlight`, MIT |
 | `@astrojs/check` | `0.9.12` | Astro/TypeScript checks, official Astro tooling, MIT |
 | `@astrojs/markdown-remark` | `7.3.5` | Markdown processing with literal typography preserved, official Astro distribution, MIT |
+| `@astrojs/sitemap` | `3.7.4` | Canonical documentation-version sitemap filtering, official Astro distribution, MIT; explicitly owned at the existing locked transitive version, without adding another package resolution |
+| `@pagefind/default-ui` | `1.6.0` | Version-scoped search using the public filter API, official Pagefind distribution, MIT; explicitly owned at the existing locked transitive version |
 | `@mermaid-js/mermaid-cli` | `12.0.0` | Build-time SVG from reviewed Mermaid sources, official Mermaid project, MIT |
 | `puppeteer` | `25.16.0` | Explicit renderer browser acquisition/configuration, official Puppeteer project, Apache-2.0; Chrome for Testing has its own Google terms |
 | `typescript` | `6.0.3` | Strict website TypeScript checking, Microsoft distribution, Apache-2.0 |

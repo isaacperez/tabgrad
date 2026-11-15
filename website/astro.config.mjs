@@ -1,17 +1,22 @@
 import { defineConfig } from "astro/config";
 import starlight from "@astrojs/starlight";
+import sitemap from "@astrojs/sitemap";
+import documentationData from "./.generated/site-data.json";
 import { responsiveTables } from "./scripts/table-layout.mjs";
 import { unified } from "@astrojs/markdown-remark";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { prepareContent } from "./scripts/prepare-content.mjs";
 import { watchGitIndex } from "./scripts/source-watch.mjs";
-import { websiteRoot, repositoryRoot, setupNavigation, referenceNavigation } from "./scripts/config.mjs";
+import { websiteRoot, repositoryRoot } from "./scripts/config.mjs";
 import { siteOrigin, socialHead } from "./scripts/publication.mjs";
 import { prepareOutputSocialImages } from "./scripts/social-images.mjs";
 import { fileURLToPath } from "node:url";
+import { writeChanged } from "./scripts/files.mjs";
+import { createDocumentationIndex, documentationIndexName } from "./scripts/documentation-index.mjs";
 
 const site = siteOrigin(process.env.TABGRAD_SITE_URL);
+const documentationAliases = new Set(documentationData.documents.filter(entry => entry.alias).map(entry => entry.route));
 
 let refreshing = null;
 let requested = false;
@@ -61,35 +66,33 @@ export default defineConfig({
   output: "static",
   devToolbar: { enabled: false },
   markdown: { processor: unified({ smartypants: false, rehypePlugins: [responsiveTables] }) },
-  integrations: [{
+  integrations: [sitemap({ filter: page => !documentationAliases.has(new URL(page).pathname) }), {
     name: "tabgrad-documentation-routes",
     hooks: {
       "astro:config:setup": ({ addWatchFile }) => addWatchFile(new URL("./.generated/routes.json", import.meta.url)),
-      "astro:build:done": ({ dir }) => prepareOutputSocialImages(fileURLToPath(dir)),
+      "astro:build:done": async ({ dir }) => {
+        await prepareOutputSocialImages(fileURLToPath(dir));
+        await writeChanged(join(fileURLToPath(dir), documentationIndexName), JSON.stringify(createDocumentationIndex(documentationData)) + "\n");
+      },
     },
   }, starlight({
     title: "Tabgrad",
+    routeMiddleware: "./src/documentation-middleware.ts",
     head: [{ tag: "meta", attrs: { property: "og:type", content: "website" } }, ...socialHead(site)],
     disable404Route: true,
     description: "Run Python or JavaScript calculations in your browser, without a local installation. Tabgrad independently implements a documented subset of PyTorch.",
     favicon: "/brand/tabgrad-small.svg",
     customCss: ["./src/styles/site.css"],
-    components: { Header: "./src/components/Header.astro", ThemeSelect: "./src/components/ThemeAppearance.astro", MobileMenuToggle: "./src/components/MobileMenuToggle.astro", PageTitle: "./src/components/PageTitle.astro", Footer: "./src/components/Footer.astro" },
-    sidebar: [
-      { label: "Start here", items: [
-        { label: "Documentation", slug: "docs" },
-        { label: "Get started", link: "/start/" },
-        ...setupNavigation.map(([name, label]) => ({ label, slug: `docs/reference/${name}` })),
-      ] },
-      { label: "API reference", collapsed: true, items: [
-        { label: "JavaScript API", slug: "docs/javascript-api" },
-        ...referenceNavigation.map(([name, label]) => ({ label, slug: `docs/reference/${name}` })),
-        { label: "Compatibility", slug: "docs/compatibility" },
-      ] },
-      ...["concepts", "architecture", "components", "flows"].map((name) => ({
-        label: name[0].toUpperCase() + name.slice(1), collapsed: true, items: [{ autogenerate: { directory: `docs/${name}` } }],
-      })),
-    ],
+    components: {
+      Header: "./src/components/Header.astro",
+      Search: "./src/components/Search.astro",
+      ThemeSelect: "./src/components/ThemeAppearance.astro",
+      MobileMenuToggle: "./src/components/MobileMenuToggle.astro",
+      PageTitle: "./src/components/PageTitle.astro",
+      Footer: "./src/components/Footer.astro",
+      Sidebar: "./src/components/DocumentationSidebar.astro",
+    },
+    sidebar: [],
     social: [{ icon: "github", label: "GitHub", href: "https://github.com/isaacperez/tabgrad" }],
     tableOfContents: { minHeadingLevel: 2, maxHeadingLevel: 3 },
     expressiveCode: {

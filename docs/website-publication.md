@@ -45,7 +45,10 @@ The exporter compares every file with the output verifier's recorded hashes,
 then copies the exact bytes. `_headers` derives document and worker policies
 from `scripts/delivery.mjs`. The native fallback policy admits the recovery
 page's scripts; differing documents and active worker entries replace it with
-their own policy. Passive assets can inherit the recovery hashes, never the
+their own policy. Identical policies within a wholly HTML namespace share a
+single prefix rule only when they also admit the recovery page's exact script
+hashes. A differing page, passive file or missing recovery hash prevents that
+compression; policies are not merged. Passive assets can inherit the recovery hashes, never the
 executor's eval permission. MIME remains native, so an absent `.js` URL returns
 HTML with its real 404 status rather than an incorrect JavaScript type.
 

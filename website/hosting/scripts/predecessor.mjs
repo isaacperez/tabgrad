@@ -3,6 +3,14 @@ import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { deliveryManifest, manifestName, publicationOrigin, inventory } from "./inventory.mjs";
 import { sha256 } from "../../scripts/files.mjs";
+import { documentationIndexName, validateDocumentationIndex } from "../../scripts/documentation-index.mjs";
+
+/** Only immutable assets and the hash-bound archive inventory cross this boundary.
+ * @param {object} manifest @returns {object[]} */
+function predecessorFiles(manifest) {
+  const immutable = new Set(manifest.currentImmutable);
+  return manifest.files.filter(file => immutable.has(file.path) || file.path === documentationIndexName);
+}
 
 // An explicit transport budget, independent of the host's larger per-file quota.
 // Current and predecessor inventories remain subject to the host limits as well.
@@ -30,15 +38,16 @@ export async function readPredecessor(root, production = true) {
   const bytes = await readFile(join(root, manifestName));
   if (bytes.length > 8 * 1024 * 1024) throw new Error("Predecessor manifest is too large");
   const manifest = deliveryManifest(JSON.parse(bytes), production);
-  const immutable = new Set(manifest.currentImmutable);
-  const expected = manifest.files.filter(file => immutable.has(file.path));
+  const expected = predecessorFiles(manifest);
   const actual = await inventory(root);
   const byPath = new Map(actual.map(file => [file.path, file]));
   if (actual.length !== expected.length + 1 || expected.some(file => {
     const found = byPath.get(file.path);
     return !found || found.sha256 !== file.sha256 || found.bytes !== file.bytes;
   })) throw new Error("Predecessor immutable files differ from their public inventory");
-  return { manifest, digest: sha256(bytes) };
+  const documentation = expected.some(file => file.path === documentationIndexName)
+    ? validateDocumentationIndex(JSON.parse(await readFile(join(root, documentationIndexName)))) : null;
+  return { manifest, digest: sha256(bytes), documentation };
 }
 
 /** Capture a coherent predecessor from the admitted public origin, with no auth
@@ -53,8 +62,7 @@ export async function acquirePredecessor(origin, current, destination, request =
   const manifest = deliveryManifest(JSON.parse(manifestBytes));
   if (manifest.origin !== site) throw new Error("Predecessor origin differs");
   const currentFiles = new Map((await inventory(current)).map(file => [file.path, file]));
-  const immutable = new Set(manifest.currentImmutable);
-  const required = manifest.files.filter(file => immutable.has(file.path));
+  const required = predecessorFiles(manifest);
   if (required.reduce((sum, file) => sum + file.bytes, manifestBytes.length) > predecessorTransferBytes) throw new Error("Predecessor exceeds the acquisition budget");
   await mkdir(destination);
   try {

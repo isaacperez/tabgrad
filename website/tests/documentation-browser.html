@@ -1,0 +1,52 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Versioned documentation integration</title>
+<h1>Versioned documentation integration</h1><iframe title="Documentation under test" src="/docs/javascript-api/" style="width:1280px;height:800px"></iframe>
+<script type="module">
+const token = new URL(location.href).searchParams.get('token');
+const frame = document.querySelector('iframe');
+function assert(value, message) { if (!value) throw new Error(message); }
+async function until(test, message) {
+  const deadline = performance.now() + 30000;
+  while (!test()) {
+    if (performance.now() > deadline) throw new Error(message);
+    await new Promise(resolve => setTimeout(resolve, 25));
+  }
+}
+try {
+  await until(() => frame.contentDocument?.readyState === 'complete' && frame.contentDocument.querySelector('h1'), 'Documentation did not load');
+  assert(frame.contentDocument.querySelector('[data-documentation-version]'), 'Documentation version picker is missing');
+  const widths = [];
+  for (const width of [1280, 390]) {
+    frame.style.width = `${width}px`;
+    frame.src = '/docs/0.3.0/javascript-api/';
+    await until(() => frame.contentWindow.location.pathname === '/docs/0.3.0/javascript-api/' && frame.contentDocument?.readyState === 'complete', 'Canonical version did not load');
+    const doc = frame.contentDocument;
+    assert(doc.querySelector('meta[name="tabgrad-documentation-version"]').content === '0.3.0', 'Page lost its selected version');
+    assert(doc.querySelector('link[rel="canonical"]').href.endsWith('/docs/0.3.0/javascript-api/'), 'Canonical version differs');
+    const menu = doc.querySelector('.docs-menu-toggle');
+    if (width === 390) { assert(menu, 'Mobile docs navigation is missing'); menu.click(); }
+    const selector = doc.querySelector('[data-documentation-version]');
+    assert(selector.selectedOptions[0].textContent.includes('0.3.0'), 'Selector differs from document version');
+    assert([...doc.querySelectorAll('.sidebar-content a[href^="/docs/"]')].every(link => link.pathname.startsWith('/docs/0.3.0/')), 'Sidebar crossed documentation versions');
+    assert(doc.documentElement.scrollWidth <= doc.documentElement.clientWidth, 'Documentation overflows its viewport');
+    doc.querySelector('site-search [data-open-modal]').click();
+    await until(() => doc.querySelector('site-search input'), 'Version-local search did not initialize');
+    const input = doc.querySelector('site-search input');
+    input.value = 'matmul'; input.dispatchEvent(new frame.contentWindow.Event('input', { bubbles: true }));
+    await until(() => doc.querySelectorAll('.pagefind-ui__result-link').length > 0, 'Search returned no matching documentation');
+    assert([...doc.querySelectorAll('.pagefind-ui__result-link')].every(link => link.pathname.startsWith('/docs/0.3.0/')), 'Default search crossed documentation versions');
+    assert(doc.querySelector('[data-search-scope] option[value=""]'), 'Explicit cross-version search is missing');
+    const dialog = doc.querySelector('site-search dialog');
+    assert(dialog.scrollWidth <= dialog.clientWidth, 'Search dialog overflows its viewport');
+    doc.querySelector('[data-close-modal]').click();
+    assert(!dialog.open, 'Search did not close');
+    widths.push(width);
+  }
+  frame.src = '/docs/0.3.0/?page=missing';
+  await until(() => frame.contentWindow.location.search === '?page=missing' && frame.contentDocument?.readyState === 'complete', 'Missing-page overview did not load');
+  await until(() => frame.contentDocument.querySelector('[data-version-missing]:not([hidden])'), 'Missing-page explanation is not shown');
+  const report = {passed:true,widths};
+  if (token) await fetch(`/__result?token=${encodeURIComponent(token)}`, {method:'POST',body:JSON.stringify(report)});
+} catch(error) {
+  if (token) await fetch(`/__result?token=${encodeURIComponent(token)}`, {method:'POST',body:JSON.stringify({passed:false,error:String(error)})});
+}
+</script></html>

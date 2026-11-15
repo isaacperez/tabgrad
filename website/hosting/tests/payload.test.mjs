@@ -7,6 +7,44 @@ import { inventory, preparePayload, verifyPayload, publicationOrigin, nativeHead
 import { acquirePredecessor, boundedBody } from "../scripts/predecessor.mjs";
 
 const revision = "a".repeat(40), origin = "https://site.example.edu/";
+/** @param {object} fixture @param {string[]} versions @returns {Promise<void>} */
+async function documentation(fixture, versions) {
+  const index = { schemaVersion: 1, stableVersion: versions.at(-1), renderingRevision: revision,
+    versions: versions.map(version => ({ version, baselineRevision: revision, recordRevision: revision,
+      recordSha256: "b".repeat(64), correction: null,
+      documents: [{ source: "docs/README.md", route: `/docs/${version}/` }] })) };
+  await writeFile(join(fixture.source, "documentation.json"), JSON.stringify(index));
+  for (const version of versions) {
+    const directory = join(fixture.source, "docs", version); await mkdir(directory, { recursive: true });
+    await writeFile(join(directory, "index.html"), `<h1>Documentation ${version}</h1>`);
+  }
+  fixture.options.checked.files = await inventory(fixture.source);
+}
+
+test("updates and rollback reconstruct every documentation archive independently of asset retention", async context => {
+  const first = await fixture(context, "one"); await documentation(first, ["0.3.0"]);
+  const output1 = join(first.root, "delivery"); await preparePayload(first.source, output1, first.options);
+  const previous1 = join(first.root, "previous");
+  await acquirePredecessor(origin, first.source, previous1, async url => new Response(await readFile(join(output1, url.pathname))));
+  const second = await fixture(context, "two"); await documentation(second, ["0.3.0", "0.4.0"]);
+  const output2 = join(second.root, "delivery"); await preparePayload(second.source, output2, { ...second.options, previous: previous1 });
+  const previous2 = join(second.root, "previous");
+  await acquirePredecessor(origin, second.source, previous2, async url => new Response(await readFile(join(output2, url.pathname))));
+  const third = await fixture(context, "three"); await documentation(third, ["0.3.0", "0.4.0", "0.5.0"]);
+  const output3 = join(third.root, "delivery"); await preparePayload(third.source, output3, { ...third.options, previous: previous2 });
+  assert.equal(await readFile(join(output3, "docs/0.3.0/index.html"), "utf8"), "<h1>Documentation 0.3.0</h1>");
+  const previous3 = join(third.root, "previous");
+  await acquirePredecessor(origin, third.source, previous3, async url => new Response(await readFile(join(output3, url.pathname))));
+  await assert.rejects(preparePayload(first.source, join(first.root, "lost-archives"), { ...first.options, previous: previous3, rollback: true }), /archive/);
+  const restored = await fixture(context, "restored"); await documentation(restored, ["0.3.0", "0.4.0", "0.5.0"]);
+  await preparePayload(restored.source, join(restored.root, "delivery"), { ...restored.options, previous: previous3, rollback: true });
+  const changed = JSON.parse(await readFile(join(restored.source, "documentation.json")));
+  changed.versions[0].baselineRevision = "c".repeat(40);
+  await writeFile(join(restored.source, "documentation.json"), JSON.stringify(changed));
+  restored.options.checked.files = await inventory(restored.source);
+  await assert.rejects(preparePayload(restored.source, join(restored.root, "changed-baseline"), { ...restored.options, previous: previous3 }), /baseline/);
+});
+
 /** @param {object} context @param {string} asset @returns {Promise<object>} */
 async function fixture(context, asset = "one") {
   const root = await mkdtemp(join(tmpdir(), "tabgrad-hosting-"));
@@ -115,4 +153,19 @@ test("release manifests preserve separate source/recipe identity and explicit re
   const restore = await preparePayload(source, restored, { ...options, previous: releasePrevious, rollback: true });
   assert.equal(restore.manifest.format, 1); assert.equal(restore.manifest.previous, result.digest);
   await assert.rejects(preparePayload(source, join(root, "bad-source"), { ...options, checked: { ...checked, release: { ...identity, sourceRevision: "invalid" } } }));
+});
+
+test("equal namespace policies share one native rule while preserving recovery and exact differing policies", async t => {
+  const { source } = await fixture(t), files = [];
+  for (let index = 0; index < 120; index++) {
+    const path = `docs/0.3.0/page-${index}/index.html`;
+    await mkdir(join(source, `docs/0.3.0/page-${index}`), { recursive: true });
+    await writeFile(join(source, path), '<h1>Documentation</h1><script>window.recovery = true</script><script>window.docs = true</script>');
+    files.push({ path });
+  }
+  const headers = await nativeHeaders(source, files);
+  assert.ok(headers.includes('\n/docs/*\n'));
+  assert.ok(!headers.includes('/docs/0.3.0/page-0/'));
+  await writeFile(join(source, files[0].path), '<h1>Different policy</h1><script>window.recovery = true</script><script>window.unique = true</script>');
+  await assert.rejects(nativeHeaders(source, files), /header-rule limit/);
 });

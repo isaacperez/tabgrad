@@ -431,7 +431,7 @@ TAG_COMMANDS = {
 }
 WEBSITE_PATH = Path(".github/workflows/website-checks.yml")
 EXPECTED_WEBSITE_SHA256 = (
-    "6cc540030d64e5c7eaeef4fce66729bf83b6b08b8bf69226cb89d54607f72f42"
+    "722415083ccf97fd0a802d3171737d57ec1f6b251c13eb8ab057785b03f91f14"
 )
 WEBSITE_COMMANDS = {
     'node scripts/release-website.mjs "$RUNNER_TEMP/tabgrad-site-completion/site-completion.json" "$RUNNER_TEMP/tabgrad-site-runtime"',
@@ -451,6 +451,8 @@ WEBSITE_COMMANDS = {
     "npm --prefix website run build",
     "npm --prefix website run check",
     "npm --prefix website run verify",
+    "npm --prefix website run prepare:docs",
+    "npm --prefix website run test:docs",
     "npm --prefix website test",
     "npm --prefix website/hosting run test:browser",
     "npm --prefix website/hosting test",

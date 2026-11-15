@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { join, posix } from "node:path";
 import GithubSlugger from "github-slugger";
+import { parseFragment } from "parse5";
 import { unified } from "unified";
 import remarkParse from "remark-parse";
 import remarkGfm from "remark-gfm";
@@ -20,6 +21,12 @@ function nodeText(node) {
   return "alt" in node ? node.alt : "";
 }
 
+/** @param {import('parse5').DefaultTreeAdapterMap['node']} node @returns {string[]} */
+function explicitAnchors(node) {
+  return [...("attrs" in node ? node.attrs.filter(attribute => attribute.name === "id").map(attribute => attribute.value) : []),
+    ...("childNodes" in node ? node.childNodes.flatMap(explicitAnchors) : [])];
+}
+
 /**
  * Read only the public source categories and explicitly admitted usage pages.
  * @param {string} root
@@ -33,12 +40,14 @@ export async function collectDocuments(root = repositoryRoot, options = {}) {
     || directories.some(directory => source.startsWith(`docs/${directory}/`)));
 }
 
-/** @param {{source:string, body:string}[]} entries @returns {Map<string, {source:string, body:string, title:string, description:string, route:string, headings:string[]}>} */
-export function createDocumentIndex(entries) {
+/** @param {{source:string, body:string}[]} entries
+ * @param {{version?:string, descriptions?:Record<string,string>}} options
+ * @returns {Map<string, {source:string, body:string, title:string, description:string, route:string, headings:string[], version?:string}>} */
+export function createDocumentIndex(entries, options = {}) {
   const result = new Map();
   const routes = new Set();
   for (const entry of entries) {
-    const route = documentRoute(entry.source);
+    const route = documentRoute(entry.source, options.version);
     if (routes.has(route)) throw new Error(`Documentation route collision: ${entry.source}`);
     const tree = markdown.parse(entry.body);
     const slugger = new GithubSlugger();
@@ -49,17 +58,19 @@ export function createDocumentIndex(entries) {
       headings.push(slugger.slug(text));
       if (node.depth === 1 && !title) title = text;
     });
+    visit(tree, "html", node => { headings.push(...explicitAnchors(parseFragment(node.value))); });
     if (!title) throw new Error(`Missing document title: ${entry.source}`);
     const introduction = tree.children.find(node => node.type === "paragraph");
-    const description = documentDescriptions[entry.source] ?? ((introduction ? nodeText(introduction).replace(/\s+/g, " ").trim() : "") || title);
+    const description = (options.descriptions ?? documentDescriptions)[entry.source] ?? ((introduction ? nodeText(introduction).replace(/\s+/g, " ").trim() : "") || title);
     routes.add(route);
-    result.set(entry.source, { ...entry, title, description, route, headings });
+    result.set(entry.source, { ...entry, title, description, route, headings, ...(options.version === undefined ? {} : { version: options.version }) });
   }
   return result;
 }
 
-/** @param {string} target @param {string} source @param {Map} documents @param {string} revision @returns {string} */
-function rewriteLink(target, source, documents, revision) {
+/** @param {string} target @param {string} source @param {Map} documents @param {string} revision
+ * @param {{repositoryPaths?:Set<string>,repositoryDirectories?:Set<string>}} inventory @returns {string} */
+function rewriteLink(target, source, documents, revision, inventory) {
   if (!target) return target;
   const parsed = new URL(target, "https://source.invalid/");
   if (/^[a-z][a-z\d+.-]*:/i.test(target)) {
@@ -82,8 +93,9 @@ function rewriteLink(target, source, documents, revision) {
     }
     return entry.route + (fragment ? `#${fragment}` : "");
   }
-  if (!existsSync(join(repositoryRoot, destination))) throw new Error(`Missing repository destination in ${source}: ${destination}`);
-  return `${repositoryUrl}/blob/${revision}/${destination}` + (fragment ? `#${fragment}` : "");
+  if (!(inventory.repositoryPaths ? inventory.repositoryPaths.has(destination) : existsSync(join(repositoryRoot, destination)))) throw new Error(`Missing repository destination in ${source}: ${destination}`);
+  const kind = inventory.repositoryDirectories?.has(destination) ? "tree" : "blob";
+  return `${repositoryUrl}/${kind}/${revision}/${destination}` + (fragment ? `#${fragment}` : "");
 }
 
 /**
@@ -91,11 +103,14 @@ function rewriteLink(target, source, documents, revision) {
  * @param {{source:string, body:string}} entry
  * @param {Map} documents
  * @param {string} revision
- * @param {{diagramKey?: string}} options
+ * @param {{diagramKey?:string,repositoryPaths?:Set<string>,repositoryDirectories?:Set<string>}} options
  * @returns {{render:(sizes?:Map<string,{width:number,height:number}>)=>string, diagrams:{id:string, definition:string, label:string}[]}}
  */
 export function adaptDocument(entry, documents, revision, options = {}) {
   const metadata = documents.get(entry.source);
+  if (metadata.version !== undefined && !(options.repositoryPaths instanceof Set)) {
+    throw new Error("Versioned documentation requires its source inventory");
+  }
   const tree = markdown.parse(entry.body);
   const diagrams = [];
   const diagramNodes = [];
@@ -103,7 +118,7 @@ export function adaptDocument(entry, documents, revision, options = {}) {
   visit(tree, (node) => {
     if (node.type === "heading") heading = nodeText(node);
     if (node.type === "link" || node.type === "definition" || node.type === "image") {
-      node.url = rewriteLink(node.url, entry.source, documents, revision);
+      node.url = rewriteLink(node.url, entry.source, documents, revision, options);
     }
     if (node.type === "code" && node.lang === "mermaid") {
       const definition = node.value;

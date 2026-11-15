@@ -427,6 +427,12 @@ function checkSharedTextLinks(document, context) {
     for (const [name, value, priority] of saved) { if (value) root.setProperty(name, value, priority); else root.removeProperty(name); }
   }
 }
+function documentationHref(link) {
+  return (link.getAttribute('href') ?? '').replace(/^\/docs\/\d+\.\d+\.\d+\//, '/docs/');
+}
+function findDocumentationLink(root, href) {
+  return [...root.querySelectorAll('a')].find(link => documentationHref(link) === href);
+}
 async function checkSearch(document, path) {
   const win = document.defaultView;
   const NativeWorker = win.Worker;
@@ -977,19 +983,19 @@ try {
     if (['/', '/playground/', '/docs/', '/blog/'].includes(path)) await checkSearch(frame.contentDocument, path);
     if (path === '/start/' || path === '/versions/' || path === '/docs/') {
       const links = [...frame.contentDocument.querySelectorAll('main a')];
-      assert(links.some(link => link.getAttribute('href') === '/docs/reference/webgpu-runtime/' && /JavaScript/.test(link.textContent)), `GPU orientation identifies JavaScript at ${path}`);
-      assert(links.some(link => link.getAttribute('href') === '/docs/reference/python-host/#acquire-a-managed-gpu-connection' && /Python/.test(link.textContent)), `GPU orientation identifies Python at ${path}`);
+      assert(links.some(link => documentationHref(link) === '/docs/reference/webgpu-runtime/' && /JavaScript/.test(link.textContent)), `GPU orientation identifies JavaScript at ${path}`);
+      assert(links.some(link => documentationHref(link) === '/docs/reference/python-host/#acquire-a-managed-gpu-connection' && /Python/.test(link.textContent)), `GPU orientation identifies Python at ${path}`);
     }
-    if (path === '/docs/concepts/python-in-the-browser/') assert(frame.contentDocument.querySelector('main a[href="/docs/reference/python-host/#run-a-complete-cpu-example"]'), 'Python introduction directs app integrators to the complete browser tutorial');
+    if (path === '/docs/concepts/python-in-the-browser/') assert(findDocumentationLink(frame.contentDocument.querySelector('main'), '/docs/reference/python-host/#run-a-complete-cpu-example'), 'Python introduction directs app integrators to the complete browser tutorial');
     if (path === '/versions/') {
       const doc = frame.contentDocument;
       assert(doc.querySelector('main a[href="https://github.com/isaacperez/tabgrad/releases/tag/v0.2.0"]'), 'release history includes the published 0.2.0');
       assert(doc.querySelector('.current-release a.button').getAttribute('href') === '/start/', 'the release integration action offers both JavaScript and Python');
       const cpu = doc.querySelector('.compatibility-grid article');
-      assert(cpu.querySelector('a[href="/docs/reference/browser-package/#use-javascript-directly-in-html"]')?.textContent.includes('JavaScript CPU setup'), 'CPU setup identifies the complete JavaScript example');
-      assert(cpu.querySelector('a[href="/docs/reference/python-host/#run-a-complete-cpu-example"]')?.textContent.includes('Python CPU setup'), 'CPU setup identifies the complete Python example');
+      assert(findDocumentationLink(cpu, '/docs/reference/browser-package/#use-javascript-directly-in-html')?.textContent.includes('JavaScript CPU setup'), 'CPU setup identifies the complete JavaScript example');
+      assert(findDocumentationLink(cpu, '/docs/reference/python-host/#run-a-complete-cpu-example')?.textContent.includes('Python CPU setup'), 'CPU setup identifies the complete Python example');
       const limits = doc.querySelector('#release-limits').parentElement;
-      assert(limits.textContent.includes('Loading pretrained models and fine-tuning are not supported yet.') && limits.textContent.includes('First-order gradients and basic SGD.'), 'pretrained-model limitations remain distinct from supported gradient and SGD work');
+      assert(limits.textContent.includes('Loading pretrained models and fine-tuning are not supported') && limits.textContent.includes('First-order gradients and basic SGD.'), 'pretrained-model limitations remain distinct from supported gradient and SGD work');
     }
     if (['/', '/start/', '/docs/', '/playground/', '/versions/', '/about/', '/contact/'].includes(path)) {
       assert(frame.contentDocument.querySelector('[data-illustration], .integration-map'), `primary and project pages include contextual original artwork: ${path}`);
@@ -1055,7 +1061,7 @@ try {
         assert(doc.querySelector('.post-body a[href="/playground/?example=first-gradient&language=python&device=cpu"]'), 'the article leads to its executable CPU example');
         const copied = [...doc.querySelectorAll('[data-code]')].map(button => button.getAttribute('data-code').replaceAll('\x7f', '\n'));
         assert(copied.includes(blogExample.python), 'the article displays and copies its complete original Python code');
-        assert(doc.querySelector('.post-body').textContent.includes('Loading pretrained models and fine-tuning are not supported yet.'), 'future model loading is distinguished from current support');
+        assert(doc.querySelector('.post-body').textContent.includes('Loading pretrained models and fine-tuning are not supported'), 'future model loading is distinguished from current support');
         assert(!doc.querySelector('a[href*="/blob/"][href*="introducing-tabgrad"]'), 'an unpublished article has no fabricated source permalink');
       }
     }

@@ -72,12 +72,17 @@ checks in the same change as a registered generated path.
   Astro's maintained `src/pages/robots.txt.ts` owns `dist/robots.txt`; the shared
   publication helper supplies its origin-specific sitemap line. BlogPosting data
   is generated inside each article HTML from the native validated metadata.
-- **Inputs and reproduction:** selected Git-tracked Markdown, brand SVG,
+- **Inputs and reproduction:** exact catalogue-admitted Git blobs and tracked
+  release records/editorial corrections, brand SVG,
   website sources, exact locked dependency resolution and explicitly prepared
   renderer browser. `npm --prefix website run build` reproduces the site;
   `npm --prefix website run verify` checks emitted references and asset hashes.
   Renderer-version/configuration/platform changes invalidate diagram keys.
-  Build metadata distinguishes a clean revision from local edits.
+  Build metadata distinguishes a clean rendering revision from local edits.
+  `dist/documentation.json` records each admitted baseline, support-record digest,
+  correction identity and complete canonical route inventory. The build reconstructs
+  every admitted version; predecessor asset retention does not store this archive.
+  Publication and rollback reject lost versions, routes or changed baselines.
 - **Commit and cleanup:** commit the manifest/lock and reviewed source, never
   derived website output, dependency installations or local reports. Content
   preparation replaces changed documents and prunes retired generated pages

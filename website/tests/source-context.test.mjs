@@ -26,6 +26,8 @@ test("documentation links distinguish published source, dirty edits and clean un
     assert.deepEqual(documentationSourceContext(directory), { sourceRevision: local, sourceLinkRevision: published, localChanges: true });
     git("update-ref", "refs/remotes/origin/website", local);
     assert.deepEqual(documentationSourceContext(directory), { sourceRevision: local, sourceLinkRevision: local, localChanges: false });
+    await writeFile(join(directory, "package.json"), "{\"version\":\"0.4.0\"}\n");
+    assert.equal(documentationSourceContext(directory).localChanges, true);
     git("update-ref", "-d", "refs/remotes/origin/website"); git("update-ref", "-d", "refs/remotes/origin/main");
     assert.deepEqual(documentationSourceContext(directory), { sourceRevision: local, sourceLinkRevision: "main", localChanges: true });
   } finally { await rm(directory, { recursive: true, force: true }); }
@@ -39,9 +41,9 @@ test("an admitted detached release requires the exact clean documentation source
     git("init", "--template=", "--initial-branch=main"); git("config", "user.name", "Fixture"); git("config", "user.email", "fixture@example.invalid");
     await writeFile(join(directory, "README.md"), "Source\n"); git("add", "README.md"); git("commit", "-m", "Fixture");
     const sourceRevision = git("rev-parse", "HEAD"); git("checkout", "--detach");
-    assert.deepEqual(documentationSourceContext(directory, { sourceRevision }), { sourceRevision, sourceLinkRevision: sourceRevision, localChanges: false });
-    assert.throws(() => documentationSourceContext(directory, { sourceRevision: "f".repeat(40) }));
+    assert.deepEqual(documentationSourceContext(directory, { recipeRevision: sourceRevision }), { sourceRevision, sourceLinkRevision: sourceRevision, localChanges: false });
+    assert.throws(() => documentationSourceContext(directory, { recipeRevision: "f".repeat(40) }));
     await writeFile(join(directory, "README.md"), "Changed\n");
-    assert.throws(() => documentationSourceContext(directory, { sourceRevision }));
+    assert.throws(() => documentationSourceContext(directory, { recipeRevision: sourceRevision }));
   } finally { await rm(directory, { recursive: true, force: true }); }
 });

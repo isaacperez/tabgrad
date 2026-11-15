@@ -12,12 +12,18 @@ installing dependencies or running checks.
 After selecting this directory's Node version and preparing its dependencies:
 
 ```console
+npm --prefix website run prepare:docs
 npm --prefix website run dev
 ```
 
-Edit documentation in `docs/`, not the generated content tree. Local edits
-refresh the dev page; new documents must be selected and Git-tracked. For the
-full local search and production serving rules:
+Edit maintained documentation in `docs/`, not the generated content tree.
+Released archives read their exact catalogue-admitted Git source; tracked
+editorial corrections are applied separately without rewriting that baseline.
+A candidate preview reads its explicit candidate commit and cannot be published.
+Support records own the Versions presentation. See the
+[versioned documentation contract](../docs/architecture/static-website.md#version-documentation-by-released-behavior)
+and [source preparation](../docs/development.md#prepare-and-preview-the-static-website).
+For full local search and production serving rules:
 
 ```console
 npm --prefix website run build
@@ -99,9 +105,8 @@ paragraph, flattened to plain text without changing its source. A document with
 no introductory paragraph uses its own title. The adapter supplies the same
 summary to native page metadata and the build inventory; output verification
 checks description and Open Graph summary against that inventory.
-The publication configuration owns reviewed editorial summaries for the few
-decision chapters that begin with an acceptance notice; preparation rejects
-entries that no longer name an admitted document.
+Each archive derives its descriptions from its own documents. Descriptions from
+another version or the current checkout are not substituted.
 
 `scripts/publication.mjs` owns origin validation and shared image metadata.
 The Blog template supplies article type, author, date and its image override.

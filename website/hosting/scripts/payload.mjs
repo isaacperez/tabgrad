@@ -1,11 +1,39 @@
 import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve, sep } from "node:path";
-import { deliveryHeaders } from "../../scripts/delivery.mjs";
+import { deliveryHeaders, scriptHashes } from "../../scripts/delivery.mjs";
 import { isImmutableAsset } from "../../scripts/asset-identity.mjs";
 import { hostingLimits, manifestName, publicationOrigin, inventory, fileRecords, sameInventory, verifyPayload as verifyInventory } from "./inventory.mjs";
 import { releaseIdentity } from "../../scripts/release-input.mjs";
 import { readPredecessor } from "./predecessor.mjs";
+import { documentationIndexName, validateDocumentationIndex, preserveDocumentationArchives } from "../../scripts/documentation-index.mjs";
 export { hostingLimits, manifestName, publicationOrigin, inventory, deliveryManifest } from "./inventory.mjs";
+
+/** Compress identical HTML policies only inside a wholly HTML namespace. A missing
+ * path still serves the recovery page, so its executable hashes must be admitted.
+ * Different policies remain exact rules and retain the same host quota check.
+ * @param {object[]} rules @param {{path:string}[]} files @param {string[]} recoveryHashes @returns {object[]} */
+function compactHeaderRules(rules, files, recoveryHashes) {
+  const namespaces = new Map();
+  for (const rule of rules.slice(1)) {
+    const segment = /^\/([^/]+)\//.exec(rule.path)?.[1];
+    if (!segment) continue;
+    const prefix = `/${segment}/`, group = namespaces.get(prefix) ?? [];
+    group.push(rule); namespaces.set(prefix, group);
+  }
+  const replacements = new Map();
+  const omitted = new Set();
+  for (const [prefix, group] of namespaces) {
+    const members = files.filter(file => ("/" + file.path).startsWith(prefix));
+    if (group.length < 2 || members.length !== group.length || !members.every(file => file.path.endsWith(".html")
+      && group.some(rule => rule.path === ("/" + file.path).replace(/index\.html$/, "")))) continue;
+    const headers = group[0].headers, policy = headers["Content-Security-Policy"] ?? "";
+    if (!group.every(rule => JSON.stringify(rule.headers) === JSON.stringify(headers))
+      || !recoveryHashes.every(hash => policy.includes(hash))) continue;
+    replacements.set(group[0], { path: prefix + "*", headers });
+    for (const rule of group.slice(1)) omitted.add(rule);
+  }
+  return rules.filter(rule => !omitted.has(rule)).map(rule => replacements.get(rule) ?? rule);
+}
 
 /** Native rules match the original request URL, including fallback 404s. The global
  * policy therefore admits the recovery page's scripts; exact pages and active
@@ -25,8 +53,9 @@ export async function nativeHeaders(root, files) {
     if (!Object.keys(differences).length) continue;
     rules.push({ path: url.replace(/index\.html$/, ""), headers: differences });
   }
-  if (rules.length > hostingLimits.headerRules) throw new Error("Static output exceeds the native header-rule limit");
-  const lines = rules.flatMap((rule, index) => [rule.path, ...Object.entries(rule.headers).flatMap(([name, value]) =>
+  const compact = compactHeaderRules(rules, files, scriptHashes(fallback));
+  if (compact.length > hostingLimits.headerRules) throw new Error("Static output exceeds the native header-rule limit");
+  const lines = compact.flatMap((rule, index) => [rule.path, ...Object.entries(rule.headers).flatMap(([name, value]) =>
     index && Object.hasOwn(baseline, name) ? [`  ! ${name}`, `  ${name}: ${value}`] : [`  ${name}: ${value}`]), ""]);
   if (lines.some(line => Buffer.byteLength(line) > hostingLimits.headerLine)) throw new Error("Native header line exceeds the host limit");
   return lines.join("\n");
@@ -63,6 +92,14 @@ export async function preparePayload(source, destination, { checked, origin, rev
   if (current.some(file => ["_headers", "_redirects", manifestName].includes(file.path)
     || /(?:^|\/)(?:node_modules|scripts|local|\.env|wrangler)(?:[./-]|$)/.test(file.path))) throw new Error("Hosting/private configuration in raw website output");
   const predecessor = previousRoot && await readPredecessor(previousRoot, production);
+  const documentation = current.some(file => file.path === documentationIndexName)
+    ? validateDocumentationIndex(JSON.parse(await readFile(join(input, documentationIndexName)))) : null;
+  if (predecessor?.documentation) {
+    if (!documentation) throw new Error("Published documentation archive inventory disappeared");
+    preserveDocumentationArchives(predecessor.documentation, documentation);
+  }
+  if (documentation && documentation.versions.some(entry => entry.documents.some(document =>
+    !current.some(file => file.path === document.route.slice(1) + "index.html")))) throw new Error("Documentation archive HTML is missing");
   if (predecessor && predecessor.manifest.origin !== publicOrigin) throw new Error("Predecessor origin differs");
   if (production && predecessor?.manifest.format === 2 && !release && !rollback) throw new Error("Select the completed release or explicitly authorize a rollback");
   const currentMap = new Map(current.map(file => [file.path, file]));

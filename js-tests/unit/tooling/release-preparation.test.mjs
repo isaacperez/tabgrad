@@ -101,8 +101,8 @@ test("selection cannot replace source notes, responsible owner or the complete c
 });
 
 test("notes come from one committed version section and link to that source", () => {
-  assert.equal(releaseNotes("# Log\n\n## 0.1.3 - Today\n\nSee [guide](docs/guide.md).\n\n## 0.1.2 - Before\nOld\n", "0.1.3", "example/project", "a".repeat(40)),
-    `## 0.1.3 - Today\n\nSee [guide](https://github.com/example/project/blob/${"a".repeat(40)}/docs/guide.md).\n`);
+  assert.equal(releaseNotes("# Log\n\n## 0.1.3 - 2026-11-15\n\n### Added\n\n- See [guide](docs/guide.md).\n\n## 0.1.2 - Before\nOld\n", "0.1.3", "example/project", "a".repeat(40)),
+    `## 0.1.3 - 2026-11-15\n\n### Added\n\n- See [guide](https://github.com/example/project/blob/${"a".repeat(40)}/docs/guide.md).\n`);
   assert.throws(() => releaseNotes("## 0.1.3 - A\n\n## 0.1.3 - B\n", "0.1.3", "example/project", "a".repeat(40)), { code: "PUBLICATION_SOURCE_NOTES" });
 });
 
@@ -162,7 +162,7 @@ catch (error) { console.log(JSON.stringify({code:error.code})); process.exitCode
 
 test("valid long release notes stay outside the bounded selection record without truncation", async t => {
   const f = await releasePreparationFixture(t);
-  const notes = `## ${f.candidate.version} - 2026-01-01\n\n${"Useful change.\n".repeat(8192)}`;
+  const notes = `## ${f.candidate.version} - 2026-01-01\n\n### Fixed\n\n${"- Useful change.\n".repeat(8192)}`;
   const raw = Buffer.from(notes);
   f.values.set(`/contents/CHANGELOG.md?ref=${f.candidate.sourceRevision}`, {
     type: "file", encoding: "base64", content: raw.toString("base64"), size: raw.length });
@@ -204,4 +204,22 @@ test("preparation writes its actual SHA-256 output name and rejects unsafe names
     await assert.rejects(writeReleasePreparationOutputs(result, { GITHUB_OUTPUT: path }), { code: "PUBLICATION_OUTPUT_INVALID" });
   }
   assert.equal(await readFile(path, "utf8"), `plan_sha256=${digest}\nmode=oidc\n`);
+});
+
+test("release preparation rejects undated notes and missing version-owned documentation", async t => {
+  assert.throws(() => releaseNotes("## 0.1.3 - Today\n\n### Added\n\n- A change.\n", "0.1.3", "example/project", "a".repeat(40)), { code: "PUBLICATION_SOURCE_NOTES" });
+  const f = await releasePreparationFixture(t);
+  const route = `/contents/website/release-catalogue.json?ref=${f.candidate.sourceRevision}`;
+  f.values.set(route, { type: "file", encoding: "base64", content: Buffer.from('{"schemaVersion":1,"releases":[]}').toString("base64"), size: 33 });
+  await assert.rejects(selectReleaseInputs(f.root, f.environment, ports(f)), { code: "PUBLICATION_SOURCE_DOCUMENTATION" });
+});
+
+test("release readiness requires successful generated website evidence for the exact source", async t => {
+  for (const mutate of [
+    f => { f.values.get("/actions/runs/450/attempts/1/jobs?per_page=100&page=1").jobs[0].steps[1].conclusion = "skipped"; },
+    f => { const route = [...f.values.keys()].find(key => key.includes("website-checks.yml") && key.includes("/runs?")); f.values.get(route).workflow_runs[0].head_sha = "f".repeat(40); },
+  ]) {
+    const f = await releasePreparationFixture(t); mutate(f);
+    await assert.rejects(selectReleaseInputs(f.root, f.environment, ports(f)), { code: "PUBLICATION_WEBSITE_CHECKS_INVALID" });
+  }
 });

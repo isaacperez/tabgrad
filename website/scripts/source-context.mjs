@@ -5,9 +5,9 @@ export function documentationSourceContext(directory, release) {
   const git = (...args) => execFileSync("git", args, { cwd: directory, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
   const sourceRevision = git("rev-parse", "HEAD");
   const published = git("for-each-ref", "--format=%(refname)", "--contains=HEAD", "refs/remotes/origin/").length > 0;
-  const dirty = git("status", "--porcelain", "--", "docs", "website", "README.md", "assets/brand").length > 0;
+  const dirty = git("status", "--porcelain", "--", "docs", "website", "README.md", "assets/brand", "package.json", "CHANGELOG.md", "scripts/release-documentation.mjs").length > 0;
   if (release) {
-    if (sourceRevision !== release.sourceRevision || dirty) throw new Error("Released documentation source changed");
+    if (sourceRevision !== release.recipeRevision || dirty) throw new Error("Released documentation rendering recipe changed");
     return { sourceRevision, sourceLinkRevision: sourceRevision, localChanges: false };
   }
   let sourceLinkRevision = sourceRevision;

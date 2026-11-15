@@ -9,6 +9,57 @@ import { createMarkdownProcessor, unified } from "@astrojs/markdown-remark";
 import { references } from "../scripts/config.mjs";
 import { collectDocuments, adaptDocument, createDocumentIndex, firstCodeBlock } from "../scripts/content.mjs";
 
+test("documentation routes and links belong to the selected version and source inventory", () => {
+  const entries = [
+    { source: "docs/concepts/a.md", body: "# Shapes\n\n[Sum](../reference/sum.md#result) and [source](../../README.md).\n" },
+    { source: "docs/reference/sum.md", body: "# Sum\n\n## Result\n\nAdd values.\n" },
+  ];
+  const documents = createDocumentIndex(entries, { version: "0.3.0" });
+  assert.equal(documents.get(entries[0].source).route, "/docs/0.3.0/concepts/a/");
+  const repositoryPaths = new Set([...entries.map(entry => entry.source), "README.md"]);
+  const rendered = adaptDocument(entries[0], documents, "a".repeat(40), { repositoryPaths }).render();
+  assert.match(rendered, /\/docs\/0\.3\.0\/reference\/sum\/#result/);
+  assert.match(rendered, /blob\/a{40}\/README\.md/);
+  assert.throws(() => adaptDocument(entries[0], documents, "a".repeat(40)), /source inventory/i);
+});
+
+test("historical repository links cannot be admitted by today's checkout", () => {
+  const entry = { source: "docs/concepts/a.md", body: "# Earlier guide\n\n[New rule](../releases.md).\n" };
+  const documents = createDocumentIndex([entry], { version: "0.3.0" });
+  assert.throws(() => adaptDocument(entry, documents, "a".repeat(40), {
+    repositoryPaths: new Set([entry.source]),
+  }), /Missing repository destination/);
+});
+
+test("historical directory links retain their own source and tree identity", () => {
+  const entry = { source: "docs/concepts/a.md", body: "# Python\n\n[Package source](../../python).\n" };
+  const documents = createDocumentIndex([entry], { version: "0.3.0" });
+  const result = adaptDocument(entry, documents, "a".repeat(40), {
+    repositoryPaths: new Set([entry.source, "python"]), repositoryDirectories: new Set(["python"]),
+  }).render();
+  assert.match(result, /tree\/a{40}\/python/);
+});
+
+test("selected-version fragments do not resolve against another version", () => {
+  const old = [
+    { source: "docs/concepts/a.md", body: "# Old\n\n[New section](b.md#new-section).\n" },
+    { source: "docs/concepts/b.md", body: "# Other\n\n## Old section\n" },
+  ];
+  const current = createDocumentIndex([{ source: "docs/concepts/b.md", body: "# Other\n\n## New section\n" }], { version: "0.4.0" });
+  assert.deepEqual(current.get("docs/concepts/b.md").headings, ["other", "new-section"]);
+  assert.throws(() => adaptDocument(old[0], createDocumentIndex(old, { version: "0.3.0" }), "a".repeat(40), {
+    repositoryPaths: new Set(old.map(entry => entry.source)),
+  }), /Unknown document fragment/);
+});
+
+test("editorial heading corrections preserve explicit historical anchors without admitting code examples", () => {
+  const entry = { source: "docs/concepts/a.md", body: '# Guide\n\n<span id="earlier-title"></span>\n\n## Clearer title\n\n[Earlier link](#earlier-title).\n\n```html\n<span id="sample-only"></span>\n```\n' };
+  const documents = createDocumentIndex([entry], { version: "0.3.0" });
+  assert.ok(documents.get(entry.source).headings.includes("earlier-title"));
+  assert.ok(!documents.get(entry.source).headings.includes("sample-only"));
+  assert.doesNotThrow(() => adaptDocument(entry, documents, "a".repeat(40), { repositoryPaths: new Set([entry.source]) }));
+});
+
 test("named integration files come from their exact Markdown fences", () => {
   const source = '# Setup\n\n```javascript\nother example\n```\n\n```html title="index.html"\n<button>Run</button>\n```\n\n```javascript title="python-worker.js"\nawait runPython();\n```\n';
   assert.equal(firstCodeBlock(source, "javascript"), "other example");

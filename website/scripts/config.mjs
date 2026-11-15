@@ -34,10 +34,14 @@ export const referenceNavigation = [
 ];
 export const references = [...setupNavigation, ...referenceNavigation].map(([name]) => name);
 
-/** @param {string} source Repository-relative admitted document. @returns {string} */
-export function documentRoute(source) {
+/** @param {string} source Repository-relative admitted document. @param {string} [version] @returns {string} */
+export function documentRoute(source, version) {
   if (!source.startsWith("docs/") || !source.endsWith(".md") || source.includes("..")) {
     throw new Error(`Invalid document source: ${source}`);
   }
-  return "/" + source.replace(/(?:\/readme)?\.md$/i, "").toLowerCase() + "/";
+  if (version !== undefined && !/^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(version)) {
+    throw new Error("Invalid documentation version");
+  }
+  const route = source.replace(/(?:\/readme)?\.md$/i, "").toLowerCase();
+  return "/" + (version === undefined ? route : route.replace(/^docs(?=\/|$)/, `docs/${version}`)) + "/";
 }

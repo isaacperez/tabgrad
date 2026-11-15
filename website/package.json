@@ -14,6 +14,8 @@
     "preview": "node scripts/serve.mjs",
     "test": "node --test tests/*.test.mjs",
     "verify": "node scripts/verify-output.mjs",
+    "prepare:docs": "node scripts/acquire-documentation.mjs",
+    "test:docs": "node scripts/documentation-browser-check.mjs",
     "test:browser": "node scripts/browser-check.mjs",
     "test:cdn": "node scripts/cdn-check.mjs",
     "test:gpu": "node scripts/gpu-browser-check.mjs"
@@ -25,8 +27,10 @@
   "devDependencies": {
     "@astrojs/check": "0.9.12",
     "@astrojs/markdown-remark": "7.3.5",
+    "@astrojs/sitemap": "3.7.4",
     "@astrojs/starlight": "0.42.8",
     "@mermaid-js/mermaid-cli": "12.0.0",
+    "@pagefind/default-ui": "1.6.0",
     "astro": "7.4.4",
     "github-slugger": "2.0.0",
     "parse5": "8.1.0",
