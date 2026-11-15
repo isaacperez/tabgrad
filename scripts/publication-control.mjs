@@ -10,6 +10,18 @@ export function publicationEnvironmentSnapshot(value, branches) {
     branches };
 }
 
+/** GitHub reports custom deployment restrictions as a native branch_policy rule.
+ * It is metadata, not a pending review/wait gate; retain it in the full snapshot. */
+export function automaticPublicationEnvironment(value, branches) {
+  return typeof value.can_admins_bypass === "boolean"
+    && value.deployment_branch_policy?.custom_branch_policies === true
+    && value.deployment_branch_policy?.protected_branches === false
+    && Array.isArray(branches) && branches.length === 1
+    && branches[0]?.name === "main" && branches[0]?.type === "branch"
+    && Array.isArray(value.protection_rules) && value.protection_rules.length === 1
+    && value.protection_rules[0]?.type === "branch_policy";
+}
+
 export function publicationApprovalComment(plan, planSha256, context) {
   return `tabgrad-release-approve ${planSha256} ${plan.operation} ${context.runId}/${context.attempt}`;
 }
@@ -88,13 +100,12 @@ export async function checkPublicationEnvironment(parameters, conservation = fal
   const branchResult = await api.request(`/environments/${policy.environment.name}/deployment-branch-policies?per_page=100&page=1`);
   const branches = branchResult.branch_policies;
   requirePublication(String(environment.id) === policy.environment.id && environment.name === policy.environment.name
-    && (policy.tagAdmission ? typeof environment.can_admins_bypass === "boolean" : environment.can_admins_bypass === false)
+    && (policy.tagAdmission ? automaticPublicationEnvironment(environment, branches) : environment.can_admins_bypass === false)
     && environment.deployment_branch_policy?.custom_branch_policies === true
     && environment.deployment_branch_policy?.protected_branches === false
     && branchResult.total_count === 1 && Array.isArray(branches) && branches.length === 1
     && branches[0].name === "main" && branches[0].type === "branch"
-    && (policy.tagAdmission ? Array.isArray(environment.protection_rules) && environment.protection_rules.length === 0
-      : environment.protection_rules?.some(rule => rule.type === "required_reviewers"
+    && (policy.tagAdmission || environment.protection_rules?.some(rule => rule.type === "required_reviewers"
       && rule.reviewers?.length > 0 && rule.reviewers.every(reviewer => reviewer.type === "User"
         && policy.maintainers.some(actor => actor.id === String(reviewer.reviewer?.id)))))
     && sha256(canonicalBytes(publicationEnvironmentSnapshot(environment, branches))) === policy.environment.snapshotSha256,

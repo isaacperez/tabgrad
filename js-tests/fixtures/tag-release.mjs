@@ -10,7 +10,7 @@ import { publicationEnvironmentSnapshot } from "../../scripts/publication-author
 
 function automaticEnvironment(fixture, id, name) {
   const environment = { id, name, can_admins_bypass: true,
-    deployment_branch_policy: { protected_branches: false, custom_branch_policies: true }, protection_rules: [] };
+    deployment_branch_policy: { protected_branches: false, custom_branch_policies: true }, protection_rules: [{ id: id + 2, type: "branch_policy" }] };
   const branches = [{ id: id + 1, type: "branch", name: "main" }];
   fixture.values.set(`/environments/${name}`, environment);
   fixture.values.set(`/environments/${name}/deployment-branch-policies?per_page=100&page=1`,

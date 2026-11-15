@@ -32,6 +32,9 @@ established by the corresponding verified release record.
 
 ### Fixed
 
+- Automatic release environments recognize GitHub's native branch-policy rule
+  while preserving main-only deployment and rejecting pending approval rules
+  ([#447](https://github.com/isaacperez/tabgrad/issues/447)).
 - Release consumers wait for an unavailable registry attestation within the
   existing metadata-readiness budget, while retaining strict proof association
   and never repeating publication
