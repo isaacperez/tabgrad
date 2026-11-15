@@ -89,8 +89,68 @@ linked published base revision, including clean local commits that have not
 been pushed. The build records its actual input revision separately. Architecture
 explains accepted design; version-specific
 support records establish implemented support. Unpublished API behavior is not
-silently presented as stable. Historical versions link to their actual source
-and records instead of relabelling current documentation as an archive.
+silently presented as stable. Historical documentation follows the versioned
+source contract below instead of relabelling current documentation as an archive.
+
+## Version documentation by released behavior
+
+The [accepted versioning decision](https://github.com/isaacperez/tabgrad/issues/440#issuecomment-6893307733)
+keeps repository Markdown as the source while separating the installed release
+from development main. Each admitted release has canonical documentation under
+`/docs/VERSION/`. Existing unversioned `/docs/` addresses are stable aliases to
+the latest successfully delivered release. Advancing main alone cannot advance
+those aliases or change the version described by a page. Development previews
+must identify themselves separately.
+
+A single release catalogue binds the package version, release source,
+documentation provenance and release-owned support/notes records. Versions and
+the documentation selector project that catalogue rather than maintaining
+another capability contract. The current candidate's source comes from its
+existing release handoff; a source file cannot contain its own future commit
+hash. The [release policy](../releases.md#require-version-owned-notes-and-documentation)
+owns mandatory notes and documentation-impact review.
+
+Render admitted historical Markdown with the current reviewed presentation
+toolchain. Historical source is data, not an executable website recipe, and is
+not copied into another full maintained documentation tree. Admission,
+navigation, repository-link targets and fragments belong to each source's
+inventory; a missing historical target must not be accepted because it exists
+in today's checkout. A historical version without adequate admitted inputs
+receives an explicit source/support-record link, not fabricated website pages.
+
+Keep the exact release-source baseline. Editorial corrections to an older
+version require review and separately attributable documentation source and
+revision; they do not move its tag, change the package or extend its evidenced
+support. Store the reproducible correction separately without another complete
+editable source tree. Package-version HTML can acquire an attributed correction
+or updated presentation; this is distinct from the immutable-byte guarantee of
+runtime and content-addressed assets.
+
+Documentation links and default search remain within the selected version.
+Version selection preserves a logical page only when it exists in the target
+version. Otherwise it opens that version's overview with an explanation.
+Unknown historical routes must not silently show the latest content. Cross-version
+search is an explicit reader choice and results identify their version.
+Historical pages remain self-canonical; stable aliases identify their selected
+canonical version rather than competing with it.
+
+Every checked website output contains the complete admitted documentation set
+and its required navigation, search, style and diagram resources. Reconstruct
+that set from identified sources on updates and rollback; do not rely on the
+one-predecessor asset transfer as a documentation archive. Invalid release
+bindings, missing resources, stale output and host-limit violations stop
+delivery. Browser checks cover version selection, search, missing-page handling,
+source attribution and shared responsive/keyboard behavior. Neither bounded
+host capacity nor temporary CI retention promises unlimited archival storage.
+
+Git-derived inputs avoid maintaining copied Markdown and keep one renderer,
+at the cost of validating historical inventories and allowing presentation
+updates to affect old pages. Retaining original HTML would preserve its initial
+appearance but requires durable custody of every dependency and separate archive
+recovery. A versioning plugin can supply UI, but cannot own Tabgrad's release
+identity or generated-source admission implicitly. Reconsider the mechanism if
+historical reconstruction, correction attribution or host capacity cannot meet
+these boundaries.
 
 ## Static generation owns presentation
 
