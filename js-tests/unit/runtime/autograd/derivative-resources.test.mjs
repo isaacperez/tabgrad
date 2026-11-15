@@ -46,6 +46,16 @@ test("resource profiles reject unsupported counts and cannot be forged by protot
   history.release(leaf);
 });
 
+test("a valid profile still requires an immutable recipe binding and supports retry", () => {
+  const history = new DerivativeHistory(() => {}, () => {}), leaf = history.leaf([1]);
+  const recipe = { resources: new DerivativeResources(1, 4, 1), savedOperands: () => [], apply: () => ({}) };
+  assert.throws(() => history.record([1], recipe, [leaf], []), { code: "UNSUPPORTED_GRADIENT" });
+  assert.equal(history.references, 1);
+  const root = history.record([1], Object.freeze(recipe), [leaf], []);
+  history.release(root); history.release(leaf);
+  assert.deepEqual(history.diagnostics(), { liveDerivativeNodes: 0, liveSavedValues: 0 });
+});
+
 function currentPlan(recipe, shapes, outputShape, { pointwise = false, repeat = false, selected = null } = {}) {
   const history = new DerivativeHistory(() => {}, () => {});
   const leaves = shapes.map(shape => history.leaf(shape));
