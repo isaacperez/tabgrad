@@ -48,6 +48,14 @@ export function releaseArtifact(artifact, runId, repositoryId, revision, now = D
   return { id: String(artifact.id), sha256: artifact.digest.slice(7), expiresAt: new Date(artifact.expires_at).toISOString() };
 }
 
+function historyCreationTime(artifact, now) {
+  const value = artifact.created_at, time = typeof value === "string" ? Date.parse(value) : NaN;
+  requirePublication(Number.isFinite(time) && time <= now
+    && new Date(time).toISOString().replace(".000Z", "Z") === value.replace(".000Z", "Z"),
+  "PUBLICATION_HISTORY_SELECTION");
+  return time;
+}
+
 /** Selection is only a transfer hint; complete replay against the actual enrolled head is mandatory. */
 export function selectReleaseHistory(artifacts, repositoryId, explicit = "", now = Date.now()) {
   requirePublication(explicit === "" || id(explicit), "PUBLICATION_HISTORY_SELECTION");
@@ -55,10 +63,20 @@ export function selectReleaseHistory(artifacts, repositoryId, explicit = "", now
     const run = String(a.workflow_run?.id);
     return (explicit === "" || String(a.id) === explicit) && a.expired === false && Date.parse(a.expires_at) > now
       && ["history", "observation", "completion"].some(kind => a.name === `tabgrad-publication-${kind}-${run}-1`);
-  }).sort((a, b) => b.id - a.id);
+  });
   requirePublication(eligible.length > 0 && (explicit === "" || eligible.length === 1), "PUBLICATION_HISTORY_SELECTION");
-  const a = eligible[0], runId = String(a.workflow_run.id), revision = a.workflow_run.head_sha;
-  return { ...releaseArtifact(a, runId, repositoryId, revision, now), runId, revision, name: a.name };
+  let selected = eligible[0];
+  if (explicit === "") {
+    let latestCreated = -Infinity, ambiguous = false;
+    for (const artifact of eligible) {
+      const created = historyCreationTime(artifact, now);
+      if (created > latestCreated) { selected = artifact; latestCreated = created; ambiguous = false; }
+      else if (created === latestCreated) ambiguous = true;
+    }
+    requirePublication(!ambiguous, "PUBLICATION_HISTORY_SELECTION");
+  }
+  const runId = String(selected.workflow_run.id), revision = selected.workflow_run.head_sha;
+  return { ...releaseArtifact(selected, runId, repositoryId, revision, now), runId, revision, name: selected.name };
 }
 
 async function sourceFile(api, path, revision) {

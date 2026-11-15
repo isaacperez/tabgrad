@@ -45,6 +45,7 @@ export async function releasePreparationFixture(t) {
   environment.TABGRAD_RELEASE_QUALIFICATION_JSON = qualificationRaw.toString();
   const artifact = (id, name, runId = "131", source = f.candidate.sourceRevision) => ({ id, name,
     digest: `sha256:${String(id % 10).repeat(64)}`, expired: false, size_in_bytes: 1000, expires_at: expiry,
+    created_at: new Date(now - 1000).toISOString(),
     workflow_run: { id: Number(runId), head_sha: source, head_branch: "main", repository_id: 17, head_repository_id: 17 } });
   const outputs = ["data", "proofs", "verification"].map((name, index) => artifact(211 + index, `tabgrad-producer-${name}-131-1`));
   const history = artifact(220, "tabgrad-publication-completion-200-1", "200", "e".repeat(40));

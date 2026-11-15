@@ -168,10 +168,14 @@ creating a protected job, verifies the committed package and version's
 `CHANGELOG.md` section, and requires one successful exact-source producer.
 `producer_run` can disambiguate eligible runs; no latest-run fallback is used.
 It selects the three original artifact IDs and a run-bound history carrier.
-An optional `history_artifact` selects another eligible carrier. Otherwise the
-largest eligible artifact ID is only a transfer hint: complete replay of its
-originals against the enrolled current root/head must still succeed. Missing
-history rejects; selection cannot reset the record. Collection pagination has
+An optional `history_artifact` selects an exact eligible carrier without a
+recency comparison. Otherwise select the unique most recently created eligible
+carrier using its native `created_at`, never numeric artifact ID or collection
+order. Missing, invalid or future creation times and a tied newest creation
+time reject default selection; use an explicit eligible hint to resolve the
+choice. Selection remains only a transfer hint: complete replay of its originals
+against the enrolled current root/head must still succeed. Missing history
+rejects; selection cannot reset the record. Collection pagination has
 the existing 100-page/100-row bound and rejects incomplete or changing totals.
 
 CI receives those original artifacts with fatal digest mismatch and invokes
