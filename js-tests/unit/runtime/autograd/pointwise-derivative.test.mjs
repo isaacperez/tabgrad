@@ -2,6 +2,11 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { pointwiseGeometry, broadcastGeometry } from "../../../../dist/execution/broadcast-geometry.js";
 import { pointwiseDerivative } from "../../../../dist/runtime/autograd/pointwise-derivative.js";
+import { DerivativeResources } from "../../../../dist/runtime/autograd/derivative-resources.js";
+
+function declaredLocal(properties, arity = 2, backings = 1) {
+  return Object.freeze({ resources: new DerivativeResources(arity, 4, backings), ...properties });
+}
 
 function fixture({ wrongLocal = false, failReceive = false, wrongReceiver = false, failClose = false } = {}) {
   const closed = [], incoming = { shape: [2, 3], name: "borrowed seed" };
@@ -14,7 +19,7 @@ function fixture({ wrongLocal = false, failReceive = false, wrongReceiver = fals
     },
     close: value => { closed.push(value.name); if (failClose) throw new Error("close failed"); },
   };
-  const local = { savedOperands: () => [], apply: () => ({ shape: wrongLocal ? [6] : [2, 3], name: "local" }) };
+  const local = declaredLocal({ savedOperands: () => [], apply: () => ({ shape: wrongLocal ? [6] : [2, 3], name: "local" }) });
   return { closed, incoming, operations, recipe: pointwiseDerivative(local, pointwiseGeometry([[2, 3], [3]])) };
 }
 
@@ -32,7 +37,7 @@ test("pointwise reception checks full shapes and retires unreturned intermediate
 test("pointwise reduction failure preserves its primary error before local cleanup failure", () => {
   const seed = { shape: [2, 3] }, local = { shape: [2, 3] }, closed = [];
   const reduction = new Error("reduction"), cleanup = new Error("local cleanup");
-  const recipe = pointwiseDerivative({ savedOperands: () => [], apply: () => local }, pointwiseGeometry([[2, 3], [3]]));
+  const recipe = pointwiseDerivative(declaredLocal({ savedOperands: () => [], apply: () => local }), pointwiseGeometry([[2, 3], [3]]));
   assert.throws(() => recipe.apply(seed, [], [3], {
     shape: value => value.shape,
     receive: () => { throw reduction; },
@@ -45,7 +50,7 @@ test("pointwise reduction failure preserves its primary error before local clean
 for (const failResultClose of [false, true]) test(`a received result retires if local cleanup fails (result cleanup fails=${failResultClose})`, () => {
   const seed = { shape: [2, 3] }, local = { shape: [2, 3] }, result = { shape: [3] }, closed = [];
   const localFailure = new Error("local cleanup"), resultFailure = new Error("result cleanup");
-  const recipe = pointwiseDerivative({ savedOperands: () => [], apply: () => local }, pointwiseGeometry([[2, 3], [3]]));
+  const recipe = pointwiseDerivative(declaredLocal({ savedOperands: () => [], apply: () => local }), pointwiseGeometry([[2, 3], [3]]));
   assert.throws(() => recipe.apply(seed, [], [3], {
     shape: value => value.shape,
     receive: () => result,
@@ -61,7 +66,7 @@ for (const failResultClose of [false, true]) test(`a received result retires if 
 
 for (const returning of ["local", "receiver"]) test(`pointwise ${returning} cannot transfer the borrowed seed`, () => {
   const seed = { shape: [2, 3] }, local = { shape: [2, 3] }, closed = [];
-  const recipe = pointwiseDerivative({ savedOperands: () => [], apply: () => returning === "local" ? seed : local }, pointwiseGeometry([[2, 3], [3]]));
+  const recipe = pointwiseDerivative(declaredLocal({ savedOperands: () => [], apply: () => returning === "local" ? seed : local }), pointwiseGeometry([[2, 3], [3]]));
   assert.throws(() => recipe.apply(seed, [], [3], {
     shape: value => value.shape, receive: () => seed, close: value => { closed.push(value); },
   }, 1), { code: "INVALID_TENSOR" });
@@ -71,9 +76,9 @@ for (const returning of ["local", "receiver"]) test(`pointwise ${returning} cann
 test("a local pass uses output shape and exact reception preserves its owned identity", () => {
   const geometry = pointwiseGeometry([[2, 3], [2, 3]]), incoming = { shape: [2, 3] }, local = { ...incoming };
   let closed = 0, receives = 0;
-  const recipe = pointwiseDerivative({ savedOperands: () => [], apply(value, _saved, shape, operations) {
+  const recipe = pointwiseDerivative(declaredLocal({ savedOperands: () => [], apply(value, _saved, shape, operations) {
     assert.equal(value, incoming); assert.deepEqual(shape, [2, 3]); return operations.pass(value, shape);
-  } }, geometry, true);
+  } }, 2, 0), geometry, true);
   const result = recipe.apply(incoming, [], [2, 3], { shape: value => value.shape,
     pass: () => local, receive: () => { receives++; }, close: () => { closed++; } }, 0);
   assert.equal(result, local);
@@ -85,7 +90,7 @@ test("a test-only third-arity/channel family reuses the same local/receiving ada
   const geometry = broadcastGeometry(3, [
     { shape: [2, 3, 4], axes: [0, 1, 2] }, { shape: [3], axes: [1] }, { shape: [], axes: [] },
   ]);
-  const seen = [], recipe = pointwiseDerivative({ savedOperands: position => [position], apply: () => ({ shape: [2, 3, 4] }) }, geometry);
+  const seen = [], recipe = pointwiseDerivative(declaredLocal({ savedOperands: position => [position], apply: () => ({ shape: [2, 3, 4] }) }, 3), geometry);
   assert.deepEqual(recipe.savedOperands(2), [2]);
   const result = recipe.apply({ shape: [2, 3, 4] }, [], [3], { shape: value => value.shape, close: () => {}, receive: (_value, projection) => {
     seen.push(projection); return { shape: projection.originalShape };

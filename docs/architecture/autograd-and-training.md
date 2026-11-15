@@ -88,6 +88,48 @@ random-number reservation. The runtime does not pretend that old occurrence
 records are new, nor does it replay internal kernels as unrelated public
 operations.
 
+## Local resource declarations and session admission
+
+A canonical derivative binds a passive immutable description of its proved
+local construction demand. The family adapter composes that demand with its
+captured shape transformation; the session remains responsible for selected
+topology, contribution combines, persistent gradient receivers, controls,
+pending effects, limits and the final check before consumption. A numerical
+recipe does not execute a separate callback to estimate its cost or publish
+work to discover how much it needs.
+
+This boundary is the accepted response to [resource-admission research
+#453](https://github.com/isaacperez/tabgrad/issues/453), supported by its
+[source investigation](https://github.com/isaacperez/tabgrad/issues/453#issuecomment-6901113646)
+and [independent challenge](https://github.com/isaacperez/tabgrad/issues/453#issuecomment-6901113945).
+Keeping the closed binary proof entirely in the session was a valid simpler
+alternative, but required local recipe changes and central estimates to be
+coordinated repeatedly. Inferring resources from a new derivative-program
+description could share more information, but would require another
+representation/planning boundary not justified by these callback recipes.
+
+The declaration is a reviewed conservative bound, not a verifier for arbitrary
+JavaScript. Missing, invalid or unsupported construction demand must reject
+before consuming history; an old binary estimate cannot stand in for proof of
+a new recipe. Current reservation floors and limits remain intact. Local
+resource data does not confer the separate closed-CPU writer-isolation proof.
+That refinement remains limited to the exact qualified constructions and
+dispatch conditions. Neither this contract nor successful resource admission
+adds a public operation or qualifies larger models.
+
+Static counts and already-owned immutable shapes avoid tensor-sized metadata,
+per-element cost callbacks and a second executor. Current canonical recipes
+share small declarations; pointwise bindings share frozen methods and retain
+their existing local recipe and geometry. Admission adds constant binding
+validation and scalar work in the existing selected-plan pass. Potential CPU
+rescues also inspect the qualified recipe identities. These are explicit host
+metadata costs, not a claim of zero overhead or physical-memory equivalence.
+The [derivative-history component](../components/derivative-history.md#costs-and-extension-boundary)
+owns the exact units, composition, current proof and extension restrictions.
+Reconsider the representation when an actual derivative needs another
+intermediate domain or construction class; do not pretend a copy count
+describes an unproved shape, branch or suspended computation.
+
 ## Saved values, mutation, and aliases
 
 Backward must observe the logical version that its forward recipe saved. If an
