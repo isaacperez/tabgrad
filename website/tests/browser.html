@@ -1382,12 +1382,14 @@ try {
         const destinations = sidebarLinks.map(link => link.getAttribute('href'));
         assert(new Set(destinations).size === destinations.length, `documentation navigation has one entry per destination: ${path}`);
         const active = sidebarLinks.filter(link => link.getAttribute('aria-current') === 'page');
-        assert(active.length === 1 && active[0].getAttribute('href') === path, `documentation navigation selects the current destination: ${path}`);
+        assert(active.length === 1 && documentationHref(active[0]) === path, `documentation navigation selects the current destination: ${path}`);
       }
       if (path === '/docs/') {
         const source = document.querySelector('.docs-source [data-documentation-source]');
-        assert(source && /\/blob\/(?:[0-9a-f]{40}|main)\/docs\/README\.md$/.test(source.href), 'documentation links to published repository source independently of the playground package');
-        assert(document.querySelector('.docs-source').textContent.includes('independently'), 'documentation explains the source/package distinction in context');
+        const archives = await (await fetch('/documentation.json')).json();
+        const selected = archives.versions.find(version => version.version === archives.stableVersion);
+        assert(source?.href.endsWith(`/blob/${selected.baselineRevision}/docs/README.md`), 'documentation links to its exact released baseline');
+        assert(document.querySelector('.docs-source').textContent.includes(`Tabgrad ${selected.version}`), 'documentation explains its selected release in context');
       }
       const intro = document.querySelector('.illustrated-intro');
       if (intro) {
