@@ -212,7 +212,7 @@ async function checkNavigation(document, context) {
   const destinations = [...links, ...projectLinks];
   const current = document.defaultView.location;
   const expectedCurrent = destinations.some(link => link.origin === current.origin &&
-    (link.pathname === '/' ? current.pathname === '/' : current.pathname.startsWith(link.pathname))) ? 1 : 0;
+    (link.pathname === '/' ? current.pathname === '/' : documentationPath(current.pathname).startsWith(documentationPath(link.pathname)))) ? 1 : 0;
   assert(JSON.stringify(links.map(link => link.pathname)) === JSON.stringify([...document.querySelectorAll('.tabgrad-navigation a')].map(link => link.pathname)) && destinations.filter((link) => link.hasAttribute('aria-current')).length === expectedCurrent, `compact navigation mirrors the main destinations and identifies the active one: ${context}`);
   for (const link of destinations) {
     const linkBounds = link.getBoundingClientRect();
@@ -427,8 +427,11 @@ function checkSharedTextLinks(document, context) {
     for (const [name, value, priority] of saved) { if (value) root.setProperty(name, value, priority); else root.removeProperty(name); }
   }
 }
+function documentationPath(path) {
+  return path.replace(/^\/docs\/\d+\.\d+\.\d+\//, '/docs/');
+}
 function documentationHref(link) {
-  return (link.getAttribute('href') ?? '').replace(/^\/docs\/\d+\.\d+\.\d+\//, '/docs/');
+  return documentationPath(link.getAttribute('href') ?? '');
 }
 function findDocumentationLink(root, href) {
   return [...root.querySelectorAll('a')].find(link => documentationHref(link) === href);
