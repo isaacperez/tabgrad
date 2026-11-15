@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { documentationPage, documentationVersionChoices, documentationSidebar, documentationSearchScope } from "../scripts/documentation-navigation.mjs";
+import { documentationPage, documentationNavigation, documentationVersionChoices, documentationSidebar, documentationSearchScope } from "../scripts/documentation-navigation.mjs";
 
 const doc = (version, source, alias = false) => ({ version, source, alias, title: source,
   route: `/docs/${alias ? "" : version + "/"}${source === "docs/README.md" ? "" : source.slice(5, -3) + "/"}`,
@@ -32,4 +32,10 @@ test("onboarding navigation follows only the current runtime while historical se
   const links = version => documentationSidebar(data, `/docs/${version}/javascript-api/`).flatMap(group => group.type === "group" ? group.entries : [group]);
   assert.ok(links("0.4.0").some(link => link.href === "/start/"));
   assert.ok(!links("0.3.0").some(link => link.href === "/start/"));
+});
+
+test("global documentation navigation keeps a historical version and uses stable entry outside docs", () => {
+  assert.deepEqual(documentationNavigation(data, "/docs/0.3.0/javascript-api/"), { href: "/docs/0.3.0/", current: true });
+  assert.deepEqual(documentationNavigation(data, "/docs/javascript-api/"), { href: "/docs/0.4.0/", current: true });
+  assert.deepEqual(documentationNavigation(data, "/start/"), { href: "/docs/", current: false });
 });

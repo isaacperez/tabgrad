@@ -27,6 +27,9 @@ try {
     const selector = doc.querySelector('[data-documentation-version]');
     assert(selector.selectedOptions[0].textContent.includes('0.3.0'), 'Selector differs from document version');
     assert([...doc.querySelectorAll('.sidebar-content a[href^="/docs/"]')].every(link => link.pathname.startsWith('/docs/0.3.0/')), 'Sidebar crossed documentation versions');
+    for (const nav of doc.querySelectorAll('.tabgrad-navigation, .site-menu-links, .tabgrad-footer nav[aria-label="Explore"]')) {
+      assert([...nav.querySelectorAll('a')].some(link => link.textContent.trim() === 'Documentation' && link.pathname === '/docs/0.3.0/'), 'Global navigation changed the selected documentation version');
+    }
     assert(doc.documentElement.scrollWidth <= doc.documentElement.clientWidth, 'Documentation overflows its viewport');
     doc.querySelector('site-search [data-open-modal]').click();
     await until(() => doc.querySelector('site-search input'), 'Version-local search did not initialize');

@@ -3,6 +3,9 @@ import EditLink from "@astrojs/starlight/components/EditLink.astro";
 import { Icon } from "@astrojs/starlight/components";
 import { repositoryUrl, packageUrl } from "../../scripts/config.mjs";
 import SupportLink from "./SupportLink.astro";
+import data from "../../.generated/site-data.json";
+import { documentationNavigation } from "../../scripts/documentation-navigation.mjs";
+const documentation = documentationNavigation(data, Astro.url.pathname);
 ---
 <footer class="not-content tabgrad-footer">
   <div class="footer-main">
@@ -18,7 +21,7 @@ import SupportLink from "./SupportLink.astro";
     <nav aria-label="Explore">
       <h2>Explore</h2>
       <a href="/start/">Get started</a>
-      <a href="/docs/">Documentation</a>
+      <a href={documentation.href}>Documentation</a>
       <a href="/playground/">Playground</a>
       <a href="/blog/">Blog</a>
       <a href="/versions/">Versions</a>

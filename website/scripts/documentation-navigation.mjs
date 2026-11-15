@@ -8,6 +8,13 @@ export function documentationPage(data, path) {
   return data.documents.find(entry => entry.route === (path.endsWith("/") ? path : path + "/"));
 }
 
+/** Shared entry navigation keeps an already selected documentation version.
+ * @param {DocumentationData} data @param {string} path @returns {{href:string,current:boolean}} */
+export function documentationNavigation(data, path) {
+  const document = documentationPage(data, path);
+  return { href: document ? `/docs/${document.version}/` : "/docs/", current: document !== undefined };
+}
+
 /** @param {DocumentationData} data @param {string} path
  * @returns {{version:string,href:string,missing:boolean,headings:string[]}[]} */
 export function documentationVersionChoices(data, path) {
