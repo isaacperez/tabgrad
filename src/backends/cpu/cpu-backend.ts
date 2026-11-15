@@ -331,10 +331,10 @@ export class WebAssemblyCpuBackend implements ExecutionBackend {
   }
 
   #validateAllocation(context: BackendContext, allocation: ResidentAllocation): asserts allocation is CpuAllocation {
-    if (!(allocation instanceof CpuAllocation) || allocation.released || allocation.generation !== context.generation) {
+    if (!context.allocator.owns(allocation) || allocation.released || allocation.generation !== context.generation) {
       throw new TabgradError(
         "BACKEND_STATUS_ERROR",
-        "A stale or released WebAssembly allocation was used.",
+        "A foreign, stale or released WebAssembly allocation was used.",
       );
     }
   }

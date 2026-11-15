@@ -363,6 +363,15 @@ selected module. The CPU backend context therefore owns the memory, arena,
 module instance, reusable workspaces, allocation pools, and request leases as
 one coherent physical lifetime.
 
+An allocation's physical identity belongs to the allocator that created it.
+The adapter checks that identity before reading or binding a live allocation;
+the allocator checks it before release changes counters or free ranges.
+Generation numbers distinguish context generations but cannot establish this
+ownership, because independent contexts can have equal generation numbers.
+Each allocation carries a private owner token shared with its allocator. The
+token does not retain the allocator, memory or context, and validation needs no
+allocation registry. Releasing an already released allocation remains a no-op.
+
 The distributed module manifest records enough information to reject an
 incompatible artifact before execution: module and ABI versions, content hash,
 address width, shared-memory mode, import requirements, minimum and maximum

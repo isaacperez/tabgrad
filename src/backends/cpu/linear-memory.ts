@@ -4,13 +4,19 @@ const WEBASSEMBLY_PAGE_BYTES = 65_536;
 export const MAXIMUM_ADDRESS = 0xffff_ffff;
 
 export class CpuAllocation {
+  readonly #owner: object;
   released = false;
   constructor(
+    owner: object,
     readonly generation: number,
     readonly offset: number,
     readonly byteLength: number,
     readonly reservedByteLength: number,
-  ) {}
+  ) { this.#owner = owner; }
+
+  static belongsTo(allocation: object, owner: object): allocation is CpuAllocation {
+    return #owner in allocation && allocation.#owner === owner;
+  }
 }
 
 interface FreeSegment {
@@ -20,6 +26,7 @@ interface FreeSegment {
 
 export class LinearMemoryAllocator {
   readonly #memory: WebAssembly.Memory;
+  readonly #identity = Object.freeze({});
   readonly #maximumPages: number;
   readonly #alignment: number;
   #cursor: number;
@@ -109,17 +116,22 @@ export class LinearMemoryAllocator {
       this.#highWaterReservedBytes,
       this.#liveReservedBytes,
     );
-    return new CpuAllocation(this.#generation, offset, byteLength, reservedByteLength);
+    return new CpuAllocation(this.#identity, this.#generation, offset, byteLength, reservedByteLength);
+  }
+
+  /** Identity is allocator-local; generation numbers alone can coincide. */
+  owns(allocation: object): allocation is CpuAllocation {
+    return allocation instanceof CpuAllocation && CpuAllocation.belongsTo(allocation, this.#identity);
   }
 
   release(allocation: CpuAllocation): void {
     if (allocation.released) {
       return;
     }
-    if (allocation.generation !== this.#generation) {
+    if (!this.owns(allocation) || allocation.generation !== this.#generation) {
       throw new TabgradError(
         "BACKEND_STATUS_ERROR",
-        "A WebAssembly allocation belongs to another backend generation.",
+        "A WebAssembly allocation belongs to another allocator or backend generation.",
       );
     }
     allocation.released = true;
