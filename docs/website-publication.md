@@ -52,8 +52,10 @@ HTML with its real 404 status rather than an incorrect JavaScript type.
 All responses revalidate (`Cache-Control: no-cache`), including resources and
 404s. The browser may retain an asset and reuse it after an ETag/304 response.
 This adds possible validation requests compared with year-long immutable
-caching; no temporal advantage is claimed. URL identity remains immutable:
-versioned or content-addressed URLs cannot change bytes. Native prefix rules
+caching; no temporal advantage is claimed. Runtime-versioned and
+content-addressed asset URLs cannot change bytes. Package-version documentation
+HTML instead follows the [attributed correction contract](architecture/static-website.md#version-documentation-by-released-behavior).
+Native prefix rules
 also match absent URLs, and enumerating this output's resources exceeds the
 100-rule quota; revalidation avoids caching those failures as immutable.
 The exporter rejects output exceeding the native file, file-size, rule or line
@@ -206,7 +208,9 @@ root Node/npm profile. The acquired owned tree survives only through this build;
 its temporary local path never appears in public metadata.
 
 One explicit release input selects runtime version, package root and source
-identity across assets, Header, Versions, runner and integration downloads. The
+identity across assets, Header, Versions, runner and integration downloads. Its
+release notes, support record and documentation identity must agree with the
+release catalogue; unknown versions do not inherit another release's prose. The
 website toolchain lock remains independent and unchanged. Documentation is read
 from tracked Markdown at the released source, including clean detached checkouts;
 the hosting recipe retains its own commit identity. Only the two integration
@@ -226,7 +230,15 @@ without a post-tag human wait. The pre-tag protected plan supplies its authority
 manual delivery/recovery keeps `website-publication`. Neither the source change
 nor a passing local model creates or qualifies those effective protections.
 Manual site-only recovery or presentation updates select the retained completion
-inputs and pair its runtime with the current reviewed main source. The manifest
-keeps that content/recipe revision separate from the package source. Automatic
-delivery always requires docs and package source to match. The tag procedure
-describes this path and explicit manual rollback. npm/GitHub outcomes remain complete when a later website step fails.
+inputs and pair its runtime with the current reviewed presentation recipe and
+admitted documentation corrections. Its documentation baseline remains that
+release's source; current main's new APIs cannot replace historical pages.
+The manifest keeps presentation/correction revisions separate from package and
+documentation-baseline identities. Automatic
+delivery requires the current documentation baseline and package source to match;
+each historical archive retains its own admitted source and any separately
+attributed corrections. Stable aliases follow the completed selected release.
+Every delivery, including rollback, reconstructs and verifies the full admitted
+documentation/resource set; predecessor retention alone cannot preserve it.
+The tag procedure describes this path and explicit manual rollback. npm/GitHub
+outcomes remain complete when a later website step fails.

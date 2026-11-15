@@ -911,9 +911,12 @@ the website failed after npm/GitHub succeeded.
 
 For site-only recovery, manually dispatch `website-checks.yml` with `publish=true`
 and the retained `completion_run`, `completion_id`, `completion_digest` and
-`completion_sha256`. It reobserves successful immutable completion and pairs that exact runtime
-with the current reviewed website/Markdown source under the manual approval.
-This also supports independent documentation and presentation updates. No npm or
+`completion_sha256`. It reobserves successful immutable completion and pairs
+that exact runtime with the current reviewed presentation recipe and separately
+attributed documentation corrections under the manual approval. The
+[versioned-documentation baseline](../architecture/static-website.md#version-documentation-by-released-behavior)
+remains the released source; later main's new API documentation cannot replace
+it. This supports independent editorial and presentation updates. No npm or
 GitHub publication is repeated. The manual approval admits the current reviewed
 site recipe; the manifest retains both that recipe and the original completed
 publisher identity. It never relabels the old release as a new execution.

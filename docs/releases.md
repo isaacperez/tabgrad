@@ -93,6 +93,33 @@ A breaking or deprecated change must include migration guidance. State the old
 behavior, new behavior, affected users, replacement, warning period when one
 exists, and action needed to update.
 
+### Require version-owned notes and documentation
+
+Every newly admitted release requires a nonempty, dated version section in
+`CHANGELOG.md`, its release support record and an explicit documentation-impact
+assessment. Notes explain the user-visible additions, corrections and relevant
+limits, link their supporting work and state any required migration. They are
+published as that version's GitHub release notes and remain reachable from the
+website's Versions page. A generic version label, placeholder or file-touch
+check is not a substitute for release notes.
+
+The website's release catalogue projects the same release-owned notes and
+support records into version navigation and support presentation. It must not
+infer another version's capabilities from current development documentation or
+retain independent hardcoded support prose when selecting a new package.
+The [versioned-documentation contract](architecture/static-website.md#version-documentation-by-released-behavior)
+owns historical sources, correction attribution, aliases and navigation.
+
+Each release owns an identifiable documentation set even when some pages are
+unchanged. A compatible correction can explicitly preserve existing usage;
+authors need not manufacture Markdown edits. Source checks and release admission
+must reject missing notes or support/documentation records, mismatched package,
+source and catalogue identities, and invalid generated routes or resources
+before tag readiness or publication. Independent review assesses whether the
+notes, documentation impact and support claims cover the actual change. CI
+establishes structural consistency and tested examples, not semantic freshness
+of arbitrary prose.
+
 ## Prepare a release from a controlled state
 
 Create a release only from an identified commit on the protected default
