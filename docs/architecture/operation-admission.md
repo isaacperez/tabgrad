@@ -112,6 +112,33 @@ automatic differentiation emits more operations through this same path. The
 full training flow is described in
 [Automatic differentiation and training](autograd-and-training.md).
 
+## Extend an operation family at its actual boundaries
+
+A registered shaped operation binds an exact operand count to its shape
+policy. Admission and executable-program reconstruction consume that same
+binding. The policy itself expresses a shape relation, independent of arity:
+two-input addition and multiplication use the same trailing-axis law that can
+describe a different operation's unary or ternary domains. An operation's
+binding is not evidence that its numerical or frontend implementation exists.
+The binary semantic definition checks its binding once at construction and
+reuses the selected policy on ordinary calls. Reconstruction checks the actual
+operand count of each received program before applying that policy.
+
+Adding an operation requires its language signatures, canonical validation,
+output metadata, numerical meaning and derivative facts. A new family can
+require a different admission path; matrix contraction and total reduction
+keep their independent contracts. Saved inputs or outputs, derivative resource
+bounds and backend bindings must be established for that concrete operation.
+Shared geometry removes repeated shape algorithms, not these obligations.
+
+The WebGPU adapter explicitly assigns a shader source to every kind in its
+closed executable vocabulary. Strict TypeScript rejects an incomplete source
+assignment when that vocabulary grows. This composition does not interpret an
+operation registry per element or change the numerical kernel. Replacing an
+existing expression with a canonical composite operation still needs its own
+observable contract: grouping forward or derivative work differently can
+change floating-point results and receiving reductions.
+
 ## Error timing
 
 Errors occur at the earliest layer that has enough truthful information to
