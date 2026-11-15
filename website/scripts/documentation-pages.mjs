@@ -24,7 +24,7 @@ function overview(group, index, runtimeVersion, artwork) {
 # Tabgrad docs
 
 <p class="docs-lead">Guides and reference for Tabgrad ${group.version}.${group.candidate ? ' Candidate preview; this version has not been published.' : ''}</p>
-${current ? '<p><a class="text-link" href="/playground/">Try an example in the playground →</a></p>' : `<p>The current playground runs Tabgrad ${runtimeVersion}.</p>`}
+${current ? '<p><a class="text-link" href="/playground/">Try an example in the playground&nbsp;→</a></p>' : `<p>The current playground runs Tabgrad ${runtimeVersion}.</p>`}
 </div><div class="docs-overview-art">${artwork.replaceAll("\n", "")}</div></div>
 <p class="documentation-notice" data-version-missing hidden>This page is not available in the selected version. Its documentation starts here.</p>
 <div class="docs-paths">
