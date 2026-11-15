@@ -1,5 +1,12 @@
 import type { DerivativeOperations, DerivativeRecipe } from "./derivative-history.js";
 import { TabgradError, throwCleanupFailures } from "../../shared/errors.js";
+import { DerivativeResources } from "./derivative-resources.js";
+
+// The current primitive proof includes one shared transient borrow allowance.
+const UNARY_ALIAS_RESOURCES = new DerivativeResources(1, 4, 0);
+const BINARY_ALIAS_RESOURCES = new DerivativeResources(2, 4, 0);
+const UNARY_VALUE_RESOURCES = new DerivativeResources(1, 4, 1);
+const BINARY_VALUE_RESOURCES = new DerivativeResources(2, 4, 1);
 
 /** History cannot retire a calculated value that its recipe never returned. */
 function withBorrowedOperand<Value, Gradient>(saved: Value, operations: DerivativeOperations<Value, Gradient>,
@@ -24,6 +31,7 @@ function withBorrowedOperand<Value, Gradient>(saved: Value, operations: Derivati
 
 /** Contiguous views adapt incoming values to their input shape. */
 export const IDENTITY_DERIVATIVE: DerivativeRecipe = Object.freeze({
+  resources: UNARY_ALIAS_RESOURCES,
   savedOperands: () => [],
   apply<Value, Gradient>(incoming: Gradient, _saved: readonly Value[], shape: readonly number[],
     operations: DerivativeOperations<Value, Gradient>): Gradient {
@@ -33,6 +41,7 @@ export const IDENTITY_DERIVATIVE: DerivativeRecipe = Object.freeze({
 
 /** Local pointwise identity stays in the output domain; reception is separate. */
 export const POINTWISE_PASS_DERIVATIVE: DerivativeRecipe = Object.freeze({
+  resources: BINARY_ALIAS_RESOURCES,
   savedOperands: () => [],
   apply<Value, Gradient>(incoming: Gradient, _saved: readonly Value[], shape: readonly number[],
     operations: DerivativeOperations<Value, Gradient>): Gradient {
@@ -42,6 +51,7 @@ export const POINTWISE_PASS_DERIVATIVE: DerivativeRecipe = Object.freeze({
 });
 
 export const MUL_DERIVATIVE: DerivativeRecipe = Object.freeze({
+  resources: BINARY_VALUE_RESOURCES,
   savedOperands: (position: number) => [1 - position],
   apply<Value, Gradient>(incoming: Gradient, saved: readonly Value[], _shape: readonly number[],
     operations: DerivativeOperations<Value, Gradient>): Gradient {
@@ -53,6 +63,7 @@ export const MUL_DERIVATIVE: DerivativeRecipe = Object.freeze({
 
 /** Ordinary VJPs use captured orientations, with no transposed payload owner. */
 export const MATMUL_DERIVATIVE: DerivativeRecipe = Object.freeze({
+  resources: BINARY_VALUE_RESOURCES,
   savedOperands: (position: number) => [1 - position],
   apply<Value, Gradient>(incoming: Gradient, saved: readonly Value[], _shape: readonly number[],
     operations: DerivativeOperations<Value, Gradient>, position: number): Gradient {
@@ -64,6 +75,7 @@ export const MATMUL_DERIVATIVE: DerivativeRecipe = Object.freeze({
 });
 
 export const SUM_DERIVATIVE: DerivativeRecipe = Object.freeze({
+  resources: UNARY_VALUE_RESOURCES,
   savedOperands: () => [],
   apply<Value, Gradient>(incoming: Gradient, _saved: readonly Value[], shape: readonly number[],
     operations: DerivativeOperations<Value, Gradient>): Gradient {
@@ -73,6 +85,7 @@ export const SUM_DERIVATIVE: DerivativeRecipe = Object.freeze({
 
 /** A full copy keeps a connected old-destination edge with exact positive zeros. */
 export const COPY_DERIVATIVE: DerivativeRecipe = Object.freeze({
+  resources: BINARY_VALUE_RESOURCES,
   savedOperands: () => [],
   apply<Value, Gradient>(incoming: Gradient, _saved: readonly Value[], shape: readonly number[],
     operations: DerivativeOperations<Value, Gradient>, position: number): Gradient {
@@ -93,9 +106,20 @@ export const COPY_SLICES_DERIVATIVE: DerivativeRecipe = Object.freeze({
 
 /** Re-resolving a modified view creates the native rebased base contribution. */
 export const REBASED_VIEW_DERIVATIVE: DerivativeRecipe = Object.freeze({
+  resources: UNARY_VALUE_RESOURCES,
   savedOperands: () => [],
   apply<Value, Gradient>(incoming: Gradient, _saved: readonly Value[], shape: readonly number[],
     operations: DerivativeOperations<Value, Gradient>): Gradient {
     return operations.rebase(incoming, shape);
   },
 });
+
+const CANONICAL_CONTROL_RECIPES = Object.freeze([
+  IDENTITY_DERIVATIVE, POINTWISE_PASS_DERIVATIVE, MUL_DERIVATIVE, MATMUL_DERIVATIVE,
+  SUM_DERIVATIVE, COPY_DERIVATIVE, COPY_SLICES_DERIVATIVE, REBASED_VIEW_DERIVATIVE,
+]);
+
+/** Resource numbers alone do not establish isolation of newly created writers. */
+export function hasCanonicalDerivativeControls(recipe: DerivativeRecipe | null): boolean {
+  return recipe === null || CANONICAL_CONTROL_RECIPES.includes(recipe);
+}

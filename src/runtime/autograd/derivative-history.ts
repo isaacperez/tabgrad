@@ -1,9 +1,11 @@
 import { WriterOutcome, captureWriterOutcomes, retainWriterOutcomes, releaseWriterOutcomes } from "../writer-outcome.js";
 import { TabgradError, throwCleanupFailures } from "../../shared/errors.js";
 import type { BroadcastGeometry, ReceivingGeometry } from "../../execution/broadcast-geometry.js";
+import { requireDerivativeResources, type DerivativeResources } from "./derivative-resources.js";
 
 /** A canonical operation supplies its saved-operand selection and local VJP. */
 export interface DerivativeRecipe {
+  readonly resources: DerivativeResources;
   readonly consumesHistory?: boolean;
   readonly pointwise?: Readonly<{ geometry: BroadcastGeometry; receivers: readonly ReceivingGeometry[]; aliasesIncoming: boolean }>;
   savedOperands(position: number): readonly number[];
@@ -149,6 +151,7 @@ export class DerivativeHistory<Value> {
     inputs: readonly (DerivativeNode<Value> | null)[], values: readonly Value[],
     outcomes: readonly WriterOutcome[] = [],
   ): DerivativeNode<Value> {
+    requireDerivativeResources(recipe, inputs.length);
     // Admission decides advertised tracking. An active operation on a tracked
     // no-grad view has a real recipe even when all its input edges are absent.
     const saved = inputs.map((input, position) => {

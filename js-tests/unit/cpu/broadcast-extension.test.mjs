@@ -8,6 +8,7 @@ import { test } from "node:test";
 import { broadcastGeometry, receivingGeometry } from "../../../dist/execution/broadcast-geometry.js";
 import { pointwisePacket, receivingPacket } from "../../../dist/backends/cpu/broadcast-packet.js";
 import { pointwiseDerivative } from "../../../dist/runtime/autograd/pointwise-derivative.js";
+import { DerivativeResources } from "../../../dist/runtime/autograd/derivative-resources.js";
 
 function extensionSource() {
   const source = fileURLToPath(new URL("../../../crates/tabgrad-wasm-kernels/src/", import.meta.url));
@@ -70,7 +71,8 @@ for (const variant of ["scalar", "simd128"]) test(`third-arity channel policy ex
         return { shape: projection.originalShape, data: new Float32Array(memory.buffer, output, projection.groups).slice() };
       },
     };
-    const local = { savedOperands: position => position === 2 ? [] : [1 - position],
+    const local = Object.freeze({ resources: new DerivativeResources(3, 4, 1),
+      savedOperands: position => position === 2 ? [] : [1 - position],
       apply(incoming, _saved, shape, _operations, position) {
         const factor = position === 0 ? Float32Array.from(a, (_, i) => b[Math.floor(i / 4) % 3]) : position === 1 ? a : new Float32Array(24).fill(1);
         // Local arithmetic uses the same real ternary traversal with c=0.
@@ -78,7 +80,7 @@ for (const variant of ["scalar", "simd128"]) test(`third-arity channel policy ex
           { shape, axes: [0, 1, 2] }, { shape, axes: [0, 1, 2] }, { shape: [], axes: [] },
         ])) };
       },
-    };
+    });
     const recipe = pointwiseDerivative(local, geometry);
     const gradients = geometry.operands.map((operand, position) => recipe.apply(seed, [], operand.shape, operations, position));
     assert.deepEqual(gradients.map(value => [...value.data]), [

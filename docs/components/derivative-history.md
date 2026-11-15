@@ -132,11 +132,49 @@ handles are retired per occurrence, including repeated operands and requests.
 ## Costs and extension boundary
 
 Differentiation reserves owners, backing bytes and pending effects before
-creating its seed or consuming history. The runtime ordinarily reserves
-`S * (controls + 1)` owners, where `S = 20M + requestedAllowance + 10` for
-`M` selected nodes. The requested allowance is four per functional result or
-ten per backward input. These are conservative ownership references, not
-payload bytes or a minimum requirement.
+creating its seed or consuming history. Each frozen recipe binds a validated
+`DerivativeResources` declaration: input arity, local owner/container slots
+per contribution, and local backing copies per contribution. These are
+reviewed conservative bounds, not an operation count or a runtime proof of an
+arbitrary callback. History validates the passive own-data binding before it
+acquires edges or saves, including calls whose later functional quota check is
+intentionally omitted. An accessor, mutable or missing binding is rejected.
+
+The local domain is the receiver shape for ordinary recipes and the complete
+output shape for pointwise local recipes. The pointwise adapter composes its
+receiving payload and ordinary capture/restoration costs. Static declarations
+and already-captured immutable shapes suffice; no per-edge resource record,
+numerical copy or executable cost callback is required. A construction with
+an intermediate outside that domain needs an explicit proved extension.
+
+The session owns actual selected edge occurrences `L`, combines
+`C = L - M + 1`, and receiver effects `E`, for `M` selected nodes. It sums
+declared local slots into `A` and family receiving/restoration slots into `G`.
+It ordinarily reserves `S * (controls + 1)` owners, where
+`S = max(20M, A + 4C + 8E) + G + requestedAllowance + 10`.
+The requested allowance is four per functional result or ten per backward
+input. These are conservative reference occurrences, not payload bytes.
+
+Current recipes have at most four local slots per selected contribution;
+pass/view, expansion, binary numerical capture and rebase fit the established
+primitive proof, including its shared transient borrow allowance. Their binary
+topology has `L <= 2(M-1)`, `C <= M-1` and `E <= M`, so `A+4C+8E <= 20M`.
+Thus every current reservation retains exactly its previous value. For a
+compound or higher-arity recipe the independently proved local declaration
+and actual topology must cover demand; the twenty-slot floor is a preserved
+policy, never a fallback for an unproved construction.
+
+Backing bytes remain separate. For selected-node elements `P`, selected-edge
+receiver elements `W` and root elements `nout`, the base remains
+`max(20P, 8W + 4nout)`, plus an implicit scalar seed when needed. For each
+selected edge, local construction and family reception declare backing demand
+`B`; add `max(0, B - 4*receiverElements)` outside that maximum. The base already
+pays for one receiver-sized contribution, combines and prior gradients.
+Current exact multiplication adds no excess; nonexact pointwise multiplication
+adds exactly its output-domain product. A two-product local construction
+charges both backings rather than assuming a single product. Restoration
+views add owners, not another backing. Unsafe accounting rejects before
+consumption; it is not saturated into an accepted estimate.
 
 An owner rejection can instead use `S * (controls - E + 1) + 4E`, where `E`
 is the planned receiver-effect count. Old pending or failed controls still
@@ -147,7 +185,11 @@ not qualify a GPU plan. The runtime checks that dispatch by descriptors,
 without invoking user getters, after ordinary argument normalization. It
 requires an empty request queue, no active advancement or reachable formation
 or publication hook, and canonical runtime, CPU and writer-ledger methods.
-The CPU must already be prepared, or the selected plan must preserve host
+The selected recipes must also be the exact source-proven canonical recipes
+or immutable pointwise bindings of those recipes. The adapter's private
+provenance and frozen shared methods establish that binding; copied metadata
+or resource numbers cannot qualify a different callback. The CPU must already
+be prepared, or the selected plan must preserve host
 aliases: a host seed, only current pass/identity/copy recipes, no contribution
 combines and no prior receiver gradients. Qualification never prepares the
 backend or drains requests.
@@ -155,8 +197,9 @@ backend or drains requests.
 The smaller bound is considered only when the original owner estimate rejects
 and the new owner and unchanged byte estimates fit. Already-admitted calls do
 not inspect eligibility; uncertain dispatch or plans retain the original
-reservation and execution path. The cold-plan check adds one selected-plan
-scan only on a potentially rescuable rejection. This refinement establishes
+reservation and execution path. Potential rescues add a selected-plan
+recipe-isolation scan; cold host plans also need their existing host-alias
+scan. Neither runs on already-admitted calls. This refinement establishes
 neither universal linear ownership nor a timing or process-memory guarantee.
 
 For `V` history nodes and `E` edges reachable from the output, planning uses
@@ -179,8 +222,15 @@ owners. Closing all relevant handles and requests must return live counts to
 zero; reserved allocator capacity and WebAssembly memory can remain pooled.
 
 A further derivative recipe belongs to its canonical operation definition.
-It identifies required saved operands and emits operations through the existing
-runtime interface. History traversal, storage pinning and backend ownership do
+It identifies required saved operands, binds its proved passive construction
+declaration, and emits operations through the existing runtime interface.
+Two products and two borrowed saved exposures can, for example, conservatively
+declare twelve local slots and two backing copies per contribution without
+retirement credit. This internal representation example does not add a public
+operation or establish its numerical compatibility. Every new declaration
+needs source and conformance evidence, including failure prefixes; it does not
+grant the CPU control-isolation refinement. History traversal, storage pinning
+and backend ownership do
 not depend on the operation's name. A rule requiring another numerical
 primitive would additionally extend the ordinary admitted vocabulary and its
 backend capability profile; mutation versions use the independent shared counter under the

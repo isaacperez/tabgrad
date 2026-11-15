@@ -20,11 +20,12 @@ import type { ExecutionBackend, ResidentAllocation, TensorDevice } from "../exec
 import { WebGpuBackend, type WebGpuDiagnostics, type WebGpuExecutionBackend } from "../backends/webgpu/webgpu-backend.js";
 export type { TensorDevice } from "../execution/backend.js";
 import { DerivativeHistory, type DerivativeNode, type DerivativePlan, type DerivativeRecipe } from "./autograd/derivative-history.js";
-import { COPY_DERIVATIVE, COPY_SLICES_DERIVATIVE, REBASED_VIEW_DERIVATIVE, IDENTITY_DERIVATIVE, POINTWISE_PASS_DERIVATIVE, MUL_DERIVATIVE, MATMUL_DERIVATIVE, SUM_DERIVATIVE } from "./autograd/derivative-recipes.js";
+import { COPY_DERIVATIVE, COPY_SLICES_DERIVATIVE, REBASED_VIEW_DERIVATIVE, IDENTITY_DERIVATIVE, POINTWISE_PASS_DERIVATIVE, MUL_DERIVATIVE, MATMUL_DERIVATIVE, SUM_DERIVATIVE, hasCanonicalDerivativeControls } from "./autograd/derivative-recipes.js";
 import { matrixGeometry } from "../execution/matrix-geometry.js";
 import { BroadcastCapacityError, type BroadcastGeometry, type ReceivingGeometry } from "../execution/broadcast-geometry.js";
 import { operationShapeContract, assertOperationArity } from "../execution/operation-shapes.js";
-import { pointwiseDerivative } from "./autograd/pointwise-derivative.js";
+import { pointwiseDerivative, hasCanonicalPointwiseControls } from "./autograd/pointwise-derivative.js";
+import { planDerivativeResources } from "./autograd/derivative-resource-plan.js";
 import { copyTensorShape, equalTensorShapes, inferViewShape, tensorElementCount } from "./tensor-shape.js";
 import { createSGD, type SGD, type SGDOptions, type SGDParameterGroup } from "./sgd.js";
 import type { OptimizerCapture, OptimizerLease, OptimizerParameterCapture } from "./optimizer-lease.js";
@@ -786,6 +787,11 @@ function capturedAdmissionOwners(inputs: number, extraOwners = 0): number {
   return inputs * 10 + extraOwners + 2;
 }
 
+const DERIVATIVE_CAPTURE_POLICY = Object.freeze({
+  receivingOwners: capturedAdmissionOwners(1),
+  restorationOwners: capturedAdmissionOwners(1, 4),
+});
+
 export class RuntimeSession {
   #backend: WebAssemblyCpuBackend;
   readonly #gpuBackend: WebGpuExecutionBackend | undefined;
@@ -1453,38 +1459,9 @@ export class RuntimeSession {
 
   #checkGradientCapacity(plan: DerivativePlan<TensorValue>, explicitSeed: TensorState | undefined,
     requestedOwners: number, controls: number, effects: number, destinations: ReadonlySet<TensorIdentity>, device: TensorDevice): void {
-    let nodeElements = 0;
-    let edgeElements = 0;
-    let localProductBytes = 0, receivingOwners = 0;
-    for (const node of plan.order) {
-      nodeElements += tensorElementCount(node.shape);
-      for (const input of node.inputs) {
-        if (input !== null && plan.needed.has(input)) edgeElements += tensorElementCount(input.shape);
-      }
-      const pointwise = node.recipe?.pointwise;
-      if (pointwise !== undefined) node.inputs.forEach((input, position) => {
-        const projection = pointwise.receivers[position]!;
-        if (input === null || !plan.needed.has(input) || projection.exact) return;
-        receivingOwners += capturedAdmissionOwners(1);
-        if (!equalTensorShapes(projection.shape, projection.originalShape)) receivingOwners += capturedAdmissionOwners(1, 4);
-        // The old contribution bound covers the receiving payload. A local
-        // product in the larger output domain survives as the reduction input.
-        if (!pointwise.aliasesIncoming) localProductBytes += tensorElementCount(node.shape) * 4;
-      });
-    }
-    const output = plan.order.at(-1);
-    const outputElements = output === undefined ? 0 : tensorElementCount(output.shape);
-    // Each selected edge can allocate one contribution; combines cost another
-    // edge sum minus non-output nodes. Prior-gradient additions cost at most
-    // the node sum, giving 8*edgeElements + 4*outputElements without retirement
-    // credit. Fanout after a reduction defeats a node-only payload estimate.
-    // Keep larger old reservations and the separate binary-recipe owner bound.
-    const additionalBytes = (explicitSeed === undefined ? 4 : 0)
-      + Math.max(nodeElements * 20, edgeElements * 8 + outputElements * 4) + localProductBytes;
-    // Reserve the ordinary unary capture bound for each reduction and, only
-    // when needed, its restoration alias/view. These use the same admission
-    // budget as those calls, with no retirement credit or fitted new constant.
-    const slots = plan.order.length * 20 + receivingOwners + requestedOwners + 10;
+    const demand = planDerivativeResources(plan, effects, DERIVATIVE_CAPTURE_POLICY);
+    const additionalBytes = (explicitSeed === undefined ? 4 : 0) + demand.backingBytes;
+    const slots = demand.ownerSlots + requestedOwners + 10;
     let additionalOwners = slots * (controls + 1);
     const refinedOwners = slots * (controls - effects + 1) + effects * 4;
     const owners = this.#updateOwnerCount();
@@ -1501,6 +1478,8 @@ export class RuntimeSession {
       && this.#onProgramFormed === undefined && this.#beforeCopyPublication === undefined
       && hasCanonicalRuntimeDispatch(this) && hasCanonicalCpuDispatch(this.#backend)
       && hasCanonicalWriterDispatch(this.#writers)
+      && plan.order.every(node => hasCanonicalDerivativeControls(node.recipe)
+        || hasCanonicalPointwiseControls(node.recipe!))
       && (isPreparedCanonicalCpuBackend(this.#backend)
         || this.#hostAliasGradientPlan(plan, destinations, explicitSeed))) {
       additionalOwners = refinedOwners;
@@ -1540,8 +1519,8 @@ export class RuntimeSession {
     // captures, only the newly planned writers contribute to this bound.
     if (this.#writers.references === 0) return effects;
     // Include existing node/prior-gradient controls and one new writer per
-    // destination. Each recipe admits at most two contributions plus combines;
-    // twenty owner slots per node bound their captures at the transient peak.
+    // destination. Declared construction/topology demand bounds captures;
+    // the current twenty-slot policy floor remains independently conservative.
     const groups = nodes.flatMap(node => [node.outcomes, this.#gradientReceiver(node, destinations)?.gradient?.value.outcomes ?? []]);
     return captureWriterOutcomes(groups).length + effects;
   }

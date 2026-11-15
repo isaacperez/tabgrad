@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { DerivativeHistory } from "../../../../dist/runtime/autograd/derivative-history.js";
+import { DerivativeResources } from "../../../../dist/runtime/autograd/derivative-resources.js";
+
+function declaredRecipe(arity, properties) {
+  return Object.freeze({ resources: new DerivativeResources(arity, 4, 1), ...properties });
+}
 
 test("consumption retires every saved owner and marks histories consumed even when release fails", () => {
   const released = [];
@@ -9,10 +14,10 @@ test("consumption retires every saved owner and marks histories consumed even wh
     throw new Error(`controlled saved release ${value}`);
   });
   const leaf = history.leaf([1]);
-  const recipe = {
+  const recipe = declaredRecipe(1, {
     savedOperands: () => [0],
     apply: () => ({}),
-  };
+  });
   const inner = history.record([1], recipe, [leaf], ["inner"]);
   const outer = history.record([1], recipe, [inner], ["outer"]);
   const closed = new Set();
@@ -44,10 +49,10 @@ test("a late semantic error preserves earlier consumption and aggregates indepen
     if (value === "good") throw savedCleanup;
   }, value => { if (value === "bad") throw invalidSave; });
   const leaf = history.leaf([1]);
-  const recipe = { savedOperands: () => [0], apply: () => ({}) };
+  const recipe = declaredRecipe(1, { savedOperands: () => [0], apply: () => ({}) });
   const bad = history.record([1], recipe, [leaf], ["bad"]);
   const good = history.record([1], recipe, [leaf], ["good"]);
-  const root = history.record([1], { savedOperands: () => [], apply: () => ({}) }, [bad, good], []);
+  const root = history.record([1], declaredRecipe(2, { savedOperands: () => [], apply: () => ({}) }), [bad, good], []);
   const closed = new Set();
   const operations = { view: () => ({}), close: value => {
     assert.equal(closed.has(value), false, "each temporary closes once even after independent errors");
@@ -77,7 +82,7 @@ test("consumption failure preserves its cause while retiring every temporary and
   const history = new DerivativeHistory(() => undefined, () => { throw savedFailure; });
   const leaf = history.leaf([1]);
   const temporary = { kind: "temporary" };
-  const output = history.record([1], { savedOperands: () => [0], apply: () => temporary }, [leaf], ["saved"]);
+  const output = history.record([1], declaredRecipe(1, { savedOperands: () => [0], apply: () => temporary }), [leaf], ["saved"]);
   const results = [];
   const closed = [];
   const operations = {
