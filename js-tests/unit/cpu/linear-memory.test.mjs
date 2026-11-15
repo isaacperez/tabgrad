@@ -73,6 +73,29 @@ test("CPU release rejects a live foreign generation but ignores an already relea
   assert.deepEqual(allocationCounters(allocator), [0, 4, 0, 16]);
 });
 
+for (const sharedMemory of [false, true]) for (const bytes of [0, 4]) {
+  test(`CPU release rejects a live foreign owner with equal generation (shared=${sharedMemory}, bytes=${bytes})`, () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    const otherMemory = sharedMemory ? memory : new WebAssembly.Memory({ initial: 1 });
+    const allocator = new LinearMemoryAllocator(memory, 48, 1, 16, 7);
+    const other = new LinearMemoryAllocator(otherMemory, 48, 1, 16, 7);
+    const owned = allocator.allocate(4), foreign = other.allocate(bytes);
+    const before = allocationCounters(allocator), otherBefore = allocationCounters(other);
+    assert.throws(() => allocator.release(foreign), { code: "BACKEND_STATUS_ERROR" });
+    assert.equal(foreign.released, false);
+    assert.deepEqual(allocationCounters(allocator), before);
+    assert.deepEqual(allocationCounters(other), otherBefore);
+    const next = allocator.allocate(4);
+    assert.notEqual(next.offset, owned.offset, "a rejected release cannot make a live range reusable");
+    other.release(foreign);
+    allocator.release(foreign);
+    allocator.release(owned);
+    allocator.release(next);
+    assert.equal(allocator.livePayloadBytes, 0);
+    assert.equal(other.livePayloadBytes, 0);
+  });
+}
+
 test("CPU fragmented search survives largest-range splits, removal and new coalescing", () => {
   const memory = new WebAssembly.Memory({ initial: 1, maximum: 1 });
   const allocator = new LinearMemoryAllocator(memory, 48, 1, 16, 7);
