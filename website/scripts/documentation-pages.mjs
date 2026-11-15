@@ -14,6 +14,26 @@ function overviewLink(index, source, label) {
   return entry ? `- [${label}](${entry.route})` : "";
 }
 
+/** Validate every release presentation, including a not-yet-selected candidate.
+ * @param {object} release @param {Map} index @returns {void} */
+function validateSupportLinks(release, index) {
+  if (!release?.support) throw new Error("Missing release support presentation");
+  const links = [...release.support.capabilities, ...release.support.environments.flatMap(environment => environment.links)];
+  for (const link of links) {
+    const document = index.get(link.source);
+    if (!document || link.fragment && !document.headings.includes(link.fragment)) throw new Error("Release support link is not available in its documentation version");
+  }
+}
+
+/** Complete integration examples must load their documentation's package version.
+ * @param {object} group @returns {void} */
+function validateIntegrationPins(group) {
+  for (const entry of group.entries.filter(entry => ["docs/reference/browser-package.md", "docs/reference/python-host.md"].includes(entry.source))) {
+    const pins = [...entry.body.matchAll(/@tabgrad\/tabgrad@([^/"'`\s<>]+)/g)];
+    if (!pins.length || pins.some(match => match[1] !== group.version)) throw new Error("Integration guide package version differs from documentation version");
+  }
+}
+
 /** The shared overview changes its links and attribution, not its reader task.
  * @param {object} group @param {Map} index @param {string} runtimeVersion @param {string} artwork @returns {string} */
 function overview(group, index, runtimeVersion, artwork) {
@@ -93,6 +113,8 @@ export function prepareDocumentationPages(releaseData, runtimeVersion, rendererK
   const prepared = [], documents = [], groups = [], diagrams = new Map();
   for (const group of releaseData.groups) {
     const index = createDocumentIndex(group.entries, { version: group.version, descriptions: {} });
+    validateSupportLinks(releaseData.releases.find(release => release.version === group.version), index);
+    validateIntegrationPins(group);
     const overviewEntry = { source: "docs/README.md", body: overview(group, index, runtimeVersion, artwork) };
     const overviewIndex = createDocumentIndex([overviewEntry], { version: group.version, descriptions: {} });
     const overviewMetadata = { ...overviewIndex.get(overviewEntry.source), title: "Documentation", description: `Guides and reference for Tabgrad ${group.version}.` };

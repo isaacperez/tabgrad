@@ -40,8 +40,8 @@ Deployment and account configuration
 are not part of these commands. Keep local tools, original evidence and private
 configuration outside maintained source and generated public output.
 
-Get started renders the HTML/CDN example directly from the browser package
-guide's first HTML block, and the two complete Python integration files from
+Get started renders the HTML/CDN example directly from the selected archive's
+browser package guide's first HTML block, and the two complete Python integration files from
 the named fences in the Python host guide. Their imports use the exact published version
 and raw files; the playground itself keeps its separate same-origin assets.
 `IntegrationSource` gives each file the same download action and native code

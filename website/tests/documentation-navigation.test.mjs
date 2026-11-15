@@ -27,3 +27,9 @@ test("navigation and default search are local to the selected documentation vers
   assert.deepEqual(documentationSearchScope(data, "/docs/0.3.0/javascript-api/"), "0.3.0");
   assert.deepEqual(documentationSearchScope(data, "/blog/"), "current");
 });
+
+test("onboarding navigation follows only the current runtime while historical setup remains version-local", () => {
+  const links = version => documentationSidebar(data, `/docs/${version}/javascript-api/`).flatMap(group => group.type === "group" ? group.entries : [group]);
+  assert.ok(links("0.4.0").some(link => link.href === "/start/"));
+  assert.ok(!links("0.3.0").some(link => link.href === "/start/"));
+});

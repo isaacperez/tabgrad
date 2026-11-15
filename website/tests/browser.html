@@ -1291,7 +1291,9 @@ try {
         const reference = [...sectionHeadings[0].parentElement.querySelectorAll('a')].at(-1);
         const separation = sectionHeadings[1].getBoundingClientRect().top - reference.getBoundingClientRect().bottom;
         assert(separation >= parseFloat(frame.contentWindow.getComputedStyle(reference).lineHeight), `compatibility sections retain a line of separation at ${width}px`);
-        for (const release of document.querySelectorAll('.version-history > a')) {
+        const historyRows = document.querySelectorAll('.version-history .release-history-entry');
+        assert(historyRows.length > 0, 'version history includes released records');
+        for (const release of historyRows) {
           const style = frame.contentWindow.getComputedStyle(release);
           assert(style.borderLeftWidth === '0px' && style.borderRightWidth === '0px' && style.borderBottomWidth === '0px' && style.borderRadius === '0px' && style.backgroundColor === 'rgba(0, 0, 0, 0)', 'release history retains its unframed row style');
         }
@@ -1421,7 +1423,7 @@ try {
         const routes = document.querySelectorAll('.docs-route');
         assert(routes.length === 4, 'documentation presents the four reader paths');
         assert(routes[0].querySelector('ul a').getAttribute('href') === '/start/', 'documentation integration begins with the JavaScript and Python file choices');
-        for (const href of ['/start/', '/docs/reference/browser-package/', '/docs/reference/python-host/']) assert(document.querySelector(`#starlight__sidebar a[href="${href}"]`), `documentation navigation offers setup: ${href}`);
+        for (const href of ['/start/', '/docs/reference/browser-package/', '/docs/reference/python-host/']) assert(findDocumentationLink(document.querySelector('#starlight__sidebar'), href), `documentation navigation offers setup: ${href}`);
         for (let index = 0; index < routes.length; index += 2) {
           const left = routes[index], right = routes[index + 1];
           if (left.getBoundingClientRect().right <= right.getBoundingClientRect().left) {

@@ -23,8 +23,13 @@ export function documentationVersionChoices(data, path) {
 /** @param {Document|undefined} document @param {string} current @param {string} [label]
  * @returns {import('@astrojs/starlight/route-data').StarlightRouteData['sidebar']} */
 function sidebarLink(document, current, label) {
-  return document ? [{ type: "link", label: label ?? document.title, href: document.canonicalRoute,
-    isCurrent: document.source === current, badge: undefined, attrs: {} }] : [];
+  return document ? navigationLink(document.canonicalRoute, label ?? document.title, document.source === current) : [];
+}
+
+/** @param {string} href @param {string} label @param {boolean} isCurrent
+ * @returns {import('@astrojs/starlight/route-data').StarlightRouteData['sidebar']} */
+function navigationLink(href, label, isCurrent) {
+  return [{ type: "link", label, href, isCurrent, badge: undefined, attrs: {} }];
 }
 
 /** @param {string} label @param {import('@astrojs/starlight/route-data').StarlightRouteData['sidebar']} entries @param {boolean} collapsed
@@ -41,6 +46,7 @@ export function documentationSidebar(data, path) {
   const documents = data.documents.filter(entry => !entry.alias && entry.version === current.version);
   const bySource = new Map(documents.map(entry => [entry.source, entry]));
   const start = [...sidebarLink(bySource.get("docs/README.md"), current.source, "Documentation"),
+    ...(current.version === data.runtimeVersion ? navigationLink("/start/", "Get started", false) : []),
     ...setupNavigation.flatMap(([name, label]) => sidebarLink(bySource.get(`docs/reference/${name}.md`), current.source, label))];
   const reference = [...sidebarLink(bySource.get("docs/javascript-api.md"), current.source, "JavaScript API"),
     ...referenceNavigation.flatMap(([name, label]) => sidebarLink(bySource.get(`docs/reference/${name}.md`), current.source, label)),

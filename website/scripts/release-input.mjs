@@ -28,14 +28,3 @@ export function readReleaseInput(path) {
   if (value.sourceRevision !== release.sourceRevision) throw new Error("Documentation baseline differs from completed package source");
   return { ...value, release };
 }
-
-/** Only the two integration guides bind their explicit package specifier to the selected release.
- * Versioned support/history prose and unrelated numbers retain their original meaning. */
-export function bindIntegrationVersion(source, body, referenceVersion, selectedVersion) {
-  if (!["docs/reference/browser-package.md", "docs/reference/python-host.md"].includes(source)) return body;
-  const token = `@tabgrad/tabgrad@${referenceVersion}`;
-  return body.replaceAll(token, (match, offset) => {
-    const next = body[offset + match.length];
-    return next === undefined || "/ \t\r\n\"'`".includes(next) ? `@tabgrad/tabgrad@${selectedVersion}` : match;
-  });
-}

@@ -54,3 +54,13 @@ export async function loadReleaseData(root, selectedVersion, context = {}) {
   if (!groups.some(group => group.version === selectedVersion)) throw new Error("Selected runtime has no completed documentation source");
   return { releases, groups };
 }
+
+/** Tutorials share the selected archive, never newer usage from the rendering checkout.
+ * @param {object} releaseData @param {string} version @returns {{browser:string,python:string}} */
+export function releaseIntegrationGuides(releaseData, version) {
+  const group = releaseData.groups.find(entry => entry.version === version);
+  const browser = group?.entries.find(entry => entry.source === "docs/reference/browser-package.md")?.body;
+  const python = group?.entries.find(entry => entry.source === "docs/reference/python-host.md")?.body;
+  if (browser === undefined || python === undefined) throw new Error("Selected release has no complete integration guides");
+  return { browser, python };
+}
