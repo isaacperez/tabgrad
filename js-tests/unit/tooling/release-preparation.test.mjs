@@ -14,6 +14,9 @@ const ports = f => ({ api: f.api, clock: f.clock, replay: f.replay, registry: f.
 
 test("version/source compose a canonical public plan and exact execution facts without changing enrolled trust", async t => {
   const f = await releasePreparationFixture(t), before = structuredClone(f.environment);
+  const older = { ...f.history, id: 221, name: "tabgrad-publication-observation-200-1",
+    created_at: new Date(f.now - 2000).toISOString() };
+  f.values.set("/actions/artifacts?per_page=100&page=1", { total_count: 2, artifacts: [older, f.history] });
   assert.equal((await selectReleaseInputs(f.root, f.environment, ports(f))).mode, "intent"); await f.receive();
   const result = await composeReleaseInputs(f.root, f.environment, ports(f));
   const raw = await readFile(join(f.root, "input/plan.json")), plan = JSON.parse(raw);
@@ -24,6 +27,7 @@ test("version/source compose a canonical public plan and exact execution facts w
   assert.equal(f.replays[0].command, "read"); assert.equal(f.replays[0].config.root, f.profile.record.root);
   assert.equal(Object.keys(f.replays[0].config.evidence).length, 1);
   const execution = JSON.parse(await readFile(join(f.root, "input/execution.json")));
+  assert.equal(execution.history.id, "220");
   assert.equal(execution.planSha256, result.plan_sha256); assert.equal(execution.physical.commentId, "56");
   assert.deepEqual((await readdir(join(f.root, "input"))).sort(), ["execution.json", "notes.md", "plan.json", "producer-evidence.json", "qualification.json", "release-checksums.txt"]);
   assert.equal(raw.includes(Buffer.from("operational qualification")), false);
@@ -72,10 +76,44 @@ test("producer selection requires a unique exact eligible run, never the latest 
 
 test("history selection is a metadata transfer hint and rejects wrong carriers", async t => {
   const f = await releasePreparationFixture(t), a = f.history;
-  assert.equal(selectReleaseHistory([a, { ...a, id: 221 }], "17", "", f.now).id, "221");
+  assert.equal(selectReleaseHistory([a], "17", "", f.now).id, "220");
   assert.equal(selectReleaseHistory([a, { ...a, id: 221 }], "17", "220", f.now).id, "220");
   for (const patch of [{ expired: true }, { name: "unrelated" }, { digest: "unknown" },
     { workflow_run: { ...a.workflow_run, head_repository_id: 18 } }]) assert.throws(() => selectReleaseHistory([{ ...a, ...patch }], "17", "", f.now));
+});
+
+test("default history selection follows creation time rather than opaque IDs or collection order", async t => {
+  const f = await releasePreparationFixture(t), newer = f.history;
+  const older = { ...newer, id: 221, name: "tabgrad-publication-observation-200-1",
+    created_at: new Date(f.now - 2000).toISOString() };
+  for (const artifacts of [[older, newer], [newer, older]]) {
+    assert.equal(selectReleaseHistory(artifacts, "17", "", f.now).id, "220");
+    assert.equal(selectReleaseHistory(artifacts, "17", "221", f.now).id, "221");
+  }
+});
+
+test("default history selection rejects unavailable, invalid and future native creation times", async t => {
+  const f = await releasePreparationFixture(t);
+  for (const created_at of [undefined, null, 123, "unknown", "2026-02-30T00:00:00Z",
+    new Date(f.now + 1000).toISOString()]) {
+    const artifact = { ...f.history, created_at };
+    assert.throws(() => selectReleaseHistory([artifact], "17", "", f.now), { code: "PUBLICATION_HISTORY_SELECTION" });
+    assert.throws(() => selectReleaseHistory([f.history, { ...artifact, id: 221 }], "17", "", f.now),
+      { code: "PUBLICATION_HISTORY_SELECTION" });
+  }
+  assert.equal(selectReleaseHistory([{ ...f.history, created_at: undefined }], "17", "220", f.now).id, "220");
+});
+
+test("a tied newest creation time requires an exact hint without making older ties ambiguous", async t => {
+  const f = await releasePreparationFixture(t);
+  const newest = { ...f.history, created_at: new Date(Math.floor((f.now - 1000) / 1000) * 1000).toISOString() };
+  const tied = { ...newest, id: 221, created_at: newest.created_at.replace(".000Z", "Z") };
+  for (const artifacts of [[newest, tied], [tied, newest]]) {
+    assert.throws(() => selectReleaseHistory(artifacts, "17", "", f.now), { code: "PUBLICATION_HISTORY_SELECTION" });
+    assert.equal(selectReleaseHistory(artifacts, "17", "221", f.now).id, "221");
+  }
+  const older = { ...newest, id: 222, created_at: new Date(f.now - 2000).toISOString() };
+  assert.equal(selectReleaseHistory([older, { ...older, id: 223 }, newest], "17", "", f.now).id, "220");
 });
 
 for (const [name, mutate, code] of [
