@@ -818,8 +818,9 @@ Use stable profile schema 3, extending schema 2 with `tagDelivery`:
 Both automatic environments admit only the `main` branch and have no pending
 review or wait rule. GitHub reports the custom deployment restriction as one
 native `branch_policy` protection entry. Admission requires that entry, verifies
-the main-only branch configuration and binds the complete response in the
-enrolled snapshot; reviewer, wait and unknown protection rules reject.
+the main-only branch configuration and binds the complete rule and branch
+objects in the stable enrolled snapshot; reviewer, wait and unknown protection
+rules reject.
 The human decision is the earlier protected candidate
 approval. Retain the existing reviewed `tabgrad-npm-publication` and
 `website-publication` environments for manual work. Enroll the new live snapshots,
