@@ -6,7 +6,7 @@ import { canonicalBytes, sha256 } from "./release-record-data.mjs";
 import { exactPublicationKeys, requirePublication, validatePublicationPlan } from "./publication-plan.mjs";
 import { publicationFile } from "./publication-admission.mjs";
 import { publicationGithub } from "./publication-github.mjs";
-import { publicationEnvironmentSnapshot } from "./publication-control.mjs";
+import { automaticPublicationEnvironment, publicationEnvironmentSnapshot } from "./publication-control.mjs";
 import { readProducerInventory } from "./package-provenance.mjs";
 import { createRegistryPackageApplication } from "./package-registry.mjs";
 
@@ -79,8 +79,7 @@ export async function observeCompletedRelease({ descriptor, api, artifact, envir
   const branchResult = await api.request(`/environments/${descriptor.environment.name}/deployment-branch-policies?per_page=100&page=1`);
   const branches = branchResult.branch_policies;
   requirePublication(String(protection.id) === descriptor.environment.id && protection.name === descriptor.environment.name
-    && Array.isArray(protection.protection_rules) && protection.protection_rules.length === 0
-    && branchResult.total_count === 1 && branches?.length === 1 && branches[0].name === "main" && branches[0].type === "branch"
+    && automaticPublicationEnvironment(protection, branches) && branchResult.total_count === 1
     && sha256(canonicalBytes(publicationEnvironmentSnapshot(protection, branches))) === descriptor.environment.snapshotSha256,
   "PUBLICATION_SITE_PROTECTION_CHANGED");
   const release = await api.request(`/releases/${descriptor.releaseId}`);
