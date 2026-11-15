@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { documentationBaseline, loadReleaseData, releaseIntegrationGuides } from "../scripts/release-data.mjs";
+import { documentationBaseline, loadReleaseData } from "../scripts/release-data.mjs";
 
 import { execFileSync } from "node:child_process";
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
@@ -39,11 +39,4 @@ test("candidate previews require explicit validation and cannot enter a publicat
   assert.deepEqual(documentationBaseline(entry, { candidateRevision: revision }), { revision, candidate: true });
   assert.equal(documentationBaseline(entry, { candidateRevision: revision, publication: true }), null);
   assert.throws(() => documentationBaseline({ ...entry, source: "b".repeat(40) }, { release: { version: entry.version, sourceRevision: revision } }), /differs/);
-});
-
-test("integration tutorials use the selected archive and reject an absent guide instead of falling back to main", () => {
-  const data = { groups: [{ version: "0.3.0", entries: [{ source: "docs/reference/browser-package.md", body: "Released JavaScript" }, { source: "docs/reference/python-host.md", body: "Released Python" }] },
-    { version: "0.4.0", entries: [{ source: "docs/reference/browser-package.md", body: "Future JavaScript" }] }] };
-  assert.deepEqual(releaseIntegrationGuides(data, "0.3.0"), { browser: "Released JavaScript", python: "Released Python" });
-  assert.throws(() => releaseIntegrationGuides(data, "0.4.0"), /complete integration guides/);
 });

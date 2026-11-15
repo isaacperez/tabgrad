@@ -214,12 +214,12 @@ One explicit release input selects runtime version, package root and source
 identity across assets, Header, Versions, runner and integration downloads. Its
 release notes, support record and documentation identity must agree with the
 release catalogue; unknown versions do not inherit another release's prose. The
-website toolchain lock remains independent and unchanged. Documentation is read
-from tracked Markdown at the released source, including clean detached checkouts;
-the hosting recipe retains its own commit identity. Only the two integration
-guides bind exact Tabgrad package specifiers to that selected runtime when rendered
-for the web; standalone Markdown keeps its explicit reference-version example.
-Other versioned support records, numbers and interpreter pins are not rewritten.
+website toolchain lock remains independent and unchanged. Documentation is read from exact admitted Git objects and attributed editorial
+corrections; the hosting recipe retains its own commit identity. Integration
+tutorials and downloads come from the selected archive's two guides. Every
+candidate is checked for those guides, required code fences and matching package
+pins before readiness. Newer main's examples never replace them, and their
+package or interpreter specifiers are not silently rewritten.
 
 Delivery manifest format 2 adds the public release binding and distinguishes
 documentation source from recipe. Format 1 remains the manual format. Both keep

@@ -3,17 +3,16 @@ import { mkdir, readdir, readFile, rm, copyFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { promisify } from "node:util";
 import puppeteer from "puppeteer";
-import { firstCodeBlock } from "./content.mjs";
 import { websiteRoot, repositoryRoot, runtimeVersion, pyodideVersion, releaseInput } from "./config.mjs";
 import { writeChanged, sha256 } from "./files.mjs";
 import { loadIllustration } from "./illustrations.mjs";
 import { documentationSourceContext } from "./source-context.mjs";
 import { diagramSize } from "./diagram-layout.mjs";
 import { prepareBlog } from "./blog.mjs";
-import { integrationFiles } from "./integration-files.mjs";
+import { integrationFiles, integrationSource } from "./integration-files.mjs";
 import { checkGeneratedAssets } from "./generated-assets.mjs";
 import { siteOrigin } from "./publication.mjs";
-import { loadReleaseData, releaseIntegrationGuides } from "./release-data.mjs";
+import { loadReleaseData } from "./release-data.mjs";
 import { prepareDocumentationPages } from "./documentation-pages.mjs";
 
 const execFileAsync = promisify(execFile);
@@ -92,16 +91,14 @@ export async function prepareContent() {
   for (const entry of output) await writeChanged(entry.path, entry.body);
   for (const path of await generatedFiles(generatedDocs)) if (!livePaths.has(path)) await rm(path);
   for (const path of await generatedFiles(diagramDirectory)) if (!diagrams.has(relative(diagramDirectory, path).replace(/\.svg$/, ""))) await rm(path);
-  const guides = releaseIntegrationGuides(releaseData, runtimeVersion);
+  const integration = integrationSource(releaseData.groups.find(group => group.version === runtimeVersion));
   const information = {
     publicOrigin: siteOrigin(process.env.TABGRAD_SITE_URL) ?? null,
     sourceRevision, sourceLinkRevision, localChanges: localChanges || releaseData.releases.some(entry => entry.candidate), runtimeVersion, pyodideVersion, posts,
     release: releaseInput?.release ?? null, recipeRevision: releaseInput?.recipeRevision ?? null,
     documents: documentation.documents, documentationGroups: documentation.groups, releases: releaseData.releases,
     diagrams: diagrams.size, rendererKey,
-    integrationHtml: firstCodeBlock(guides.browser, "html"),
-    integrationPythonHtml: firstCodeBlock(guides.python, "html", "index.html"),
-    integrationPythonWorker: firstCodeBlock(guides.python, "javascript", "python-worker.js"),
+    ...integration,
   };
   const downloads = integrationFiles(information);
   await checkGeneratedAssets(join(websiteRoot, "public"), downloads.map(file => file.path), { allowMissing: true });
