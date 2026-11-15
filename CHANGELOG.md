@@ -7,12 +7,23 @@ established by the corresponding verified release record.
 
 ## Unreleased
 
-- Add approved pre-tag candidate preparation and coordinated tag delivery through
-  npm, immutable GitHub completion and a version-matched website, preserving
-  manual publication and site recovery. Service activation remains separate.
-
+## 0.4.0 - 2026-11-15
 
 ### Added
+
+- Add and multiply tensors with broadcast-compatible shapes on CPU and GPU,
+  from JavaScript or Python. Functional gradients and `backward()` reduce each
+  contribution to its original input shape without expanding operand storage
+  ([#430](https://github.com/isaacperez/tabgrad/issues/430)).
+- Browse documentation by release, with version-aware navigation and search.
+  Versions now presents each release's own notes, capabilities and limits;
+  dated notes and matching documentation are required before release readiness
+  ([#441](https://github.com/isaacperez/tabgrad/issues/441)).
+- Maintainers can approve a candidate before its version tag and deliver it
+  through npm, immutable GitHub completion and a matching website. Existing
+  manual publication and site-only recovery remain available; service
+  activation and qualification are separate
+  ([#434](https://github.com/isaacperez/tabgrad/issues/434)).
 
 - Publication plans can preserve an existing exact-source version tag without
   trying to create it again. Earlier plans retain their original effect
@@ -29,6 +40,13 @@ established by the corresponding verified release record.
   startup dependency on the real user keychain while retaining the isolated
   environment, temporary profile and GPU checks
   ([#409](https://github.com/isaacperez/tabgrad/issues/409)).
+
+The [0.4.0 source and support record](docs/reference/release-0.4.0.md)
+describes the new shape domain and existing float32, first-order and device
+limits, including backend differences in grouped gradient reduction. Replace
+the complete matched distribution; existing supported calls need no API
+migration. Source notes do not establish registry availability or actual
+retained-archive qualification.
 
 ## 0.3.0 - 2026-11-05
 
