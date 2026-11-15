@@ -7,7 +7,9 @@ import { firstCodeBlock } from "../scripts/content.mjs";
 const guide = await readFile(new URL("../../docs/reference/browser-package.md", import.meta.url), "utf8");
 const html = firstCodeBlock(guide, "html");
 const source = html.match(/<script type="module">([\s\S]*?)<\/script>/)[1];
-const entry = "https://cdn.jsdelivr.net/npm/@tabgrad/tabgrad@0.3.0/dist/index.js";
+const { version } = JSON.parse(await readFile(new URL("../../package.json", import.meta.url), "utf8"));
+const entry = `https://cdn.jsdelivr.net/npm/@tabgrad/tabgrad@${version}/dist/index.js`;
+assert.ok(source.includes(entry), "the starter imports the matching package version");
 
 // Execute the documented module unchanged except for its import destination.
 // The controlled module implements the public session contract and faults each
