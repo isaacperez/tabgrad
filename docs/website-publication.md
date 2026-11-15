@@ -230,12 +230,15 @@ without a post-tag human wait. The pre-tag protected plan supplies its authority
 manual delivery/recovery keeps `website-publication`. Neither the source change
 nor a passing local model creates or qualifies those effective protections.
 Manual site-only recovery or presentation updates select the retained completion
-inputs and pair its runtime with the current reviewed main source. The manifest
-keeps that content/recipe revision separate from the package source. Automatic
+inputs and pair its runtime with the current reviewed presentation recipe and
+admitted documentation corrections. Its documentation baseline remains that
+release's source; current main's new APIs cannot replace historical pages.
+The manifest keeps presentation/correction revisions separate from package and
+documentation-baseline identities. Automatic
 delivery requires the current documentation baseline and package source to match;
 each historical archive retains its own admitted source and any separately
 attributed corrections. Stable aliases follow the completed selected release.
 Every delivery, including rollback, reconstructs and verifies the full admitted
 documentation/resource set; predecessor retention alone cannot preserve it.
-The tag procedure
-describes this path and explicit manual rollback. npm/GitHub outcomes remain complete when a later website step fails.
+The tag procedure describes this path and explicit manual rollback. npm/GitHub
+outcomes remain complete when a later website step fails.
