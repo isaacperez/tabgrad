@@ -5,7 +5,7 @@
   "schemaVersion": 1,
   "version": "0.3.0",
   "title": "Local Python CPU diagnostics",
-  "documentationImpact": "The archive preserves the exact 0.3.0 behavior baseline. Reviewed migration metadata supplies the support presentation, and attributed editorial corrections add the already qualified complete JavaScript and Python integration examples while preserving previous heading links. No later runtime behavior is added.",
+  "documentationImpact": "The archive preserves the exact 0.3.0 behavior baseline. Reviewed migration metadata supplies the support presentation, and attributed editorial corrections add the already qualified complete JavaScript and Python integration examples while preserving previous heading links. The local diagnostics example now supplies the float32 dtype already required by this release. No later runtime behavior is added.",
   "support": {
     "summary": "Create tensors, combine calculations and compute their gradients in Python or JavaScript.",
     "capabilities": [
