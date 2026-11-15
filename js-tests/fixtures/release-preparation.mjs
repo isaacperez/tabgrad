@@ -56,7 +56,7 @@ export async function releasePreparationFixture(t) {
   const comment = { id: 56, user: { id: 11 }, issue_url: "https://api.github.com/repos/example/project/issues/55",
     body: `tabgrad-release-qualification 131/1 ${sha256(f.bytes)}\n${canonicalBytes(gpu)}` };
   const sourceMetadata = { name: f.candidate.name, version: f.candidate.version, private: false };
-  const sourceNotes = `# Changelog\n\n## ${f.candidate.version} - 2026-01-01\n\n- A useful correction.\n`;
+  const sourceNotes = `# Changelog\n\n## ${f.candidate.version} - 2026-01-01\n\n### Fixed\n\n- A useful correction.\n`;
   const content = raw => ({ type: "file", encoding: "base64", content: Buffer.from(raw).toString("base64"), size: Buffer.byteLength(raw) });
   const values = new Map([["", { id: 17, owner: { id: 23 }, full_name: "example/project", default_branch: "main", archived: false, disabled: false }],
     ["/actions/runs/301", { id: 301, run_attempt: 1, head_sha: revision, head_branch: "main", event: "workflow_dispatch", path: publisher,
@@ -73,6 +73,21 @@ export async function releasePreparationFixture(t) {
     ["/issues/55/comments", [comment]], ["/issues/comments/56", comment],
     ...[...outputs, history].map(a => [`/actions/artifacts/${a.id}`, a])]);
   const producerRoute = `/actions/workflows/${encodeURIComponent(run.path)}/runs?branch=main&event=workflow_dispatch&status=success&head_sha=${run.head_sha}&per_page=100&page=1`;
+  const documentation = { schemaVersion: 1, releases: [{ version: f.candidate.version, source: "candidate",
+    documentation: { directories: [], individual: ["docs/javascript-api.md"] } }] };
+  const support = { summary: "Use the corrected arithmetic.", capabilities: [{ title: "Tensors", description: "Add tensors.", source: "docs/javascript-api.md" }],
+    environments: [{ title: "CPU", usage: "Default", tested: "Chrome", setup: "Load the matching files.", links: [{ label: "Setup", source: "docs/javascript-api.md" }] }],
+    limits: [{ title: "Data", description: "Float32 tensors." }] };
+  values.set(`/contents/website/release-catalogue.json?ref=${f.candidate.sourceRevision}`, content(JSON.stringify(documentation)));
+  values.set(`/contents/docs/reference/release-${f.candidate.version}.md?ref=${f.candidate.sourceRevision}`,
+    content(`<!-- tabgrad-release\n${JSON.stringify({ schemaVersion: 1, version: f.candidate.version, title: "Corrected arithmetic", documentationImpact: "Reference records the correction.", support })}\n-->`));
+  const websiteRun = { ...run, id: 450, path: ".github/workflows/website-checks.yml", event: "push" };
+  values.set(`/actions/workflows/${encodeURIComponent(websiteRun.path)}/runs?branch=main&event=push&head_sha=${websiteRun.head_sha}&per_page=100&page=1`,
+    { total_count: 1, workflow_runs: [websiteRun] });
+  values.set("/actions/runs/450/attempts/1/jobs?per_page=100&page=1", { total_count: 1, jobs: [{ id: 451, name: "website", run_id: 450,
+    head_sha: websiteRun.head_sha, status: "completed", conclusion: "success", steps:
+      ["Verify emitted links, diagrams and runtime bytes", "Check versioned documentation in desktop and mobile browsers"]
+        .map(name => ({ name, status: "completed", conclusion: "success" })) }] });
   values.set(producerRoute, { total_count: 1, workflow_runs: [run] });
   values.set("/actions/runs/131/artifacts?per_page=100&page=1", { total_count: 3, artifacts: outputs });
   values.set("/actions/artifacts?per_page=100&page=1", { total_count: 1, artifacts: [history] });

@@ -104,7 +104,7 @@ export async function observeCompletedRelease({ descriptor, api, artifact, envir
 }
 
 /** Owned registry application is copied only after full archive/install verification and always closed. */
-export async function acquireReleaseSite({ descriptor, directory, recipeRevision = descriptor.plan.publisher.revision, sourceRevision = descriptor.plan.candidate.sourceRevision, createApplication = createRegistryPackageApplication }) {
+export async function acquireReleaseSite({ descriptor, directory, recipeRevision = descriptor.plan.publisher.revision, createApplication = createRegistryPackageApplication }) {
   const { candidate, plan } = completedRelease(descriptor);
   let application;
   await mkdir(directory, { mode: 0o700 });
@@ -113,6 +113,7 @@ export async function acquireReleaseSite({ descriptor, directory, recipeRevision
       allowedOrigins: ["https://registry.npmjs.org"], channel: plan.npm.channel, clientTimeoutMs: 60000, maxClientOutputBytes: 4 * 1024 * 1024 } });
     const packageDirectory = join(directory, "package");
     await cp(application.packageDirectory, packageDirectory, { recursive: true, errorOnExist: true, force: false });
+    const sourceRevision = candidate.sourceRevision;
     requirePublication([recipeRevision, sourceRevision].every(value => /^[a-f0-9]{40}$/.test(value)), "PUBLICATION_SITE_CONTEXT_INVALID");
     const context = { schemaVersion: 1, recipeRevision, sourceRevision, release: releaseSiteIdentity(descriptor), packageDirectory, inventory: candidate.files };
     await writeFile(join(directory, "release-input.json"), canonicalBytes(context), { flag: "wx", mode: 0o600 });
@@ -131,8 +132,7 @@ async function main() {
   await observeCompletedRelease({ descriptor, environment, artifact: { id: environment.TABGRAD_COMPLETION_ID,
     sha256: environment.TABGRAD_COMPLETION_DIGEST }, api: publicationGithub({ repository: environment.GITHUB_REPOSITORY,
     token: environment.GH_TOKEN, readOnly: true }) });
-  const context = await acquireReleaseSite({ descriptor, directory: resolve(directory), recipeRevision: environment.GITHUB_SHA, sourceRevision: environment.TABGRAD_WEBSITE_RELEASE_RECOVERY === "true"
-    ? environment.GITHUB_SHA : selected.plan.candidate.sourceRevision });
+  const context = await acquireReleaseSite({ descriptor, directory: resolve(directory), recipeRevision: environment.GITHUB_SHA });
   if (environment.GITHUB_OUTPUT) await appendFile(environment.GITHUB_OUTPUT,
     `source_revision=${context.sourceRevision}\nrelease_input=${join(resolve(directory), "release-input.json")}\n`);
   return { status: "release-site-acquired", release: context.release };

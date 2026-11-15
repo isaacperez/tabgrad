@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "releases": [
+    {
+      "version": "0.3.0",
+      "source": "591dcdac35ef2ebf548c73edfd26bd196c41560b",
+      "documentation": {
+        "directories": ["concepts", "architecture", "components", "flows"],
+        "individual": [
+          "docs/javascript-api.md", "docs/compatibility.md",
+          "docs/reference/browser-package.md", "docs/reference/python-host.md",
+          "docs/reference/python-tensors.md", "docs/reference/webgpu-runtime.md",
+          "docs/reference/tensor-view.md", "docs/reference/tensor-copy.md",
+          "docs/reference/tensor-sum.md", "docs/reference/tensor-multiplication.md",
+          "docs/reference/tensor-matmul.md", "docs/reference/functional-gradients.md",
+          "docs/reference/backward-gradients.md", "docs/reference/gradient-recording.md",
+          "docs/reference/sgd.md"
+        ]
+      }
+    },
+    { "version": "0.2.0", "source": "8223ec2ef9de1b2be94694b8689db35b23a692ad", "documentation": null },
+    { "version": "0.1.3", "source": "3a0cdabdded4ecbd658bbca2427d857e92f3517e", "documentation": null },
+    { "version": "0.1.2", "source": "9d87949d324bb0e5b9d7979a50c048a2d13ba899", "documentation": null },
+    { "version": "0.1.1", "source": "ce0b54a8bd4703a5b68a0c0ee832002c37eac157", "documentation": null },
+    { "version": "0.1.0", "source": "c06a12045b741564cefb38277f8e94da534c0ea3", "documentation": null }
+  ]
+}

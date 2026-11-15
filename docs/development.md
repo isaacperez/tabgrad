@@ -396,14 +396,25 @@ CDN packages. This opt-in check needs public network access and is separate
 from the ordinary website checks, which retain same-origin assets. It qualifies
 the observed CPU examples, not CDN availability, all browsers or GPU delivery.
 
-Documentation comes from the GitHub checkout's selected Markdown, not a request
-to GitHub for every visitor. Existing admitted files need no commit to preview
-edits. Add a new selected document to Git's index (`git add path/to/document.md`)
-before previewing it; untracked notes are deliberately excluded. Generated
-frontmatter and adapted links never become another editable documentation copy.
-Use `docs/` as the source. Diagram errors stop the update instead of silently
-omitting a diagram. The [website contract](architecture/static-website.md)
-owns selection, rendering and execution boundaries.
+Documentation is generated from exact released Git objects selected by
+`website/release-catalogue.json`. Run `npm --prefix website run prepare:docs`
+explicitly before the first build or after adding a source admission. It fetches
+only missing exact commits; rendering performs no network acquisition and never
+executes historical scripts or dependencies. Release completion supplies the
+selected package baseline while the clean reviewed checkout supplies the renderer.
+The catalogue's single `candidate` entry is validation-only before completion;
+when preparing the next version, pin its predecessor to that completed release's
+public commit. Candidate preview output cannot be published.
+
+Release support records own structured presentation and documentation-impact
+metadata. An unchanged page needs no artificial edit. Historical editorial fixes
+belong in a tracked `website/content/corrections/VERSION.json` record, bound to
+the baseline revision, raw document digest and unique textual replacements.
+They do not change the package or baseline. Add new records to Git's index before
+previewing; untracked notes are excluded. Generated frontmatter, HTML and adapted
+links are not another editable documentation tree. The
+[website contract](architecture/static-website.md#version-documentation-by-released-behavior)
+owns admission, stable aliases, search, corrections and archive retention.
 
 Astro's development server is for authoring; search is available in the full
 build/preview. Rebuild the static preview after edits. The production build
@@ -459,6 +470,8 @@ checks do not depend on shell activation or an unprepared global interpreter.
 
 | Purpose | Command | Requirements |
 | --- | --- | --- |
+| Acquire exact historical documentation objects | `npm --prefix website run prepare:docs` | Prepared website Node/Git, tracked catalogue and optional admitted completion; explicit read-only source fetch, no historical code execution |
+| Check versioned documentation in browsers | `npm --prefix website run test:docs` | Prepared Chrome/Firefox, built output; desktop/mobile navigation, selected-version search and archive checks, no publication |
 | Select, receive or compose ordinary release inputs | `node scripts/prepare-release.mjs select ROOT`, `node scripts/prepare-release.mjs activate ROOT`, `node scripts/prepare-release.mjs compose ROOT` | Existing qualified controller profile, explicit admitted environment and originals; tag activation preserves the approved plan; no installation or publication |
 | Format the approved annotated-tag message | `node scripts/tag-delivery.mjs message READY_DIRECTORY ARTIFACT_METADATA_JSON NEW_TAG_MESSAGE_JSON` | Retained inspected readiness and metadata; writes a new message only, no tag or service write |
 | Request and coordinate tag delivery | `node scripts/tag-delivery.mjs request`, `node scripts/tag-delivery.mjs select ROOT`, `node scripts/tag-delivery.mjs dispatch ROOT` | Exact provider-bound contexts, enabled enrolled profile and separate operational authority; select is read-only, dispatch retains one intent/result and never retries unknown outcomes |

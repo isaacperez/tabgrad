@@ -2,8 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { browserVersion, resolveBrowser, selectBrowserDefinitions, startBrowserServer, runBrowserPage } from "../../scripts/browser-harness.mjs";
-import { firstCodeBlock } from "./content.mjs";
-import { repositoryRoot, websiteRoot, runtimeVersion, pyodideVersion } from "./config.mjs";
+import { websiteRoot, runtimeVersion, pyodideVersion } from "./config.mjs";
 import { scriptHashes } from "./delivery.mjs";
 import { writeChanged } from "./files.mjs";
 
@@ -11,8 +10,9 @@ import { writeChanged } from "./files.mjs";
 // Run the very block rendered by Get started; never serve local runtime assets.
 const fixture = "tabgrad-cdn.html";
 const failureFixture = "tabgrad-cdn-import-failure.html";
-const guide = await readFile(join(repositoryRoot, "docs/reference/browser-package.md"), "utf8");
-const snippet = firstCodeBlock(guide, "html");
+const prepared = JSON.parse(await readFile(join(websiteRoot, ".generated/site-data.json"), "utf8"));
+assert.equal(prepared.runtimeVersion, runtimeVersion, "Build the selected website before CDN qualification");
+const snippet = prepared.integrationHtml;
 const cdnBase = `https://cdn.jsdelivr.net/npm/@tabgrad/tabgrad@${runtimeVersion}/dist/`;
 assert.ok(snippet.includes(`"${cdnBase}index.js"`), "HTML example and selected runtime version must agree");
 assert.equal((snippet.match(/<script type="module">/g) ?? []).length, 1);
@@ -57,9 +57,8 @@ globalThis.finishCdnExample = async function () {
 const importFailure = standalone.replace(snippet, failureObserver + snippet
   .replace(cdnBase + "index.js", "./failing-starter-module.js")
   .replace("</script>", "  await globalThis.finishCdnExample();\n</script>"));
-const pythonGuide = await readFile(join(repositoryRoot, "docs/reference/python-host.md"), "utf8");
-const pythonHtml = firstCodeBlock(pythonGuide, "html", "index.html");
-const pythonWorker = firstCodeBlock(pythonGuide, "javascript", "python-worker.js");
+const pythonHtml = prepared.integrationPythonHtml;
+const pythonWorker = prepared.integrationPythonWorker;
 assert.ok(pythonWorker.includes(`from "${cdnBase}python.js"`), "Python example and selected runtime must agree");
 assert.ok(pythonWorker.includes(`https://cdn.jsdelivr.net/npm/pyodide@${pyodideVersion}/pyodide.mjs`), "Python interpreter pin must agree");
 await writeChanged(join(websiteRoot, ".generated/python-cdn-example/index.html"), pythonHtml + "\n");

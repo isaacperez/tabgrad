@@ -1,5 +1,14 @@
 # Tabgrad 0.2.0 source and support record
 
+<!-- tabgrad-release
+{
+  "schemaVersion": 1,
+  "version": "0.2.0",
+  "title": "Managed GPU diagnostics",
+  "documentationImpact": "Historical catalogue metadata identifies the original notes and support record. Full browsable documentation is not inferred from later sources."
+}
+-->
+
 This record identifies `@tabgrad/tabgrad@0.2.0`, selected npm channel `latest`
 and tag `v0.2.0`, under the [release policy](../releases.md). Source metadata
 does not establish registry availability. Release evidence separately identifies

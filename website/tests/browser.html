@@ -212,7 +212,7 @@ async function checkNavigation(document, context) {
   const destinations = [...links, ...projectLinks];
   const current = document.defaultView.location;
   const expectedCurrent = destinations.some(link => link.origin === current.origin &&
-    (link.pathname === '/' ? current.pathname === '/' : current.pathname.startsWith(link.pathname))) ? 1 : 0;
+    (link.pathname === '/' ? current.pathname === '/' : documentationPath(current.pathname).startsWith(documentationPath(link.pathname)))) ? 1 : 0;
   assert(JSON.stringify(links.map(link => link.pathname)) === JSON.stringify([...document.querySelectorAll('.tabgrad-navigation a')].map(link => link.pathname)) && destinations.filter((link) => link.hasAttribute('aria-current')).length === expectedCurrent, `compact navigation mirrors the main destinations and identifies the active one: ${context}`);
   for (const link of destinations) {
     const linkBounds = link.getBoundingClientRect();
@@ -426,6 +426,15 @@ function checkSharedTextLinks(document, context) {
   } finally {
     for (const [name, value, priority] of saved) { if (value) root.setProperty(name, value, priority); else root.removeProperty(name); }
   }
+}
+function documentationPath(path) {
+  return path.replace(/^\/docs\/\d+\.\d+\.\d+\//, '/docs/');
+}
+function documentationHref(link) {
+  return documentationPath(link.getAttribute('href') ?? '');
+}
+function findDocumentationLink(root, href) {
+  return [...root.querySelectorAll('a')].find(link => documentationHref(link) === href);
 }
 async function checkSearch(document, path) {
   const win = document.defaultView;
@@ -977,19 +986,19 @@ try {
     if (['/', '/playground/', '/docs/', '/blog/'].includes(path)) await checkSearch(frame.contentDocument, path);
     if (path === '/start/' || path === '/versions/' || path === '/docs/') {
       const links = [...frame.contentDocument.querySelectorAll('main a')];
-      assert(links.some(link => link.getAttribute('href') === '/docs/reference/webgpu-runtime/' && /JavaScript/.test(link.textContent)), `GPU orientation identifies JavaScript at ${path}`);
-      assert(links.some(link => link.getAttribute('href') === '/docs/reference/python-host/#acquire-a-managed-gpu-connection' && /Python/.test(link.textContent)), `GPU orientation identifies Python at ${path}`);
+      assert(links.some(link => documentationHref(link) === '/docs/reference/webgpu-runtime/' && /JavaScript/.test(link.textContent)), `GPU orientation identifies JavaScript at ${path}`);
+      assert(links.some(link => documentationHref(link) === '/docs/reference/python-host/#acquire-a-managed-gpu-connection' && /Python/.test(link.textContent)), `GPU orientation identifies Python at ${path}`);
     }
-    if (path === '/docs/concepts/python-in-the-browser/') assert(frame.contentDocument.querySelector('main a[href="/docs/reference/python-host/#run-a-complete-cpu-example"]'), 'Python introduction directs app integrators to the complete browser tutorial');
+    if (path === '/docs/concepts/python-in-the-browser/') assert(findDocumentationLink(frame.contentDocument.querySelector('main'), '/docs/reference/python-host/#run-a-complete-cpu-example'), 'Python introduction directs app integrators to the complete browser tutorial');
     if (path === '/versions/') {
       const doc = frame.contentDocument;
       assert(doc.querySelector('main a[href="https://github.com/isaacperez/tabgrad/releases/tag/v0.2.0"]'), 'release history includes the published 0.2.0');
       assert(doc.querySelector('.current-release a.button').getAttribute('href') === '/start/', 'the release integration action offers both JavaScript and Python');
       const cpu = doc.querySelector('.compatibility-grid article');
-      assert(cpu.querySelector('a[href="/docs/reference/browser-package/#use-javascript-directly-in-html"]')?.textContent.includes('JavaScript CPU setup'), 'CPU setup identifies the complete JavaScript example');
-      assert(cpu.querySelector('a[href="/docs/reference/python-host/#run-a-complete-cpu-example"]')?.textContent.includes('Python CPU setup'), 'CPU setup identifies the complete Python example');
+      assert(findDocumentationLink(cpu, '/docs/reference/browser-package/#use-javascript-directly-in-html')?.textContent.includes('JavaScript CPU setup'), 'CPU setup identifies the complete JavaScript example');
+      assert(findDocumentationLink(cpu, '/docs/reference/python-host/#run-a-complete-cpu-example')?.textContent.includes('Python CPU setup'), 'CPU setup identifies the complete Python example');
       const limits = doc.querySelector('#release-limits').parentElement;
-      assert(limits.textContent.includes('Loading pretrained models and fine-tuning are not supported yet.') && limits.textContent.includes('First-order gradients and basic SGD.'), 'pretrained-model limitations remain distinct from supported gradient and SGD work');
+      assert(limits.textContent.includes('Loading pretrained models and fine-tuning are not supported') && limits.textContent.includes('First-order gradients and basic SGD.'), 'pretrained-model limitations remain distinct from supported gradient and SGD work');
     }
     if (['/', '/start/', '/docs/', '/playground/', '/versions/', '/about/', '/contact/'].includes(path)) {
       assert(frame.contentDocument.querySelector('[data-illustration], .integration-map'), `primary and project pages include contextual original artwork: ${path}`);
@@ -1055,7 +1064,7 @@ try {
         assert(doc.querySelector('.post-body a[href="/playground/?example=first-gradient&language=python&device=cpu"]'), 'the article leads to its executable CPU example');
         const copied = [...doc.querySelectorAll('[data-code]')].map(button => button.getAttribute('data-code').replaceAll('\x7f', '\n'));
         assert(copied.includes(blogExample.python), 'the article displays and copies its complete original Python code');
-        assert(doc.querySelector('.post-body').textContent.includes('Loading pretrained models and fine-tuning are not supported yet.'), 'future model loading is distinguished from current support');
+        assert(doc.querySelector('.post-body').textContent.includes('Loading pretrained models and fine-tuning are not supported'), 'future model loading is distinguished from current support');
         assert(!doc.querySelector('a[href*="/blob/"][href*="introducing-tabgrad"]'), 'an unpublished article has no fabricated source permalink');
       }
     }
@@ -1285,7 +1294,9 @@ try {
         const reference = [...sectionHeadings[0].parentElement.querySelectorAll('a')].at(-1);
         const separation = sectionHeadings[1].getBoundingClientRect().top - reference.getBoundingClientRect().bottom;
         assert(separation >= parseFloat(frame.contentWindow.getComputedStyle(reference).lineHeight), `compatibility sections retain a line of separation at ${width}px`);
-        for (const release of document.querySelectorAll('.version-history > a')) {
+        const historyRows = document.querySelectorAll('.version-history .release-history-entry');
+        assert(historyRows.length > 0, 'version history includes released records');
+        for (const release of historyRows) {
           const style = frame.contentWindow.getComputedStyle(release);
           assert(style.borderLeftWidth === '0px' && style.borderRightWidth === '0px' && style.borderBottomWidth === '0px' && style.borderRadius === '0px' && style.backgroundColor === 'rgba(0, 0, 0, 0)', 'release history retains its unframed row style');
         }
@@ -1376,12 +1387,14 @@ try {
         const destinations = sidebarLinks.map(link => link.getAttribute('href'));
         assert(new Set(destinations).size === destinations.length, `documentation navigation has one entry per destination: ${path}`);
         const active = sidebarLinks.filter(link => link.getAttribute('aria-current') === 'page');
-        assert(active.length === 1 && active[0].getAttribute('href') === path, `documentation navigation selects the current destination: ${path}`);
+        assert(active.length === 1 && documentationHref(active[0]) === path, `documentation navigation selects the current destination: ${path}`);
       }
       if (path === '/docs/') {
         const source = document.querySelector('.docs-source [data-documentation-source]');
-        assert(source && /\/blob\/(?:[0-9a-f]{40}|main)\/docs\/README\.md$/.test(source.href), 'documentation links to published repository source independently of the playground package');
-        assert(document.querySelector('.docs-source').textContent.includes('independently'), 'documentation explains the source/package distinction in context');
+        const archives = await (await fetch('/documentation.json')).json();
+        const selected = archives.versions.find(version => version.version === archives.stableVersion);
+        assert(source?.href.endsWith(`/blob/${selected.baselineRevision}/docs/README.md`), 'documentation links to its exact released baseline');
+        assert(document.querySelector('.docs-source').textContent.includes(`Tabgrad ${selected.version}`), 'documentation explains its selected release in context');
       }
       const intro = document.querySelector('.illustrated-intro');
       if (intro) {
@@ -1413,7 +1426,7 @@ try {
         const routes = document.querySelectorAll('.docs-route');
         assert(routes.length === 4, 'documentation presents the four reader paths');
         assert(routes[0].querySelector('ul a').getAttribute('href') === '/start/', 'documentation integration begins with the JavaScript and Python file choices');
-        for (const href of ['/start/', '/docs/reference/browser-package/', '/docs/reference/python-host/']) assert(document.querySelector(`#starlight__sidebar a[href="${href}"]`), `documentation navigation offers setup: ${href}`);
+        for (const href of ['/start/', '/docs/reference/browser-package/', '/docs/reference/python-host/']) assert(findDocumentationLink(document.querySelector('#starlight__sidebar'), href), `documentation navigation offers setup: ${href}`);
         for (let index = 0; index < routes.length; index += 2) {
           const left = routes[index], right = routes[index + 1];
           if (left.getBoundingClientRect().right <= right.getBoundingClientRect().left) {

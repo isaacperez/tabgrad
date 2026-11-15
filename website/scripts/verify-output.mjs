@@ -8,6 +8,7 @@ import { sha256, writeChanged } from "./files.mjs";
 import { integrationFiles } from "./integration-files.mjs";
 import { brandPaths, componentNoticePath, checkGeneratedAssets } from "./generated-assets.mjs";
 import { siteOrigin, robotsTxt, articleStructuredData } from "./publication.mjs";
+import { documentationIndexName, createDocumentationIndex, validateDocumentationIndex } from "./documentation-index.mjs";
 
 /** @param {string} root @param {string} directory @returns {Promise<string[]>} */
 export async function outputFiles(root, directory = "") {
@@ -64,6 +65,8 @@ export async function verifyOutput(root = join(websiteRoot, "dist")) {
   const inventory = new Set(files);
   const data = JSON.parse(await readFile(join(websiteRoot, ".generated/site-data.json"), "utf8"));
   const assets = JSON.parse(await readFile(join(websiteRoot, ".generated/asset-data.json"), "utf8"));
+  const documentation = validateDocumentationIndex(JSON.parse(await readFile(join(root, documentationIndexName), "utf8")));
+  if (!isDeepStrictEqual(documentation, createDocumentationIndex(data))) throw new Error("Emitted documentation index differs from its admitted sources");
   await checkGeneratedAssets(root, [...brandPaths, componentNoticePath, ...integrationFiles(data).map(file => file.path)], { authoredPaths: ["licenses/index.html"] });
   const expectedOrigin = siteOrigin(process.env.TABGRAD_SITE_URL);
   if (expectedOrigin && data.publicOrigin !== expectedOrigin) throw new Error("Build origin does not match verification origin");
@@ -111,6 +114,13 @@ export async function verifyOutput(root = join(websiteRoot, "dist")) {
   for (const entry of data.documents) {
     const path = entry.route.slice(1) + "index.html";
     if (!pages.has(path)) throw new Error(`Missing admitted document: ${entry.source}`);
+    const nodes = pages.get(path);
+    const version = nodes.filter(node => attribute(node, "name") === "tabgrad-documentation-version");
+    const scope = nodes.filter(node => attribute(node, "name") === "tabgrad-search-version");
+    if (version.length !== 1 || attribute(version[0], "content") !== entry.version
+      || scope.length !== 1 || attribute(scope[0], "content") !== entry.version || attribute(scope[0], "data-pagefind-filter") !== "scope[content]") throw new Error(`Incorrect documentation search/version identity: ${path}`);
+    const indexed = nodes.some(node => node.tagName === "main" && attribute(node, "data-pagefind-body") !== undefined);
+    if (indexed === entry.alias) throw new Error(`Documentation alias search admission differs: ${path}`);
     for (const key of ["description", "og:description"]) {
       const summaries = pages.get(path).filter(node => node.tagName === "meta" && (attribute(node, "name") === key || attribute(node, "property") === key));
       if (!entry.description || summaries.length !== 1 || attribute(summaries[0], "content") !== entry.description) throw new Error(`Incorrect documentation summary: ${entry.source}`);
@@ -133,7 +143,8 @@ export async function verifyOutput(root = join(websiteRoot, "dist")) {
         if (!nodes.some(node => attribute(node, "name") === "robots" && attribute(node, "content") === "noindex")) throw new Error("Recovery page must not be indexed");
         continue;
       }
-      const url = new URL(file.replace(/index\.html$/, ""), data.publicOrigin).href;
+      const document = data.documents.find(entry => entry.route.slice(1) + "index.html" === file);
+      const url = new URL(document?.canonicalRoute ?? file.replace(/index\.html$/, ""), data.publicOrigin).href;
       expectedPages.add(url);
       const canonical = nodes.filter(node => attribute(node, "rel") === "canonical");
       if (canonical.length !== 1 || attribute(canonical[0], "href") !== url) throw new Error(`Incorrect canonical URL: ${file}`);
@@ -185,7 +196,7 @@ export async function verifyOutput(root = join(websiteRoot, "dist")) {
     return { path, sha256: sha256(bytes), bytes: bytes.byteLength };
   }));
   await writeChanged(join(websiteRoot, ".generated/verified-files.json"), JSON.stringify({
-    origin: data.publicOrigin, revision: data.sourceRevision, localChanges: data.localChanges, files: verifiedFiles,
+    origin: data.publicOrigin, revision: data.release?.sourceRevision ?? data.sourceRevision, localChanges: data.localChanges, files: verifiedFiles,
     ...(data.release ? { release: data.release, recipeRevision: data.recipeRevision } : {}),
   }) + "\n");
   return report;

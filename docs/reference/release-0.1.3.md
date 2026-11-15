@@ -1,5 +1,14 @@
 # Tabgrad 0.1.3 source and support record
 
+<!-- tabgrad-release
+{
+  "schemaVersion": 1,
+  "version": "0.1.3",
+  "title": "Release workflow improvements",
+  "documentationImpact": "Historical catalogue metadata preserves the release notes and unchanged tensor support. Full browsable documentation is not inferred from later sources."
+}
+-->
+
 This record identifies ordinary `@tabgrad/tabgrad@0.1.3`, selected npm channel
 `latest` and repository tag `v0.1.3`, under the [release policy](../releases.md).
 Source metadata is separate from registry availability and operational delivery:

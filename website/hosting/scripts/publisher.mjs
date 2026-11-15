@@ -106,7 +106,7 @@ export async function publishWebsite(root, env, { deploy, observe, record, now, 
   if (manifest.format === 2) {
     const descriptor = JSON.parse(await publicationFile(env.TABGRAD_WEBSITE_COMPLETION, 8 * 1024 * 1024));
     const selected = completedRelease(descriptor);
-    if ((env.TABGRAD_WEBSITE_RELEASE_RECOVERY === "true" ? manifest.revision !== context.revision : manifest.revision !== manifest.release.sourceRevision)
+    if (manifest.revision !== manifest.release.sourceRevision
       || selected.sha256 !== env.TABGRAD_COMPLETION_SHA256
       || !isDeepStrictEqual(releaseSiteIdentity(descriptor), manifest.release)
       || sha256(canonicalBytes(account)) !== selected.plan.website.configurationSha256

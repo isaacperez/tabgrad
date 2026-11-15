@@ -1,0 +1,27 @@
+---
+import { Icon } from "@astrojs/starlight/components";
+import data from "../../.generated/site-data.json";
+import { documentationSearchScope } from "../../scripts/documentation-navigation.mjs";
+const scope = documentationSearchScope(data, Astro.url.pathname);
+---
+<site-search>
+  <button type="button" data-open-modal aria-label="Search" aria-keyshortcuts="Control+K Meta+K">
+    <Icon name="magnifier" /><span>Search</span>
+  </button>
+  <dialog aria-label="Search">
+    <div class="dialog-frame">
+      <div class="search-dialog-heading"><strong>Search</strong><button type="button" data-close-modal>Close</button></div>
+      <div class="search-scope">
+        <label for="search-scope">Search in</label>
+        <select id="search-scope" data-search-scope>
+          <option value="current" selected={scope === "current"}>Current website and documentation</option>
+          {data.releases.filter(release => release.available).map(release => <option value={release.version} selected={scope === release.version}>Tabgrad v{release.version} documentation</option>)}
+          <option value="">All versions and pages</option>
+        </select>
+      </div>
+      <p data-search-status role="status">Loading search…</p>
+      <div class="search-container"><div id="starlight__search"></div></div>
+    </div>
+  </dialog>
+</site-search>
+<script>import "../search/search-control";</script>

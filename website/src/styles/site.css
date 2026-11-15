@@ -1,5 +1,24 @@
 @import "./tokens.css";
 @import "./illustrations.css";
+@import "@pagefind/default-ui/css/ui.css" layer(starlight.core);
+
+:is(.documentation-version-picker, .search-scope) { display: grid; gap: var(--tg-space-2); }
+.documentation-version-picker { padding-block-end: var(--tg-space-4); margin-block-end: var(--tg-space-4); border-block-end: 1px solid var(--line); }
+:is(.documentation-version-picker, .search-scope) label { color: var(--muted); font-size: var(--tg-text-interface); }
+:is(.documentation-version-picker, .search-scope) select { width: 100%; min-height: var(--tg-control-size); padding-inline: var(--tg-space-3); border: 1px solid var(--line); border-radius: var(--tg-radius-md); background: var(--paper); color: var(--ink); font: inherit; font-size: var(--tg-text-interface); }
+.documentation-notice { padding-block: var(--tg-space-3); color: var(--muted); font-size: var(--tg-text-interface); }
+site-search dialog { width: min(calc(100% - 2 * var(--tg-space-4)), var(--tg-reading-measure)); max-height: calc(100% - 2 * var(--tg-space-8)); margin: var(--tg-space-8) auto auto; padding: 0; border: 1px solid var(--line); border-radius: var(--tg-radius-lg); background: var(--paper); color: var(--ink); }
+site-search dialog::backdrop { background: var(--tg-dialog-backdrop); }
+body[data-search-modal-open] { overflow: hidden; }
+#starlight__search { --pagefind-ui-primary: var(--accent); --pagefind-ui-text: var(--ink); --pagefind-ui-background: var(--paper); --pagefind-ui-border: var(--line); --pagefind-ui-font: var(--sl-font); --pagefind-ui-border-radius: var(--tg-radius-md); }
+#starlight__search .pagefind-ui__filter-panel { display: none; }
+.search-scope { margin-block-end: var(--tg-space-4); }
+site-search .dialog-frame { padding: var(--tg-space-6); }
+.search-dialog-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--tg-space-4); margin-block-end: var(--tg-space-4); }
+.search-dialog-heading button { min-height: var(--tg-control-size); padding-inline: var(--tg-space-3); border: 1px solid var(--line); border-radius: var(--tg-radius-md); background: transparent; color: var(--ink); font: inherit; }
+.release-history-entry { padding-block: var(--tg-space-6); border-block-start: 1px solid var(--line); }
+.release-history-entry > .link-card { display: grid; gap: var(--tg-space-2); text-decoration: none; }
+.release-history-entry > .text-link { display: inline-flex; margin-block-start: var(--tg-space-3); }
 
 html { scroll-behavior: auto; scrollbar-gutter: stable; }
 body { font-optical-sizing: auto; }
@@ -63,6 +82,7 @@ body { font-optical-sizing: auto; }
 .site-menu-appearance { flex-wrap: wrap; padding-top: var(--tg-space-4); border-top: 1px solid var(--line); color: var(--muted); font-size: var(--tg-text-interface); }
 .site-menu-appearance select { min-height: var(--tg-control-size); font-size: var(--tg-text-interface); }
 .tabgrad-page-start { display: block; height: 0; scroll-margin-top: calc(var(--sl-nav-height) + var(--tg-space-4)); }
+html:not([data-has-sidebar]) .sl-container { margin-inline: auto; }
 .content-panel:has(.tabgrad-page-start) { padding-block: 0; border: 0; }
 .content-panel:has(.tabgrad-page-start) + .content-panel { border-block-start: 0; }
 .sl-markdown-content { font-size: var(--sl-text-base); line-height: var(--sl-line-height); }
@@ -385,7 +405,7 @@ starlight-tabs [role="tab"] { font-size: var(--tg-text-interface); min-height: v
 .tabgrad-navigation a[aria-current], .site-menu-links a[aria-current],
 .tabgrad-header-actions button[data-open-modal]:is(:hover, :focus-visible) > span,
 .link-card:is(:hover, :focus-visible) [data-link-title] { text-decoration-line: underline; }
-:is(.tabgrad-header, .tabgrad-footer, .sl-markdown-content) :is(a, button, select, textarea, summary):focus-visible,
+:is(.tabgrad-header, .tabgrad-footer, .sl-markdown-content, site-search, .documentation-version-picker) :is(a, button, input, select, textarea, summary):focus-visible,
 .docs-menu-toggle:focus-visible, .diagram-viewport:focus-visible, .table-viewport:focus-visible, .run-console:focus-visible { outline: var(--tg-focus-width) solid var(--violet); outline-offset: var(--tg-focus-offset, var(--tg-space-1)); }
 
 /* Repository documentation keeps Markdown content and its original anchors. */

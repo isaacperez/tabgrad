@@ -24,16 +24,7 @@ export function readReleaseInput(path) {
   const value = JSON.parse(readFileSync(path, "utf8"));
   if (Object.keys(value).sort().join() !== "inventory,packageDirectory,recipeRevision,release,schemaVersion,sourceRevision" || value.schemaVersion !== 1
     || !revision.test(value.recipeRevision) || !revision.test(value.sourceRevision) || value.packageDirectory !== join(dirname(path), "package") || !Array.isArray(value.inventory)) throw new Error("Invalid acquired runtime input");
-  return { ...value, release: releaseIdentity(value.release) };
-}
-
-/** Only the two integration guides bind their explicit package specifier to the selected release.
- * Versioned support/history prose and unrelated numbers retain their original meaning. */
-export function bindIntegrationVersion(source, body, referenceVersion, selectedVersion) {
-  if (!["docs/reference/browser-package.md", "docs/reference/python-host.md"].includes(source)) return body;
-  const token = `@tabgrad/tabgrad@${referenceVersion}`;
-  return body.replaceAll(token, (match, offset) => {
-    const next = body[offset + match.length];
-    return next === undefined || "/ \t\r\n\"'`".includes(next) ? `@tabgrad/tabgrad@${selectedVersion}` : match;
-  });
+  const release = releaseIdentity(value.release);
+  if (value.sourceRevision !== release.sourceRevision) throw new Error("Documentation baseline differs from completed package source");
+  return { ...value, release };
 }

@@ -1,0 +1,33 @@
+---
+import Sidebar from "@astrojs/starlight/components/Sidebar.astro";
+import data from "../../.generated/site-data.json";
+import { documentationPage, documentationVersionChoices } from "../../scripts/documentation-navigation.mjs";
+const current = documentationPage(data, Astro.url.pathname);
+const choices = current ? documentationVersionChoices(data, Astro.url.pathname) : [];
+---
+{current && <div class="documentation-version-picker">
+  <label for="documentation-version">Documentation version</label>
+  <select id="documentation-version" data-documentation-version aria-label="Documentation version">
+    {choices.map(choice => <option value={choice.href} selected={choice.version === current.version} data-headings={JSON.stringify(choice.headings)}>
+      v{choice.version}{choice.version === data.runtimeVersion ? " (latest)" : ""}
+    </option>)}
+  </select>
+</div>}
+<Sidebar />
+<script>
+  for (const selector of document.querySelectorAll<HTMLSelectElement>("[data-documentation-version]")) {
+    selector.addEventListener("change", () => {
+      const option = selector.selectedOptions[0];
+      if (!option) return;
+      const target = new URL(option.value, location.origin);
+      const headings: string[] = JSON.parse(option.dataset.headings ?? "[]");
+      let fragment = "";
+      try { fragment = decodeURIComponent(location.hash.slice(1)); } catch { /* A malformed fragment has no matching heading. */ }
+      if (headings.includes(fragment)) target.hash = location.hash;
+      location.assign(target);
+    });
+  }
+  if (new URL(location.href).searchParams.get("page") === "missing") {
+    document.querySelector<HTMLElement>("[data-version-missing]")?.removeAttribute("hidden");
+  }
+</script>

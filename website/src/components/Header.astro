@@ -1,12 +1,17 @@
 ---
-import Search from "@astrojs/starlight/components/Search.astro";
+import Search from "./Search.astro";
 import ThemeAppearance from "./ThemeAppearance.astro";
 import { Icon } from "@astrojs/starlight/components";
 import { runtimeVersion, repositoryUrl, packageUrl } from "../../scripts/config.mjs";
+import data from "../../.generated/site-data.json";
+import { documentationNavigation } from "../../scripts/documentation-navigation.mjs";
+
+const current = Astro.url.pathname;
+const documentation = documentationNavigation(data, current);
 
 const navigation = [
   ["Get started", "/start/"],
-  ["Documentation", "/docs/"],
+  ["Documentation", documentation.href],
   ["Playground", "/playground/"],
   ["Blog", "/blog/"],
   ["Versions", "/versions/"],
@@ -15,7 +20,6 @@ const projectNavigation = [
   ["About", "/about/"],
   ["Contact", "/contact/"],
 ];
-const current = Astro.url.pathname;
 ---
 <div class="tabgrad-header">
   <a href="/" class="tabgrad-brand" aria-label="Tabgrad home" aria-current={current === "/" ? "page" : undefined}>
@@ -25,7 +29,7 @@ const current = Astro.url.pathname;
   <nav aria-label="Main navigation" class="tabgrad-navigation">
     {navigation.map(([label, href]) => <a
       href={href}
-      aria-current={current.startsWith(href) ? "page" : undefined}
+      aria-current={(href === documentation.href ? documentation.current : current.startsWith(href)) ? "page" : undefined}
     >
       {label}
     </a>)}
@@ -62,7 +66,7 @@ const current = Astro.url.pathname;
     <div class="site-menu-links">
       {navigation.map(([label, href]) => <a
         href={href}
-        aria-current={current.startsWith(href) ? "page" : undefined}
+        aria-current={(href === documentation.href ? documentation.current : current.startsWith(href)) ? "page" : undefined}
       >
         {label}
       </a>)}

@@ -47,8 +47,9 @@ them separate from executable website routes and the search inventory.
 Authors edit the original Markdown files in the repository. The website build
 reads its reviewed GitHub checkout; it does not fetch mutable Markdown from
 GitHub in each visitor's browser. The resulting pages remain usable if a
-GitHub API request would fail. Local development reads the same source files
-and refreshes generated content after an edit.
+GitHub API request would fail. Released pages read their admitted exact Git
+objects. Local edits to tracked editorial content and correction records refresh
+generated presentation; candidate API documentation reads its explicit commit.
 
 Editorial articles live in `website/content/blog/`. They follow the same
 Git-tracked, symlink-rejected source admission and are copied unchanged into
@@ -62,9 +63,11 @@ Articles distinguish version-specific capabilities from future goals and link
 to maintained references. They do not replace or extend those contracts.
 
 A publication register identifies admitted sources, routes and navigation.
-Only Git-tracked source files are admitted; new pages enter the local preview
-after they are added to Git. Ordinary edits to existing pages need no commit
-or package release to appear locally. Untracked notes and ignored local files
+Current editorial sources must be Git-tracked to enter the local preview.
+Release documentation additionally requires catalogue admission at its exact
+source commit; adding or editing a worktree file alone cannot alter that archive.
+Reviewed tracked correction records can update its presentation without a new
+package. Untracked notes and ignored local files
 cannot become website documentation merely by sharing a Markdown extension.
 Technical concepts, architecture, components and flows keep their existing
 owners. Public usage references are selected explicitly; contributor procedures,
@@ -80,13 +83,14 @@ identify their source revision rather than depending on a developer's path.
 Route collisions, missing local destinations and invalid internal fragments
 are build failures.
 
-Editing documentation can update the website without publishing another npm
-version. The deployment automation consumes a checked website output after its
+An attributed editorial correction can update release documentation without
+publishing another npm version. The deployment automation consumes a checked website output after its
 own authorization. It does not become part of the tensor package release.
-The documentation overview identifies its source separately from the version of
-Tabgrad used by examples. Local previews distinguish unpublished edits from the
-linked published base revision, including clean local commits that have not
-been pushed. The build records its actual input revision separately. Architecture
+The documentation overview identifies its exact released baseline and any
+separate correction source. The current playground identifies its own selected
+package version. Local previews distinguish candidate documentation and
+unpublished presentation edits from admitted released data. The build records
+the rendering revision separately. Architecture
 explains accepted design; version-specific
 support records establish implemented support. Unpublished API behavior is not
 silently presented as stable. Historical documentation follows the versioned

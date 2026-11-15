@@ -3,17 +3,17 @@ import { mkdir, readdir, readFile, rm, copyFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { promisify } from "node:util";
 import puppeteer from "puppeteer";
-import { collectDocuments, createDocumentIndex, adaptDocument, firstCodeBlock } from "./content.mjs";
-import { websiteRoot, repositoryRoot, repositoryUrl, runtimeVersion, pyodideVersion, documentDescriptions, releaseInput, referenceRuntimeVersion } from "./config.mjs";
+import { websiteRoot, repositoryRoot, runtimeVersion, pyodideVersion, releaseInput } from "./config.mjs";
 import { writeChanged, sha256 } from "./files.mjs";
 import { loadIllustration } from "./illustrations.mjs";
 import { documentationSourceContext } from "./source-context.mjs";
 import { diagramSize } from "./diagram-layout.mjs";
 import { prepareBlog } from "./blog.mjs";
-import { integrationFiles } from "./integration-files.mjs";
+import { integrationFiles, integrationSource } from "./integration-files.mjs";
 import { checkGeneratedAssets } from "./generated-assets.mjs";
-import { bindIntegrationVersion } from "./release-input.mjs";
 import { siteOrigin } from "./publication.mjs";
+import { loadReleaseData } from "./release-data.mjs";
+import { prepareDocumentationPages } from "./documentation-pages.mjs";
 
 const execFileAsync = promisify(execFile);
 const generatedDocs = join(websiteRoot, "src/content/docs");
@@ -78,115 +78,27 @@ export async function prepareContent() {
   const browser = JSON.parse(await readFile(join(websiteRoot, "node_modules/puppeteer/package.json"), "utf8"));
   const mermaid = JSON.parse(await readFile(join(websiteRoot, "node_modules/mermaid/package.json"), "utf8"));
   const rendererKey = sha256(JSON.stringify({ cli: cli.version, mermaid: mermaid.version, browser: browser.version, platform: process.platform, arch: process.arch, config: mermaidConfig }));
-  const { sourceRevision, sourceLinkRevision, localChanges } = documentationSourceContext(repositoryRoot, releaseInput && { sourceRevision: releaseInput.sourceRevision });
-  const entries = await collectDocuments();
-  const documents = createDocumentIndex(entries);
-  for (const source of Object.keys(documentDescriptions)) if (!documents.has(source)) throw new Error(`Editorial summary is not an admitted document: ${source}`);
-  const output = [];
-  const adaptedDocuments = [];
-  const diagrams = new Map();
-  for (const entry of entries) {
-    const adapted = adaptDocument({ ...entry, body: bindIntegrationVersion(entry.source, entry.body, referenceRuntimeVersion, runtimeVersion) }, documents, sourceLinkRevision, { diagramKey: rendererKey });
-    for (const diagram of adapted.diagrams) diagrams.set(diagram.id, diagram);
-    const metadata = documents.get(entry.source);
-    const frontmatter = ["---", `title: ${JSON.stringify(metadata.title)}`, `description: ${JSON.stringify(metadata.description)}`, `editUrl: ${localChanges ? "false" : JSON.stringify(`${repositoryUrl}/blob/${sourceRevision}/${entry.source}`)}`, "---", ""].join("\n");
-    adaptedDocuments.push({ path: join(generatedDocs, entry.source.replace(/README\.md$/i, "index.md")), frontmatter, adapted });
-  }
+  const { sourceRevision, sourceLinkRevision, localChanges } = documentationSourceContext(repositoryRoot, releaseInput);
+  const releaseData = await loadReleaseData(repositoryRoot, runtimeVersion, { release: releaseInput?.release,
+    candidateRevision: sourceRevision, publication: process.env.TABGRAD_WEBSITE_MODE === "publish" });
+  const documentation = prepareDocumentationPages(releaseData, runtimeVersion, rendererKey, await loadIllustration("learning"));
+  const diagrams = documentation.diagrams;
   const diagramSizes = await prepareDiagrams(diagrams, rendererKey);
-  for (const { path, frontmatter, adapted } of adaptedDocuments) output.push({ path, body: frontmatter + adapted.render(diagramSizes) });
-  const overviewDescription = "Guides and reference for using Tabgrad in the browser.";
-  const overview = `---
-title: Documentation
-description: ${JSON.stringify(overviewDescription)}
-editUrl: false
-tableOfContents: false
----
-
-<div class="docs-overview not-content">
-<div class="docs-overview-intro"><div>
-
-# Tabgrad docs
-
-<p class="docs-lead">${overviewDescription}</p>
-<p><a class="text-link" href="/playground/">Try an example in the playground&nbsp;→</a></p>
-</div><div class="docs-overview-art">${(await loadIllustration("learning")).replaceAll("\n", "")}</div></div>
-
-<div class="docs-paths">
-<section class="docs-route">
-
-## Add Tabgrad to your website
-
-Start with a complete HTML example for JavaScript or Python, then adapt it to your page.
-
-- **[Get started →](/start/)**
-- [JavaScript setup](/docs/reference/browser-package/)
-- [Python setup](/docs/reference/python-host/)
-- GPU: [requirements](/versions/#execution-options) · [JavaScript setup](/docs/reference/webgpu-runtime/) · [Python setup](/docs/reference/python-host/#acquire-a-managed-gpu-connection)
-
-</section>
-<section class="docs-route">
-
-## Concepts
-
-Understand tensor shapes and how Python runs in the browser.
-
-- [Tensors and shapes](/docs/concepts/tensor-shape/)
-- [Python in the browser](/docs/concepts/python-in-the-browser/)
-
-</section>
-<section class="docs-route">
-
-## Reference
-
-Find supported operations, arguments, results and errors for JavaScript and Python.
-
-- [JavaScript API](/docs/javascript-api/)
-- [Python tensors](/docs/reference/python-tensors/)
-- [Backward and gradients](/docs/reference/backward-gradients/)
-- [PyTorch compatibility](/docs/compatibility/)
-
-</section>
-<section class="docs-route">
-
-## Inside Tabgrad
-
-See how the Python interface, tensor runtime and CPU and GPU backends fit together.
-
-- [Architecture](/docs/architecture/)
-- [Components](/docs/components/)
-- [Flows](/docs/flows/)
-
-</section>
-</div>
-<section class="docs-source">
-
-## Source and contributing
-
-These pages come from the repository’s Markdown. They can change independently of the playground’s package version. Use GitHub to suggest a correction.
-
-${localChanges ? "This preview includes unpublished changes. GitHub shows the published source.\n" : ""}
-
-<a data-documentation-source href="${repositoryUrl}/blob/${sourceLinkRevision}/docs/README.md">View documentation on GitHub ↗</a> · <a href="${repositoryUrl}/blob/${sourceLinkRevision}/CONTRIBUTING.md">Contribute to the docs ↗</a>
-
-</section>
-</div>
-`;
-  output.push({ path: join(generatedDocs, "docs/index.md"), body: overview });
+  const output = documentation.prepared.map(entry => ({
+    path: join(generatedDocs, entry.path), body: entry.frontmatter + entry.adapted.render(diagramSizes),
+  }));
   const livePaths = new Set(output.map((entry) => entry.path));
   for (const entry of output) await writeChanged(entry.path, entry.body);
   for (const path of await generatedFiles(generatedDocs)) if (!livePaths.has(path)) await rm(path);
   for (const path of await generatedFiles(diagramDirectory)) if (!diagrams.has(relative(diagramDirectory, path).replace(/\.svg$/, ""))) await rm(path);
-  const browserGuide = await readFile(join(repositoryRoot, "docs/reference/browser-package.md"), "utf8");
-  const pythonGuide = await readFile(join(repositoryRoot, "docs/reference/python-host.md"), "utf8");
+  const integration = integrationSource(releaseData.groups.find(group => group.version === runtimeVersion));
   const information = {
     publicOrigin: siteOrigin(process.env.TABGRAD_SITE_URL) ?? null,
-    sourceRevision, sourceLinkRevision, localChanges, runtimeVersion, pyodideVersion, posts,
+    sourceRevision, sourceLinkRevision, localChanges: localChanges || releaseData.releases.some(entry => entry.candidate), runtimeVersion, pyodideVersion, posts,
     release: releaseInput?.release ?? null, recipeRevision: releaseInput?.recipeRevision ?? null,
-    documents: [...documents.values()].map(({ source, title, description, route, headings }) => ({ source, title, description, route, headings })),
+    documents: documentation.documents, documentationGroups: documentation.groups, releases: releaseData.releases,
     diagrams: diagrams.size, rendererKey,
-    integrationHtml: firstCodeBlock(bindIntegrationVersion("docs/reference/browser-package.md", browserGuide, referenceRuntimeVersion, runtimeVersion), "html"),
-    integrationPythonHtml: firstCodeBlock(bindIntegrationVersion("docs/reference/python-host.md", pythonGuide, referenceRuntimeVersion, runtimeVersion), "html", "index.html"),
-    integrationPythonWorker: firstCodeBlock(bindIntegrationVersion("docs/reference/python-host.md", pythonGuide, referenceRuntimeVersion, runtimeVersion), "javascript", "python-worker.js"),
+    ...integration,
   };
   const downloads = integrationFiles(information);
   await checkGeneratedAssets(join(websiteRoot, "public"), downloads.map(file => file.path), { allowMissing: true });
@@ -194,5 +106,5 @@ ${localChanges ? "This preview includes unpublished changes. GitHub shows the pu
   await writeChanged(join(websiteRoot, ".generated/site-data.json"), JSON.stringify(information, null, 2) + "\n");
   // Use Astro's public watch hook to rebuild its route table on admission changes.
   await writeChanged(join(websiteRoot, ".generated/routes.json"), JSON.stringify([...information.documents, ...posts].map(({ route }) => route)) + "\n");
-  return { documents: documents.size, diagrams: diagrams.size, sourceRevision };
+  return { documents: documentation.documents.length, diagrams: diagrams.size, sourceRevision };
 }

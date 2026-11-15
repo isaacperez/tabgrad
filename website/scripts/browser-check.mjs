@@ -2,18 +2,24 @@ import assert from "node:assert/strict";
 import { readFile, stat } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { browserVersion, resolveBrowser, selectBrowserDefinitions, startBrowserServer, runBrowserPage } from "../../scripts/browser-harness.mjs";
-import { websiteRoot, repositoryRoot, runtimeVersion, pyodideVersion } from "./config.mjs";
+import { websiteRoot, repositoryRoot, runtimeVersion, pyodideVersion, releaseInput } from "./config.mjs";
 import { contentType, deliveryHeaders } from "./delivery.mjs";
 import { writeChanged, sha256 } from "./files.mjs";
 import { firstCodeBlock } from "./content.mjs";
 import { outputFiles } from "./verify-output.mjs";
 import { nativeAssets } from "./native-assets.mjs";
+import { loadReleaseData } from "./release-data.mjs";
+import { integrationGuides } from "./integration-files.mjs";
 
 import { exampleSource } from "../src/playground/presets.ts";
 const fixture = "website-smoke.html";
 const requestedAssets = new Set();
 const native = nativeAssets(process.env.TABGRAD_WEBSITE_NATIVE_ORIGIN, join(websiteRoot, "dist"));
-const pythonHost = await readFile(join(repositoryRoot, "docs/reference/python-host.md"), "utf8");
+const prepared = JSON.parse(await readFile(join(websiteRoot, ".generated/site-data.json"), "utf8"));
+assert.equal(prepared.runtimeVersion, runtimeVersion, "Build the selected website before browser qualification");
+const releaseData = await loadReleaseData(repositoryRoot, runtimeVersion, { release: releaseInput?.release,
+  candidateRevision: prepared.sourceRevision, publication: process.env.TABGRAD_WEBSITE_MODE === "publish" });
+const pythonHost = integrationGuides(releaseData.groups.find(group => group.version === runtimeVersion)).python;
 const diagnosticsSection = pythonHost.split("## Read local runtime observations\n")[1]?.split("\n## ")[0];
 assert.ok(diagnosticsSection, "the documented local diagnostics section exists");
 const diagnosticsSource = `import { loadPyodide } from '/vendor/pyodide/${pyodideVersion}/pyodide.mjs';

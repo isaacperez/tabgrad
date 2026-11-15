@@ -15,6 +15,8 @@ import { readProducerInventory } from "./package-provenance.mjs";
 import { publicationHistoryInput, publicationRecordConfig, transferPublicationHistory } from "./publication-controller.mjs";
 import { releaseRecord } from "./release-record.mjs";
 import { selectTagCandidate, activateTagCandidate } from "./tag-delivery.mjs";
+import { documentationCataloguePath, parseReleaseCatalogue, resolveReleaseCatalogue, releaseNotesSection,
+  admitReleaseDocumentation } from "./release-documentation.mjs";
 
 const id = value => typeof value === "string" && /^[1-9][0-9]*$/.test(value);
 const commit = value => typeof value === "string" && /^(?!0{40}$)[a-f0-9]{40}$/.test(value);
@@ -69,14 +71,40 @@ async function sourceFile(api, path, revision) {
 }
 
 export function releaseNotes(changelog, selectedVersion, repository, source) {
-  const lines = changelog.split(/\r?\n/), starts = [];
-  for (let i = 0; i < lines.length; i++) if (lines[i].startsWith(`## ${selectedVersion} - `)) starts.push(i);
-  requirePublication(starts.length === 1, "PUBLICATION_SOURCE_NOTES");
-  const end = lines.findIndex((line, index) => index > starts[0] && line.startsWith("## "));
-  const text = lines.slice(starts[0], end < 0 ? lines.length : end).join("\n").trim();
-  requirePublication(text.length > lines[starts[0]].length, "PUBLICATION_SOURCE_NOTES");
-  return text.replace(/\]\((?![a-z]+:|#)([^\s)]+)\)/gi,
-    (_match, path) => `](https://github.com/${repository}/blob/${source}/${path})`) + "\n";
+  let notes;
+  try { notes = releaseNotesSection(changelog, selectedVersion).body; }
+  catch { requirePublication(false, "PUBLICATION_SOURCE_NOTES"); }
+  return notes.replace(/\]\((?![a-z]+:|#)([^\s)]+)\)/gi,
+    (_match, path) => `](https://github.com/${repository}/blob/${source}/${path})`);
+}
+
+async function sourceDocumentation(api, selectedVersion, revision, packageVersion) {
+  try {
+    const raw = await sourceFile(api, documentationCataloguePath, revision), catalogue = parseReleaseCatalogue(raw);
+    const records = new Map(await Promise.all(catalogue.releases.map(async entry => [entry.version,
+      (await sourceFile(api, `docs/reference/release-${entry.version}.md`, revision)).toString("utf8")])));
+    const selected = admitReleaseDocumentation(resolveReleaseCatalogue(catalogue, records), selectedVersion, revision, packageVersion);
+    return { catalogueSha256: sha256(raw), recordSha256: selected.recordSha256 };
+  } catch { requirePublication(false, "PUBLICATION_SOURCE_DOCUMENTATION"); }
+}
+
+/** Exact generated-output success is a pre-tag gate, separate from repository checks. */
+async function websiteCheck(api, revision, repositoryId) {
+  const workflow = ".github/workflows/website-checks.yml";
+  const runs = await releasePreparationPages(api,
+    `/actions/workflows/${encodeURIComponent(workflow)}/runs?branch=main&event=push&head_sha=${revision}`, "workflow_runs");
+  const matches = runs.filter(run => run.head_sha === revision && run.path === workflow && run.head_branch === "main"
+    && run.event === "push" && run.status === "completed" && run.conclusion === "success"
+    && String(run.repository?.id) === repositoryId && String(run.head_repository?.id) === repositoryId);
+  requirePublication(matches.length === 1, "PUBLICATION_WEBSITE_CHECKS_INVALID");
+  const run = matches[0];
+  const jobs = await releasePreparationPages(api, `/actions/runs/${run.id}/attempts/${run.run_attempt}/jobs`, "jobs");
+  const website = jobs.filter(job => job.name === "website" && job.status === "completed" && job.conclusion === "success"
+    && job.head_sha === revision && job.run_id === run.id);
+  requirePublication(website.length === 1 && ["Verify emitted links, diagrams and runtime bytes", "Check versioned documentation in desktop and mobile browsers"]
+    .every(name => website[0].steps?.some(step => step.name === name && step.status === "completed" && step.conclusion === "success")),
+  "PUBLICATION_WEBSITE_CHECKS_INVALID");
+  return { revision, runId: String(run.id), attempt: String(run.run_attempt) };
 }
 
 async function sourceCheck(api, revision, repositoryId) {
@@ -142,6 +170,8 @@ export async function selectReleaseInputs(root, environment, { clock = Date.now,
   requirePublication(metadata.version === state.version && metadata.private !== true
     && typeof metadata.name === "string", "PUBLICATION_DRAFT_SOURCE_MISMATCH");
   const notes = releaseNotes((await sourceFile(api, "CHANGELOG.md", source)).toString(), state.version, repository, source);
+  const documentation = await sourceDocumentation(api, state.version, source, metadata.version);
+  const websiteChecks = await websiteCheck(api, source, profile.repositoryId);
   const explicit = environment.TABGRAD_RELEASE_PRODUCER_RUN ?? "";
   requirePublication(explicit === "" || id(explicit), "PUBLICATION_PRODUCER_SELECTION");
   const runs = explicit ? [await api.request(`/actions/runs/${explicit}`)]
@@ -164,7 +194,7 @@ export async function selectReleaseInputs(root, environment, { clock = Date.now,
   const selection = { schemaVersion: 1, publisher: { revision: context.revision, runId: context.runId, attempt: context.attempt },
     source, version: state.version, name: metadata.name, owner: owner.ownerSha256, notesSha256: sha256(Buffer.from(notes)), start,
     producerRun: String(producer.id), outputs, history, recordHead: head.object.sha, sourceChecks: checks,
-    issue, physicalComment: environment.TABGRAD_RELEASE_PHYSICAL_COMMENT ?? "", prepareOnly: state.prepareOnly };
+    issue, physicalComment: environment.TABGRAD_RELEASE_PHYSICAL_COMMENT ?? "", prepareOnly: state.prepareOnly, documentation, websiteChecks };
   await mkdir(root, { mode: 0o700 });
   await writeFile(join(root, "selection.json"), canonicalBytes(selection), { flag: "wx", mode: 0o600 });
   return { mode: "intent", data_id: outputs.data.id, proofs_id: outputs.proofs.id, verification_id: outputs.corroboration.id,
@@ -194,6 +224,10 @@ export async function composeReleaseInputs(root, environment, { clock = Date.now
     && s.publisher.runId === context.runId && s.publisher.attempt === context.attempt, "PUBLICATION_PREPARATION_CHANGED");
   const metadata = JSON.parse(await sourceFile(api, "package.json", state.source));
   const notes = releaseNotes((await sourceFile(api, "CHANGELOG.md", state.source)).toString(), state.version, repository, state.source);
+  const documentation = await sourceDocumentation(api, state.version, state.source, metadata.version);
+  const websiteChecks = await websiteCheck(api, state.source, profile.repositoryId);
+  requirePublication(canonicalBytes(documentation).equals(canonicalBytes(s.documentation))
+    && canonicalBytes(websiteChecks).equals(canonicalBytes(s.websiteChecks)), "PUBLICATION_PREPARATION_CHANGED");
   const current = await api.request(`/actions/runs/${context.runId}`);
   requirePublication(metadata.name === s.name && metadata.version === s.version && metadata.private !== true
     && s.notesSha256 === sha256(Buffer.from(notes)) && profile.maintainers.some(actor => actor.id === String(current.actor?.id) && actor.ownerSha256 === s.owner),

@@ -897,8 +897,10 @@ website workflow at its own recipe commit. The callee observes the completed
 GitHub role and native completion hash, original artifact and immutable public
 release; it does not wait for the still-running aggregate run. It installs the
 exact registry package with the root acquisition profile, then switches to the
-website build profile. Documentation and website source come from the tagged
-commit, while hosting code remains the admitted recipe. No package rebuild,
+website build profile. The renderer, website build and hosting code remain at
+the admitted recipe. Documentation reads the exact tagged baseline as data,
+with any separately attributed editorial corrections from that recipe. No historical
+build scripts or dependencies are executed. No package rebuild,
 repack or maintained lock rewrite occurs after the tag.
 
 ### Keep partial outcomes and recover only the missing stage

@@ -1,5 +1,14 @@
 # Tabgrad 0.1.0 source and support record
 
+<!-- tabgrad-release
+{
+  "schemaVersion": 1,
+  "version": "0.1.0",
+  "title": "First public distribution",
+  "documentationImpact": "Historical catalogue metadata preserves the first release's notes and bounded support record. Full browsable documentation is not inferred from later sources."
+}
+-->
+
 This versioned record identifies the public source contract for ordinary
 `@tabgrad/tabgrad@0.1.0`, its initially selected npm channel `latest` and repository
 tag `v0.1.0`. It is a bounded support record under the

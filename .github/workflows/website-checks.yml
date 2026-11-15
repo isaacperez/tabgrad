@@ -7,6 +7,9 @@ on:
       - 'docs/**'
       - 'assets/brand/**'
       - 'README.md'
+      - 'package.json'
+      - 'CHANGELOG.md'
+      - 'scripts/release-documentation.mjs'
       - 'scripts/browser-harness.mjs'
       - '.github/workflows/website-checks.yml'
   push:
@@ -16,6 +19,9 @@ on:
       - 'docs/**'
       - 'assets/brand/**'
       - 'README.md'
+      - 'package.json'
+      - 'CHANGELOG.md'
+      - 'scripts/release-documentation.mjs'
       - 'scripts/browser-harness.mjs'
       - '.github/workflows/website-checks.yml'
   workflow_dispatch:
@@ -127,12 +133,6 @@ jobs:
           TABGRAD_COMPLETION_ID: ${{ inputs.completion_id }}
           TABGRAD_COMPLETION_DIGEST: ${{ inputs.completion_digest }}
           TABGRAD_COMPLETION_SHA256: ${{ inputs.completion_sha256 }}
-      - name: Check out exactly the released website and Markdown
-        if: inputs.completion_id != ''
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ steps.released.outputs.source_revision }}
-          persist-credentials: false
       - name: Select the acquired runtime for every website consumer
         if: inputs.completion_id != ''
         run: echo "TABGRAD_WEBSITE_RELEASE_INPUT=$RELEASE_INPUT" >> "$GITHUB_ENV"
@@ -161,6 +161,8 @@ jobs:
           test "$(stat -c '%u' "$CHROME_DEVEL_SANDBOX")" = 0
           sudo chmod 4755 "$CHROME_DEVEL_SANDBOX"
           test -u "$CHROME_DEVEL_SANDBOX"
+      - name: Acquire only exact historical Markdown objects
+        run: npm --prefix website run prepare:docs
       - name: Check website types and generated content
         run: npm --prefix website run check
       - name: Test website source and serving contracts
@@ -169,6 +171,8 @@ jobs:
         run: npm --prefix website run build
       - name: Verify emitted links, diagrams and runtime bytes
         run: npm --prefix website run verify
+      - name: Check versioned documentation in desktop and mobile browsers
+        run: npm --prefix website run test:docs
       - name: Capture only the current public immutable predecessor
         if: env.TABGRAD_WEBSITE_MODE == 'publish' && !inputs.initial
         run: node website/hosting/scripts/predecessor.mjs website/dist website/.generated/previous
