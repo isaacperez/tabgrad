@@ -2,6 +2,7 @@ import { copyFile, mkdir } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { wasmProfile, wasmPageBytes } from "./wasm-profile.mjs";
 
 const repositoryRoot = fileURLToPath(new URL("..", import.meta.url));
 const outputDirectory = fileURLToPath(new URL("../dist/wasm", import.meta.url));
@@ -10,8 +11,8 @@ const compiledModule = join(targetDirectory, "wasm32-unknown-unknown/release/tab
 
 const commonRustFlags = [
   "-C", "link-arg=--import-memory",
-  "-C", "link-arg=--initial-memory=2097152",
-  "-C", "link-arg=--max-memory=67108864",
+  "-C", `link-arg=--initial-memory=${wasmProfile.initialPages * wasmPageBytes}`,
+  "-C", `link-arg=--max-memory=${wasmProfile.maximumPages * wasmPageBytes}`,
 ];
 
 await mkdir(outputDirectory, { recursive: true });

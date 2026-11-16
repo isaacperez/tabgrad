@@ -1,5 +1,8 @@
 import { TensorValue, OperationRecord, type StorageState, type TensorMetadata, type NumericalOperationDefinition } from "./tensor-value.js";
 import { TensorFamily, TensorIdentity, TensorState } from "./tensor-family.js";
+import { DEFAULT_UPDATE_BACKING_BYTES, resolveRuntimeMemoryLimits, type RuntimeMemoryLimits } from "./memory-limits.js";
+import type { CpuMemoryCapacity } from "../backends/cpu/memory-capacity.js";
+export type { RuntimeMemoryLimits } from "./memory-limits.js";
 import { WriterOutcome, WriterOutcomeLedger, hasCanonicalWriterDispatch, type EffectFailure, captureWriterOutcomes, retainWriterOutcomes,
   releaseWriterOutcomes, failedWriterOutcome } from "./writer-outcome.js";
 import {
@@ -52,6 +55,7 @@ export interface TensorOptions {
 
 export interface RuntimeSessionOptions {
   readonly manifestUrl?: string | URL;
+  readonly memoryLimits?: RuntimeMemoryLimits;
 }
 
 export interface WebGpuRuntimeSessionOptions extends RuntimeSessionOptions {
@@ -60,6 +64,8 @@ export interface WebGpuRuntimeSessionOptions extends RuntimeSessionOptions {
 }
 
 export interface RuntimeDiagnostics {
+  readonly memoryLimits: Readonly<Required<RuntimeMemoryLimits>>;
+  readonly cpuMemoryCapacity: CpuMemoryCapacity | null;
   readonly webgpu: WebGpuDiagnostics | null;
   readonly backendLoads: number;
   readonly hostToWasmBytes: number;
@@ -253,7 +259,7 @@ interface UpdateLimits {
 const DEFAULT_UPDATE_LIMITS: UpdateLimits = Object.freeze({
   pendingCopies: 1024,
   owners: 65536,
-  backingBytes: 64 * 1024 * 1024,
+  backingBytes: DEFAULT_UPDATE_BACKING_BYTES,
 });
 
 interface RuntimeSessionTestConfiguration {
@@ -793,6 +799,7 @@ const DERIVATIVE_CAPTURE_POLICY = Object.freeze({
 });
 
 export class RuntimeSession {
+  readonly #memoryLimits: Readonly<Required<RuntimeMemoryLimits>>;
   #backend: WebAssemblyCpuBackend;
   readonly #gpuBackend: WebGpuExecutionBackend | undefined;
   readonly #history = new DerivativeHistory<TensorValue>(
@@ -844,6 +851,7 @@ export class RuntimeSession {
   #beforeReadback: (() => void) | undefined;
 
   constructor(options: RuntimeSessionOptions = {}) {
+    const memoryLimits = resolveRuntimeMemoryLimits(options.memoryLimits);
     this.#gpuBackend = (options as InternalRuntimeSessionOptions)[RUNTIME_SESSION_GPU_BACKEND];
     const testConfiguration = (options as InternalRuntimeSessionOptions)[
       RUNTIME_SESSION_TEST_CONFIGURATION
@@ -857,14 +865,17 @@ export class RuntimeSession {
     this.#backend = new WebAssemblyCpuBackend(
       manifestUrl,
       testConfiguration?.forceVariant,
+      memoryLimits.cpuLinearMemoryBytes,
     );
     this.#onProgramFormed = testConfiguration?.onProgramFormed;
     this.#beforeReadback = testConfiguration?.beforeReadback;
     this.#beforeCopyPublication = testConfiguration?.beforeCopyPublication;
-    this.#updateLimits = Object.freeze({ ...DEFAULT_UPDATE_LIMITS, ...testConfiguration?.updateLimits });
+    this.#updateLimits = Object.freeze({ ...DEFAULT_UPDATE_LIMITS,
+      backingBytes: memoryLimits.updateBackingBytes, ...testConfiguration?.updateLimits });
     for (const limit of Object.values(this.#updateLimits)) {
       if (!Number.isSafeInteger(limit) || limit < 0) throw new TypeError("Update limits must be nonnegative safe integers.");
     }
+    this.#memoryLimits = Object.freeze({ ...memoryLimits, updateBackingBytes: this.#updateLimits.backingBytes });
     RUNTIME_SESSION_ACCESS.set(this, Object.freeze({
       registerOptimizer: (groups: readonly (readonly Tensor[])[]) => this.#registerOptimizer(groups),
       gradient: (state: TensorState) => state.identity.gradient === null ? null : this.#expose(state.identity.gradient),
@@ -1904,6 +1915,8 @@ export class RuntimeSession {
     const owners = this.#updateOwnerCount();
     if (owners + additionalOwners > this.#updateLimits.owners || this.#liveBackingBytes + additionalBytes > this.#updateLimits.backingBytes) {
       throw new TabgradError("RESOURCE_EXHAUSTED", "Persistent update captures exceed the session capacity.", {
+        capacityDomain: this.#liveBackingBytes + additionalBytes > this.#updateLimits.backingBytes ? "update-backing" : "update-owners",
+        phase: "admission",
         owners, additionalOwners, maximumOwners: this.#updateLimits.owners,
         backingBytes: this.#liveBackingBytes, additionalBytes, maximumBackingBytes: this.#updateLimits.backingBytes,
       });
@@ -2269,6 +2282,7 @@ export class RuntimeSession {
     this.#collectCycles();
     return Object.freeze({
       ...this.#backend.diagnostics(),
+      memoryLimits: this.#memoryLimits,
       webgpu: this.#gpuBackend?.diagnostics() ?? null,
       ...this.#history.diagnostics(),
       liveTensorHandles: this.#states.size,
@@ -2746,14 +2760,17 @@ export function createRuntimeSession(options: RuntimeSessionOptions = {}): Runti
 export async function createWebGpuRuntimeSession(
   options: WebGpuRuntimeSessionOptions = {},
 ): Promise<RuntimeSession> {
-  const device = await acquireWebGpuDevice(options.setupAbortSignal);
+  const { manifestUrl, setupAbortSignal } = options;
+  const memoryLimits = resolveRuntimeMemoryLimits(options.memoryLimits);
+  const device = await acquireWebGpuDevice(setupAbortSignal);
   try {
     const backend = new WebGpuBackend(device);
     // Observe a loss already delivered with acquisition before publishing readiness.
     await Promise.resolve();
-    assertWebGpuSetupActive(options.setupAbortSignal);
+    assertWebGpuSetupActive(setupAbortSignal);
     backend.assertAvailable();
-    return new RuntimeSession({ ...options, [RUNTIME_SESSION_GPU_BACKEND]: backend } as InternalRuntimeSessionOptions);
+    return new RuntimeSession({ ...(manifestUrl === undefined ? {} : { manifestUrl }), memoryLimits,
+      [RUNTIME_SESSION_GPU_BACKEND]: backend } as InternalRuntimeSessionOptions);
   } catch (error) {
     device.destroy();
     throw error;
@@ -2814,8 +2831,8 @@ export function finalizeTensorExposure(handle: Tensor): void {
 }
 
 /** @internal Attach a library-owned physical connection, not a public backend SPI. */
-export function createConnectedRuntimeSession(backend: WebGpuExecutionBackend): RuntimeSession {
-  return new RuntimeSession({ [RUNTIME_SESSION_GPU_BACKEND]: backend } as InternalRuntimeSessionOptions);
+export function createConnectedRuntimeSession(backend: WebGpuExecutionBackend, memoryLimits: RuntimeMemoryLimits = {}): RuntimeSession {
+  return new RuntimeSession({ memoryLimits, [RUNTIME_SESSION_GPU_BACKEND]: backend } as InternalRuntimeSessionOptions);
 }
 
 /** @internal Observe an opaque handle through its owning session's common request path. */

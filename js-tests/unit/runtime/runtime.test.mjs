@@ -981,6 +981,8 @@ test("records float32 addition lazily and materializes it on observation", async
   assert.deepEqual(result.shape, [3]);
   assert.equal(result.dtype, "float32");
   assert.deepEqual(session.diagnostics(), {
+    memoryLimits: { cpuLinearMemoryBytes: 67_108_864, updateBackingBytes: 67_108_864 },
+    cpuMemoryCapacity: null,
     webgpu: null,
     backendLoads: 0,
     hostToWasmBytes: 0,
@@ -1015,6 +1017,9 @@ test("records float32 addition lazily and materializes it on observation", async
   const afterObservation = session.diagnostics();
   const { timings, ...afterCounters } = afterObservation;
   assert.deepEqual(afterCounters, {
+    memoryLimits: { cpuLinearMemoryBytes: 67_108_864, updateBackingBytes: 67_108_864 },
+    cpuMemoryCapacity: { artifactMaximumBytes: 268_435_456, linearMemoryLimitBytes: 67_108_864,
+      arenaBaseBytes: 1_048_576, arenaCapacityBytes: 66_060_288 },
     webgpu: null,
     backendLoads: 1,
     hostToWasmBytes: 24,

@@ -11,6 +11,10 @@ accepted form and scope without following a complete design narrative.
 Use [JavaScript tensor API](../javascript-api.md) for the direct session and
 tensor interface, observation and explicit resource cleanup.
 
+Use [CPU memory and update capacity](memory-capacity.md) for independent byte
+limits, artifact/session/arena distinctions, host-copy exclusions and capacity
+diagnostics and errors.
+
 Use [Basic SGD](sgd.md) for Python and JavaScript optimizer calls, parameter
 groups, numerical reset, ordered updates and host ownership.
 

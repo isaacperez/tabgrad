@@ -26,7 +26,7 @@ async function fixture(context, { redirected = false, stale = false } = {}) {
   const root = await mkdtemp(join(tmpdir(), "tabgrad-wasm-build-"));
   context.after(() => rm(root, { recursive: true, force: true }));
   await mkdir(join(root, "scripts"));
-  for (const script of ["build-wasm.mjs", "write-wasm-manifest.mjs"]) {
+  for (const script of ["build-wasm.mjs", "write-wasm-manifest.mjs", "wasm-profile.mjs"]) {
     await copyFile(new URL(`../../../scripts/${script}`, import.meta.url), join(root, "scripts", script));
   }
   const cargo = join(root, "cargo-double.mjs");

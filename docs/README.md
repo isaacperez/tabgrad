@@ -117,6 +117,7 @@ link to its primary source, but they must not create a competing version.
 | Dependencies, licenses, and third-party code | [`dependencies.md`](dependencies.md) |
 | PyTorch compatibility and public API support | [`compatibility.md`](compatibility.md) |
 | Direct JavaScript API | [`javascript-api.md`](javascript-api.md) |
+| CPU memory capacity, logical update limits and capacity diagnostics | [`reference/memory-capacity.md`](reference/memory-capacity.md) |
 | Contiguous shape-only view syntax, inference and limits | [`reference/tensor-view.md`](reference/tensor-view.md) |
 | Persistent same-device copy, signatures, alias updates and derivative interactions | [`reference/tensor-copy.md`](reference/tensor-copy.md) |
 | Total tensor sum, accumulation and numerical limits | [`reference/tensor-sum.md`](reference/tensor-sum.md) |

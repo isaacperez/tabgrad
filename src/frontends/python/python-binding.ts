@@ -3,6 +3,7 @@ import { loadPythonSources, type PythonSources } from "./python-assets.js";
 import { PythonInstallation } from "./python-installation.js";
 import { PythonRuntimeBridge } from "./python-runtime-bridge.js";
 import { createRuntimeSession, createConnectedRuntimeSession, prepareRuntimeSession, type RuntimeSession, type RuntimeDiagnostics } from "../../runtime/runtime.js";
+import { resolveRuntimeMemoryLimits, type RuntimeMemoryLimits } from "../../runtime/memory-limits.js";
 import { ConnectedWebGpuBackend, consumeWebGpuConnection, retireFailedGpuAttachment } from "../../backends/webgpu/webgpu-connected-backend.js";
 import { snapshotWebGpuDiagnostics, type WebGpuConnection, type WebGpuConnectionData } from "../../backends/webgpu/webgpu-connection.js";
 
@@ -57,6 +58,7 @@ const ATTACHED_INTERPRETERS = new WeakSet<PythonInterpreter>();
 export interface PythonBindingOptions {
   readonly manifestUrl?: URL;
   readonly webgpu?: WebGpuConnection;
+  readonly memoryLimits?: RuntimeMemoryLimits;
 }
 
 class InterpreterBinding implements LocalPythonBinding {
@@ -67,10 +69,10 @@ class InterpreterBinding implements LocalPythonBinding {
   #closing: Promise<void> | undefined;
   #running: Promise<void> | undefined;
 
-  constructor(interpreter: PythonInterpreter, connection?: WebGpuConnectionData) {
+  constructor(interpreter: PythonInterpreter, connection: WebGpuConnectionData | undefined, memoryLimits: RuntimeMemoryLimits) {
     this.#interpreter = interpreter;
-    this.#session = connection === undefined ? createRuntimeSession()
-      : createConnectedRuntimeSession(new ConnectedWebGpuBackend(connection));
+    this.#session = connection === undefined ? createRuntimeSession({ memoryLimits })
+      : createConnectedRuntimeSession(new ConnectedWebGpuBackend(connection), memoryLimits);
     this.#bridge = new PythonRuntimeBridge(this.#session);
     Object.freeze(this.#bridge);
   }
@@ -153,9 +155,10 @@ export async function attachPython(
   interpreter: PythonInterpreter,
   options: PythonBindingOptions = {},
 ): Promise<LocalPythonBinding> {
+  const memoryLimits = resolveRuntimeMemoryLimits(options.memoryLimits);
   const connection = options.webgpu === undefined ? undefined : consumeWebGpuConnection(options.webgpu);
   try {
-    return await attachClaimedInterpreter(interpreter, options, connection);
+    return await attachClaimedInterpreter(interpreter, options, connection, memoryLimits);
   } catch (error) {
     if (connection !== undefined) retireFailedGpuAttachment(connection);
     throw error;
@@ -166,6 +169,7 @@ async function attachClaimedInterpreter(
   interpreter: PythonInterpreter,
   options: PythonBindingOptions,
   connection: WebGpuConnectionData | undefined,
+  memoryLimits: RuntimeMemoryLimits,
 ): Promise<LocalPythonBinding> {
   if (
     typeof interpreter !== "object" || interpreter === null
@@ -189,7 +193,7 @@ async function attachClaimedInterpreter(
     const sources = await loadPythonSources(
       options.manifestUrl ?? new URL("../../python/manifest.json", import.meta.url),
     );
-    binding = new InterpreterBinding(interpreter, connection);
+    binding = new InterpreterBinding(interpreter, connection, memoryLimits);
     binding.install(sources);
     return binding;
   } catch (error) {

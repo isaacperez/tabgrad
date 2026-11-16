@@ -9,6 +9,7 @@ import { CpuAllocation, LinearMemoryAllocator, MAXIMUM_ADDRESS } from "./linear-
 import { pointwiseGeometry, receivingGeometry } from "../../execution/broadcast-geometry.js";
 import { operationShapeContract } from "../../execution/operation-shapes.js";
 import { pointwisePacket, receivingPacket } from "./broadcast-packet.js";
+import { DEFAULT_CPU_LINEAR_MEMORY_BYTES, WEBASSEMBLY_PAGE_BYTES, type CpuMemoryCapacity } from "./memory-capacity.js";
 
 export type { BackendDiagnostics, WasmVariant } from "./cpu-types.js";
 
@@ -19,6 +20,7 @@ interface BackendContext {
   readonly allocator: LinearMemoryAllocator;
   readonly variant: WasmVariant;
   readonly maximumBytes: number;
+  readonly capacity: CpuMemoryCapacity;
   poisoned: boolean;
 }
 
@@ -48,13 +50,14 @@ export class WebAssemblyCpuBackend implements ExecutionBackend {
     instantiationMilliseconds: 0,
   };
 
-  constructor(manifestUrl: URL, forceVariant?: WasmVariant) {
+  constructor(manifestUrl: URL, forceVariant?: WasmVariant, linearMemoryBytes = DEFAULT_CPU_LINEAR_MEMORY_BYTES) {
     canonicalCpuCapabilities.set(this, this.capabilities);
-    this.#artifactLoader = new CpuArtifactLoader(manifestUrl, forceVariant, this.#timings);
+    this.#artifactLoader = new CpuArtifactLoader(manifestUrl, forceVariant, this.#timings, linearMemoryBytes);
   }
 
   diagnostics(): BackendDiagnostics {
     return Object.freeze({
+      cpuMemoryCapacity: this.#context?.capacity ?? null,
       backendLoads: this.#backendLoads,
       hostToWasmBytes: this.#hostToWasmBytes,
       hostToWasmCopies: this.#hostToWasmCopies,
@@ -306,12 +309,13 @@ export class WebAssemblyCpuBackend implements ExecutionBackend {
         allocator: new LinearMemoryAllocator(
           artifact.memory,
           artifact.arenaBase,
-          artifact.maximumPages,
+          artifact.capacity.linearMemoryLimitBytes / WEBASSEMBLY_PAGE_BYTES,
           artifact.alignment,
           this.#generation,
         ),
         variant: artifact.variant,
-        maximumBytes: artifact.maximumPages * 65_536,
+        maximumBytes: artifact.capacity.linearMemoryLimitBytes,
+        capacity: artifact.capacity,
         poisoned: false,
       };
       this.#context = context;

@@ -46,3 +46,24 @@ test("SIMD inspection distinguishes code prefixes from constants and custom-sect
   assert.equal(hasSimdInstructions(simd), true);
   assert.throws(() => hasSimdInstructions(scalar.slice(0, -1)), WebAssembly.CompileError);
 });
+
+for (const variant of ["scalar", "simd128"]) {
+  test(`the matched CPU import permits smaller session limits and rejects a larger maximum (${variant})`, async () => {
+    const manifest = JSON.parse(await readFile(join(distributionRoot, "manifest.json"), "utf8"));
+    assert.equal(manifest.moduleVersion, 8);
+    assert.deepEqual(manifest.memory, { initialPages: 32, maximumPages: 4096, alignment: 16 });
+    const module = await WebAssembly.compile(await readFile(join(distributionRoot, `wasm/kernels-${variant}.wasm`)));
+    for (const maximum of [32, 2048, 4096]) {
+      const memory = new WebAssembly.Memory({ initial: 32, maximum });
+      const instance = await WebAssembly.instantiate(module, { env: { memory } });
+      assert.equal(instance.exports.tabgrad_abi_version(), 1);
+      assert.equal(memory.buffer.byteLength, 2 * 1024 * 1024);
+    }
+    await assert.rejects(WebAssembly.instantiate(module, {
+      env: { memory: new WebAssembly.Memory({ initial: 32, maximum: 4097 }) },
+    }), WebAssembly.LinkError);
+    await assert.rejects(WebAssembly.instantiate(module, {
+      env: { memory: new WebAssembly.Memory({ initial: 31, maximum: 4096 }) },
+    }), WebAssembly.LinkError);
+  });
+}

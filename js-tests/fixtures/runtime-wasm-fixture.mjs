@@ -104,7 +104,7 @@ export function fixtureModule({
     0x02,
     0x01,
     ...unsignedLeb128(32),
-    ...unsignedLeb128(1024),
+    ...unsignedLeb128(4096),
   ]);
   const functions = section(3, [0x0c, 0x00, 0x00, 0x00, 0x01, 0x02, 0x01, 0x02, 0x03, 0x04, 0x03, 0x03, 0x01]);
   const exportedFunctions = [

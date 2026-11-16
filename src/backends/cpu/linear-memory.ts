@@ -1,6 +1,5 @@
 import { TabgradError } from "../../shared/errors.js";
-
-const WEBASSEMBLY_PAGE_BYTES = 65_536;
+import { WEBASSEMBLY_PAGE_BYTES } from "./memory-capacity.js";
 export const MAXIMUM_ADDRESS = 0xffff_ffff;
 
 export class CpuAllocation {
@@ -147,25 +146,28 @@ export class LinearMemoryAllocator {
   }
 
   #ensureMemory(requiredBytes: number): void {
+    const maximumBytes = this.#maximumPages * WEBASSEMBLY_PAGE_BYTES;
+    if (requiredBytes > maximumBytes) {
+      throw new TabgradError(
+        "RESOURCE_EXHAUSTED",
+        "The WebAssembly memory limit cannot satisfy this allocation.",
+        { capacityDomain: "cpu-linear-memory", phase: "allocation", maximumBytes, requiredBytes,
+          maximumPages: this.#maximumPages, requiredPages: Math.ceil(requiredBytes / WEBASSEMBLY_PAGE_BYTES) },
+      );
+    }
     if (requiredBytes <= this.#memory.buffer.byteLength) {
       return;
     }
     const requiredPages = Math.ceil(requiredBytes / WEBASSEMBLY_PAGE_BYTES);
     const currentPages = this.#memory.buffer.byteLength / WEBASSEMBLY_PAGE_BYTES;
-    if (requiredPages > this.#maximumPages) {
-      throw new TabgradError(
-        "RESOURCE_EXHAUSTED",
-        "The WebAssembly memory limit cannot satisfy this allocation.",
-        { maximumPages: this.#maximumPages, requiredPages },
-      );
-    }
     try {
       this.#memory.grow(requiredPages - currentPages);
     } catch (error) {
       throw new TabgradError(
         "RESOURCE_EXHAUSTED",
         "The browser could not grow WebAssembly memory for this allocation.",
-        { requiredPages },
+        { capacityDomain: "cpu-linear-memory", phase: "memory-growth", maximumBytes, requiredBytes,
+          maximumPages: this.#maximumPages, requiredPages },
         error,
       );
     }

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { WebAssemblyCpuBackend } from "../../../dist/backends/cpu/cpu-backend.js";
+import { CpuArtifactLoader } from "../../../dist/backends/cpu/artifact-loader.js";
 import { CpuAllocation } from "../../../dist/backends/cpu/linear-memory.js";
 import { ExecutableProgram } from "../../../dist/execution/executable-program.js";
 import { RuntimeFixtureServer } from "../../fixtures/runtime-fixture-server.mjs";
@@ -68,5 +69,18 @@ for (const variant of ["scalar", "simd128"]) for (const operation of ["read", "e
       await backend.close();
       await other.close();
     }
+  });
+}
+
+for (const variant of ["scalar", "simd128"]) {
+  test(`CPU loader applies the session maximum to the imported memory itself (${variant})`, async () => {
+    const timings = { manifestFetchMilliseconds: 0, moduleFetchMilliseconds: 0,
+      integrityCheckMilliseconds: 0, compilationMilliseconds: 0, instantiationMilliseconds: 0 };
+    const artifact = await new CpuArtifactLoader(manifestUrl, variant, timings, 2 * 1024 * 1024).load();
+    assert.equal(artifact.memory.buffer.byteLength, 2 * 1024 * 1024);
+    assert.throws(() => artifact.memory.grow(1), RangeError);
+    assert.equal(artifact.memory.buffer.byteLength, 2 * 1024 * 1024);
+    assert.equal(artifact.capacity.artifactMaximumBytes, 256 * 1024 * 1024);
+    assert.equal(artifact.capacity.linearMemoryLimitBytes, 2 * 1024 * 1024);
   });
 }

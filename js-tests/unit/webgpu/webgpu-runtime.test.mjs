@@ -1,6 +1,7 @@
 import { deferred, device, executionDevice } from "./helpers/webgpu-device.mjs";
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { readFile } from "node:fs/promises";
 import * as tabgrad from "../../../dist/index.js";
 import { inspectExecutionFailureContext } from "../../../dist/shared/errors.js";
 
@@ -573,4 +574,34 @@ test("submitted multistage sum protects private buffers through immediate sessio
   assert.equal(acquired.buffers.every((buffer) => buffer.destroyed), true);
   assert.equal(session.diagnostics().webgpu.ownedBufferBytes, 0);
   assert.equal(session.diagnostics().webgpu.pendingSubmissions, 0);
+});
+
+test("GPU-enabled sessions capture CPU memory limits before asynchronous acquisition", async context => {
+  context.mock.method(globalThis, "fetch", async url => new Response(await readFile(url)));
+  const acquired = device(), adapter = deferred();
+  installGpu(context, { requestAdapter: () => adapter.promise });
+  const memoryLimits = { cpuLinearMemoryBytes: 128 * 1024 * 1024, updateBackingBytes: 4096 };
+  const pending = tabgrad.createWebGpuRuntimeSession({ memoryLimits });
+  memoryLimits.cpuLinearMemoryBytes = 2 * 1024 * 1024;
+  memoryLimits.updateBackingBytes = 0;
+  adapter.resolve({ requestDevice: async () => acquired });
+  const session = await pending;
+  try {
+    assert.deepEqual(session.diagnostics().memoryLimits, {
+      cpuLinearMemoryBytes: 128 * 1024 * 1024, updateBackingBytes: 4096,
+    });
+    assert.equal(session.diagnostics().backendLoads, 0);
+    const input = session.tensor([3]), output = input.add(input);
+    assert.deepEqual([...await output.toArray()], [6]);
+    assert.equal(session.diagnostics().cpuMemoryCapacity.linearMemoryLimitBytes, 128 * 1024 * 1024);
+    output.close(); input.close();
+  } finally { await session.close(); }
+  assert.equal(acquired.destroyed, 1);
+});
+
+test("invalid memory limits reject before GPU acquisition", async context => {
+  let requests = 0;
+  installGpu(context, { requestAdapter: async () => { requests += 1; return { requestDevice: async () => device() }; } });
+  await assert.rejects(tabgrad.createWebGpuRuntimeSession({ memoryLimits: { cpuLinearMemoryBytes: 1 } }), TypeError);
+  assert.equal(requests, 0);
 });

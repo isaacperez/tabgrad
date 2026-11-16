@@ -242,6 +242,16 @@ the scalar module. Variant selection changes the physical kernel, not tensor
 meaning, and an incompatible or corrupt artifact fails rather than falling
 back to JavaScript arithmetic.
 
+## Set independent memory limits
+
+`createRuntimeSession({ memoryLimits })` and the GPU-enabled factory accept
+independent CPU linear-memory and logical update limits. The default for each
+is 64 MiB; a session can explicitly request up to 256 MiB of CPU linear memory
+without raising its logical update allowance. A context initially allocates
+2 MiB, rather than its maximum. See the
+[capacity reference](reference/memory-capacity.md) for exact fields, validation,
+host-copy boundaries, diagnostics and errors.
+
 ## Errors are part of admission and execution
 
 `TabgradError` has a stable `code`, a human-readable `message`, and immutable

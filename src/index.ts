@@ -7,6 +7,7 @@ export {
   createWebGpuRuntimeSession,
   type WebGpuRuntimeSessionOptions,
   type RuntimeSessionOptions,
+  type RuntimeMemoryLimits,
   type RuntimeDiagnostics,
   type TensorDevice,
   type TensorDType,

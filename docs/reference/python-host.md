@@ -185,6 +185,20 @@ is cooperative; it cannot interrupt an infinite or externally stalled script.
 Ordinary tensor methods such as `tolist()` do not require Python `await` or
 JSPI. The JavaScript script-entry Promise has a different purpose.
 
+### Configure the owned runtime's memory limits
+
+`attachPython(interpreter, { memoryLimits })` accepts the same independent CPU
+linear-memory and logical update settings as direct JavaScript. Configuration
+is captured before asynchronous attachment work and reaches the owned runtime
+for CPU and managed-GPU attachments. It does not change the meaning of
+`manifestUrl`, which still selects the Python source assets. Exact values,
+validation and host-memory exclusions are in the
+[capacity reference](memory-capacity.md).
+
+These settings belong where the application creates the binding. Connecting
+to a remote script worker does not reconfigure its runtime or add a remote
+diagnostics request.
+
 ## Read local runtime observations
 
 `LocalPythonBinding` extends the common `PythonBinding` with `diagnostics()`;

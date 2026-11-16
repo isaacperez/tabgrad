@@ -27,6 +27,8 @@ import {
 
 function assertRuntimeResult(result, variant) {
   assert.equal(result.ok, true, JSON.stringify(result.error));
+  assert.deepEqual(result.memoryCapacity, { artifactMaximumBytes: 268_435_456, explicitCpuLimitBytes: 134_217_728,
+    rejectedDomain: "cpu-linear-memory", closed: true });
   assert.deepEqual(result.values, [5, 7, 9]);
   assert.equal(result.before.backendLoads, 0);
   assert.equal(result.before.kernelCalls, 0);
@@ -52,7 +54,7 @@ function assertPythonWorkerResult(result, jspi, gated, variant = "simd128") {
 }
 
 const server = await startBrowserServer(["runtime/runtime.html", "python/python-lifecycle.html", "python/python-worker.html"], {
-  assets: ["python/python-worker.mjs", "helpers/cpu-profile.mjs", "helpers/python-no-grad-cases.mjs", ...copyAssets], readAsset: readCopyAsset,
+  assets: ["python/python-worker.mjs", "helpers/cpu-profile.mjs", "helpers/python-no-grad-cases.mjs", "helpers/memory-capacity-cases.mjs", ...copyAssets], readAsset: readCopyAsset,
 });
 try {
   const selectedBrowsers = selectBrowserDefinitions(
