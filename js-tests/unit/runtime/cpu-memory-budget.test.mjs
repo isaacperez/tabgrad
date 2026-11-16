@@ -4,12 +4,32 @@ import { fileURLToPath } from "node:url";
 import { RuntimeFixtureServer } from "../../fixtures/runtime-fixture-server.mjs";
 import { createTestRuntimeSession, getTestRuntimeOwnership } from "../../../dist/testing.js";
 import { prepareRuntimeSession } from "../../../dist/runtime/runtime.js";
+import { createRuntimeSession } from "../../../dist/index.js";
 
 const MiB = 1024 * 1024;
 const fixtures = new RuntimeFixtureServer(fileURLToPath(new URL("../../../dist/", import.meta.url)));
 let manifestUrl;
 before(async () => { manifestUrl = new URL("manifest.json", await fixtures.start()); });
 after(async () => { await fixtures.close(); });
+
+test("the public CPU maximum is inclusive without preallocating 256 MiB", async () => {
+  const session = createRuntimeSession({ manifestUrl,
+    memoryLimits: { cpuLinearMemoryBytes: 256 * MiB } });
+  let capacity;
+  try {
+    assert.equal(session.diagnostics().memoryLimits.cpuLinearMemoryBytes, 256 * MiB);
+    assert.equal(session.diagnostics().cpuMemoryCapacity, null);
+    await prepareRuntimeSession(session);
+    const ready = session.diagnostics();
+    capacity = ready.cpuMemoryCapacity;
+    assert.equal(ready.wasmMemoryBytes, 2 * MiB);
+    assert.equal(capacity.artifactMaximumBytes, 256 * MiB);
+    assert.equal(capacity.linearMemoryLimitBytes, 256 * MiB);
+    assert.equal(capacity.arenaCapacityBytes, 255 * MiB);
+  } finally { await session.close(); }
+  assert.equal(session.diagnostics().cpuMemoryCapacity, null);
+  assert.equal(capacity.linearMemoryLimitBytes, 256 * MiB);
+});
 
 for (const forceVariant of ["scalar", "simd128"]) {
   test(`CPU prepared capacity separates artifact, session and arena (${forceVariant})`, async () => {
