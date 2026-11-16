@@ -114,12 +114,24 @@ Source and destination remain independently mutable families even when they
 share immutable resident storage. Functional copy derivatives and no-grad
 parameter updates use this same runtime and backend.
 
-Allocation admission is bounded by the acquired device's buffer and storage
-binding limits and the encoder's one-dimensional dispatch capacity. For the
-64-invocation workgroups used by this backend, the latter permits at most
-`64 * maxComputeWorkgroupsPerDimension` elements in one tensor. Exceeding
-the supported byte extent produces `RESOURCE_EXHAUSTED`. These are admission
-limits, not a promise that all permitted allocations will fit available memory.
+Tensor storage capacity is the float32-aligned minimum of the acquired device's
+buffer/binding limits, supported unsigned element indexing and the signed
+32-bit shared-completion byte count (at most 2,147,483,644 tensor bytes).
+Direct and connected sessions advertise the same extent; tensor creation and
+inferred outputs check it independently of an operation's launch shape.
+This does not request larger optional device limits or promise host allocation.
+
+Dispatch geometry is checked separately for each kernel. Work that fits one
+axis retains its original one-dimensional shader; larger independent or
+cooperative linear work can use a checked two-dimensional grid. Broadcast
+widths, cooperative padding, reduction partials and receiving windows keep their
+own bounds. An admitted tensor does not promise that every operation or graph
+fits. Known storage/index/dispatch exhaustion produces `RESOURCE_EXHAUSTED`
+before dependent numerical work, with requesting-slot provenance during
+preparation. Native allocation, encoding, mapping, drain and device-loss errors
+retain their established phases and causes. See the
+[dispatch architecture](../architecture/webgpu-dispatch.md) for the exact
+ownership and indexing separation.
 
 ## Observation, errors and shutdown
 

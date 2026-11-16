@@ -1,10 +1,12 @@
+import { invocationEntry, type LinearDispatchLayout } from "../linear-dispatch.js";
 import { WEBGPU_ADDITION_ARITHMETIC_SOURCE } from "./addition.js";
 import { WEBGPU_MULTIPLICATION_ARITHMETIC_SOURCE } from "./multiplication.js";
 
 export const WEBGPU_POINTWISE_WORKGROUP_SIZE = 64;
 
 /** Arithmetic is specialized at pipeline creation, never interpreted per value. */
-export function pointwiseSource(arithmetic: string, calculate: string): string {
+export function pointwiseSource(arithmetic: string, calculate: string, layout: LinearDispatchLayout = "linear"): string {
+  const entry = invocationEntry(layout, WEBGPU_POINTWISE_WORKGROUP_SIZE);
   return `${arithmetic}
 @group(0) @binding(0) var<storage, read> left: array<u32>;
 @group(0) @binding(1) var<storage, read> right: array<u32>;
@@ -12,9 +14,9 @@ export function pointwiseSource(arithmetic: string, calculate: string): string {
 @group(0) @binding(3) var<storage, read> geometry: array<u32>;
 
 @compute @workgroup_size(${WEBGPU_POINTWISE_WORKGROUP_SIZE})
-fn main(@builtin(global_invocation_id) position: vec3<u32>) {
+${entry.signature}
   let width = geometry[2];
-  let first = position.x * width;
+  let first = ${entry.index} * width;
   if first >= geometry[1] { return; }
   let rank = geometry[0];
   var remaining = first;

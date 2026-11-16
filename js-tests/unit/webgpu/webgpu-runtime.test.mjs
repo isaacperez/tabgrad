@@ -30,9 +30,9 @@ test("GPU capability admission rejects unsupported operators before retaining wo
   } finally { await session.close(); }
 });
 
-test("each acquired device extent rejects oversized creation without retained work", async (context) => {
+test("each acquired storage extent rejects oversized creation without retained work", async (context) => {
   for (const [limit, bound, elements] of [["maxBufferSize", 8, 2],
-    ["maxStorageBufferBindingSize", 8, 2], ["maxComputeWorkgroupsPerDimension", 1, 64]]) {
+    ["maxStorageBufferBindingSize", 8, 2]]) {
     const acquired = device();
     acquired.limits[limit] = bound;
     installGpu(context, { requestAdapter: async () => ({ requestDevice: async () => acquired }) });

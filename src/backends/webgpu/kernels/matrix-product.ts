@@ -1,17 +1,20 @@
+import { invocationEntry, type LinearDispatchLayout } from "../linear-dispatch.js";
 import { WEBGPU_FUSED_MULTIPLY_ADD_SOURCE } from "./fused-multiply-add.js";
 
 export const WEBGPU_MATRIX_WORKGROUP_SIZE = 64;
 export const WEBGPU_MATRIX_UNIFORM_BYTES = 16;
 
-export const WEBGPU_MATRIX_SOURCE = `${WEBGPU_FUSED_MULTIPLY_ADD_SOURCE}
+export function createMatrixSource(layout: LinearDispatchLayout = "linear"): string {
+  const entry = invocationEntry(layout, WEBGPU_MATRIX_WORKGROUP_SIZE);
+  return `${WEBGPU_FUSED_MULTIPLY_ADD_SOURCE}
 struct Matrix { rows: u32, columns: u32, contraction: u32, flags: u32, }
 @group(0) @binding(0) var<storage, read> left: array<u32>;
 @group(0) @binding(1) var<storage, read> right: array<u32>;
 @group(0) @binding(2) var<storage, read_write> output: array<u32>;
 @group(0) @binding(3) var<uniform> matrix: Matrix;
 @compute @workgroup_size(${WEBGPU_MATRIX_WORKGROUP_SIZE})
-fn main(@builtin(global_invocation_id) position: vec3<u32>) {
-  let index = position.x;
+${entry.signature}
+  let index = ${entry.index};
   if index >= matrix.rows * matrix.columns { return; }
   let row = index / matrix.columns;
   let column = index % matrix.columns;
@@ -26,3 +29,6 @@ fn main(@builtin(global_invocation_id) position: vec3<u32>) {
   output[index] = accumulator;
 }
 `;
+}
+
+export const WEBGPU_MATRIX_SOURCE = createMatrixSource();

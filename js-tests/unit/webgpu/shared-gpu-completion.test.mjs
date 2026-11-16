@@ -207,3 +207,10 @@ test("multiple failed tickets drain out of order with exactly-once reentrant ret
   assert.equal(first.retired(), 1);
   assert.equal(second.retired(), 1);
 });
+
+test("shared completion rejects unrepresentable byte counts before allocating a result", () => {
+  const control = new Int32Array(new SharedArrayBuffer(GPU_CONTROL_LENGTH * 4));
+  for (const bytes of [-1, .5, NaN, Number.MAX_SAFE_INTEGER]) {
+    assert.throws(() => completion(control, bytes), { code: "RESOURCE_EXHAUSTED" });
+  }
+});

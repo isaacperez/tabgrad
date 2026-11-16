@@ -1,6 +1,7 @@
 import type { BroadcastGeometry, ReceivingGeometry } from "../../execution/broadcast-geometry.js";
 import { TabgradError } from "../../shared/errors.js";
-import { WEBGPU_SUM_GROUP_ELEMENTS, WEBGPU_SUM_PARTIAL_BYTES } from "./kernels/sum.js";
+import { reductionStages, type ReductionStage } from "./reduction-stages.js";
+import { gpuStorageCapacityBytes } from "./webgpu-capacity.js";
 
 export interface BroadcastDispatchLimits {
   readonly maxBufferSize: number;
@@ -9,7 +10,7 @@ export interface BroadcastDispatchLimits {
 }
 
 function storageBytes(bytes: number, limits: BroadcastDispatchLimits): void {
-  if (!Number.isSafeInteger(bytes) || bytes < 0 || Math.max(4, bytes) > Math.min(limits.maxBufferSize, limits.maxStorageBufferBindingSize, 0xffff_ffff)) {
+  if (!Number.isSafeInteger(bytes) || bytes < 0 || Math.max(4, bytes) > gpuStorageCapacityBytes(limits)) {
     throw new TabgradError("RESOURCE_EXHAUSTED", "Broadcast storage exceeds the selected GPU limits.");
   }
 }
@@ -42,14 +43,7 @@ export function receivingParameters(projection: ReceivingGeometry, limits: Broad
   return result;
 }
 
-export interface ReceivingStage {
-  readonly count: number;
-  readonly chunks: number;
-  readonly workgroups: number;
-  readonly bytes: number;
-  readonly partial: boolean;
-  readonly final: boolean;
-}
+export type ReceivingStage = ReductionStage;
 
 /** Bound every intermediate before enqueuing writes; windows are streamed later. */
 export function receivingStages(projection: ReceivingGeometry, limits: BroadcastDispatchLimits): readonly ReceivingStage[] {
@@ -57,17 +51,5 @@ export function receivingStages(projection: ReceivingGeometry, limits: Broadcast
   if (!Number.isSafeInteger(limits.maxComputeWorkgroupsPerDimension) || limits.maxComputeWorkgroupsPerDimension < 1) {
     throw new TabgradError("RESOURCE_EXHAUSTED", "Receiving reduction requires a GPU workgroup window.");
   }
-  const stages: ReceivingStage[] = [];
-  let count = projection.terms, partial = false;
-  do {
-    const chunks = Math.max(1, Math.ceil(count / WEBGPU_SUM_GROUP_ELEMENTS));
-    const workgroups = word(projection.groups * chunks);
-    const final = chunks === 1;
-    const bytes = workgroups * (final ? 4 : WEBGPU_SUM_PARTIAL_BYTES);
-    storageBytes(bytes, limits);
-    stages.push(Object.freeze({ count, chunks, workgroups, bytes, partial, final }));
-    count = chunks; partial = true;
-    if (final) break;
-  } while (true);
-  return Object.freeze(stages);
+  return reductionStages(projection.terms, projection.groups, limits);
 }

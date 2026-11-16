@@ -1,3 +1,4 @@
+import { cooperativeEntry, type LinearDispatchLayout } from "../linear-dispatch.js";
 /** Physical representation and partition; never a logical tensor dtype. */
 export const WEBGPU_SUM_WORKGROUP_SIZE = 64;
 export const WEBGPU_SUM_GROUP_ELEMENTS = 2 * WEBGPU_SUM_WORKGROUP_SIZE;
@@ -93,7 +94,9 @@ fn rounded(value: Accumulator) -> u32 {
 
 `;
 
-export const WEBGPU_SUM_SOURCE = `${WEBGPU_EXACT_SUM_ARITHMETIC_SOURCE}
+export function createSumSource(layout: LinearDispatchLayout = "linear"): string {
+  const entry = cooperativeEntry(layout, WEBGPU_SUM_GROUP_ELEMENTS, "parameters.count");
+  return `${WEBGPU_EXACT_SUM_ARITHMETIC_SOURCE}
 struct Parameters { count: u32, final_stage: u32, partial_input: u32, padding: u32 }
 @group(0) @binding(0) var<storage, read> input: array<u32>;
 @group(0) @binding(1) var<storage, read_write> output: array<u32>;
@@ -110,19 +113,22 @@ fn load_partial(index: u32) -> Accumulator {
 }
 
 @compute @workgroup_size(${WEBGPU_SUM_WORKGROUP_SIZE})
-fn main(@builtin(local_invocation_index) lane: u32, @builtin(workgroup_id) group: vec3<u32>) {
-  let index = group.x * ${WEBGPU_SUM_GROUP_ELEMENTS}u + lane * 2u;
+${entry.signature}${entry.guard}
+  let index = ${entry.index} * ${WEBGPU_SUM_GROUP_ELEMENTS}u + lane * 2u;
   partials[lane] = merge(load_partial(index), load_partial(index + 1u));
   for (var stride = ${WEBGPU_SUM_WORKGROUP_SIZE / 2}u; stride > 0u; stride >>= 1u) {
     workgroupBarrier();
     if lane < stride { partials[lane] = merge(partials[lane], partials[lane + stride]); }
   }
   if lane == 0u {
-    if parameters.final_stage != 0u { output[group.x] = rounded(partials[0]); }
+    if parameters.final_stage != 0u { output[${entry.index}] = rounded(partials[0]); }
     else {
-      for (var word = 0u; word < 10u; word++) { output[group.x * 11u + word] = partials[0].words[word]; }
-      output[group.x * 11u + 10u] = partials[0].flags;
+      for (var word = 0u; word < 10u; word++) { output[${entry.index} * 11u + word] = partials[0].words[word]; }
+      output[${entry.index} * 11u + 10u] = partials[0].flags;
     }
   }
 }
 `;
+}
+
+export const WEBGPU_SUM_SOURCE = createSumSource();

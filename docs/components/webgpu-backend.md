@@ -74,16 +74,20 @@ owns its separate `WEBGPU_MULTIPLICATION_WORKGROUP_SIZE`, also 64. Each shader
 uses its own constant in `@workgroup_size`.
 [`kernels/expansion.ts`](../../src/backends/webgpu/kernels/expansion.ts) owns the
 same-width unary scalar-copy launch for sum derivatives. It copies unsigned
-stored words to a separate output, without floating-point arithmetic. The backend imports all three for
-the dispatch-related capacity bound and the ceiling division that computes
-the number of groups. There is no second host declaration to keep aligned.
+stored words to a separate output, without floating-point arithmetic. The
+physical kernel table uses those constants with an explicit index class
+and span. The common linear planner derives launch geometry without using it
+as a global tensor-storage bound.
 
-For a nonempty output of `n` elements, dispatch uses `ceil(n / 64)` groups. The
+For a nonempty dense output of `n` elements, dispatch uses `ceil(n / 64)` logical
+groups. The
 shader's output-length guard prevents surplus invocations in the final partial
 group from accessing an element outside the output. Empty outputs encode no
-compute pass. Capacity admission also takes the minimum of the device's buffer,
-storage-binding and dispatch extents; sharing launch width does not remove any
-of those limits.
+compute pass. Storage admission and checked launch geometry are separate. A
+larger linear
+extent uses a checked grid with flattened indices and bounded padding; a
+cooperative group returns uniformly before barriers when it is padding. The
+[dispatch decision](../architecture/webgpu-dispatch.md) owns this separation.
 
 Derivative programs use the same storage-use accounting and physical completion
 as forward programs. Saved pins retain resident operands until common history
@@ -117,7 +121,7 @@ including cached compilation failures.
 
 The acquired device is ready before the factory returns, but a compute pipeline
 is prepared only when numerical execution first needs it. Preparation is shared
-within that backend owner, separately for each computation kind. A prepared
+within that backend owner, separately for each numerical kind and index layout. A prepared
 addition pipeline cannot satisfy multiplication or sum preparation. Cache identity
 is bounded
 by that owner's device lifetime and the selected kernel semantics; it retains
@@ -155,7 +159,9 @@ when all inputs are resident or empty and command encoding later fails.
 
 The acquired workgroup limits must permit 64 invocations and 2,816 bytes of
 workgroup storage; the buffer limit must permit a uniform. The existing tensor
-extent bound also limits the unsigned input count and first-stage dispatch.
+extent bound limits the unsigned input count; stage planning separately checks
+each dispatch and its padded indices. Each stage selects its own original or
+grid pipeline, so a large first stage does not change later partitions.
 For nonfinal stages, `44 * ceil(N/128) <= 4*N` for `N >= 129`, so private storage
 bindings fit the already admitted input extent. Later stages only shrink.
 The [sum decision](../architecture/webgpu-float32-sum.md) gives the integer-width

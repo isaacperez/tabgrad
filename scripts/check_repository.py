@@ -129,6 +129,7 @@ ARCHITECTURE_DOCUMENTS = {
     "docs/architecture/semantic-state.md",
     "docs/architecture/sum-gradient-aliases.md",
     "docs/architecture/webassembly-cpu-backend.md",
+    "docs/architecture/webgpu-dispatch.md",
     "docs/architecture/webgpu-float32-addition.md",
     "docs/architecture/webgpu-float32-sum.md",
     "docs/architecture/webgpu-sgd.md",

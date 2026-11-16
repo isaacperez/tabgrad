@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { cp, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { release, tmpdir } from "node:os";
-import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createPackageApplication, runPackageProcess } from "../js-tests/fixtures/package-application.mjs";
 import { checkPublicPackageEntries, checkPublicPackageTypes, checkPublicPackageCpuAssets } from "../js-tests/fixtures/package-consumer.mjs";
@@ -14,6 +14,10 @@ const repository = fileURLToPath(new URL("..", import.meta.url));
 const fixtureRoot = join(repository, "js-tests/browser");
 const page = "distribution/candidate.html";
 const assets = ["distribution/candidate.mjs", "distribution/python-worker.mjs"];
+const dispatchPages = ["webgpu/webgpu-dispatch.html", "python-webgpu/python-webgpu-dispatch.html"];
+const dispatchAssets = ["helpers/gpu-dispatch-cases.mjs", "helpers/matrix-cases.mjs", "helpers/float32-matrix-oracle.mjs",
+  "helpers/float32-addition-oracle.mjs", "helpers/float32-multiplication-oracle.mjs", "helpers/float32-coefficient-oracle.mjs",
+  "python-webgpu/python-webgpu-dispatch.mjs", "python-webgpu/python-webgpu-dispatch-device.mjs"];
 
 export function parsePackageArguments(arguments_) {
   const options = { gpu: false };
@@ -91,13 +95,16 @@ function validateCandidateResult(result, mode) {
   }
 }
 
-async function prepareBrowserApplication(fixture) {
+async function prepareBrowserApplication(fixture, gpu) {
   const application = fixture.application;
   await cp(join(fixture.packageDirectory, "dist"), join(application, "vendor/tabgrad"), { recursive: true });
   await verifyPackageDirectory(join(application, "vendor/tabgrad"), fixture.evidence.files
     .filter(file => file.path.startsWith("dist/")).map(file => ({ ...file, path: file.path.slice(5) })));
   await mkdir(join(application, "distribution"));
-  for (const path of [page, ...assets]) await cp(join(fixtureRoot, path), join(application, path));
+  for (const path of [page, ...assets, ...(gpu ? [...dispatchPages, ...dispatchAssets] : [])]) {
+    await mkdir(dirname(join(application, path)), { recursive: true });
+    await cp(join(fixtureRoot, path), join(application, path));
+  }
   await mkdir(join(application, "vendor/pyodide"));
   for (const path of ["pyodide.mjs", "pyodide.asm.mjs", "pyodide.asm.wasm", "pyodide-lock.json", "python_stdlib.zip"]) {
     await cp(join(repository, "node_modules/pyodide", path), join(application, "vendor/pyodide", path));
@@ -109,7 +116,9 @@ async function prepareBrowserApplication(fixture) {
 }
 
 function readCandidateAsset(application, reads, path) {
-  const actual = containedPath(fixtureRoot, path) ? join(application, relative(fixtureRoot, path)) : path;
+  const pyodide = join(repository, "node_modules/pyodide");
+  const actual = containedPath(fixtureRoot, path) ? join(application, relative(fixtureRoot, path))
+    : containedPath(pyodide, path) ? join(application, "vendor/pyodide", relative(pyodide, path)) : path;
   assert.ok(containedPath(application, actual), "A candidate request escaped the external application.");
   reads.push(relative(application, actual).split(sep).join("/"));
   return readFile(actual);
@@ -133,7 +142,49 @@ async function runCandidateProfile(fixture, browser, executable, version, mode) 
     if (mode === "direct") assert.ok(!reads.some(path => path.startsWith("vendor/pyodide/")
       || path.startsWith("vendor/tabgrad/python/") || path.startsWith("vendor/tabgrad/frontends/python/")
       || path === "vendor/tabgrad/python.js"));
+    if (mode === "gpu") await runDispatchProfiles(fixture, browser, executable, version, notes);
     return { ...observation, notes };
+  } finally { await server.close(); }
+}
+
+/** Reuse admitted archive bytes and owned fixtures; preserve the GPU report schema. */
+async function runDispatchProfiles(fixture, browser, executable, version, notes) {
+  const reads = [];
+  const server = await startBrowserServer(dispatchPages, { assets: dispatchAssets, crossOriginIsolation: true,
+    distributionDirectory: join(fixture.packageDirectory, "dist"),
+    readAsset: path => readCandidateAsset(fixture.application, reads, path),
+  });
+  try {
+    // Run larger payloads before small cohorts: installed browser services may
+    // outlive an individual browser, even after its GPU context has drained.
+    const profiles = [
+      { page: dispatchPages[1], mode: "large" }, { page: dispatchPages[0], mode: "large" },
+      { page: dispatchPages[1], mode: "controlled-axis" }, { page: dispatchPages[0], mode: "controlled-axis" },
+    ];
+    for (const { page, mode } of profiles) {
+      await runBrowserPage({ server, browser, executable, version, page, parameters: { mode },
+        reportNote: message => notes.push(message.trimEnd()),
+        validateResult(result) {
+          assert.equal(result.ok, true, JSON.stringify(result.error));
+          assertDrained(result.diagnostics);
+          const gpu = result.gpuDiagnostics ?? result.cases.gpu;
+          assert.equal(gpu.adapter.isFallbackAdapter, false);
+          assert.ok(gpu.peakOwnedBufferBytes <= 128 * 1024 ** 2);
+          if (page.startsWith("python-webgpu/")) {
+            assert.equal(result.worker, true);
+            assert.equal(result.jspiAvailable, false);
+            assert.equal(result.elements, mode === "large" ? 4194305 : 2305);
+          } else if (mode === "large") {
+            assert.equal(result.cases.elements, 4194305);
+            assert.equal(result.cases.sumElements, 8388481);
+            assert.equal(result.cases.matrixWeights, 4194304);
+          } else {
+            assert.equal(result.matrixGrid.cases, 4);
+            assert.equal(result.arithmetic.cases, 3);
+          }
+        },
+      });
+    }
   } finally { await server.close(); }
 }
 
@@ -224,7 +275,7 @@ export async function qualifyPackage(options) {
     phase = "cpu-assets";
     await checkPublicPackageCpuAssets(fixture); report.checks.push(phase);
     phase = "static-application";
-    await prepareBrowserApplication(fixture); report.checks.push("static-inventory");
+    await prepareBrowserApplication(fixture, options.gpu); report.checks.push("static-inventory");
     for (const browser of browsers) {
       phase = `${browser.name}-availability`;
       const executable = await resolveBrowser(browser);

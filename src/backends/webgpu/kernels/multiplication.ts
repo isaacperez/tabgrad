@@ -1,3 +1,4 @@
+import { invocationEntry, type LinearDispatchLayout } from "../linear-dispatch.js";
 import { WEBGPU_SIGNIFICAND_PRODUCT_SOURCE } from "./significand-product.js";
 
 /** One element per invocation; the host uses this same launch width. */
@@ -71,13 +72,18 @@ fn multiply_binary32(left: u32, right: u32) -> u32 {
 
 `;
 
-export const WEBGPU_MULTIPLICATION_SOURCE = `${WEBGPU_MULTIPLICATION_ARITHMETIC_SOURCE}
+export function createMultiplicationSource(layout: LinearDispatchLayout = "linear"): string {
+  const entry = invocationEntry(layout, WEBGPU_MULTIPLICATION_WORKGROUP_SIZE);
+  return `${WEBGPU_MULTIPLICATION_ARITHMETIC_SOURCE}
 @group(0) @binding(0) var<storage, read> left: array<u32>;
 @group(0) @binding(1) var<storage, read> right: array<u32>;
 @group(0) @binding(2) var<storage, read_write> output: array<u32>;
 @compute @workgroup_size(${WEBGPU_MULTIPLICATION_WORKGROUP_SIZE})
-fn main(@builtin(global_invocation_id) position: vec3<u32>) {
-  let index = position.x;
+${entry.signature}
+  let index = ${entry.index};
   if index < arrayLength(&output) { output[index] = multiply_binary32(left[index], right[index]); }
 }
 `;
+}
+
+export const WEBGPU_MULTIPLICATION_SOURCE = createMultiplicationSource();

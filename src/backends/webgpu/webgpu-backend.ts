@@ -1,19 +1,14 @@
+import { planKernelDispatch, requestedPipelines, selectPipeline, pipelineSource, type PipelineKey, type PipelineSelection, type KernelDispatchPlan } from "./kernel-dispatch.js";
+import { gpuTensorCapacityBytes } from "./webgpu-capacity.js";
 import type { BackendCapabilities, ExecutionBackend, ProgramBinding, ResidentAllocation } from "../../execution/backend.js";
 import { TabgradError } from "../../shared/errors.js";
 import type { ExecutableProgram, LoweredComputation, ProgramSlot } from "../../execution/executable-program.js";
 import { tensorElementCount } from "../../runtime/tensor-shape.js";
-import { WEBGPU_ADDITION_SOURCE, WEBGPU_ADDITION_WORKGROUP_SIZE } from "./kernels/addition.js";
-import { WEBGPU_MULTIPLICATION_SOURCE, WEBGPU_MULTIPLICATION_WORKGROUP_SIZE } from "./kernels/multiplication.js";
-import { WEBGPU_COEFFICIENT_ADDITION_SOURCE, WEBGPU_COEFFICIENT_ADDITION_WORKGROUP_SIZE, WEBGPU_COEFFICIENT_UNIFORM_BYTES } from "./kernels/coefficient-addition.js";
-import { WEBGPU_MATRIX_SOURCE, WEBGPU_MATRIX_WORKGROUP_SIZE, WEBGPU_MATRIX_UNIFORM_BYTES } from "./kernels/matrix-product.js";
-import { WEBGPU_EXPANSION_SOURCE, WEBGPU_EXPANSION_WORKGROUP_SIZE } from "./kernels/expansion.js";
-import { WEBGPU_SUM_SOURCE, WEBGPU_SUM_GROUP_ELEMENTS, WEBGPU_SUM_PARTIAL_BYTES, WEBGPU_SUM_WORKGROUP_BYTES, WEBGPU_SUM_WORKGROUP_SIZE } from "./kernels/sum.js";
+import { WEBGPU_COEFFICIENT_UNIFORM_BYTES } from "./kernels/coefficient-addition.js";
+import { WEBGPU_MATRIX_UNIFORM_BYTES } from "./kernels/matrix-product.js";
+import { WEBGPU_SUM_WORKGROUP_BYTES, WEBGPU_SUM_WORKGROUP_SIZE } from "./kernels/sum.js";
 import { ExecutionTicket } from "../../execution/execution-ticket.js";
-import { pointwiseGeometry, receivingGeometry } from "../../execution/broadcast-geometry.js";
-import { operationShapeContract } from "../../execution/operation-shapes.js";
-import { pointwiseParameters, receivingParameters, receivingStages } from "./broadcast-dispatch.js";
-import { WEBGPU_BROADCAST_ADDITION_SOURCE, WEBGPU_BROADCAST_MULTIPLICATION_SOURCE, WEBGPU_POINTWISE_WORKGROUP_SIZE } from "./kernels/broadcast.js";
-import { WEBGPU_RECEIVING_SOURCE, WEBGPU_RECEIVING_UNIFORM_BYTES } from "./kernels/receiving.js";
+import { WEBGPU_RECEIVING_UNIFORM_BYTES } from "./kernels/receiving.js";
 
 // WebGPU flag values are fixed by the API. The selected DOM declarations expose
 // their numeric types but not the namespace objects; no ambient typing patch is needed.
@@ -59,20 +54,6 @@ interface GpuReadback {
 }
 
 type WebGpuComputationKind = LoweredComputation["kind"];
-type WebGpuPipelineKind = WebGpuComputationKind | "broadcast-add-f32" | "broadcast-mul-f32";
-
-const PIPELINE_SOURCES: Readonly<Record<WebGpuPipelineKind, string>> = Object.freeze({
-  "add-f32": WEBGPU_ADDITION_SOURCE,
-  "add-alpha-f32": WEBGPU_COEFFICIENT_ADDITION_SOURCE,
-  "mul-f32": WEBGPU_MULTIPLICATION_SOURCE,
-  "sum-f32": WEBGPU_SUM_SOURCE,
-  "expand-f32": WEBGPU_EXPANSION_SOURCE,
-  "matmul-f32": WEBGPU_MATRIX_SOURCE,
-  "reduce-f32": WEBGPU_RECEIVING_SOURCE,
-  "broadcast-add-f32": WEBGPU_BROADCAST_ADDITION_SOURCE,
-  "broadcast-mul-f32": WEBGPU_BROADCAST_MULTIPLICATION_SOURCE,
-});
-
 /** Owns the acquired device, its private buffers, pipelines and physical completion. */
 export class WebGpuBackend implements WebGpuExecutionBackend {
   readonly synchronousObservation = false;
@@ -86,8 +67,8 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
   readonly #limits: WebGpuDiagnostics["limits"];
   #failure: TabgradError | undefined;
   #closed = false;
-  readonly #pipelines = new Map<WebGpuPipelineKind, GPUComputePipeline>();
-  readonly #preparations = new Map<WebGpuPipelineKind, Promise<void>>();
+  readonly #pipelines = new Map<PipelineKey, GPUComputePipeline>();
+  readonly #preparations = new Map<PipelineKey, Promise<void>>();
   #ownedBytes = 0;
   #peakBytes = 0;
   #pendingSubmissions = 0;
@@ -118,9 +99,7 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
       && device.limits.maxStorageBuffersPerShaderStage >= 3) computations.push("reduce-f32");
     computations.push("expand-f32");
     this.capabilities = Object.freeze({ device: "webgpu", computations: Object.freeze(computations),
-      gradients: true, maximumTensorBytes: Math.min(this.#limits.maxBufferSize,
-        this.#limits.maxStorageBufferBindingSize, 0xffffffff * 4,
-        this.#limits.maxComputeWorkgroupsPerDimension * Math.min(WEBGPU_ADDITION_WORKGROUP_SIZE, WEBGPU_COEFFICIENT_ADDITION_WORKGROUP_SIZE, WEBGPU_MULTIPLICATION_WORKGROUP_SIZE, WEBGPU_EXPANSION_WORKGROUP_SIZE) * 4) });
+      gradients: true, maximumTensorBytes: gpuTensorCapacityBytes(this.#limits) });
     void device.lost.then((info) => {
       if (!this.#closed) this.#retire(new TabgradError("BACKEND_STATUS_ERROR", "The WebGPU device was lost.", {
         backend: "webgpu", device: "webgpu", phase: "device-loss", reason: info.reason,
@@ -147,60 +126,74 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
 
   prepare(program?: ExecutableProgram): Promise<void> | undefined {
     this.assertAvailable();
-    const requested = new Map<WebGpuPipelineKind, { kind: WebGpuComputationKind; slot: ProgramSlot | undefined }>();
-    if (program === undefined) requested.set("add-f32", { kind: "add-f32", slot: undefined });
-    else for (const computation of program.computations) {
-      const key = this.#pipelineKind(computation, program);
-      if (!requested.has(key)) requested.set(key, { kind: computation.kind, slot: computation.output });
-    }
-    // Reject known unsupported work before starting any asynchronous pipeline.
-    for (const [pipelineKind, { kind, slot }] of requested) {
-      if (!this.capabilities.computations.includes(kind)
-        || (pipelineKind.startsWith("broadcast-") && this.#device.limits.maxStorageBuffersPerShaderStage < 4)) {
-        throw new TabgradError("BACKEND_CAPABILITY_MISMATCH", "Unsupported WebGPU computation.", {
-          backend: "webgpu", phase: "preparation",
-          programValueSlot: slot,
-        });
-      }
+    const requested = new Map<PipelineKey, { pipeline: PipelineSelection; slot: ProgramSlot | undefined }>();
+    if (program === undefined) {
+      const pipeline = selectPipeline("add-f32", "linear");
+      requested.set(pipeline.key, { pipeline, slot: undefined });
+    } else {
+      const plans = this.#planProgram(program);
+      program.computations.forEach((computation, index) => {
+        for (const pipeline of requestedPipelines(plans[index]!)) {
+          if (!requested.has(pipeline.key)) requested.set(pipeline.key, { pipeline, slot: computation.output });
+        }
+      });
     }
     const pending: Promise<void>[] = [];
-    for (const [pipelineKind, { slot }] of requested) {
-      if (this.#pipelines.has(pipelineKind)) continue;
-      let preparation = this.#preparations.get(pipelineKind);
+    for (const [key, { pipeline, slot }] of requested) {
+      if (this.#pipelines.has(key)) continue;
+      let preparation = this.#preparations.get(key);
       if (preparation === undefined) {
-        preparation = this.#compile(pipelineKind);
-        this.#preparations.set(pipelineKind, preparation);
+        preparation = this.#compile(pipeline);
+        this.#preparations.set(key, preparation);
       }
-      // Cache device preparation, not one request's slot. A downstream sum
-      // must identify a failed multiplication pipeline, and a later requester
-      // may place that same kind at a different slot.
+      // Cache physical preparation, never the requesting program's provenance.
       pending.push(preparation.catch((error: unknown) => {
         if (!(error instanceof TabgradError) || error.details.phase !== "preparation") throw error;
-        throw new TabgradError(error.code, error.message, { ...error.details,
-          programValueSlot: slot,
-        }, error.cause);
+        throw new TabgradError(error.code, error.message, { ...error.details, programValueSlot: slot }, error.cause);
       }));
     }
     return pending.length === 0 ? undefined : Promise.all(pending).then(() => undefined);
   }
 
-  #pipelineKind(computation: LoweredComputation, program: ExecutableProgram): WebGpuPipelineKind {
-    if (computation.kind === "add-f32" || computation.kind === "mul-f32") {
-      const length = tensorElementCount(program.values[computation.output]!.shape);
-      if (length !== 0 && computation.inputs.some(slot => tensorElementCount(program.values[slot]!.shape) !== length)) {
-        return computation.kind === "add-f32" ? "broadcast-add-f32" : "broadcast-mul-f32";
+  #planProgram(program: ExecutableProgram): readonly KernelDispatchPlan[] {
+    for (const value of program.values) {
+      const bytes = tensorElementCount(value.shape) * 4;
+      if (!Number.isSafeInteger(bytes) || bytes > this.capabilities.maximumTensorBytes) {
+        throw new TabgradError("RESOURCE_EXHAUSTED", "GPU program storage exceeds its admitted byte extent.", {
+          backend: "webgpu", phase: "preparation", programValueSlot: value.slot,
+          byteLength: bytes, maximumTensorBytes: this.capabilities.maximumTensorBytes,
+        });
       }
     }
-    return computation.kind;
+    return program.computations.map(computation => {
+      if (!this.capabilities.computations.includes(computation.kind)) {
+        throw new TabgradError("BACKEND_CAPABILITY_MISMATCH", "Unsupported WebGPU computation.", {
+          backend: "webgpu", phase: "preparation", programValueSlot: computation.output,
+        });
+      }
+      try {
+        const plan = planKernelDispatch(computation, program, this.#limits);
+        if (requestedPipelines(plan).some(pipeline => pipeline.kind.startsWith("broadcast-"))
+          && this.#device.limits.maxStorageBuffersPerShaderStage < 4) {
+          throw new TabgradError("BACKEND_CAPABILITY_MISMATCH", "Unsupported WebGPU broadcast bindings.");
+        }
+        return plan;
+      } catch (cause) {
+        if (!(cause instanceof TabgradError)) throw cause;
+        throw new TabgradError(cause.code, cause.message, { ...cause.details,
+          backend: "webgpu", phase: "preparation", programValueSlot: computation.output,
+        }, cause.cause);
+      }
+    });
   }
 
-  async #compile(kind: WebGpuPipelineKind): Promise<void> {
+  async #compile(selection: PipelineSelection): Promise<void> {
     const pipeline = await this.#checked("preparation", () => {
-      const module = this.#device.createShaderModule({ code: PIPELINE_SOURCES[kind] });
+      const module = this.#device.createShaderModule({ code: pipelineSource(selection) });
       return this.#device.createComputePipelineAsync({ layout: "auto", compute: { module, entryPoint: "main" } });
     });
     this.assertAvailable();
-    this.#pipelines.set(kind, pipeline);
+    this.#pipelines.set(selection.key, pipeline);
   }
 
   #allocate(byteLength: number, usage: GPUBufferUsageFlags): GpuAllocation {
@@ -236,6 +229,7 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
 
   #encodeExecution(program: ExecutableProgram, bindings: ReadonlyMap<ProgramSlot, ProgramBinding>,
     retainedSlots: readonly boolean[], storage: GpuInvocationStorage): Promise<void> | undefined {
+    const plans = this.#planProgram(program);
     const { allocations, created } = storage;
     const spare = new Map<number, GpuAllocation[]>();
     const uses = program.storageUseCounts.slice();
@@ -259,14 +253,14 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
           this.#uploadBytes += allocation.byteLength;
         }
       }
-      for (const computation of program.computations) {
+      for (const [index, computation] of program.computations.entries()) {
         const byteLength = tensorElementCount(program.values[computation.output]!.shape) * 4;
         const output = spare.get(byteLength)?.pop() ?? this.#allocate(byteLength,
           GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST);
         created.add(output); allocations.set(computation.output, output);
         if (byteLength !== 0) {
           const inputs = computation.inputs.map((slot) => allocations.get(program.values[slot]!.storageSlot)!);
-          this.#encodeComputation(encoder, computation, program, inputs, output, storage);
+          this.#encodeComputation(encoder, computation, program, inputs, output, storage, plans[index]!);
         }
         for (const input of computation.inputs) {
           const slot = program.values[input]!.storageSlot;
@@ -290,30 +284,22 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
 
   #encodeComputation(encoder: GPUCommandEncoder, computation: LoweredComputation,
     program: ExecutableProgram,
-    inputs: readonly GpuAllocation[], output: GpuAllocation, storage: GpuInvocationStorage): void {
+    inputs: readonly GpuAllocation[], output: GpuAllocation, storage: GpuInvocationStorage, plan: KernelDispatchPlan): void {
     try {
-      if (computation.kind === "sum-f32") {
-        this.#encodeSum(encoder, inputs[0]!, output, storage);
+      if (plan.path === "sum") {
+        this.#encodeSum(encoder, inputs[0]!, output, storage, plan);
         return;
       }
-      if (computation.kind === "reduce-f32") {
-        this.#encodeReceiving(encoder, inputs[0]!, output, receivingGeometry(pointwiseGeometry([
-          program.values[computation.inputs[0]!]!.shape, program.values[computation.output]!.shape,
-        ]), 1), storage);
+      if (plan.path === "receiving") {
+        this.#encodeReceiving(encoder, inputs[0]!, output, storage, plan);
         return;
       }
-      const pipelineKind = this.#pipelineKind(computation, program);
-      if (pipelineKind === "broadcast-add-f32" || pipelineKind === "broadcast-mul-f32") {
-        this.#encodePointwise(encoder, computation, program, inputs, output, storage, pipelineKind);
+      if (plan.path === "pointwise") {
+        this.#encodePointwise(encoder, inputs, output, storage, plan);
         return;
       }
-      if (computation.kind !== "add-f32" && computation.kind !== "add-alpha-f32" && computation.kind !== "mul-f32" && computation.kind !== "expand-f32" && computation.kind !== "matmul-f32") throw new Error("Unsupported WebGPU computation.");
-      const pipeline = this.#pipelines.get(computation.kind);
+      const pipeline = this.#pipelines.get(plan.pipeline.key);
       if (pipeline === undefined) throw new Error("WebGPU computation was not prepared.");
-      const workgroupSize = computation.kind === "mul-f32" ? WEBGPU_MULTIPLICATION_WORKGROUP_SIZE
-        : computation.kind === "matmul-f32" ? WEBGPU_MATRIX_WORKGROUP_SIZE
-        : computation.kind === "add-alpha-f32" ? WEBGPU_COEFFICIENT_ADDITION_WORKGROUP_SIZE
-        : computation.kind === "expand-f32" ? WEBGPU_EXPANSION_WORKGROUP_SIZE : WEBGPU_ADDITION_WORKGROUP_SIZE;
       const entries = [...inputs, output].map((allocation, binding) => ({ binding, resource: { buffer: allocation.buffer } }));
       if (computation.kind === "add-alpha-f32") {
         const coefficient = this.#allocate(WEBGPU_COEFFICIENT_UNIFORM_BYTES, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST);
@@ -339,7 +325,7 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
         entries });
       const pass = encoder.beginComputePass();
       pass.setPipeline(pipeline); pass.setBindGroup(0, bindGroup);
-      pass.dispatchWorkgroups(Math.ceil(output.byteLength / 4 / workgroupSize)); pass.end();
+      pass.dispatchWorkgroups(plan.dispatch.x, plan.dispatch.y, plan.dispatch.z); pass.end();
       this.#kernelCalls += 1;
     } catch (cause) {
       throw new TabgradError("BACKEND_STATUS_ERROR", "WebGPU computation encoding failed.", {
@@ -348,34 +334,29 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
     }
   }
 
-  #encodeSum(encoder: GPUCommandEncoder, input: GpuAllocation, output: GpuAllocation, storage: GpuInvocationStorage): void {
-    const pipeline = this.#pipelines.get("sum-f32");
-    if (pipeline === undefined) throw new Error("WebGPU sum was not prepared.");
+  #encodeSum(encoder: GPUCommandEncoder, input: GpuAllocation, output: GpuAllocation, storage: GpuInvocationStorage,
+    plan: Extract<KernelDispatchPlan, { path: "sum" }>): void {
     const pass = encoder.beginComputePass();
-    pass.setPipeline(pipeline);
     let current = input;
-    let count = input.byteLength / 4;
-    let partialInput = false;
-    do {
-      const groups = Math.max(1, Math.ceil(count / WEBGPU_SUM_GROUP_ELEMENTS));
-      const final = groups === 1;
-      const target = final ? output : this.#allocate(groups * WEBGPU_SUM_PARTIAL_BYTES, GPUBufferUsage.STORAGE);
-      if (!final) storage.created.add(target);
-      const parameters = this.#allocate(16, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST);
-      storage.created.add(parameters);
-      // Immutable per-stage parameters enqueue work even with resident/empty input.
-      storage.queuedWrites = true;
-      this.#device.queue.writeBuffer(parameters.buffer, 0, new Uint32Array([count, Number(final), Number(partialInput), 0]));
+    for (const stage of plan.stages) {
+      const pipeline = this.#pipelines.get(stage.pipeline.key);
+      if (pipeline === undefined) throw new Error("WebGPU sum was not prepared.");
+      pass.setPipeline(pipeline);
+      const target = stage.final ? output : this.#allocate(stage.bytes, GPUBufferUsage.STORAGE);
+      if (!stage.final) storage.created.add(target);
+      const parameters = this.#uploadParameters(new Uint32Array([
+        stage.count, Number(stage.final), Number(stage.partial), 0,
+      ]), GPUBufferUsage.UNIFORM, storage);
       const bindGroup = this.#device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [
         { binding: 0, resource: { buffer: current.buffer } },
         { binding: 1, resource: { buffer: target.buffer } },
         { binding: 2, resource: { buffer: parameters.buffer } },
       ] });
-      pass.setBindGroup(0, bindGroup); pass.dispatchWorkgroups(groups);
+      pass.setBindGroup(0, bindGroup);
+      pass.dispatchWorkgroups(stage.dispatch.x, stage.dispatch.y, stage.dispatch.z);
       this.#kernelCalls += 1;
-      if (final) break;
-      current = target; count = groups; partialInput = true;
-    } while (true);
+      current = target;
+    }
     pass.end();
   }
 
@@ -387,38 +368,32 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
     return allocation;
   }
 
-  #encodePointwise(encoder: GPUCommandEncoder, computation: LoweredComputation, program: ExecutableProgram,
-    inputs: readonly GpuAllocation[], output: GpuAllocation, storage: GpuInvocationStorage, kind: WebGpuPipelineKind): void {
-    const pipeline = this.#pipelines.get(kind);
+  #encodePointwise(encoder: GPUCommandEncoder, inputs: readonly GpuAllocation[], output: GpuAllocation,
+    storage: GpuInvocationStorage, plan: Extract<KernelDispatchPlan, { path: "pointwise" }>): void {
+    const pipeline = this.#pipelines.get(plan.pipeline.key);
     if (pipeline === undefined) throw new Error("Broadcast computation was not prepared.");
-    const words = pointwiseParameters(operationShapeContract(computation.kind)!.policy.plan(
-      computation.inputs.map(slot => program.values[slot]!.shape),
-    ), this.#limits);
-    const groups = Math.ceil(output.byteLength / 4 / words[2]! / WEBGPU_POINTWISE_WORKGROUP_SIZE);
-    if (groups > this.#limits.maxComputeWorkgroupsPerDimension) throw new TabgradError("RESOURCE_EXHAUSTED", "Broadcast work exceeds one GPU dispatch window.");
-    const parameters = this.#uploadParameters(words, GPUBufferUsage.STORAGE, storage);
+    const parameters = this.#uploadParameters(plan.words, GPUBufferUsage.STORAGE, storage);
     const entries = [...inputs, output, parameters].map((allocation, binding) => ({ binding, resource: { buffer: allocation.buffer } }));
     const bindGroup = this.#device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries });
     const pass = encoder.beginComputePass();
-    pass.setPipeline(pipeline); pass.setBindGroup(0, bindGroup); pass.dispatchWorkgroups(groups); pass.end();
+    pass.setPipeline(pipeline); pass.setBindGroup(0, bindGroup);
+    pass.dispatchWorkgroups(plan.dispatch.x, plan.dispatch.y, plan.dispatch.z); pass.end();
     this.#kernelCalls++;
   }
 
   #encodeReceiving(encoder: GPUCommandEncoder, input: GpuAllocation, output: GpuAllocation,
-    projection: import("../../execution/broadcast-geometry.js").ReceivingGeometry, storage: GpuInvocationStorage): void {
-    const pipeline = this.#pipelines.get("reduce-f32");
+    storage: GpuInvocationStorage, plan: Extract<KernelDispatchPlan, { path: "receiving" }>): void {
+    const pipeline = this.#pipelines.get(plan.pipeline.key);
     if (pipeline === undefined) throw new Error("Receiving reduction was not prepared.");
-    const stages = receivingStages(projection, this.#limits);
-    const words = receivingParameters(projection, this.#limits);
-    const geometry = this.#uploadParameters(words, GPUBufferUsage.STORAGE, storage);
+    const geometry = this.#uploadParameters(plan.words, GPUBufferUsage.STORAGE, storage);
     const pass = encoder.beginComputePass();
     pass.setPipeline(pipeline);
     let current = input;
-    for (const stage of stages) {
+    for (const stage of plan.stages) {
       const target = stage.final ? output : this.#allocate(stage.bytes, GPUBufferUsage.STORAGE);
       if (!stage.final) storage.created.add(target);
       for (let offset = 0; offset < stage.workgroups; offset += this.#limits.maxComputeWorkgroupsPerDimension) {
-        const parameters = this.#uploadParameters(new Uint32Array([stage.count, stage.chunks, projection.terms, projection.groups,
+        const parameters = this.#uploadParameters(new Uint32Array([stage.count, stage.chunks, plan.terms, plan.groups,
           Number(stage.partial), Number(stage.final), offset, 0]), GPUBufferUsage.UNIFORM, storage);
         const bindGroup = this.#device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [
           { binding: 0, resource: { buffer: current.buffer } }, { binding: 1, resource: { buffer: target.buffer } },

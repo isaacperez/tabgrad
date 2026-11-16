@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Managed Python GPU dispatch</title></head>
+<body><script type="module">
+  import { connectPythonWorker, createWebGpuWorker } from "/python.js";
+  const parameters = new URLSearchParams(location.search), token = parameters.get("token");
+  const large = parameters.get("mode") === "large";
+  const lifetime = new AbortController(), events = new Map();
+  let controller, worker, client;
+  function next(kind) { return new Promise((resolve, reject) => events.set(kind, { resolve, reject })); }
+  function failed(error) { lifetime.abort(error); for (const event of events.values()) event.reject(error); events.clear(); }
+  async function send(endpoint, value) {
+    const response = await fetch(`${endpoint}?token=${encodeURIComponent(token)}`, {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(value),
+    });
+    if (!response.ok) throw new Error("Could not report Python GPU dispatch result.");
+  }
+  try {
+    await send("/__phase", { phase: "application-started" });
+    controller = await createWebGpuWorker({ signal: lifetime.signal, ...(large ? {}
+      : { workerUrl: new URL("/python-webgpu/python-webgpu-dispatch-device.mjs", location.href) }) });
+    if (controller.diagnostics().adapter.isFallbackAdapter) throw new Error("Physical GPU required.");
+    worker = new Worker("/python-webgpu/python-webgpu-dispatch.mjs", { type: "module" });
+    const channel = new MessageChannel();
+    client = connectPythonWorker(channel.port1, lifetime.signal);
+    worker.addEventListener("error", event => failed(new Error(event.message)));
+    worker.addEventListener("message", ({ data }) => {
+      if (data.kind === "failure") { failed(new Error(data.message)); return; }
+      events.get(data.kind)?.resolve(data); events.delete(data.kind);
+    });
+    const ready = next("ready"), finished = next("finished");
+    void finished.catch(() => undefined);
+    worker.postMessage({ port: channel.port2, webgpu: controller.connection }, [channel.port2, ...controller.transferables]);
+    const environment = await ready;
+    await send("/__phase", { phase: "assets-loaded" });
+    await send("/__phase", { phase: "runtime-started" });
+    const count = large ? 4194305 : 2305;
+    const script = large ? `
+import torch
+from dispatch_probe import verify
+x = torch.tensor([1.] * ${count}, dtype=torch.float32, device='webgpu')
+y = x + x
+del x
+assert y.sum().tolist() == ${count * 2}
+await verify(y._handle, ${count}, 2.)
+` : `
+import torch
+n = ${count}
+x = torch.tensor([1.] * n, dtype=torch.float32, device='webgpu', requires_grad=True)
+loss = (x * x).sum()
+loss.backward()
+gradient = x.grad
+alias = gradient.view(n)
+assert gradient.tolist() == [2.] * n
+captured = x + x
+optimizer = torch.optim.SGD([x], lr=0.25)
+optimizer.step()
+assert x.tolist() == [0.5] * n
+assert captured.tolist() == [2.] * n
+optimizer.zero_grad(set_to_none=False)
+assert x.grad is gradient
+assert alias.tolist() == [0.] * n
+for columns in (4, 5):
+    left = torch.tensor([[2.]] * 1089, dtype=torch.float32, device='webgpu')
+    right = torch.tensor([[float(i + 1) for i in range(columns)]], dtype=torch.float32, device='webgpu', requires_grad=True)
+    output = left * right
+    assert output.tolist() == [[2. * (i + 1) for i in range(columns)]] * 1089
+    reduced = output.sum()
+    derivative, = torch.autograd.grad(reduced, [right])
+    assert derivative.tolist() == [[2178.] * columns]
+`;
+    const statement = large
+      ? `await eval(compile(${JSON.stringify(script)}, '<gpu-dispatch>', 'exec', flags=__import__('ast').PyCF_ALLOW_TOP_LEVEL_AWAIT), {'__name__': '__main__'})`
+      : `exec(compile(${JSON.stringify(script)}, '<gpu-dispatch>', 'exec'), {'__name__': '__main__'})`;
+    await client.runPythonAsync(statement);
+    await client.close(); const closed = await finished; await controller.close();
+    const gpu = controller.diagnostics();
+    if (gpu.peakOwnedBufferBytes > 128 * 1024 * 1024 || gpu.ownedBufferBytes !== 0 || gpu.pendingSubmissions !== 0 || gpu.unknownCompletionBytes !== 0) throw new Error("Python GPU dispatch did not close within its resource domain.");
+    await send("/__phase", { phase: "runtime-finished" });
+    await send("/__result", { ok: true, ...environment, mode: large ? "large" : "controlled-axis", elements: count,
+      diagnostics: closed.diagnostics, gpuDiagnostics: gpu });
+  } catch (error) {
+    lifetime.abort(error); await controller?.close().catch(() => undefined);
+    await send("/__result", { ok: false, error: { message: String(error), stack: error?.stack } });
+  } finally { worker?.terminate(); }
+</script></body></html>

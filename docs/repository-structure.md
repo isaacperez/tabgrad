@@ -98,6 +98,13 @@ private modules and the panic boundary. Source ownership is separate from
 distribution: both complete variant artifacts are built from the same crate,
 not downloaded or compiled separately for each operation.
 
+`src/backends/webgpu/kernel-dispatch.ts` derives finite physical plans and
+bounded kind/layout identities; `linear-dispatch.ts` owns checked linear index
+spaces and shader entry fragments. `reduction-stages.ts` owns the shared exact
+partial layout; broadcast projection and immutable receiving windows remain in
+`broadcast-dispatch.ts`. `webgpu-capacity.ts` separates buffer/index capacity
+from signed completion lengths, enforced by the shared-completion owner.
+
 `src/backends/webgpu/` groups the physical GPU owner, device acquisition,
 connection transport, shared completion and host supervision. Its `kernels/`
 directory owns numerical shader source and the launch geometry used by that
