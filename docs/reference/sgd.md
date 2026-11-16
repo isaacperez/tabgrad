@@ -182,10 +182,32 @@ Accepted writes/observations retain captures through reset, replacement and drop
 Physical failure creates the existing terminal mutation barrier and reaches
 observation or session drain.
 
-Fixed-owner checks retain optimizer, parameter, gradient, alias and old saved
-history across 16/64/128 drained steps. CPU checks vary lengths 32/4096/65536;
-GPU cohorts independently vary payload, parameters, groups, duplicates, aliases,
-depth, pending windows and repetitions. GPU checkpoints distinguish numerical
-result availability from physical drain. Logical ownership, Wasm capacity and
-counted GPU buffers are distinct from process RSS and private device memory.
-These bounded observations establish no universal memory or speed claim.
+## Inspect fixed-owner resources
+
+`node scripts/measure-sgd.mjs` checks resource lifetimes through the maintained
+JavaScript and Python helpers. It records cumulative checkpoints at 16, 64 and
+128 completed steps, so their elapsed windows cover 16, 48 and 64 steps. Those
+windows are not independent equal-length latency samples.
+
+Both paths retain the parameter, optimizer, alias and old saved history. The
+JavaScript helper also retains its first gradient wrapper; the Python helper
+does not. The Python window includes explicit `gc.collect()` and its first
+runtime diagnostic read; the JavaScript window ends before diagnostic reads.
+Their elapsed fields therefore do not isolate language overhead or compare
+ordinary training latency.
+
+Runtime diagnostics and the internal ownership readers can flush scheduled
+semantic collection. A checkpoint can retire unreachable owners and change the
+next window's starting state. Read these fields outside an ordinary timing
+boundary, or explicitly include and name that diagnostic work. JavaScript
+await points and managed Python entry boundaries can coalesce collection at
+different cadences; equal step counts alone do not make their costs comparable.
+
+The CPU helpers vary lengths 32, 4096 and 65536. GPU qualification separately
+varies payload, parameters, groups, duplicates, aliases, depth, pending windows
+and repetitions; its checkpoints distinguish numerical availability from
+physical drain. Logical ownership, Wasm capacity and counted GPU buffers remain
+distinct from process RSS and private device memory. Finite checkpoints do not
+establish transient peaks, asymptotic retention, or universal speed or memory
+bounds. Quantitative comparisons require a separately adequate method under
+[the performance policy](../performance.md#establish-measurement-adequacy).

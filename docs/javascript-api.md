@@ -294,7 +294,10 @@ excluding dormant leaf entries without history-edge owners;
 `liveSavedValues` counts pins rather than distinct buffers or bytes. These semantic
 counters make it possible to distinguish a retained computation from
 WebAssembly memory growth and to check that explicit shutdown retires owned
-semantic resources. Reading diagnostics does not demand a tensor. The separate
+semantic resources. Reading diagnostics can flush scheduled semantic cycle
+retirement before taking the snapshot. It does not demand tensor computation,
+but it is not passive timer instrumentation; see the
+[semantic lifetime contract](components/semantic-value-lifetimes.md). The separate
 `webgpu` snapshot reports GPU ownership, queue checkpoints and unknown
 completion; see the [GPU diagnostics reference](reference/webgpu-runtime.md#inspect-the-gpu-resource-domain).
 Top-level backend counters retain their CPU meaning.
