@@ -14,6 +14,7 @@
       import { checkBroadcastCases } from "/helpers/broadcast-cases.mjs";
       import { checkMatrixCases, checkMatrixTraining, checkMatrixPending } from "/helpers/matrix-cases.mjs";
       import { completeRuntimeSession } from "/runtime/runtime.js";
+      import { checkMemoryCapacity } from "/helpers/memory-capacity-cases.mjs";
       const parameters = new URLSearchParams(location.search);
       const token = parameters.get("token");
       const forceVariant = parameters.get("variant");
@@ -300,8 +301,11 @@
         await checkNoGrad(session);
         await checkCopy(session);
         await session.close();
+        const memoryCapacity = await checkMemoryCapacity(options => forceVariant === "auto"
+          ? createRuntimeSession({ manifestUrl, ...options })
+          : createTestRuntimeSession({ manifestUrl, forceVariant, ...options }));
         await reportPhase("runtime-finished");
-        await report({ ok: true, before, after, values });
+        await report({ ok: true, before, after, values, memoryCapacity });
       } catch (error) {
         await report({
           ok: false,

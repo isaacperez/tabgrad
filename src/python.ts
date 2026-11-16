@@ -9,7 +9,7 @@ export {
 export { connectPythonWorker, servePythonWorker } from "./frontends/python/python-worker.js";
 export { PythonWorkerError } from "./frontends/python/python-worker-errors.js";
 export type { WebGpuDiagnostics } from "./backends/webgpu/webgpu-backend.js";
-export type { RuntimeDiagnostics } from "./runtime/runtime.js";
+export type { RuntimeDiagnostics, RuntimeMemoryLimits } from "./runtime/runtime.js";
 export {
   createWebGpuWorker,
   type WebGpuWorkerController,

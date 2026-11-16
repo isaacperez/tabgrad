@@ -1,6 +1,9 @@
+import type { CpuMemoryCapacity } from "./memory-capacity.js";
+
 export type WasmVariant = "scalar" | "simd128";
 
 export interface BackendDiagnostics {
+  readonly cpuMemoryCapacity: CpuMemoryCapacity | null;
   readonly backendLoads: number;
   readonly hostToWasmBytes: number;
   readonly hostToWasmCopies: number;

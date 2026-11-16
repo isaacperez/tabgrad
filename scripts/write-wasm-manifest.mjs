@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
+import { wasmProfile } from "./wasm-profile.mjs";
 
 const variants = [];
 for (const descriptor of [
@@ -19,16 +20,16 @@ for (const descriptor of [
 
 const manifest = {
   schemaVersion: 1,
-  moduleVersion: 7,
+  moduleVersion: wasmProfile.moduleVersion,
   abiVersion: 1,
   addressWidth: 32,
   sharedMemory: false,
   capabilities: ["add-f32", "sum-f32", "mul-f32", "expand-f32", "add-alpha-f32", "matmul-f32", "broadcast-f32", "reduce-f32"],
   imports: [{ module: "env", name: "memory", kind: "memory" }],
   memory: {
-    initialPages: 32,
-    maximumPages: 1024,
-    alignment: 16,
+    initialPages: wasmProfile.initialPages,
+    maximumPages: wasmProfile.maximumPages,
+    alignment: wasmProfile.alignment,
   },
   variants,
 };

@@ -1,5 +1,7 @@
 import { TabgradError } from "../../shared/errors.js";
 import type { BackendDiagnostics, WasmVariant } from "./cpu-types.js";
+import { CPU_MEMORY_PROFILE, DEFAULT_CPU_LINEAR_MEMORY_BYTES, WEBASSEMBLY_PAGE_BYTES,
+  validateCpuLinearMemoryBytes, type CpuMemoryCapacity } from "./memory-capacity.js";
 
 const ABI_VERSION = 1;
 const CAPABILITY_ADD_FLOAT32 = 1;
@@ -75,7 +77,7 @@ interface PreparedCpuArtifact {
   readonly memory: WebAssembly.Memory;
   readonly exports: KernelExports;
   readonly arenaBase: number;
-  readonly maximumPages: number;
+  readonly capacity: CpuMemoryCapacity;
   readonly alignment: number;
   readonly variant: WasmVariant;
 }
@@ -99,15 +101,18 @@ export class CpuArtifactLoader {
   readonly #manifestUrl: URL;
   readonly #forceVariant: WasmVariant | undefined;
   readonly #timings: PreparationTimings;
+  readonly #linearMemoryBytes: number;
 
   constructor(
     manifestUrl: URL,
     forceVariant: WasmVariant | undefined,
     timings: PreparationTimings,
+    linearMemoryBytes = DEFAULT_CPU_LINEAR_MEMORY_BYTES,
   ) {
     this.#manifestUrl = manifestUrl;
     this.#forceVariant = forceVariant;
     this.#timings = timings;
+    this.#linearMemoryBytes = validateCpuLinearMemoryBytes(linearMemoryBytes);
   }
 
   async load(): Promise<PreparedCpuArtifact> {
@@ -190,7 +195,7 @@ export class CpuArtifactLoader {
       phase = "instantiation";
       const memory = new WebAssembly.Memory({
         initial: manifest.memory.initialPages,
-        maximum: manifest.memory.maximumPages,
+        maximum: this.#linearMemoryBytes / WEBASSEMBLY_PAGE_BYTES,
       });
       const instantiationStart = performance.now();
       const instance = await WebAssembly.instantiate(module, { env: { memory } });
@@ -232,7 +237,12 @@ export class CpuArtifactLoader {
         memory,
         exports,
         arenaBase,
-        maximumPages: manifest.memory.maximumPages,
+        capacity: Object.freeze({
+          artifactMaximumBytes: manifest.memory.maximumPages * WEBASSEMBLY_PAGE_BYTES,
+          linearMemoryLimitBytes: this.#linearMemoryBytes,
+          arenaBaseBytes: arenaBase,
+          arenaCapacityBytes: this.#linearMemoryBytes - arenaBase,
+        }),
         alignment: manifest.memory.alignment,
         variant: selectedVariant,
       };
@@ -329,7 +339,7 @@ export class CpuArtifactLoader {
     const memory = value.memory as Record<string, unknown> | undefined;
     const variants = value.variants;
     return value.schemaVersion === 1
-      && value.moduleVersion === 7
+      && value.moduleVersion === CPU_MEMORY_PROFILE.moduleVersion
       && value.abiVersion === ABI_VERSION
       && value.addressWidth === 32
       && value.sharedMemory === false
@@ -350,9 +360,9 @@ export class CpuArtifactLoader {
       && memory !== null
       && Number.isInteger(memory.initialPages)
       && Number.isInteger(memory.maximumPages)
-      && memory.initialPages === 32
-      && memory.maximumPages === 1024
-      && memory.alignment === 16
+      && memory.initialPages === CPU_MEMORY_PROFILE.initialPages
+      && memory.maximumPages === CPU_MEMORY_PROFILE.maximumPages
+      && memory.alignment === CPU_MEMORY_PROFILE.alignment
       && this.#hasManifestVariants(variants);
   }
 

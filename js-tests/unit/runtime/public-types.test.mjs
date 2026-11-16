@@ -8,6 +8,17 @@ import * as tabgrad from "../../../dist/index.js";
 
 const { RuntimeSession, Tensor, SGD } = tabgrad;
 
+test("capacity options typecheck through public JavaScript and local Python entries", () => {
+  const program = ts.createProgram({
+    rootNames: [fileURLToPath(new URL("../../fixtures/memory-capacity-types.ts", import.meta.url))],
+    options: { strict: true, noEmit: true, skipLibCheck: false, types: [],
+      target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.NodeNext,
+      moduleResolution: ts.ModuleResolutionKind.NodeNext, lib: ["lib.es2022.d.ts", "lib.dom.d.ts"] },
+  });
+  assert.deepEqual(ts.getPreEmitDiagnostics(program).map(diagnostic =>
+    ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n")), []);
+});
+
 test("the static Python entry selects only the supported runtime exports", async () => {
   const python = await import("../../../dist/python.js");
   assert.deepEqual(Object.keys(python).sort(), [

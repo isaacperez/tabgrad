@@ -99,6 +99,11 @@ execution. Neither that interface nor a successful GPU browser run establishes
 Python GPU support. Release evidence must name the browser, operating system,
 adapter, enabled features and limits, and whether the adapter is a fallback.
 
+The [host memory-capacity options](reference/memory-capacity.md) are likewise
+Tabgrad integration controls, not PyTorch allocator settings or a new tensor
+operation. Their configuration, physical/logical exhaustion and lifecycle
+tests do not establish a wider PyTorch numerical or model-support claim.
+
 ## Required operation record
 
 The [managed GPU controller reader](reference/python-host.md#read-managed-gpu-observations)

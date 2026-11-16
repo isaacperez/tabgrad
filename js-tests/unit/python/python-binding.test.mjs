@@ -238,6 +238,8 @@ test("local Python diagnostics remain available after failed CPU preparation", {
     assert.equal(failed.kernelCalls, 0);
     assert.equal(failed.liveAllocationBytes, 0);
     assert.equal(failed.wasmMemoryBytes, 0);
+    assert.equal(failed.cpuMemoryCapacity, null);
+    assert.deepEqual(failed.memoryLimits, { cpuLinearMemoryBytes: 64 * 1024 * 1024, updateBackingBytes: 64 * 1024 * 1024 });
     assert.equal(binding.diagnostics().backendLoads, failed.backendLoads);
   } finally {
     replacement.mock.restore();
@@ -3117,4 +3119,67 @@ test("Python sum gradients preserve pinned aliases, views and incoming acquisiti
     await binding.close();
     interpreter.runPython("[globals().pop(name, None) for name in ('torch','json','gc','sum_filled','sum_make','sum_sample','sum_error','sum_alias_report','sum_seed_report','sum_empty_promotion','sum_reset_report','sum_reset_partial','probe_version','check_sum_gradient_aliases','inspect_sgd_version')]; None");
   }
+});
+
+test("Python attachment captures shared memory limits before loading source assets", { timeout: 20_000 }, async () => {
+  const { attachPython } = await import("../../../dist/python.js");
+  const interpreter = await getInterpreter();
+  const memoryLimits = { cpuLinearMemoryBytes: 128 * 1024 * 1024, updateBackingBytes: 4096 };
+  const pending = attachPython(interpreter, { memoryLimits,
+    manifestUrl: new URL("../../../dist/python/manifest.json", import.meta.url) });
+  memoryLimits.cpuLinearMemoryBytes = 2 * 1024 * 1024;
+  memoryLimits.updateBackingBytes = 0;
+  const binding = await pending;
+  try {
+    assert.deepEqual(binding.diagnostics().memoryLimits, {
+      cpuLinearMemoryBytes: 128 * 1024 * 1024, updateBackingBytes: 4096,
+    });
+    assert.equal(binding.diagnostics().cpuMemoryCapacity, null);
+    await binding.runPythonAsync("import torch\ncapacity_input = torch.tensor([2.0], dtype=torch.float32)\nassert (capacity_input + capacity_input).tolist() == [4.0]");
+    const ready = binding.diagnostics();
+    assert.equal(ready.cpuMemoryCapacity.artifactMaximumBytes, 256 * 1024 * 1024);
+    assert.equal(ready.cpuMemoryCapacity.linearMemoryLimitBytes, 128 * 1024 * 1024);
+    assert.ok(Object.isFrozen(ready.cpuMemoryCapacity));
+  } finally { await binding.close(); }
+  assert.equal(binding.diagnostics().cpuMemoryCapacity, null);
+  assert.equal(binding.diagnostics().memoryLimits.cpuLinearMemoryBytes, 128 * 1024 * 1024);
+});
+
+test("connected Python keeps CPU capacity and validates limits before claiming a GPU connection", { timeout: 20_000 }, async () => {
+  const { attachPython } = await import("../../../dist/python.js");
+  const { GPU_ACCOUNTED, GPU_CONSUMED, GPU_CONTROL_LENGTH, GPU_METRIC_LENGTH } = await import("../../../dist/backends/webgpu/webgpu-connection.js");
+  const interpreter = await getInterpreter();
+  const physical = new MessageChannel(), supervision = new MessageChannel();
+  const control = new Int32Array(new SharedArrayBuffer(GPU_CONTROL_LENGTH * 4));
+  // Transport is idle: this test executes actual CPU kernels in a GPU-connected
+  // attachment, not simulated GPU numerics or remote completion.
+  const connection = {
+    connectionType: "tabgrad-webgpu", protocolVersion: 1,
+    port: physical.port1, supervision: supervision.port1, control: control.buffer,
+    metrics: new SharedArrayBuffer(GPU_METRIC_LENGTH * 8),
+    capabilities: { device: "webgpu", computations: ["add-f32"], gradients: false, maximumTensorBytes: 1048576 },
+    diagnostics: { state: "ready", adapter: {}, features: [], limits: {} },
+  };
+  let binding;
+  try {
+    await assert.rejects(attachPython(interpreter, { webgpu: connection, memoryLimits: { updateBackingBytes: -1 } }), TypeError);
+    assert.equal(Atomics.load(control, GPU_CONSUMED), 0);
+    const memoryLimits = { cpuLinearMemoryBytes: 128 * 1024 * 1024, updateBackingBytes: 4096 };
+    const pending = attachPython(interpreter, { webgpu: connection, memoryLimits });
+    memoryLimits.cpuLinearMemoryBytes = 2 * 1024 * 1024;
+    binding = await pending;
+    assert.equal(Atomics.load(control, GPU_CONSUMED), 1);
+    assert.equal(binding.diagnostics().cpuMemoryCapacity, null);
+    await binding.runPythonAsync("import torch; assert (torch.tensor([3], dtype=torch.float32) + torch.tensor([4], dtype=torch.float32)).tolist() == [7]");
+    const ready = binding.diagnostics();
+    assert.equal(ready.memoryLimits.updateBackingBytes, 4096);
+    assert.equal(ready.cpuMemoryCapacity.linearMemoryLimitBytes, 128 * 1024 * 1024);
+    assert.equal(ready.webgpu.kernelCalls, 0);
+  } finally {
+    Atomics.store(control, GPU_ACCOUNTED, 1);
+    await binding?.close();
+    for (const port of [physical.port1, physical.port2, supervision.port1, supervision.port2]) port.close();
+    interpreter.runPython("globals().pop('torch', None); None");
+  }
+  assert.equal(binding.diagnostics().cpuMemoryCapacity, null);
 });

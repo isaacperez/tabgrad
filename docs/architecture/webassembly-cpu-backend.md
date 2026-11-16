@@ -252,13 +252,15 @@ and call-overhead requirements with simpler total maintenance.
 
 ## Version 1 raw ABI and module capabilities
 
-The first concrete raw ABI profile gives the general boundary above an exact,
+The raw ABI profile gives the general boundary above an exact,
 small instance. The generated JSON manifest has schema version 1 and module
-version 7. It declares ABI version 1, 32-bit addresses, non-shared memory, the
+version 8. It declares ABI version 1, 32-bit addresses, non-shared memory, the
 `add-f32`, `sum-f32`, `mul-f32`, `expand-f32`, `add-alpha-f32`, `matmul-f32`,
 `broadcast-f32` and `reduce-f32` capabilities,
 one `env.memory` import, an initial 32-page memory, a
-maximum 1024-page memory, and 16-byte host-arena alignment. Each scalar or
+maximum 4096-page memory, and 16-byte host-arena alignment. The actual imported
+memory uses the session's independently resolved maximum, 1024 pages by default.
+Each scalar or
 `simd128` variant records its relative path, byte length, required features, and
 SHA-256 digest.
 
@@ -412,6 +414,34 @@ Work that does not fit has only three honest outcomes:
 - use an explicitly planned and measured tiling or staging route whose copies
   and lifetimes are visible to the backend; or
 - reject the request with a resource or capability error.
+
+### Separate artifact, session and logical capacity
+
+The artifact ceiling describes the largest supported imported memory, while
+the session selects its actual growth limit. The initial allocation remains
+2 MiB and the default session maximum remains 64 MiB; an application can
+explicitly request a larger arena within the 256 MiB artifact ceiling. The
+loader, allocator and packet checks use the resolved session bound together.
+Changing a maximum does not guarantee that the host can allocate it, and the
+module's private prefix reduces the maximum numerical arena span.
+
+Logical update admission remains a separate semantic-runtime responsibility.
+Live captures, repeated edges and saved or prior gradients can retain logical
+resources even when numerical storage is shared. Physical buffer peaks cannot
+justify replacing those reservations. Host tensor copies, Pyodide and process
+RSS are separate domains as well. The
+[capacity reference](../reference/memory-capacity.md) owns the exact options,
+limits, diagnostic fields and error phases.
+
+This separation retains the allocator's reuse and rollback rather than
+introducing compaction, automatic RAM-based resizing or a larger default.
+An immutable explicit limit makes application resource policy visible without
+adding per-element callbacks or another allocation owner. The 256 MiB ceiling
+is a supported policy bound, not a measured optimum; a different ceiling or
+memory model requires artifact/import conformance and qualification of its
+actual consumers. The [capacity investigation](https://github.com/isaacperez/tabgrad/issues/462)
+and [accepted contract](https://github.com/isaacperez/tabgrad/issues/462#issuecomment-6920578646)
+record the evidence, alternatives and maintainer decision.
 
 Memory64 or multiple memories can change this constraint only after the
 required browsers, toolchains, ABI, and measurements support them. They are not

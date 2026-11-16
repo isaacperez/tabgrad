@@ -152,7 +152,10 @@ only a version counter, never another family's current descriptor. Completed
 no-grad updates therefore need not retain one source chain per step.
 
 The session bounds persistent update admission to 1,024 pending copies, 65,536
-live owning references and 64 MiB of unique live backing payload. The owner
+live owning references and, by default, 64 MiB of unique live backing payload.
+The backing allowance can be tightened independently through
+[`memoryLimits.updateBackingBytes`](memory-capacity.md); raising the CPU
+numerical ceiling does not raise it. The owner
 budget counts numeric/history/control references, requests and undelivered
 failures. Control-capturing derivative and downstream admissions reserve count
 and byte capacity before changing ownership; derivative planning uses a

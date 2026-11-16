@@ -175,10 +175,12 @@ for (const rejection of ["configured limit", "host failure"]) {
       assert.throws(() => allocator.allocate(65_536), (error) => {
         assert.equal(error.code, "RESOURCE_EXHAUSTED");
         if (rejection === "configured limit") {
-          assert.deepEqual(error.details, { maximumPages: 1, requiredPages: 2 });
+          assert.deepEqual(error.details, { maximumPages: 1, requiredPages: 2,
+            capacityDomain: "cpu-linear-memory", phase: "allocation", maximumBytes: 65_536, requiredBytes: 65_600 });
           assert.equal(error.cause, undefined);
         } else {
-          assert.deepEqual(error.details, { requiredPages: 2 });
+          assert.deepEqual(error.details, { maximumPages: 2, requiredPages: 2,
+            capacityDomain: "cpu-linear-memory", phase: "memory-growth", maximumBytes: 131_072, requiredBytes: 65_600 });
           assert.equal(error.cause, hostError);
         }
         return true;
@@ -220,3 +222,17 @@ function allocationCounters(allocator) {
     allocator.highWaterReservedBytes,
   ];
 }
+
+test("CPU configured ceiling also bounds an already larger memory buffer", () => {
+  const memory = new WebAssembly.Memory({ initial: 2, maximum: 2 });
+  const allocator = new LinearMemoryAllocator(memory, 48, 1, 16, 7);
+  const counters = allocationCounters(allocator);
+  assert.throws(() => allocator.allocate(65_536), error => {
+    assert.equal(error.code, "RESOURCE_EXHAUSTED");
+    assert.equal(error.details.capacityDomain, "cpu-linear-memory");
+    assert.equal(error.details.maximumBytes, 65_536);
+    return true;
+  });
+  assert.deepEqual(allocationCounters(allocator), counters);
+  assert.equal(allocator.allocate(4).offset, 48);
+});

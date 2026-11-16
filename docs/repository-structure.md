@@ -81,7 +81,10 @@ and allocation identity; `invocation-storage.ts` tracks physical use and rollbac
 for one execution. `cpu-backend.ts` composes those owners and keeps preparation
 caching, generation, quarantine, dispatch and diagnostics. Shared CPU variant
 and diagnostic types live in `cpu-types.ts` without creating another state
-owner. The adapter uses common execution contracts and semantic shape rules,
+owner. `memory-capacity.ts` owns the supported physical profile, byte units and
+session-bound validation; `src/runtime/memory-limits.ts` captures the public
+physical and logical settings without moving logical admission into CPU.
+The adapter uses common execution contracts and semantic shape rules,
 not frontend or session-private state. The numerical kernels remain in the Rust
 crate, with
 their own toolchain and build root; grouping the adapter does not move or
@@ -289,7 +292,10 @@ the Python assets through [`scripts/build-python.mjs`](../scripts/build-python.m
 [`scripts/build-wasm.mjs`](../scripts/build-wasm.mjs) compiles and copies the
 CPU modules, and
 [`scripts/write-wasm-manifest.mjs`](../scripts/write-wasm-manifest.mjs)
-describes the resulting bytes. Edit those maintained inputs when changing
+describes the resulting bytes. Both producer tools use
+[`scripts/wasm-profile.mjs`](../scripts/wasm-profile.mjs); loader compatibility
+and raw-ABI tests check that the emitted profile and actual imports agree.
+Edit those maintained inputs when changing
 their behavior, not the generated JavaScript, manifest or binary.
 
 A build output directory is not a release. The package's `files` field selects
