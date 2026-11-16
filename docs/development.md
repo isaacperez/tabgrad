@@ -676,6 +676,16 @@ in the same repository change as its executable configuration and local
 verification evidence.
 
 
+The direct and managed Python GPU commands also exercise checked dispatch
+grids and retained receiving windows. Their bounded large profiles validate
+complete 4,194,305-element payloads; direct GPU also checks an 8,388,481-element
+sum and a 4,194,304-weight matrix with a small output. Controlled smaller axis
+profiles reach padded cooperative stages and grid arithmetic without requesting
+optional device limits. These are physical qualification checks, not a promise
+of full-model support. Python's large transport probe validates the full typed
+payload in its interpreter worker, avoiding millions of Python output scalar
+objects; ordinary Python observation is separately exercised.
+
 ## Add or change a command
 
 `npm run package` defaults to ignored `build/browser-package/`. Supply another

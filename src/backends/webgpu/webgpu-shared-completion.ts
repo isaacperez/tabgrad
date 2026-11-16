@@ -3,6 +3,7 @@ import { TabgradError } from "../../shared/errors.js";
 import { ExecutionTicket, type SynchronousCompletion } from "../../execution/execution-ticket.js";
 import { GPU_DIAGNOSTIC_BYTES, decodeGpuFailure, encodeGpuFailure } from "./webgpu-failure-diagnostic.js";
 import { GPU_ACCOUNTED, GPU_PULSE, assertGpuConnectionActive, wakeGpuObservers } from "./webgpu-connection.js";
+import { validateSharedGpuPayloadBytes } from "./webgpu-capacity.js";
 
 // Fixed control and bounded diagnostics are separate from demand-sized payload.
 const HEADER_BYTES = 16;
@@ -38,7 +39,7 @@ export class SharedGpuCompletion<T> implements SynchronousCompletion<T> {
     this.#decode = decode;
     this.#retire = retire;
     this.#failed = failed;
-    this.buffer = new SharedArrayBuffer(PAYLOAD_OFFSET + payloadBytes);
+    this.buffer = new SharedArrayBuffer(PAYLOAD_OFFSET + validateSharedGpuPayloadBytes(payloadBytes));
     this.#header = new Int32Array(this.buffer, 0, HEADER_BYTES / 4);
     this.ticket = new ExecutionTicket(() => this.#observeResult(), () => this.#observeDrain(), this);
   }

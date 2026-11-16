@@ -81,3 +81,16 @@ shared observation and independent supervision; a direct JavaScript Promise
 run cannot qualify those parked-interpreter boundaries.
 CPU tensors keep their local synchronous execution path and ordinary default
 device. There is no automatic CPU/GPU transfer or fallback in this flow.
+
+## Capacity before physical work
+
+The backend validates finite storage, parameter, partial and dispatch geometry
+before compilation or numerical writes. Pipeline identities distinguish kind
+and index layout; an invocation uses its checked original/grid plan while
+receiving reductions retain immutable offset windows. A larger tensor can
+therefore use a small matrix output or a multi-stage scalar sum without
+turning a one-axis window into a global storage limit. The
+[dispatch decision](../architecture/webgpu-dispatch.md) explains index bounds,
+uniform cooperative padding and preparation/encoding consistency. Managed
+workers advertise the same signed-readback-safe storage capacity; mapping
+result lengths are validated separately from tensor bytes.

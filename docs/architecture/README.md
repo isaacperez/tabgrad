@@ -146,6 +146,8 @@ Read the documents in this order when learning the architecture:
    [Selecting and integrating WebGPU](webgpu-integration.md) explains explicit
    device identity, ready-session setup, direct JavaScript placement and the
    owned GPU worker connection used by managed Python.
+   [GPU storage and dispatch geometry](webgpu-dispatch.md) separates capacity,
+   linear index classes, padded grids and bounded pipeline identities.
    [WebGPU float32 addition](webgpu-float32-addition.md) develops a bounded
    numerical decision: rounding, exceptional values, implementation freedom
    and the evidence behind the accepted cost tradeoff.

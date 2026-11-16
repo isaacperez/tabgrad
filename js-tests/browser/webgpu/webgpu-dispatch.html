@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>GPU dispatch integration</title></head>
+<body><script type="module">
+  import { createWebGpuRuntimeSession } from "/index.js";
+  import { createConnectedRuntimeSession } from "/runtime/runtime.js";
+  import { WebGpuBackend } from "/backends/webgpu/webgpu-backend.js";
+  import { ExecutableProgram } from "/execution/executable-program.js";
+  import { checkMatrixBackend } from "/helpers/matrix-cases.mjs";
+  import { checkLargeGpuDispatch, checkGpuDispatchComposition, restrictDispatchAxis, checkGridMatrixOrientations, checkGridArithmetic } from "/helpers/gpu-dispatch-cases.mjs";
+  const parameters = new URLSearchParams(location.search), token = parameters.get("token");
+  const send = async (endpoint, value) => {
+    const response = await fetch(`${endpoint}?token=${encodeURIComponent(token)}`, {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(value),
+    });
+    if (!response.ok) throw new Error("Could not report GPU dispatch result.");
+  };
+  let session;
+  try {
+    await send("/__phase", { phase: "application-started" });
+    const large = parameters.get("mode") === "large";
+    let matrix, matrixGrid, arithmetic, backend;
+    if (large) session = await createWebGpuRuntimeSession();
+    else {
+      const adapter = await navigator.gpu.requestAdapter();
+      backend = new WebGpuBackend(restrictDispatchAxis(await adapter.requestDevice(), 17));
+      session = createConnectedRuntimeSession(backend);
+    }
+    await send("/__phase", { phase: "assets-loaded" });
+    await send("/__phase", { phase: "runtime-started" });
+    if (backend !== undefined) {
+      matrix = await checkMatrixBackend(backend, ExecutableProgram);
+      matrixGrid = await checkGridMatrixOrientations(backend, ExecutableProgram);
+      arithmetic = await checkGridArithmetic(session);
+    }
+    const cases = large ? await checkLargeGpuDispatch(session) : await checkGpuDispatchComposition(session);
+    await session.close();
+    const closed = session.diagnostics();
+    if (closed.webgpu.ownedBufferBytes !== 0 || closed.webgpu.pendingSubmissions !== 0 || closed.liveRequestLeases !== 0) {
+      throw new Error("Closed GPU dispatch test retained physical or semantic work.");
+    }
+    await send("/__phase", { phase: "runtime-finished" });
+    await send("/__result", { ok: true, mode: large ? "large" : "controlled-axis", cases, matrix, matrixGrid, arithmetic, diagnostics: closed });
+  } catch (error) {
+    await session?.close().catch(() => undefined);
+    await send("/__result", { ok: false, error: { message: String(error), stack: error?.stack } });
+  }
+</script></body></html>

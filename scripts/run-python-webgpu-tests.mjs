@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { browserDefinitions, browserVersion, resolveBrowser, runBrowserPage, selectBrowserDefinitions, startBrowserServer } from "./browser-harness.mjs";
 
 const profiles = [
+  ...["controlled-axis", "large"].map(mode => ({ page: "python-webgpu/python-webgpu-dispatch.html", mode })),
   { page: "python-webgpu/python-webgpu-diagnostics.html" },
   ...["message", "error"].map((failure) => ({ page: "python-webgpu/python-webgpu-diagnostics.html", failure })),
   { page: "python-webgpu/python-webgpu.html" }, { page: "python-webgpu/python-webgpu-revocation.html" }, { page: "python-webgpu/python-webgpu-attachment.html" },
@@ -16,7 +17,7 @@ const profiles = [
   ...["device-loss", "worker-loss", "interpreter-loss"].map((mode) => ({ page: "python-webgpu/python-webgpu-loss.html", mode })),
 ];
 const server = await startBrowserServer(profiles.map(({ page }) => page), { crossOriginIsolation: true,
-  assets: ["python-webgpu/python-webgpu-diagnostics.mjs", "python-webgpu/python-webgpu.mjs", "python-webgpu/python-webgpu-revocation.mjs", "python-webgpu/python-webgpu-delayed.mjs", "python-webgpu/python-webgpu-attachment.mjs", "python-webgpu/python-webgpu-loss.mjs", "helpers/float32-addition-oracle.mjs", "helpers/float32-sum-oracle.mjs", "helpers/float32-multiplication-oracle.mjs", "helpers/functional-gradient-cases.mjs", "helpers/python-copy-cases.mjs", "helpers/gradient-progress-cases.mjs", "helpers/backward-cases.mjs", "helpers/python-tensor-device.mjs", "helpers/backward-lifetime.mjs", "helpers/sgd-cases.mjs", "helpers/sgd-lifetime.mjs", "helpers/gpu-sgd-cases.mjs", "helpers/float32-coefficient-oracle.mjs", "helpers/matrix-cases.mjs", "helpers/float32-matrix-oracle.mjs", "helpers/python-matrix-cases.mjs", "helpers/broadcast-cases.mjs", "helpers/python-view-cases.mjs", "helpers/functional-gradient-oracle.json"],
+  assets: ["python-webgpu/python-webgpu-dispatch.mjs", "python-webgpu/python-webgpu-dispatch-device.mjs", "helpers/gpu-dispatch-cases.mjs", "python-webgpu/python-webgpu-diagnostics.mjs", "python-webgpu/python-webgpu.mjs", "python-webgpu/python-webgpu-revocation.mjs", "python-webgpu/python-webgpu-delayed.mjs", "python-webgpu/python-webgpu-attachment.mjs", "python-webgpu/python-webgpu-loss.mjs", "helpers/float32-addition-oracle.mjs", "helpers/float32-sum-oracle.mjs", "helpers/float32-multiplication-oracle.mjs", "helpers/functional-gradient-cases.mjs", "helpers/python-copy-cases.mjs", "helpers/gradient-progress-cases.mjs", "helpers/backward-cases.mjs", "helpers/python-tensor-device.mjs", "helpers/backward-lifetime.mjs", "helpers/sgd-cases.mjs", "helpers/sgd-lifetime.mjs", "helpers/gpu-sgd-cases.mjs", "helpers/float32-coefficient-oracle.mjs", "helpers/matrix-cases.mjs", "helpers/float32-matrix-oracle.mjs", "helpers/python-matrix-cases.mjs", "helpers/broadcast-cases.mjs", "helpers/python-view-cases.mjs", "helpers/functional-gradient-oracle.json"],
   readAsset: (path) => readFile(String(path).endsWith("/helpers/functional-gradient-oracle.json")
     ? new URL("../js-tests/fixtures/python-tensor-oracle.json", import.meta.url) : path),
 });
@@ -28,6 +29,19 @@ try {
       server, browser, executable, version, page, parameters: { ...(mode === undefined ? {} : { mode }), ...(operation === undefined ? {} : { operation }), ...(failure === undefined ? {} : { failure }) },
       validateResult(result) {
         assert.equal(result.ok, true, JSON.stringify(result.error));
+        if (page === "python-webgpu/python-webgpu-dispatch.html") {
+          assert.equal(result.worker, true);
+          assert.equal(result.jspiAvailable, false);
+          assert.equal(result.pyodide, "314.0.6");
+          assert.equal(result.elements, mode === "large" ? 4194305 : 2305);
+          assert.equal(result.diagnostics.liveRequestLeases, 0);
+          assert.equal(result.gpuDiagnostics.ownedBufferBytes, 0);
+          assert.equal(result.gpuDiagnostics.pendingSubmissions, 0);
+          assert.equal(result.gpuDiagnostics.unknownCompletionBytes, 0);
+          assert.ok(result.gpuDiagnostics.peakOwnedBufferBytes <= 128 * 1024 ** 2);
+          process.stdout.write(`${browser.name} ${version}: ${JSON.stringify({ pythonDispatch: mode, gpu: result.gpuDiagnostics })}\n`);
+          return;
+        }
         if (failure !== undefined) {
           assert.equal(result.expectedBootstrapFailure, failure);
           assert.match(result.observedFailure, /controlled GPU diagnostic bootstrap failure/);

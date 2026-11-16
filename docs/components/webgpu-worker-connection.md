@@ -363,3 +363,13 @@ gate follows real GPU queue completion; it controls publication timing, not
 natural pending-hardware behavior, acquisition or arithmetic. Controlled unit
 tests supplement those integrated failure boundaries. Named qualification does not
 establish universal browser support or whole-model throughput.
+
+## Storage and result-length admission
+
+The physical owner advertises the same float32 storage capacity used by direct
+GPU sessions, independently of its dispatch axis. The connected runtime uses
+that immutable capability for creation and inferred outputs. Shared completion
+validates its signed byte-count domain before allocating a payload, including
+the separate sixteen-byte-per-selected-value allocation mapping. A large
+tensor limit does not authorize an oversized mapping or a larger semantic
+quota. See [GPU capacity and dispatch](../architecture/webgpu-dispatch.md).

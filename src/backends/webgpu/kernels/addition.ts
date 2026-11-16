@@ -1,3 +1,4 @@
+import { invocationEntry, type LinearDispatchLayout } from "../linear-dispatch.js";
 /** One-dimensional launch width owned by this kernel, shared with host dispatch. */
 export const WEBGPU_ADDITION_WORKGROUP_SIZE = 64;
 
@@ -50,13 +51,18 @@ fn add_binary32(left: u32, right: u32) -> u32 {
 
 `;
 
-export const WEBGPU_ADDITION_SOURCE = `${WEBGPU_ADDITION_ARITHMETIC_SOURCE}
+export function createAdditionSource(layout: LinearDispatchLayout = "linear"): string {
+  const entry = invocationEntry(layout, WEBGPU_ADDITION_WORKGROUP_SIZE);
+  return `${WEBGPU_ADDITION_ARITHMETIC_SOURCE}
 @group(0) @binding(0) var<storage, read> left: array<u32>;
 @group(0) @binding(1) var<storage, read> right: array<u32>;
 @group(0) @binding(2) var<storage, read_write> output: array<u32>;
 @compute @workgroup_size(${WEBGPU_ADDITION_WORKGROUP_SIZE})
-fn main(@builtin(global_invocation_id) position: vec3<u32>) {
-  let index = position.x;
+${entry.signature}
+  let index = ${entry.index};
   if index < arrayLength(&output) { output[index] = add_binary32(left[index], right[index]); }
 }
 `;
+}
+
+export const WEBGPU_ADDITION_SOURCE = createAdditionSource();

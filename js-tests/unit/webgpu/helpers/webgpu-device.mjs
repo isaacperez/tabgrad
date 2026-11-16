@@ -30,14 +30,16 @@ export function executionDevice({ completion = () => Promise.resolve(), finishEr
   const buffers = [];
   const shaderSources = [];
   const dispatches = [];
+  const dispatchGrids = [];
+  const dispatchedSources = [];
   const bindingGroups = [];
   let scopes = 0;
   let submitted = 0;
   return Object.assign(acquired, {
     buffers,
-    shaderSources, dispatches, bindingGroups,
-    createShaderModule({ code }) { shaderSources.push(code); return {}; },
-    async createComputePipelineAsync() { return { getBindGroupLayout() { return {}; } }; },
+    shaderSources, dispatches, dispatchGrids, dispatchedSources, bindingGroups,
+    createShaderModule({ code }) { shaderSources.push(code); return { code }; },
+    async createComputePipelineAsync({ compute } = {}) { return { source: compute?.module.code, getBindGroupLayout() { return {}; } }; },
     createBindGroup({ entries }) {
       if (bindGroupError !== undefined) throw bindGroupError;
       bindingGroups.push(entries); return {};
@@ -56,8 +58,13 @@ export function executionDevice({ completion = () => Promise.resolve(), finishEr
     createCommandEncoder() {
       const copies = [];
       return {
-        beginComputePass() { return { setPipeline() {}, setBindGroup() {},
-          dispatchWorkgroups(count) { dispatches.push(count); }, end() {} }; },
+        beginComputePass() {
+          let pipeline;
+          return { setPipeline(value) { pipeline = value; }, setBindGroup() {},
+            dispatchWorkgroups(x, y = 1, z = 1) {
+              dispatches.push(x); dispatchGrids.push([x, y, z]); dispatchedSources.push(pipeline?.source);
+            }, end() {} };
+        },
         copyBufferToBuffer(source, sourceOffset, destination, destinationOffset, bytes) {
           copies.push(() => new Uint8Array(destination.data, destinationOffset, bytes).set(new Uint8Array(source.data, sourceOffset, bytes)));
         },
