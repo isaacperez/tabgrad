@@ -39,8 +39,9 @@ import torch
 from dispatch_probe import verify
 x = torch.tensor([1.] * ${count}, dtype=torch.float32, device='webgpu')
 y = x + x
-await verify(y._handle, ${count}, 2.)
+del x
 assert y.sum().tolist() == ${count * 2}
+await verify(y._handle, ${count}, 2.)
 ` : `
 import torch
 n = ${count}

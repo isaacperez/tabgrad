@@ -155,7 +155,13 @@ async function runDispatchProfiles(fixture, browser, executable, version, notes)
     readAsset: path => readCandidateAsset(fixture.application, reads, path),
   });
   try {
-    for (const page of dispatchPages) for (const mode of ["controlled-axis", "large"]) {
+    // Run larger payloads before small cohorts: installed browser services may
+    // outlive an individual browser, even after its GPU context has drained.
+    const profiles = [
+      { page: dispatchPages[1], mode: "large" }, { page: dispatchPages[0], mode: "large" },
+      { page: dispatchPages[1], mode: "controlled-axis" }, { page: dispatchPages[0], mode: "controlled-axis" },
+    ];
+    for (const { page, mode } of profiles) {
       await runBrowserPage({ server, browser, executable, version, page, parameters: { mode },
         reportNote: message => notes.push(message.trimEnd()),
         validateResult(result) {
