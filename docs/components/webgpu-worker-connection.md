@@ -353,7 +353,8 @@ allocation mapping. The published mapping uses 16 bytes per surviving entry:
 two Float64 numbers encoding a slot and its allocation ID. Retaining all
 selected allocations can fill the reservation; retiring intermediate
 allocations can reduce published length without reducing that capacity.
-Readback separately reserves 4 bytes per requested float32 element. These
+Readback separately reserves the encoded extent: 4 bytes per float32 element
+or 2 bytes per float16 element. These
 payload capacities exclude the fixed header and diagnostic region described
 above. Resident identity maps scale with live owned allocations. Pending
 completion records scale with accepted, not-yet-retired work. Completed
@@ -381,7 +382,7 @@ establish universal browser support or whole-model throughput.
 
 ## Storage and result-length admission
 
-The physical owner advertises the same float32 storage capacity used by direct
+The physical owner advertises the same encoded-byte storage capacity used by direct
 GPU sessions, independently of its dispatch axis. The connected runtime uses
 that immutable capability for creation and inferred outputs. Shared completion
 validates its signed byte-count domain before allocating a payload, including
