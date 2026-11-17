@@ -4,6 +4,8 @@ import { ConnectedWebGpuBackend } from "../../../dist/backends/webgpu/webgpu-con
 import { SharedGpuCompletion, publishSharedGpuFailure, publishSharedGpuDrain } from "../../../dist/backends/webgpu/webgpu-shared-completion.js";
 import { GPU_ACCOUNTED, GPU_CONTROL_LENGTH, GPU_METRIC_LENGTH } from "../../../dist/backends/webgpu/webgpu-connection.js";
 import { TabgradError } from "../../../dist/shared/errors.js";
+import { ExecutableProgram } from "../../../dist/execution/executable-program.js";
+import { float32TensorPayload } from "../../../dist/execution/tensor-payload.js";
 
 function mark(path) {
   for (const { buffer, mask } of path.toReversed()) Atomics.or(new Int32Array(buffer), 0, mask);
@@ -35,7 +37,11 @@ function fixture({ delayAcknowledgment = false, rejectSubscription = false } = {
     Atomics.or(new Int32Array(packet.completion, 0, 4), 3, 1);
   }
   function fail() {
-    const ticket = backend.execute({ values: [] }, new Map(), []);
+    const provenance = { operation: "tensor", source: "test" };
+    const program = new ExecutableProgram([{ slot: 0, storageSlot: 0, shape: [0], dtype: "float32",
+      device: "webgpu", layout: "contiguous", source: "binding", provenance }], [], 0);
+    const bindings = new Map([[0, { hostData: float32TensorPayload(new Float32Array()) }]]);
+    const ticket = backend.execute(program, bindings, [true]);
     let error;
     assert.throws(() => ticket.synchronous.read(), (caught) => {
       error = caught;

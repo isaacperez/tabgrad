@@ -22,6 +22,20 @@ test("actual GPU worker reconstructs matrix packets and rejects malformed empty 
   const physical = new MessageChannel(), supervision = new MessageChannel();
   const control = new SharedArrayBuffer(GPU_CONTROL_LENGTH * 4), metrics = new SharedArrayBuffer(GPU_METRIC_LENGTH * 8);
   const ready = Promise.withResolvers(), closed = Promise.withResolvers(), inspection = Promise.withResolvers();
+  const post = physical.port1.postMessage.bind(physical.port1);
+  let corruptProgram;
+  let executions = 0;
+  physical.port1.postMessage = (message, transfer) => {
+    if (message.kind === "execute") {
+      executions += 1;
+      if (corruptProgram !== undefined) {
+        const program = structuredClone(message.program);
+        corruptProgram(program);
+        message = { ...message, program };
+      }
+    }
+    return post(message, transfer);
+  };
   worker.on("message", message => {
     if (message.kind === "ready") ready.resolve(message);
     if (message.kind === "closed") closed.resolve();
@@ -36,6 +50,10 @@ test("actual GPU worker reconstructs matrix packets and rejects malformed empty 
       port: physical.port1, supervision: supervision.port1, control, metrics,
       capabilities: advertised.capabilities, diagnostics: advertised.diagnostics });
     assert.ok(advertised.capabilities.computations.includes("matmul-f32"));
+    const unsupported = structuredClone(matrixProgram());
+    unsupported.values[0].dtype = "invalid";
+    assert.throws(() => backend.execute(unsupported, new Map(), [false, false, false]), TypeError);
+    assert.equal(executions, 0, "host type rejection precedes the physical request");
     for (const empty of [false, true]) {
       const mutations = [
         ...[undefined, -1, 0.5, NaN, 4, "0"].map(flags => p => { p.computations[0].matrixFlags = flags; }),
@@ -45,14 +63,17 @@ test("actual GPU worker reconstructs matrix packets and rejects malformed empty 
         p => { p.computations[0].inputs = [0, 99]; },
       ];
       for (const mutate of mutations) {
-        const packet = structuredClone(matrixProgram(0, empty)); mutate(packet);
-        const ticket = backend.execute(packet, new Map(), [false, false, false]);
+        // Corrupt the serialized packet after host admission, preserving the
+        // physical worker's independent untrusted reconstruction boundary.
+        corruptProgram = mutate;
+        const ticket = backend.execute(matrixProgram(0, empty), new Map(), [false, false, false]);
         await assert.rejects(ticket.result, error => error.code === "BACKEND_STATUS_ERROR" && error.cause.name === "TypeError");
         await ticket.drained;
         assert.equal(backend.diagnostics().ownedBufferBytes, 0);
         assert.equal(backend.diagnostics().kernelCalls, 0);
       }
     }
+    corruptProgram = undefined;
     for (const flags of [0, 1, 2, 3]) {
       const program = matrixProgram(flags);
       const bindings = new Map([[0, { hostData: float32TensorPayload(new Float32Array(6)) }], [1, { hostData: float32TensorPayload(new Float32Array(12)) }]]);
