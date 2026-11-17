@@ -20,7 +20,6 @@ import { ExecutionRequest, type QueuedExecutionRequest } from "./execution-reque
 import { ExecutionTicket, type ExecutionStep } from "../execution/execution-ticket.js";
 import { acquireWebGpuDevice, assertWebGpuSetupActive } from "../backends/webgpu/webgpu-device.js";
 import type { ExecutionBackend, ResidentAllocation, TensorDevice } from "../execution/backend.js";
-import { supportsComputation } from "../execution/backend.js";
 import { operationTypeContract, resolveTensorType, GRADIENT_STATE_TYPES,
   DEFAULT_GRADIENT_ASSIGNMENT_TYPES, PERSISTENT_COPY_TYPES } from "../execution/operation-types.js";
 import { WebGpuBackend, type WebGpuDiagnostics, type WebGpuExecutionBackend } from "../backends/webgpu/webgpu-backend.js";
@@ -748,12 +747,13 @@ class SumOperationDefinition implements NumericalOperationDefinition {
   readonly provenanceSource = "Tensor.sum";
   readonly loweredKind = "sum-f32";
   readonly pure = true;
+  readonly typePolicy = operationTypeContract(this.loweredKind)!.types;
 
   admit(source: TensorState): AdmittedOperation {
     assertTensorOpen(source);
     const value = source.value;
     const inputs = [value];
-    const dtype = resolveTensorType(operationTypeContract(this.loweredKind)!.types, inputs);
+    const dtype = resolveTensorType(this.typePolicy, inputs);
     if (dtype === undefined) throw new TabgradError("UNSUPPORTED_DTYPE", "Sum requires its declared tensor type.");
     // Backend support is checked by the session before recording this result.
     return Object.freeze({
@@ -1784,7 +1784,7 @@ export class RuntimeSession {
 
   #requireBackendComputation(value: TensorValue, definition: NumericalOperationDefinition): void {
     const backend = this.#backendFor(value.device, definition.name);
-    if (!supportsComputation(backend.capabilities, definition.loweredKind)) {
+    if (!backend.capabilities.computations.includes(definition.loweredKind)) {
       throw new TabgradError("BACKEND_CAPABILITY_MISMATCH", "The selected backend does not support this operation.", {
         operation: definition.name, source: definition.provenanceSource, device: value.device,
       });

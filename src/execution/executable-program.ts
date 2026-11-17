@@ -1,7 +1,6 @@
 import type { TensorDevice } from "./backend.js";
 import { tensorDType, type TensorDType } from "../shared/tensor-dtype.js";
 import { assertComputationCoefficient, operationTypeContract, resolveTensorType, type ComputationKind } from "./operation-types.js";
-export { assertComputationCoefficient } from "./operation-types.js";
 import { assertMatrixFlags, matrixGeometry } from "./matrix-geometry.js";
 import { operationShapeContract, assertOperationArity } from "./operation-shapes.js";
 import { pointwiseGeometry } from "./broadcast-geometry.js";
@@ -133,7 +132,9 @@ export class ExecutableProgram {
     const storageUseCounts = new Array<number>(this.values.length).fill(0);
     const elementCounts = new Map<ProgramSlot, number>();
     for (let slot = 0; slot < this.values.length; slot++) requireContiguousValue(slot, this.values, elementCounts);
-    requireContiguousValue(result, this.values, elementCounts);
+    if (!Number.isSafeInteger(result) || result < 0 || this.values[result] === undefined) {
+      throw new TypeError("Program result requires a valid value slot.");
+    }
     this.computations = Object.freeze(
       computations.map((computation) => {
         const captured = { ...computation };

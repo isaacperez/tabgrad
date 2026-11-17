@@ -24,11 +24,6 @@ export interface BackendCapabilities {
   readonly maximumTensorBytes: number;
 }
 
-/** A lowered kind binds one signature; dtype registration alone grants no kernel. */
-export function supportsComputation(capabilities: BackendCapabilities, kind: LoweredComputation["kind"]): boolean {
-  return operationTypeContract(kind) !== undefined && capabilities.computations.includes(kind);
-}
-
 /** Physical consumers also admit before compilation, upload or allocation. */
 export function assertBackendProgram(capabilities: BackendCapabilities, program: ExecutableProgram): void {
   for (const value of program.values) {
@@ -42,7 +37,7 @@ export function assertBackendProgram(capabilities: BackendCapabilities, program:
   for (const computation of program.computations) {
     const contract = operationTypeContract(computation.kind);
     const dtype = contract === undefined ? undefined : resolveTensorType(contract.types, program.values, computation.inputs);
-    if (contract === undefined || !supportsComputation(capabilities, computation.kind)
+    if (contract === undefined || !capabilities.computations.includes(computation.kind)
       || dtype === undefined || !Number.isSafeInteger(computation.output) || computation.output < 0
       || dtype !== program.values[computation.output]?.dtype) {
       throw new TabgradError("BACKEND_CAPABILITY_MISMATCH", "The selected backend does not support this computation signature.", {

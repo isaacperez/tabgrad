@@ -16,7 +16,8 @@ export function resolveTensorType<DType extends string>(policy: TensorTypePolicy
   if ((slots?.length ?? values.length) !== policy.inputs.length) return undefined;
   for (let index = 0; index < policy.inputs.length; index++) {
     const slot = slots === undefined ? index : slots[index]!;
-    if (!Number.isSafeInteger(slot) || slot < 0 || values[slot]?.dtype !== policy.inputs[index]) return undefined;
+    if ((slots !== undefined && (!Number.isSafeInteger(slot) || slot < 0))
+      || values[slot]?.dtype !== policy.inputs[index]) return undefined;
   }
   return policy.result;
 }
