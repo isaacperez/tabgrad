@@ -1,5 +1,6 @@
 import { TabgradError } from "../../shared/errors.js";
 import type { BackendCapabilities, ExecutionBackend, ProgramBinding, ResidentAllocation } from "../../execution/backend.js";
+import { assertBackendProgram } from "../../execution/backend.js";
 import { assertTensorPayload, hostTensorPayload, type HostTensorPayload } from "../../execution/tensor-payload.js";
 import { tensorByteLength, type TensorDType } from "../../shared/tensor-dtype.js";
 import type { ExecutableProgram, ProgramSlot } from "../../execution/executable-program.js";
@@ -82,8 +83,9 @@ export class WebAssemblyCpuBackend implements ExecutionBackend {
     return this.#context !== undefined && !this.#closed;
   }
 
-  prepare(): Promise<void> | undefined {
+  prepare(program?: ExecutableProgram): Promise<void> | undefined {
     this.#assertOpen();
+    if (program !== undefined) assertBackendProgram(this.capabilities, program);
     if (this.#context !== undefined) return undefined;
     return this.#getContext().then(() => undefined);
   }
@@ -94,6 +96,7 @@ export class WebAssemblyCpuBackend implements ExecutionBackend {
     retainedSlots: readonly boolean[],
   ): ReadonlyMap<ProgramSlot, ResidentAllocation> {
     const context = this.#requiredContext();
+    assertBackendProgram(this.capabilities, program);
     if (context.poisoned) {
       throw new TabgradError(
         "BACKEND_TRAP",

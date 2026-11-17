@@ -1,5 +1,6 @@
 import type { BackendCapabilities, ProgramBinding, ResidentAllocation } from "../../execution/backend.js";
 import { TabgradError } from "../../shared/errors.js";
+import { assertBackendProgram } from "../../execution/backend.js";
 import type { ExecutableProgram, ProgramSlot } from "../../execution/executable-program.js";
 import type { ExecutionTicket } from "../../execution/execution-ticket.js";
 import { assertTensorPayload, copyTensorPayload, hostTensorPayload, type HostTensorPayload } from "../../execution/tensor-payload.js";
@@ -78,8 +79,9 @@ export class ConnectedWebGpuBackend implements WebGpuExecutionBackend {
     return this.#closing === undefined ? snapshot : Object.freeze({ ...snapshot, state: snapshot.state === "ready" ? "closed" : snapshot.state });
   }
 
-  prepare(_program?: ExecutableProgram): undefined {
+  prepare(program?: ExecutableProgram): undefined {
     this.assertAvailable();
+    if (program !== undefined) assertBackendProgram(this.capabilities, program);
     // Pipeline preparation progresses in the physical worker as part of its
     // finite execution ticket. No complete definition is staged between RPCs.
     return undefined;
@@ -88,6 +90,7 @@ export class ConnectedWebGpuBackend implements WebGpuExecutionBackend {
   execute(program: ExecutableProgram, bindings: ReadonlyMap<ProgramSlot, ProgramBinding>, retainedSlots: readonly boolean[]):
     ExecutionTicket<ReadonlyMap<ProgramSlot, ResidentAllocation>> {
     this.assertAvailable();
+    assertBackendProgram(this.capabilities, program);
     const transferables: Transferable[] = [];
     const entries = [...bindings].map(([slot, binding]) => {
       if (binding.resident !== undefined) return { slot, resident: this.#requireAllocation(binding.resident).id };

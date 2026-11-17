@@ -4,6 +4,7 @@ import type { BackendCapabilities, ExecutionBackend, ProgramBinding, ResidentAll
 import { assertTensorPayload, hostTensorPayload, type HostTensorPayload } from "../../execution/tensor-payload.js";
 import { alignedByteLength, tensorByteLength, tensorDType, type TensorDType } from "../../shared/tensor-dtype.js";
 import { TabgradError } from "../../shared/errors.js";
+import { assertBackendProgram } from "../../execution/backend.js";
 import type { ExecutableProgram, LoweredComputation, ProgramSlot } from "../../execution/executable-program.js";
 import { tensorElementCount } from "../../runtime/tensor-shape.js";
 import { WEBGPU_COEFFICIENT_UNIFORM_BYTES } from "./kernels/coefficient-addition.js";
@@ -158,6 +159,7 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
   }
 
   #planProgram(program: ExecutableProgram): readonly KernelDispatchPlan[] {
+    assertBackendProgram(this.capabilities, program);
     for (const value of program.values) {
       const bytes = tensorElementCount(value.shape) * tensorDType(value.dtype).bytesPerElement;
       if (!Number.isSafeInteger(bytes) || bytes > this.capabilities.maximumTensorBytes) {
@@ -168,11 +170,6 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
       }
     }
     return program.computations.map(computation => {
-      if (!this.capabilities.computations.includes(computation.kind)) {
-        throw new TabgradError("BACKEND_CAPABILITY_MISMATCH", "Unsupported WebGPU computation.", {
-          backend: "webgpu", phase: "preparation", programValueSlot: computation.output,
-        });
-      }
       try {
         const plan = planKernelDispatch(computation, program, this.#limits);
         if (requestedPipelines(plan).some(pipeline => pipeline.kind.startsWith("broadcast-"))

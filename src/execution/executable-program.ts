@@ -1,5 +1,7 @@
 import type { TensorDevice } from "./backend.js";
-import type { TensorDType } from "../shared/tensor-dtype.js";
+import { tensorDType, type TensorDType } from "../shared/tensor-dtype.js";
+import { assertComputationCoefficient, operationTypeContract, resolveTensorType, type ComputationKind } from "./operation-types.js";
+export { assertComputationCoefficient } from "./operation-types.js";
 import { assertMatrixFlags, matrixGeometry } from "./matrix-geometry.js";
 import { operationShapeContract, assertOperationArity } from "./operation-shapes.js";
 import { pointwiseGeometry } from "./broadcast-geometry.js";
@@ -24,7 +26,7 @@ export interface ProgramValue {
 }
 
 export interface LoweredComputation {
-  readonly kind: "add-f32" | "add-alpha-f32" | "mul-f32" | "sum-f32" | "expand-f32" | "matmul-f32" | "reduce-f32";
+  readonly kind: ComputationKind;
   /** Captured binary32 coefficient; present only for add-alpha-f32. */
   readonly alphaBits?: number;
   /** Required for matmul-f32, absent for all other computations. */
@@ -33,17 +35,6 @@ export interface LoweredComputation {
   readonly inputs: readonly ProgramSlot[];
   readonly output: ProgramSlot;
   readonly provenance: ProgramProvenance;
-}
-
-/** Validate captured metadata at semantic creation and program reconstruction. */
-export function assertComputationCoefficient(kind: LoweredComputation["kind"], alphaBits: number | undefined): void {
-  if (kind === "add-alpha-f32") {
-    if (!Number.isInteger(alphaBits) || alphaBits! < 0 || alphaBits! > 0xffff_ffff) {
-      throw new TypeError("Coefficient addition requires captured binary32 bits.");
-    }
-  } else if (alphaBits !== undefined) {
-    throw new TypeError("This operation has no coefficient.");
-  }
 }
 
 function copyProgramValue(value: ProgramValue): ProgramValue {
@@ -68,12 +59,13 @@ function valueElements(value: ProgramValue, counts: Map<ProgramSlot, number>): n
 function requireContiguousValue(slot: ProgramSlot, values: readonly ProgramValue[], counts: Map<ProgramSlot, number>): ProgramValue {
   const value = values[slot];
   if (!Number.isSafeInteger(slot) || slot < 0 || value === undefined || value.slot !== slot
-    || value.dtype !== "float32" || value.layout !== "contiguous"
+    || value.layout !== "contiguous"
     || (value.device !== "cpu" && value.device !== "webgpu")
     || !Number.isSafeInteger(value.storageSlot) || value.storageSlot < 0
     || (value.source !== "binding" && value.source !== "computed" && value.source !== "alias")) {
-    throw new TypeError("Program values require valid slots and float32 contiguous metadata.");
+    throw new TypeError("Program values require valid slots and canonical contiguous metadata.");
   }
+  tensorDType(value.dtype);
   const storage = values[value.storageSlot];
   if (storage === undefined || storage.slot !== value.storageSlot || storage.storageSlot !== storage.slot
     || (storage.source !== "binding" && storage.source !== "computed")
@@ -85,37 +77,31 @@ function requireContiguousValue(slot: ProgramSlot, values: readonly ProgramValue
   return value;
 }
 
-function assertMatrixComputation(values: readonly ProgramValue[], computation: LoweredComputation,
-  result: ProgramSlot, counts: Map<ProgramSlot, number>): void {
+function assertMatrixComputation(values: readonly ProgramValue[], computation: LoweredComputation): void {
   if (computation.inputs.length !== 2) throw new TypeError("Matrix multiplication requires two inputs.");
-  const left = requireContiguousValue(computation.inputs[0]!, values, counts);
-  const right = requireContiguousValue(computation.inputs[1]!, values, counts);
-  const output = requireContiguousValue(computation.output, values, counts);
-  const selected = requireContiguousValue(result, values, counts);
+  const left = values[computation.inputs[0]!]!;
+  const right = values[computation.inputs[1]!]!;
+  const output = values[computation.output]!;
   const geometry = matrixGeometry(left.shape, right.shape, computation.matrixFlags!);
   if (output.source !== "computed" || output.storageSlot !== output.slot
     || output.storageSlot === left.storageSlot || output.storageSlot === right.storageSlot
     || !Number.isSafeInteger(geometry.outputElements) || output.shape.length !== 2
-    || output.shape[0] !== geometry.rows || output.shape[1] !== geometry.columns
-    || left.device !== right.device || left.device !== output.device || output.device !== selected.device) {
+    || output.shape[0] !== geometry.rows || output.shape[1] !== geometry.columns) {
     throw new TypeError("Matrix output must own distinct storage with the captured shape and device.");
   }
 }
 
-function assertShapedComputation(values: readonly ProgramValue[], computation: LoweredComputation,
-  result: ProgramSlot, counts: Map<ProgramSlot, number>): void {
+function assertShapedComputation(values: readonly ProgramValue[], computation: LoweredComputation): void {
   const contract = operationShapeContract(computation.kind);
   const reduction = computation.kind === "reduce-f32";
   if (reduction) {
     if (computation.inputs.length !== 1) throw new TypeError("Shaped computation has invalid arity.");
   } else assertOperationArity(contract!, computation.inputs.length);
-  const inputs = computation.inputs.map(slot => requireContiguousValue(slot, values, counts));
-  const output = requireContiguousValue(computation.output, values, counts);
-  const selected = requireContiguousValue(result, values, counts);
+  const inputs = computation.inputs.map(slot => values[slot]!);
+  const output = values[computation.output]!;
   const expected = reduction ? inputs[0]!.shape : contract!.policy.plan(inputs.map(value => value.shape)).shape;
   if (output.source !== "computed" || output.storageSlot !== output.slot
-    || inputs.some(input => input.storageSlot === output.storageSlot || input.device !== output.device)
-    || selected.device !== output.device || output.shape.length !== expected.length
+    || inputs.some(input => input.storageSlot === output.storageSlot) || output.shape.length !== expected.length
     || (!reduction && output.shape.some((dimension, axis) => dimension !== expected[axis]))) {
     throw new TypeError("Shaped output must own distinct storage with its captured shape and device.");
   }
@@ -145,7 +131,9 @@ export class ExecutableProgram {
     this.domain = this.values[result]?.device === "webgpu" ? "webgpu" : "webassembly-cpu";
     const inputUseCounts = new Array<number>(this.values.length).fill(0);
     const storageUseCounts = new Array<number>(this.values.length).fill(0);
-    let elementCounts: Map<ProgramSlot, number> | undefined;
+    const elementCounts = new Map<ProgramSlot, number>();
+    for (let slot = 0; slot < this.values.length; slot++) requireContiguousValue(slot, this.values, elementCounts);
+    requireContiguousValue(result, this.values, elementCounts);
     this.computations = Object.freeze(
       computations.map((computation) => {
         const captured = { ...computation };
@@ -153,12 +141,21 @@ export class ExecutableProgram {
         assertMatrixFlags(captured.kind, captured.matrixFlags);
         captured.inputs = Object.freeze([...captured.inputs]);
         captured.provenance = Object.freeze({ ...captured.provenance });
+        const types = operationTypeContract(captured.kind)!.types;
+        const dtype = resolveTensorType(types, this.values, captured.inputs);
+        if (dtype === undefined || !Number.isSafeInteger(captured.output) || captured.output < 0
+          || this.values[captured.output]?.dtype !== dtype) {
+          throw new TypeError("Computation requires its declared input and result types.");
+        }
+        const device = this.values[captured.output]!.device;
+        if (device !== this.values[result]!.device
+          || captured.inputs.some(slot => this.values[slot]!.device !== device)) {
+          throw new TypeError("Computation inputs and result require the selected device.");
+        }
         if (captured.kind === "matmul-f32") {
-          elementCounts ??= new Map();
-          assertMatrixComputation(this.values, captured, result, elementCounts);
+          assertMatrixComputation(this.values, captured);
         } else if (operationShapeContract(captured.kind) !== undefined || captured.kind === "reduce-f32") {
-          elementCounts ??= new Map();
-          assertShapedComputation(this.values, captured, result, elementCounts);
+          assertShapedComputation(this.values, captured);
         }
         for (const input of captured.inputs) {
           inputUseCounts[input]! += 1;

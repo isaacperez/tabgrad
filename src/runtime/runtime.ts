@@ -20,6 +20,9 @@ import { ExecutionRequest, type QueuedExecutionRequest } from "./execution-reque
 import { ExecutionTicket, type ExecutionStep } from "../execution/execution-ticket.js";
 import { acquireWebGpuDevice, assertWebGpuSetupActive } from "../backends/webgpu/webgpu-device.js";
 import type { ExecutionBackend, ResidentAllocation, TensorDevice } from "../execution/backend.js";
+import { supportsComputation } from "../execution/backend.js";
+import { operationTypeContract, resolveTensorType, GRADIENT_STATE_TYPES,
+  DEFAULT_GRADIENT_ASSIGNMENT_TYPES, PERSISTENT_COPY_TYPES } from "../execution/operation-types.js";
 import { WebGpuBackend, type WebGpuDiagnostics, type WebGpuExecutionBackend } from "../backends/webgpu/webgpu-backend.js";
 export type { TensorDevice } from "../execution/backend.js";
 import { DerivativeHistory, type DerivativeNode, type DerivativePlan, type DerivativeRecipe } from "./autograd/derivative-history.js";
@@ -585,6 +588,7 @@ export interface BackwardOptions {
 class BinaryOperationDefinition implements NumericalOperationDefinition {
   readonly pure = true;
   readonly shapePolicy;
+  readonly typePolicy;
 
   constructor(
     readonly name: "add" | "mul" | "matmul",
@@ -597,6 +601,7 @@ class BinaryOperationDefinition implements NumericalOperationDefinition {
     const contract = operationShapeContract(loweredKind);
     if (contract !== undefined) assertOperationArity(contract, 2);
     this.shapePolicy = contract?.policy;
+    this.typePolicy = operationTypeContract(loweredKind)!.types;
   }
 
   admit(
@@ -632,7 +637,9 @@ class BinaryOperationDefinition implements NumericalOperationDefinition {
     }
     const leftValue = left.value;
     const rightValue = right.value;
-    if (leftValue.dtype !== "float32" || rightValue.dtype !== "float32") {
+    const inputs = [leftValue, rightValue];
+    const dtype = resolveTensorType(this.typePolicy, inputs);
+    if (dtype === undefined) {
       throw new TabgradError(
         "UNSUPPORTED_DTYPE",
         `Float32 ${this.description} requires float32 inputs.`,
@@ -706,16 +713,12 @@ class BinaryOperationDefinition implements NumericalOperationDefinition {
       );
     }
 
-    const inputs = [
-      leftValue,
-      rightValue,
-    ];
     return Object.freeze({
       ...(broadcast === undefined ? {} : { broadcast }),
       record: new OperationRecord(this, inputs, undefined, this.matrixFlags),
       outputMetadata: Object.freeze({
         shape: outputShape,
-        dtype: leftValue.dtype,
+        dtype,
         device: leftValue.device,
         layout: leftValue.layout,
       }),
@@ -749,11 +752,14 @@ class SumOperationDefinition implements NumericalOperationDefinition {
   admit(source: TensorState): AdmittedOperation {
     assertTensorOpen(source);
     const value = source.value;
+    const inputs = [value];
+    const dtype = resolveTensorType(operationTypeContract(this.loweredKind)!.types, inputs);
+    if (dtype === undefined) throw new TabgradError("UNSUPPORTED_DTYPE", "Sum requires its declared tensor type.");
     // Backend support is checked by the session before recording this result.
     return Object.freeze({
-      record: new OperationRecord(this, [value]),
+      record: new OperationRecord(this, inputs),
       outputMetadata: Object.freeze({
-        shape: Object.freeze([]), dtype: value.dtype,
+        shape: Object.freeze([]), dtype,
         device: value.device, layout: value.layout,
       }),
     });
@@ -937,7 +943,7 @@ export class RuntimeSession {
         const state = requireTensorState(handle);
         assertTensorOpen(state);
         if (state.session !== this) throw new TabgradError("DIFFERENT_SESSION", "SGD parameters must belong to this session.");
-        this.#requireGradientState(state.value.device, "SGD");
+        this.#requireGradientState(state.value, "SGD");
         if (state.history?.recipe !== null && state.history !== null && !state.identity.retained) {
           throw new TabgradError("INVALID_TENSOR", "Cannot optimize a non-leaf tensor without retained gradients.");
         }
@@ -1129,11 +1135,11 @@ export class RuntimeSession {
 
   #optimizerUpdate(parameter: TensorState, gradient: TensorIdentity, alphaBits: number): void {
     const inputs = [parameter.value, gradient.value];
-    this.#requireComputation(inputs[0]!, COEFFICIENT_ADD_OPERATION);
+    const dtype = this.#requireComputation(inputs, COEFFICIENT_ADD_OPERATION);
     this.#checkCapturedAdmission(inputs, parameter.shape);
     const result = this.#recordOperation({
       record: new OperationRecord(COEFFICIENT_ADD_OPERATION, inputs, alphaBits),
-      outputMetadata: inputs[0]!,
+      outputMetadata: { shape: inputs[0]!.shape, dtype, device: inputs[0]!.device, layout: inputs[0]!.layout },
     });
     let failures: unknown[] | undefined;
     try { this.#copy(parameter, result); }
@@ -1144,6 +1150,7 @@ export class RuntimeSession {
   }
 
   #resetGradient(identity: TensorIdentity): void {
+    // Gradient admission/assignment establishes the float32 state domain.
     const state = new TensorState(this, identity, (state) => this.#resolveHistory(state));
     const history = state.history;
     if (this.#recording && state.specialView && state.requiresGrad) {
@@ -1224,7 +1231,7 @@ export class RuntimeSession {
     }
     const device = options.device ?? "cpu";
     const backend = this.#backendFor(device, "tensor");
-    if (options.requiresGrad === true) this.#requireGradients(backend, "tensor");
+    if (options.requiresGrad === true) this.#requireGradients(backend, "tensor", "float32");
     if (options.layout !== undefined && options.layout !== "contiguous") {
       throw new TabgradError(
         "UNSUPPORTED_LAYOUT",
@@ -1333,7 +1340,7 @@ export class RuntimeSession {
     if (state.session !== this) {
       throw new TabgradError("DIFFERENT_SESSION", "Gradient tensors must belong to this session.");
     }
-    this.#requireGradients(this.#backendFor(state.value.device, "grad"), "grad");
+    this.#requireGradients(this.#backendFor(state.value.device, "grad"), "grad", state.value.dtype);
     return state;
   }
 
@@ -1341,8 +1348,8 @@ export class RuntimeSession {
     let assigned: TensorIdentity | null = null;
     if (handle !== null) {
       const state = this.#gradientInput(handle);
-      this.#requireGradientState(owner.value.device, "grad assignment");
-      this.#requireGradientState(state.value.device, "grad assignment");
+      this.#requireGradientState(owner.value, "grad assignment");
+      this.#requireGradientState(state.value, "grad assignment");
       if (state.identity === owner.identity) throw new TabgradError("INVALID_GRADIENT", "A tensor cannot be its own gradient.");
       if (owner.value.device !== state.value.device) {
         throw new TabgradError("UNSUPPORTED_DEVICE", "Assigned gradient must match its owner's device.", {
@@ -1350,6 +1357,9 @@ export class RuntimeSession {
         });
       }
       if (!equalTensorShapes(owner.shape, state.shape)) throw new TabgradError("SHAPE_MISMATCH", "Assigned gradient must match its owner's shape.");
+      if (resolveTensorType(DEFAULT_GRADIENT_ASSIGNMENT_TYPES, [owner.value, state.value]) === undefined) {
+        throw new TabgradError("INVALID_GRADIENT", "Assigned gradient is outside the supported default type relation.");
+      }
       assigned = state.identity;
     }
     if (assigned !== null && assigned !== owner.identity.gradient) this.#checkUpdateCapacity(1);
@@ -1381,7 +1391,7 @@ export class RuntimeSession {
 
   #backwardImpl(result: TensorState, seedHandle: unknown, options: unknown): void {
     assertTensorOpen(result);
-    this.#requireGradientState(result.value.device, "backward");
+    this.#requireGradientState(result.value, "backward");
     if (options !== undefined && (options === null || typeof options !== "object" || Array.isArray(options))) {
       throw new TypeError("backward options must be an object.");
     }
@@ -1399,7 +1409,7 @@ export class RuntimeSession {
       }
     }
     const explicitSeed = seedHandle === undefined ? undefined : this.#gradientInput(seedHandle);
-    if (explicitSeed !== undefined) this.#requireGradientState(explicitSeed.value.device, "grad");
+    if (explicitSeed !== undefined) this.#requireGradientState(explicitSeed.value, "grad");
     if (explicitSeed !== undefined && !equalTensorShapes(result.shape, explicitSeed.shape)) {
       throw new TabgradError("SHAPE_MISMATCH", "Gradient seed must match output shape.");
     }
@@ -1418,7 +1428,7 @@ export class RuntimeSession {
       const seen = new Set<TensorIdentity>();
       for (const handle of selected.inputs) {
         const state = this.#gradientInput(handle);
-        this.#requireGradientState(state.value.device, "grad");
+        this.#requireGradientState(state.value, "grad");
         if (!state.requiresGrad) throw new TabgradError("GRADIENT_NOT_TRACKED", "Requested input must require gradients.");
         const entry = state.history;
         if (!state.identity.trueLeaf && entry !== null) {
@@ -1601,10 +1611,11 @@ export class RuntimeSession {
 
   #receivePointwise(value: Tensor, projection: ReceivingGeometry): Tensor {
     const state = requireTensorState(value);
-    this.#requireComputation(state.value, RECEIVE_OPERATION);
-    this.#checkCapturedAdmission([state.value], projection.shape);
-    const base = this.#recordOperation({ record: new OperationRecord(RECEIVE_OPERATION, [state.value]),
-      outputMetadata: { shape: projection.shape, dtype: state.value.dtype, device: state.value.device, layout: state.value.layout } });
+    const inputs = [state.value];
+    const dtype = this.#requireComputation(inputs, RECEIVE_OPERATION);
+    this.#checkCapturedAdmission(inputs, projection.shape);
+    const base = this.#recordOperation({ record: new OperationRecord(RECEIVE_OPERATION, inputs),
+      outputMetadata: { shape: projection.shape, dtype, device: state.value.device, layout: state.value.layout } });
     if (equalTensorShapes(projection.shape, projection.originalShape)) return base;
     // Scalars are plain; non-scalar rank restoration has a fresh no-grad base.
     let result: Tensor | undefined, failures: unknown[] | undefined;
@@ -1758,26 +1769,35 @@ export class RuntimeSession {
     return backend;
   }
 
-  #requireGradients(backend: ExecutionBackend, operation: string): void {
-    if (!backend.capabilities.gradients) {
+  #requireGradients(backend: ExecutionBackend, operation: string, dtype: TensorDType): void {
+    if (!backend.capabilities.gradients || dtype !== GRADIENT_STATE_TYPES.inputs[0]) {
       throw new TabgradError("UNSUPPORTED_GRADIENT", "The selected backend does not support gradients.", {
         operation, device: backend.capabilities.device,
       });
     }
   }
 
-  #requireGradientState(device: TensorDevice, operation: string): void {
-    const backend = this.#backendFor(device, operation);
-    this.#requireGradients(backend, operation);
+  #requireGradientState(value: TensorMetadata, operation: string): void {
+    const backend = this.#backendFor(value.device, operation);
+    this.#requireGradients(backend, operation, value.dtype);
   }
 
-  #requireComputation(value: TensorValue, definition: NumericalOperationDefinition): void {
+  #requireBackendComputation(value: TensorValue, definition: NumericalOperationDefinition): void {
     const backend = this.#backendFor(value.device, definition.name);
-    if (!backend.capabilities.computations.includes(definition.loweredKind)) {
+    if (!supportsComputation(backend.capabilities, definition.loweredKind)) {
       throw new TabgradError("BACKEND_CAPABILITY_MISMATCH", "The selected backend does not support this operation.", {
         operation: definition.name, source: definition.provenanceSource, device: value.device,
       });
     }
+  }
+
+  #requireComputation(inputs: readonly TensorValue[], definition: NumericalOperationDefinition): TensorDType {
+    const dtype = resolveTensorType(operationTypeContract(definition.loweredKind)!.types, inputs);
+    if (dtype === undefined) throw new TabgradError("UNSUPPORTED_DTYPE", "Operation requires its declared tensor types.", {
+      operation: definition.name,
+    });
+    this.#requireBackendComputation(inputs[0]!, definition);
+    return dtype;
   }
 
   #resolveHistory(state: TensorState): DerivativeNode<TensorValue> | null {
@@ -1831,6 +1851,9 @@ export class RuntimeSession {
     if (source.session !== this) throw new TabgradError("DIFFERENT_SESSION", "Copy tensors must belong to this session.");
     if (destination.value.device !== source.value.device) {
       throw new TabgradError("UNSUPPORTED_DEVICE", "Persistent copy requires tensors on the same device.");
+    }
+    if (resolveTensorType(PERSISTENT_COPY_TYPES, [destination.value, source.value]) === undefined) {
+      throw new TabgradError("UNSUPPORTED_DTYPE", "Persistent copy requires its supported tensor type relation.");
     }
     if (this.#recording && destination.specialView && (destination.requiresGrad || source.requiresGrad)) {
       throw new TabgradError("INPLACE_VIEW", "A view created in no_grad cannot be updated while recording gradients.");
@@ -1993,7 +2016,7 @@ export class RuntimeSession {
 
   #sum(source: TensorState): Tensor {
     assertTensorOpen(source);
-    this.#requireComputation(source.value, SUM_OPERATION);
+    this.#requireBackendComputation(source.value, SUM_OPERATION);
     const admitted = SUM_OPERATION.admit(source);
     this.#checkCapturedAdmission(admitted.record.inputs, admitted.outputMetadata.shape);
     const history = !this.#recording || !source.requiresGrad ? null
@@ -2032,7 +2055,10 @@ export class RuntimeSession {
     let origin = family.projectionMetadata?.deref();
     if (origin === undefined || origin.projectionSource?.deref() !== current || tensorElementCount(origin.shape) !== count
       || (origin.storage.references === 0 && origin.producer === null)) {
-      origin = new TensorValue({ ...current, shape: [count] }, new OperationRecord(EXPAND_OPERATION, [current]));
+      const inputs = [current];
+      const dtype = resolveTensorType(operationTypeContract(EXPAND_OPERATION.loweredKind)!.types, inputs);
+      if (dtype === undefined) throw new TabgradError("UNSUPPORTED_DTYPE", "Gradient projection requires its declared tensor type.");
+      origin = new TensorValue({ ...current, dtype, shape: [count] }, new OperationRecord(EXPAND_OPERATION, inputs));
       origin.references = 0;
       origin.storage.references = 0;
       origin.projectionFamily = new WeakRef(family);
@@ -2050,11 +2076,12 @@ export class RuntimeSession {
     if (tensorElementCount(value.shape) !== 1) {
       throw new TabgradError("INVALID_GRADIENT", "Scalar expansion requires a one-element input.");
     }
-    this.#requireComputation(value, EXPAND_OPERATION);
-    this.#checkCapturedAdmission([value], shape);
+    const inputs = [value];
+    const dtype = this.#requireComputation(inputs, EXPAND_OPERATION);
+    this.#checkCapturedAdmission(inputs, shape);
     const result = this.#recordOperation({
-      record: new OperationRecord(EXPAND_OPERATION, [value]),
-      outputMetadata: { shape, dtype: value.dtype, device: value.device, layout: value.layout },
+      record: new OperationRecord(EXPAND_OPERATION, inputs),
+      outputMetadata: { shape, dtype, device: value.device, layout: value.layout },
     });
     requireTensorState(result).identity.incomingDense = false;
     return result;
@@ -2063,7 +2090,7 @@ export class RuntimeSession {
   #binary(definition: BinaryOperationDefinition, left: TensorState, rightHandle: unknown): Tensor {
     this.#assertOpen();
     const admitted = definition.admit(this, left, rightHandle);
-    this.#requireComputation(admitted.record.inputs[0]!, definition);
+    this.#requireBackendComputation(admitted.record.inputs[0]!, definition);
     if (definition.matrixFlags !== undefined || admitted.broadcast !== undefined) {
       const backend = this.#backendFor(admitted.outputMetadata.device, definition.name);
       // Capacity admission owns unrepresentable extents before a physical span exists.
@@ -2096,7 +2123,8 @@ export class RuntimeSession {
 
   #view(source: TensorState, shape: unknown): Tensor {
     const metadata = VIEW_OPERATION.admit(source, shape);
-    this.#backendFor(source.value.device, "view");
+    const backend = this.#backendFor(source.value.device, "view");
+    if (source.requiresGrad) this.#requireGradients(backend, "view", source.value.dtype);
     const captured = source.value;
     this.#checkCapturedAdmission([captured], undefined, 4);
     const value = new TensorValue(metadata, null, captured.storage);
