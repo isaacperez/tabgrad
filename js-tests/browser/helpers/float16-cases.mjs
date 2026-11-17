@@ -33,15 +33,22 @@ export async function halfJavaScriptCases(session, oracle, device) {
       if (result.dtype !== 'float16') throw Error('Result lost its dtype');
       sameValues(await result.toArray(), expected.map(halfValue), label);
     }
-    for (const [a, aShape, b, bShape, expected] of [
-      [[1, 2, 3, 4, 5, 6], [2, 3], [1, 2, 3], [3], [2, 4, 6, 5, 7, 9]],
-      [[1, 2, 3], [3, 1], [1, 2, 3], [1, 3], [2, 3, 4, 3, 4, 5, 4, 5, 6]],
-      [[2], [], [1, 2, 3], [3], [3, 4, 5]],
-      [[], [0, 3], [1, 2, 3], [3], []],
+    for (const [a, aShape, b, bShape, expected, multiplied] of [
+      [[1, 2, 3, 4, 5, 6], [2, 3], [1, 2, 3], [3], [2, 4, 6, 5, 7, 9], [1, 4, 9, 4, 10, 18]],
+      [[1, 2, 3], [3, 1], [1, 2, 3], [1, 3], [2, 3, 4, 3, 4, 5, 4, 5, 6], [1, 2, 3, 2, 4, 6, 3, 6, 9]],
+      [[2], [], [1, 2, 3], [3], [3, 4, 5], [2, 4, 6]],
+      [[], [0, 3], [1, 2, 3], [3], [], []],
     ]) {
       const first = halfTensor(session, owned, device, a, aShape), second = halfTensor(session, owned, device, b, bShape), result = first.add(second);
       owned.push(result); sameValues(await result.toArray(), expected, 'broadcast');
+      const product = first.mul(second); owned.push(product);
+      sameValues(await product.toArray(), multiplied, 'broadcast multiplication');
     }
+    const channels = halfTensor(session, owned, device, [-1, 2, 3, 4, -2, 1, 0, .5, -4], [3, 3]);
+    const scale = halfTensor(session, owned, device, [.5, 1, 2], [3]);
+    const bias = halfTensor(session, owned, device, [1, .5, -1], [3]);
+    const scaled = channels.mul(scale), biased = scaled.add(bias); owned.push(scaled, biased);
+    sameValues(await biased.toArray(), [.5, 2.5, 5, 3, -1.5, 1, 1, 1, -9], 'stored channel scale and bias');
     const view = created.view([2, created.shape[0] / 2]); owned.push(view);
     created.close();
     sameValues(await view.toArray(), oracle.construction.words.map(halfValue), 'alias');
@@ -57,7 +64,7 @@ export async function halfJavaScriptCases(session, oracle, device) {
     for (const key of ['liveTensorHandles', 'liveDerivativeNodes', 'hostToWasmCopies', 'kernelCalls']) {
       if (after[key] !== before[key]) throw Error(`Rejected request changed ${key}`);
     }
-    return { construction: oracle.construction.words.length, pointwise: p.left.length, broadcasts: 4 };
+    return { construction: oracle.construction.words.length, pointwise: p.left.length, broadcasts: 8, channelCompositions: 1 };
   } finally { for (const value of owned) value.close(); }
 }
 
@@ -100,13 +107,21 @@ def check_half() -> None:
     del created
     gc.collect()
     _half_check([item for row in view.tolist() for item in row], reference['construction']['words'])
-    for a, b, expected in [([[1.,2.,3.],[4.,5.,6.]], [1.,2.,3.], [[2.,4.,6.],[5.,7.,9.]]),
-                            ([[1.],[2.],[3.]], [[1.,2.,3.]], [[2.,3.,4.],[3.,4.,5.],[4.,5.,6.]]),
-                            (2., [1.,2.,3.], [3.,4.,5.]), ([], 2., [])]:
+    for a, b, expected, multiplied in [([[1.,2.,3.],[4.,5.,6.]], [1.,2.,3.], [[2.,4.,6.],[5.,7.,9.]], [[1.,4.,9.],[4.,10.,18.]]),
+                            ([[1.],[2.],[3.]], [[1.,2.,3.]], [[2.,3.,4.],[3.,4.,5.],[4.,5.,6.]], [[1.,2.,3.],[2.,4.,6.],[3.,6.,9.]]),
+                            (2., [1.,2.,3.], [3.,4.,5.], [2.,4.,6.]), ([], 2., [], [])]:
         first, second = _half_construct(a), _half_construct(b)
         output = torch.add(first, second, alpha=1)
         assert output.tolist() == expected
-        del first, second, output
+        multiplied_output = first * second
+        assert multiplied_output.tolist() == multiplied
+        del first, second, output, multiplied_output
+    channels = _half_construct([[-1.,2.,3.],[4.,-2.,1.],[0.,.5,-4.]])
+    scale, bias = _half_construct([.5,1.,2.]), _half_construct([1.,.5,-1.])
+    scaled = channels * scale
+    biased = scaled + bias
+    assert biased.tolist() == [[.5,2.5,5.],[3.,-1.5,1.],[1.,1.,-9.]]
+    del channels, scale, bias, scaled, biased
     del view, left, right, product, total, composed, result
     gc.collect()
 

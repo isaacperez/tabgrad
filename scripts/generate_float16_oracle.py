@@ -2,14 +2,47 @@
 
 from __future__ import annotations
 
+import argparse
+import importlib
 import json
 import math
 from pathlib import Path
+from typing import Protocol, cast
 
-import torch
+
+class _OracleTensor(Protocol):
+    def view(self, dtype: object) -> _OracleTensor: ...
+    def numel(self) -> int: ...
+    def __getitem__(self, index: int) -> _OracleTensor: ...
+    def __int__(self) -> int: ...
+    def __add__(self, other: _OracleTensor) -> _OracleTensor: ...
+    def __mul__(self, other: _OracleTensor) -> _OracleTensor: ...
 
 
-def words(value: torch.Tensor) -> list[int]:
+class _OracleVersion(Protocol):
+    git_version: str
+
+
+class _OracleModule(Protocol):
+    __version__: str
+    version: _OracleVersion
+    int16: object
+    float16: object
+
+    def tensor(
+        self, data: list[int] | list[float], *, dtype: object
+    ) -> _OracleTensor: ...
+    def set_num_threads(self, value: int) -> None: ...
+    def set_num_interop_threads(self, value: int) -> None: ...
+    def get_num_threads(self) -> int: ...
+
+
+# Native generation is optional; CI type-checks this narrow foreign boundary
+# without installing the platform-specific oracle or weakening strict typing.
+torch = cast(_OracleModule, importlib.import_module("torch"))
+
+
+def words(value: _OracleTensor) -> list[int]:
     encoded = value.view(torch.int16)
     return [int(encoded[index]) & 0xFFFF for index in range(encoded.numel())]
 
@@ -24,15 +57,21 @@ def encoded_number(value: float) -> float | str:
     return value
 
 
-def from_words(values: list[int]) -> torch.Tensor:
+def from_words(values: list[int]) -> _OracleTensor:
     signed = [value if value < 0x8000 else value - 0x10000 for value in values]
     return torch.tensor(signed, dtype=torch.int16).view(torch.float16)
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--check", action="store_true")
+    arguments = parser.parse_args()
     torch.set_num_threads(1)
     torch.set_num_interop_threads(1)
-    if str(torch.__version__) != "2.14.0":
+    if (
+        str(torch.__version__) != "2.14.0"
+        or torch.version.git_version != "08187d9e0fba026dc8217405802ab5381dc88d90"
+    ):
         raise RuntimeError("This corpus requires the pinned PyTorch 2.14.0 oracle.")
     values = [0.0, -0.0, math.inf, -math.inf, math.nan]
     for exponent in range(-25, 16):
@@ -103,7 +142,14 @@ def main() -> None:
     target = (
         Path(__file__).resolve().parents[1] / "js-tests/fixtures/float16-oracle.json"
     )
-    target.write_text(json.dumps(result, allow_nan=False, separators=(",", ":")) + "\n")
+    content = json.dumps(result, allow_nan=False, separators=(",", ":")) + "\n"
+    if arguments.check:
+        if target.read_text() != content:
+            raise RuntimeError(
+                "The binary16 corpus is stale; regenerate and review it."
+            )
+    else:
+        target.write_text(content)
     errors: list[dict[str, str | list[int]]] = []
     for name, value in [
         ("int64-max", 2**63 - 1),

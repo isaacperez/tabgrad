@@ -122,6 +122,34 @@ checks in the same change as a registered generated path.
 - **License/review:** behavior observations only, no upstream source copied. Native oracle attribution remains in [Dependencies](dependencies.md).
 - **Cleanup:** generated fixture is intentionally committed; do not delete it as build cleanup. No intermediate output is created.
 
+### Binary16 oracle fixture
+
+- **Path:** `js-tests/fixtures/float16-oracle.json`.
+- **Source/generator:** maintained `scripts/generate_float16_oracle.py`, not the
+  Tabgrad codecs or kernels.
+- **Command:** `.venv/bin/python scripts/generate_float16_oracle.py` from the
+  repository root.
+- **Inputs:** the same prepared, hashed native oracle environment above,
+  PyTorch 2.14.0 build `08187d9e0fba026dc8217405802ab5381dc88d90`. The generator
+  rejects another version/revision, bounds both thread pools to one and fixes
+  its boundary cases and deterministic integer sequence. The known NumPy
+  initialization warning is retained; NumPy is not required.
+- **Commit policy:** committed so CPU, GPU and ordinary Python/JavaScript
+  consumers can compare native expectations without a platform-specific native
+  installation. The fixture is not included in the browser package.
+- **Verification:** `.venv/bin/python scripts/generate_float16_oracle.py --check`
+  regenerates and compares exact bytes without rewriting the fixture. Normal
+  Node/browser tests consume its complete construction and stored-operation
+  results independently.
+- **Comparison:** exact decoded binary16 values, including signed zero,
+  subnormals and infinities; NaN classification is compared without a payload
+  or sign identity promise. Multiplication followed by addition stores the
+  intermediate separately. See [float16](reference/float16.md).
+- **License/review:** synthetic behavior observations only; no upstream source
+  or native package is distributed. Attribution follows [Dependencies](dependencies.md).
+- **Cleanup:** intentionally committed; do not delete it as build cleanup.
+  Generation creates no intermediate files.
+
 ### Rust dependency lock
 
 - **Path:** `Cargo.lock`.
