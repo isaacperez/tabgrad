@@ -7,7 +7,8 @@ test("dtype facts have one immutable identity and no inherited or unimplemented 
   assert.equal(tensorDType("float32"), TENSOR_DTYPES.float32);
   assert(Object.isFrozen(TENSOR_DTYPES));
   assert(Object.isFrozen(tensorDType("float32")));
-  for (const dtype of ["float16", "toString", "__proto__", undefined]) assert.throws(() => tensorDType(dtype), TypeError);
+  assert.equal(tensorDType("float16"), TENSOR_DTYPES.float16);
+  for (const dtype of ["bfloat16", "toString", "__proto__", undefined]) assert.throws(() => tensorDType(dtype), TypeError);
 });
 
 test("checked spans separate compact logical widths from physical alignment", () => {

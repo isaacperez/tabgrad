@@ -36,7 +36,8 @@ result has the broadcast output shape and its inputs' dtype and device; `await r
 returns the ordinary independent flat `Float32Array`. Close JavaScript handles
 and their session under the existing explicit lifetime contract.
 
-The supported domain is two broadcast-compatible contiguous float32 tensors on the same
+The supported domain is two broadcast-compatible contiguous tensors of the same
+supported dtype on the same
 device in one session: CPU, or `webgpu` with an attached ready GPU owner. It
 includes scalar tensors, every supported contiguous rank,
 singleton and empty dimensions, and whole-contiguous views. Align axes from
@@ -47,7 +48,11 @@ can multiply any supported tensor; a tensor
 and a Python or JavaScript number do not. The result owns distinct logical
 storage and never mutates either input or a live alias.
 
-Host-number operands, promotion, other dtypes or device mixing,
+The float32 numerical and derivative contract below remains separate from the
+inference-only [float16 domain](float16.md), which defines compact storage,
+conversion, stored rounding and its explicit exclusions.
+
+Host-number operands, promotion, unsupported dtypes or device mixing,
 non-contiguous layouts, in-place multiplication, output-buffer
 mutation and `multiply` aliases are outside this contract. PyTorch supports
 many of these forms; their rejection is Tabgrad's intentional subset boundary.

@@ -24,6 +24,7 @@ export function resolveTensorType<DType extends string>(policy: TensorTypePolicy
 
 const UNARY_FLOAT32 = fixedTensorTypePolicy(["float32"], "float32");
 const BINARY_FLOAT32 = fixedTensorTypePolicy(["float32", "float32"], "float32");
+const BINARY_FLOAT16 = fixedTensorTypePolicy(["float16", "float16"], "float16");
 
 interface OperationTypeContract {
   readonly types: TensorTypePolicy;
@@ -36,6 +37,8 @@ const CONTRACTS = Object.freeze({
   "add-f32": BINARY_CONTRACT,
   "add-alpha-f32": Object.freeze({ types: BINARY_FLOAT32, coefficient: "binary32" } as const),
   "mul-f32": BINARY_CONTRACT,
+  "add-f16": Object.freeze({ types: BINARY_FLOAT16, coefficient: "none" } as const),
+  "mul-f16": Object.freeze({ types: BINARY_FLOAT16, coefficient: "none" } as const),
   "sum-f32": UNARY_CONTRACT,
   "expand-f32": UNARY_CONTRACT,
   "matmul-f32": BINARY_CONTRACT,

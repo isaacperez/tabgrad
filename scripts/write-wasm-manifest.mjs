@@ -24,7 +24,7 @@ const manifest = {
   abiVersion: 1,
   addressWidth: 32,
   sharedMemory: false,
-  capabilities: ["add-f32", "sum-f32", "mul-f32", "expand-f32", "add-alpha-f32", "matmul-f32", "broadcast-f32", "reduce-f32"],
+  capabilities: ["add-f32", "sum-f32", "mul-f32", "expand-f32", "add-alpha-f32", "matmul-f32", "broadcast-f32", "reduce-f32", "pointwise-f16"],
   imports: [{ module: "env", name: "memory", kind: "memory" }],
   memory: {
     initialPages: wasmProfile.initialPages,

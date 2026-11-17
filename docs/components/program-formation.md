@@ -107,7 +107,8 @@ allocation. The connected worker still reconstructs the immutable program at
 its transport boundary. These checks do not move computation, acquire another
 backend or change submission and drain ownership.
 
-Current numerical kinds are explicitly float32. Their names identify the
+Numerical kinds explicitly identify float32 signatures and the bounded float16
+add/mul signatures. Their names identify the
 numerical signature; GPU preparation adds the dispatch layout, while each
 backend instance owns its device generation and feature domain. Tensor shape
 remains invocation geometry and cannot grow the pipeline cache. A new numerical
@@ -119,8 +120,8 @@ float32 policy bindings at their existing runtime admission owners. Assignment
 is not a universal rule for a future configurable gradient dtype. Implicit
 seeds, zeros, derivative reservations and update proofs retain their float32
 domain; protocol words and private accumulators keep their independent widths.
-No mixed-type derivative traversal or new public dtype follows from these
-shared contracts.
+The float16 pointwise domain uses those shared contracts without introducing
+mixed-type derivative traversal or changing the float32 state policies.
 
 ## Follow dependencies without using the call stack
 

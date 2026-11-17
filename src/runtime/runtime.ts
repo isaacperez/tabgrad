@@ -45,7 +45,8 @@ import {
 } from "./program-formation.js";
 
 import { tensorByteLength, tensorDType, type TensorDType } from "../shared/tensor-dtype.js";
-import { decodeTensorPayload, float32TensorPayload, type HostTensorPayload } from "../execution/tensor-payload.js";
+import { decodeTensorPayload, hostTensorPayload, type HostTensorPayload } from "../execution/tensor-payload.js";
+import { encodeBinary16 } from "../shared/binary16.js";
 export type { TensorDType } from "../shared/tensor-dtype.js";
 export type TensorLayout = "contiguous";
 
@@ -121,7 +122,11 @@ function requireNumericElement(value: unknown): number {
   return value;
 }
 
-function copyFloat32TensorData(data: unknown): Float32Array<ArrayBuffer> {
+function requireBinary16Element(value: unknown): number {
+  return encodeBinary16(requireNumericElement(value));
+}
+
+function copyTensorData(data: unknown, dtype: TensorDType): HostTensorPayload {
   try {
     if (typeof data !== "object" || data === null) {
       throw invalidTensorData();
@@ -132,19 +137,17 @@ function copyFloat32TensorData(data: unknown): Float32Array<ArrayBuffer> {
       if (typeof iterator !== "function") {
         throw invalidTensorData();
       }
-      return Float32Array.from(
-        data as Iterable<number>,
-        requireNumericElement,
-      );
+      const values = dtype === "float32" ? Float32Array.from(data as Iterable<number>, requireNumericElement)
+        : Uint16Array.from(data as Iterable<number>, requireBinary16Element);
+      return hostTensorPayload(dtype, values.length, new Uint8Array(values.buffer, values.byteOffset, values.byteLength));
     }
     const length = source.length;
     if (typeof length !== "number" || !Number.isSafeInteger(length) || length < 0) {
       throw invalidTensorData();
     }
-    return Float32Array.from(
-      data as ArrayLike<number>,
-      requireNumericElement,
-    );
+    const values = dtype === "float32" ? Float32Array.from(data as ArrayLike<number>, requireNumericElement)
+      : Uint16Array.from(data as ArrayLike<number>, requireBinary16Element);
+    return hostTensorPayload(dtype, values.length, new Uint8Array(values.buffer, values.byteOffset, values.byteLength));
   } catch (error) {
     if (error instanceof TabgradError) {
       throw error;
@@ -592,10 +595,11 @@ class BinaryOperationDefinition implements NumericalOperationDefinition {
   constructor(
     readonly name: "add" | "mul" | "matmul",
     readonly provenanceSource: "Tensor.add" | "Tensor.mul" | "Tensor.matmul",
-    readonly loweredKind: "add-f32" | "mul-f32" | "matmul-f32",
+    readonly loweredKind: "add-f32" | "mul-f32" | "add-f16" | "mul-f16" | "matmul-f32",
     readonly description: "addition" | "multiplication" | "matrix multiplication",
-    readonly derivative: DerivativeRecipe,
+    readonly derivative: DerivativeRecipe | undefined,
     readonly matrixFlags?: number,
+    readonly specializations?: Readonly<Partial<Record<TensorDType, BinaryOperationDefinition>>>,
   ) {
     const contract = operationShapeContract(loweredKind);
     if (contract !== undefined) assertOperationArity(contract, 2);
@@ -607,19 +611,19 @@ class BinaryOperationDefinition implements NumericalOperationDefinition {
     session: RuntimeSession,
     left: TensorState,
     rightHandle: unknown,
-  ): AdmittedOperation {
+  ): AdmittedOperation & { readonly record: OperationRecord<BinaryOperationDefinition> } {
     const right = tensorStateFromHandle(rightHandle);
     if (right === null) {
       throw new TabgradError(
         "INVALID_TENSOR",
-        `Float32 ${this.description} requires another Tabgrad tensor handle.`,
+        `Tensor ${this.description} requires another Tabgrad tensor handle.`,
         { operation: this.name, contract: "tensor-handle" },
       );
     }
     if (left.closed || right.closed) {
       throw new TabgradError(
         "CLOSED_TENSOR",
-        `Float32 ${this.description} requires open tensor handles.`,
+        `Tensor ${this.description} requires open tensor handles.`,
         {
           operation: this.name,
           contract: "open-input",
@@ -636,15 +640,16 @@ class BinaryOperationDefinition implements NumericalOperationDefinition {
     }
     const leftValue = left.value;
     const rightValue = right.value;
+    const definition = this.specializations?.[leftValue.dtype] ?? this;
     const inputs = [leftValue, rightValue];
-    const dtype = resolveTensorType(this.typePolicy, inputs);
+    const dtype = resolveTensorType(definition.typePolicy, inputs);
     if (dtype === undefined) {
       throw new TabgradError(
         "UNSUPPORTED_DTYPE",
-        `Float32 ${this.description} requires float32 inputs.`,
+        `This ${definition.description} requires its declared matching tensor types.`,
         {
-          operation: this.name,
-          contract: "float32-inputs",
+          operation: definition.name,
+          contract: "matching-input-types",
           leftDType: leftValue.dtype,
           rightDType: rightValue.dtype,
         },
@@ -653,9 +658,9 @@ class BinaryOperationDefinition implements NumericalOperationDefinition {
     if (leftValue.device !== rightValue.device) {
       throw new TabgradError(
         "UNSUPPORTED_DEVICE",
-        `Both ${this.description} inputs must be on the same device.`,
+        `Both ${definition.description} inputs must be on the same device.`,
         {
-          operation: this.name,
+          operation: definition.name,
           contract: "same-device",
           device: "webgpu",
           leftDevice: leftValue.device,
@@ -666,9 +671,9 @@ class BinaryOperationDefinition implements NumericalOperationDefinition {
     if (leftValue.layout !== "contiguous" || rightValue.layout !== "contiguous") {
       throw new TabgradError(
         "UNSUPPORTED_LAYOUT",
-        `This ${this.description} definition supports only contiguous inputs.`,
+        `This ${definition.description} definition supports only contiguous inputs.`,
         {
-          operation: this.name,
+          operation: definition.name,
           contract: "contiguous-inputs",
           leftLayout: leftValue.layout,
           rightLayout: rightValue.layout,
@@ -677,34 +682,34 @@ class BinaryOperationDefinition implements NumericalOperationDefinition {
     }
     let outputShape = leftValue.shape;
     let broadcast: BroadcastGeometry | undefined;
-    if (this.matrixFlags !== undefined) {
+    if (definition.matrixFlags !== undefined) {
       if (leftValue.shape.length !== 2 || rightValue.shape.length !== 2) {
         throw new TabgradError("INVALID_SHAPE", "Matrix multiplication supports only two-dimensional inputs.", {
-          operation: this.name, contract: "two-dimensional-inputs", leftShape: leftValue.shape, rightShape: rightValue.shape,
+          operation: definition.name, contract: "two-dimensional-inputs", leftShape: leftValue.shape, rightShape: rightValue.shape,
         });
       }
-      if (leftValue.shape[this.matrixFlags & 1 ? 0 : 1] !== rightValue.shape[this.matrixFlags & 2 ? 1 : 0]) {
+      if (leftValue.shape[definition.matrixFlags & 1 ? 0 : 1] !== rightValue.shape[definition.matrixFlags & 2 ? 1 : 0]) {
         throw new TabgradError("SHAPE_MISMATCH", "Matrix contraction dimensions must match.", {
-          operation: this.name, contract: "matrix-contraction", leftShape: leftValue.shape, rightShape: rightValue.shape,
+          operation: definition.name, contract: "matrix-contraction", leftShape: leftValue.shape, rightShape: rightValue.shape,
         });
       }
-      const geometry = matrixGeometry(leftValue.shape, rightValue.shape, this.matrixFlags);
+      const geometry = matrixGeometry(leftValue.shape, rightValue.shape, definition.matrixFlags);
       outputShape = Object.freeze([geometry.rows, geometry.columns]);
-    } else if (this.shapePolicy !== undefined) {
-      try { broadcast = this.shapePolicy.plan([leftValue.shape, rightValue.shape]); }
+    } else if (definition.shapePolicy !== undefined) {
+      try { broadcast = definition.shapePolicy.plan([leftValue.shape, rightValue.shape]); }
       catch (error) {
         throw new TabgradError(error instanceof BroadcastCapacityError ? "RESOURCE_EXHAUSTED" : "SHAPE_MISMATCH",
           "Pointwise output requires compatible broadcast shapes and safe element arithmetic.", {
-            operation: this.name, contract: "broadcast-shape", leftShape: leftValue.shape, rightShape: rightValue.shape,
+            operation: definition.name, contract: "broadcast-shape", leftShape: leftValue.shape, rightShape: rightValue.shape,
           }, error);
       }
       outputShape = broadcast.shape;
     } else if (!equalTensorShapes(leftValue.shape, rightValue.shape)) {
       throw new TabgradError(
         "SHAPE_MISMATCH",
-        `Float32 ${this.description} requires equal shapes.`,
+        `Float32 ${definition.description} requires equal shapes.`,
         {
-          operation: this.name,
+          operation: definition.name,
           contract: "equal-shape",
           leftShape: leftValue.shape,
           rightShape: rightValue.shape,
@@ -714,7 +719,7 @@ class BinaryOperationDefinition implements NumericalOperationDefinition {
 
     return Object.freeze({
       ...(broadcast === undefined ? {} : { broadcast }),
-      record: new OperationRecord(this, inputs, undefined, this.matrixFlags),
+      record: new OperationRecord(definition, inputs, undefined, definition.matrixFlags),
       outputMetadata: Object.freeze({
         shape: outputShape,
         dtype,
@@ -725,11 +730,13 @@ class BinaryOperationDefinition implements NumericalOperationDefinition {
   }
 }
 
+const ADD_HALF_OPERATION = Object.freeze(new BinaryOperationDefinition("add", "Tensor.add", "add-f16", "addition", undefined));
+const MUL_HALF_OPERATION = Object.freeze(new BinaryOperationDefinition("mul", "Tensor.mul", "mul-f16", "multiplication", undefined));
 const ADD_OPERATION = Object.freeze(new BinaryOperationDefinition(
-  "add", "Tensor.add", "add-f32", "addition", POINTWISE_PASS_DERIVATIVE,
+  "add", "Tensor.add", "add-f32", "addition", POINTWISE_PASS_DERIVATIVE, undefined, Object.freeze({ float16: ADD_HALF_OPERATION }),
 ));
 const MUL_OPERATION = Object.freeze(new BinaryOperationDefinition(
-  "mul", "Tensor.mul", "mul-f32", "multiplication", MUL_DERIVATIVE,
+  "mul", "Tensor.mul", "mul-f32", "multiplication", MUL_DERIVATIVE, undefined, Object.freeze({ float16: MUL_HALF_OPERATION }),
 ));
 const MATMUL_OPERATION = Object.freeze(new BinaryOperationDefinition(
   "matmul", "Tensor.matmul", "matmul-f32", "matrix multiplication", MATMUL_DERIVATIVE, 0,
@@ -1222,16 +1229,17 @@ export class RuntimeSession {
     if (options.requiresGrad !== undefined && typeof options.requiresGrad !== "boolean") {
       throw new TypeError("requiresGrad must be a boolean.");
     }
-    if (options.dtype !== undefined && options.dtype !== "float32") {
+    const dtype = options.dtype === undefined ? "float32" : options.dtype;
+    if (dtype !== "float32" && dtype !== "float16") {
       throw new TabgradError(
         "UNSUPPORTED_DTYPE",
-        "This runtime slice supports only float32 tensors.",
-        { operation: "tensor", contract: "float32-dtype", dtype: options.dtype },
+        "Tensor creation requires a supported explicit dtype.",
+        { operation: "tensor", contract: "supported-dtype", dtype },
       );
     }
     const device = options.device ?? "cpu";
     const backend = this.#backendFor(device, "tensor");
-    if (options.requiresGrad === true) this.#requireGradients(backend, "tensor", "float32");
+    if (options.requiresGrad === true) this.#requireGradients(backend, "tensor", dtype);
     if (options.layout !== undefined && options.layout !== "contiguous") {
       throw new TabgradError(
         "UNSUPPORTED_LAYOUT",
@@ -1244,22 +1252,22 @@ export class RuntimeSession {
       );
     }
 
-    const payload = copyFloat32TensorData(data);
-    if (device === "webgpu" && payload.byteLength > backend.capabilities.maximumTensorBytes) {
+    const payload = copyTensorData(data, dtype);
+    if (device === "webgpu" && payload.bytes.byteLength > backend.capabilities.maximumTensorBytes) {
       throw new TabgradError("RESOURCE_EXHAUSTED", "Tensor exceeds the selected device's buffer limit.", {
-        operation: "tensor", device, byteLength: payload.byteLength,
+        operation: "tensor", device, byteLength: payload.bytes.byteLength,
         maximumTensorBytes: backend.capabilities.maximumTensorBytes,
       });
     }
-    const shape = copyTensorShape(options.shape, payload.length);
+    const shape = copyTensorShape(options.shape, payload.elements);
     const value = new TensorValue({
       shape,
-      dtype: "float32",
+      dtype,
       device,
       layout: "contiguous",
     }, null);
     this.#registerValue(value);
-    this.#materializations.setHost(value, float32TensorPayload(payload));
+    this.#materializations.setHost(value, payload);
     const handle = this.#createHandle(value, null, options.requiresGrad === true);
     if (options.requiresGrad === true) {
       const identity = requireTensorState(handle).identity;
@@ -2090,6 +2098,7 @@ export class RuntimeSession {
   #binary(definition: BinaryOperationDefinition, left: TensorState, rightHandle: unknown): Tensor {
     this.#assertOpen();
     const admitted = definition.admit(this, left, rightHandle);
+    definition = admitted.record.definition;
     this.#requireBackendComputation(admitted.record.inputs[0]!, definition);
     if (definition.matrixFlags !== undefined || admitted.broadcast !== undefined) {
       const backend = this.#backendFor(admitted.outputMetadata.device, definition.name);
@@ -2104,10 +2113,13 @@ export class RuntimeSession {
     }
     const right = requireTensorState(rightHandle);
     this.#checkCapturedAdmission(admitted.record.inputs, admitted.outputMetadata.shape);
-    const history = !this.#recording || (!left.requiresGrad && !right.requiresGrad) ? null
-      : this.#history.record(admitted.outputMetadata.shape, admitted.broadcast === undefined ? definition.derivative
+    let history: DerivativeNode<TensorValue> | null = null;
+    if (this.#recording && (left.requiresGrad || right.requiresGrad)) {
+      if (definition.derivative === undefined) throw new TabgradError("UNSUPPORTED_GRADIENT", "This tensor signature has no derivative.");
+      history = this.#history.record(admitted.outputMetadata.shape, admitted.broadcast === undefined ? definition.derivative
         : pointwiseDerivative(definition.derivative, admitted.broadcast, definition.derivative === POINTWISE_PASS_DERIVATIVE),
         [left.history, right.history], admitted.record.inputs);
+    }
     return this.#recordOperation(admitted, history);
   }
 

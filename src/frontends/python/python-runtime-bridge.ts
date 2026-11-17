@@ -2,10 +2,11 @@ import { TabgradError, throwCleanupFailures } from "../../shared/errors.js";
 import { getTensorIncomingIdentity, isTensorExposureOpen, acquireGradientExposure, gradientExposureNeedsCompletion, completeGradientExposure, getRecordingMode, enterNoGradScope, restoreRecordingMode, observeTensorSynchronously, completeRuntimeSession, shouldWarnUnretainedGradient, finalizeTensorExposure, registerOptimizerLease, isOptimizableParameter, type RuntimeSession, type Tensor } from "../../runtime/runtime.js";
 import type { OptimizerLease } from "../../runtime/optimizer-lease.js";
 import type { TensorDevice } from "../../execution/backend.js";
+import type { TensorDType } from "../../shared/tensor-dtype.js";
 
 /** Structural subset of Pyodide's borrowed buffer protocol; no interpreter owner. */
 interface PythonBuffer {
-  getBuffer(type: "f32"): PythonBufferView;
+  getBuffer(type: "f32" | "f64"): PythonBufferView;
 }
 
 interface PythonBufferView {
@@ -19,14 +20,17 @@ interface PythonBufferView {
   release(): void;
 }
 
-function boundedFloat32View(view: PythonBufferView): Float32Array {
+function boundedNumericView(view: PythonBufferView, dtype: TensorDType): Float32Array | Float64Array {
   const length = view.shape[0];
-  if (!(view.data instanceof Float32Array) || view.format !== "f" || view.itemsize !== 4
+  const validFormat = dtype === "float16"
+    ? view.data instanceof Float64Array && view.format === "d" && view.itemsize === 8
+    : view.data instanceof Float32Array && view.format === "f" && view.itemsize === 4;
+  if (!validFormat || !(view.data instanceof Float32Array || view.data instanceof Float64Array)
     || view.ndim !== 1 || view.shape.length !== 1 || !view.c_contiguous
     || length === undefined || !Number.isSafeInteger(length) || length < 0
     || !Number.isSafeInteger(view.offset) || view.offset < 0
     || view.offset > view.data.length || length > view.data.length - view.offset) {
-    throw new TabgradError("INVALID_DATA", "Python input must expose a contiguous rank-one float32 buffer.");
+    throw new TabgradError("INVALID_DATA", "Python input must expose the matching contiguous rank-one numeric buffer.");
   }
   return view.data.subarray(view.offset, view.offset + length);
 }
@@ -131,12 +135,13 @@ export class PythonRuntimeBridge {
     return handle.view(dimensions);
   }
 
-  tensorFromBuffer(buffer: PythonBuffer, shape?: readonly number[], requiresGrad = false, device: TensorDevice = "cpu"): Tensor {
-    const view = buffer.getBuffer("f32");
+  tensorFromBuffer(buffer: PythonBuffer, shape?: readonly number[], requiresGrad = false, device: TensorDevice = "cpu",
+    dtype: TensorDType = "float32"): Tensor {
+    const view = buffer.getBuffer(dtype === "float16" ? "f64" : "f32");
     try {
       // Runtime import performs the owned copy synchronously. Neither this view
       // nor the argument proxy may escape into deferred numerical execution.
-      return this.session.tensor(boundedFloat32View(view), { ...(shape === undefined ? {} : { shape }), requiresGrad, device });
+      return this.session.tensor(boundedNumericView(view, dtype), { ...(shape === undefined ? {} : { shape }), requiresGrad, device, dtype });
     } finally {
       view.release();
     }

@@ -74,7 +74,7 @@ function constantBody(value) {
 export function fixtureModule({
   abiVersion = 1,
   arenaBase = 1_048_576,
-  capabilities = 255,
+  capabilities = 511,
   kernelBehavior = "success",
   memoryImportName = "memory",
   omitKernelExport = false,
@@ -86,6 +86,7 @@ export function fixtureModule({
   omitBroadcastAddExport = false,
   omitBroadcastMulExport = false,
   omitReceiveExport = false,
+  omitHalfExport = false,
   failureCall,
 } = {}) {
   const i32 = 0x7f;
@@ -111,6 +112,7 @@ export function fixtureModule({
     ["tabgrad_abi_version", 0],
     ["tabgrad_capabilities", 1],
     ["tabgrad_arena_base", 2],
+    ...(omitHalfExport ? [] : [["tabgrad_add_f16", 3], ["tabgrad_mul_f16", 5], ["tabgrad_broadcast_add_f16", 9], ["tabgrad_broadcast_mul_f16", 10]]),
     ...(omitKernelExport ? [] : [["tabgrad_add_f32", 3]]),
     ...(omitSumExport ? [] : [["tabgrad_sum_f32", 4]]),
     ...(omitMulExport ? [] : [["tabgrad_mul_f32", 5]]),

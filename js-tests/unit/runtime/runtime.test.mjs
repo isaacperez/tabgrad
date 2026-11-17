@@ -1164,7 +1164,7 @@ test("rejects unsupported operations synchronously during admission", async () =
     (error) => error instanceof TabgradError
       && error.code === "UNSUPPORTED_DTYPE"
       && error.details.operation === "tensor"
-      && error.details.contract === "float32-dtype",
+      && error.details.contract === "supported-dtype",
   );
   assert.throws(
     () => session.tensor([1], { device: "webgpu" }),
@@ -2454,23 +2454,26 @@ test("executes a finite chain in dependency order and handles empty tensors", as
 });
 
 for (const failureCase of [
+  { name: "missing half exports", code: "BACKEND_ABI_MISMATCH", moduleOptions: { omitHalfExport: true } },
+  { name: "missing half capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: 511 & ~256 } },
+  { name: "stale pre-half module profile", code: "BACKEND_MANIFEST_INVALID", manifestTransform: manifest => ({ ...manifest, moduleVersion: 8 }) },
   { name: "missing expansion export", code: "BACKEND_ABI_MISMATCH", moduleOptions: { omitExpandExport: true } },
   { name: "missing coefficient addition export", code: "BACKEND_ABI_MISMATCH", moduleOptions: { omitAlphaAddExport: true } },
   { name: "missing matrix export", code: "BACKEND_ABI_MISMATCH", moduleOptions: { omitMatmulExport: true } },
   { name: "missing broadcast addition export", code: "BACKEND_ABI_MISMATCH", moduleOptions: { omitBroadcastAddExport: true } },
   { name: "missing broadcast multiplication export", code: "BACKEND_ABI_MISMATCH", moduleOptions: { omitBroadcastMulExport: true } },
   { name: "missing receiving export", code: "BACKEND_ABI_MISMATCH", moduleOptions: { omitReceiveExport: true } },
-  { name: "missing broadcast capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: 255 & ~64 } },
-  { name: "missing receiving capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: 255 & ~128 } },
+  { name: "missing broadcast capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: 511 & ~64 } },
+  { name: "missing receiving capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: 511 & ~128 } },
   { name: "stale pre-broadcast module profile", code: "BACKEND_MANIFEST_INVALID", manifestTransform: manifest => ({ ...manifest, moduleVersion: 6 }) },
-  { name: "missing matrix capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: 255 & ~32 } },
+  { name: "missing matrix capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: 511 & ~32 } },
   { name: "stale pre-matrix module profile", code: "BACKEND_MANIFEST_INVALID", manifestTransform: manifest => ({ ...manifest, moduleVersion: 5 }) },
-  { name: "missing coefficient addition capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: 255 & ~16 } },
-  { name: "missing expansion capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: 255 & ~8 } },
+  { name: "missing coefficient addition capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: 511 & ~16 } },
+  { name: "missing expansion capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: 511 & ~8 } },
   { name: "missing mul export", code: "BACKEND_ABI_MISMATCH", moduleOptions: { omitMulExport: true } },
-  { name: "missing mul capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: 255 & ~4 } },
+  { name: "missing mul capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: 511 & ~4 } },
   { name: "missing sum export", code: "BACKEND_ABI_MISMATCH", moduleOptions: { omitSumExport: true } },
-  { name: "missing sum capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: 255 & ~2 } },
+  { name: "missing sum capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: 511 & ~2 } },
   {
     name: "incompatible ABI version",
     code: "BACKEND_ABI_MISMATCH",

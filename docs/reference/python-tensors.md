@@ -55,15 +55,16 @@ bound by Python: there is no silent inference of an integer or default dtype.
   structure of built-in lists/tuples containing those types. A numeric scalar
   produces shape `()`. Empty input produces shape `(0,)`; `[[], []]` produces
   `(2, 0)`. Nesting cannot imply dimensions after an empty sequence.
-- The only accepted dtype is the `torch.float32` object, not its string name.
+- Select the canonical `torch.float32` or `torch.float16` object, not its string
+  name. [Float16 tensors](float16.md) have a bounded pointwise domain.
 - The device may be the string `'cpu'` or `'webgpu'`, or the corresponding
   `torch.device` descriptor. CPU is the default even with GPU attached.
   `webgpu` is a Tabgrad extension, not an upstream PyTorch device name.
 - Gradient and pinned-memory flags must be booleans. `requires_grad=True`
-  enables tracking; `pin_memory` must remain false.
+  enables float32 tracking; `pin_memory` must remain false.
   CPU and WebGPU support tracking for [functional gradients](functional-gradients.md)
   and [backward accumulation](backward-gradients.md).
-- Creation converts to float32 and owns a copy. Later input mutations cannot
+- Creation converts to the selected dtype and owns a copy. Later input mutations cannot
   change the tensor. Integer overflow during conversion raises `OverflowError`.
 - Ragged inputs, mixed numerical/container depth and cycles are rejected.
   Reusing an acyclic child container is allowed and copies its values at each
@@ -83,7 +84,7 @@ serve cached metadata.
 | Property | Python presentation | Bounded behavior |
 | --- | --- | --- |
 | `shape` | `torch.Size`, an immutable integer tuple | Iteration, indexing, tuple equality/hash, representation, slicing, concatenation, repetition and `numel()` |
-| `dtype` | The `torch.float32` constant of type `torch.dtype` | Identity, representation, read-only `is_floating_point=True`, `is_complex=False`, `is_signed=True` |
+| `dtype` | The selected `torch.float32` or `torch.float16` constant of type `torch.dtype` | Identity, representation, read-only `is_floating_point=True`, `is_complex=False`, `is_signed=True` |
 | `device` | A `torch.device` object for the runtime's device | Equality with the same device name, hashing, representation, string form, read-only `type` and `index=None`; supported names are `cpu` and `webgpu` |
 | `requires_grad` | Python `bool` | Advertised tracking; propagation follows the [recording mode and view rules](gradient-recording.md), and functional gradients return untracked tensors |
 
@@ -105,7 +106,7 @@ operator = left + right
 ```
 
 `torch.add(input, other, *, alpha=1, out=None)` and
-`Tensor.add(other, *, alpha=1)` require two broadcast-compatible float32 tensors on the
+`Tensor.add(other, *, alpha=1)` require two broadcast-compatible tensors of the same supported dtype on the
 same supported device. GPU admission also requires an attached, ready backend.
 Align dimensions from the right: each pair must be equal or include a
 singleton; missing leading axes act as singletons. Thus `[2, 1]` plus `[3]`

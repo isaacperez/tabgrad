@@ -59,7 +59,9 @@ The new wrapper owns its returned handle without retaining the base wrapper
 or copying its data. See the [view reference](../reference/tensor-view.md).
 
 `torch.tensor` checks explicit options and normalizes the documented scalar or
-rectangular built-in containers into an `array('f')` plus dimension lengths.
+rectangular built-in containers into an `array('f')` for float32 or an
+`array('d')` for float16, plus dimension lengths. The latter preserves original
+binary64 input precision until the shared runtime performs half conversion.
 The buffer is flat in row-major order regardless of the logical rank. See
 [tensor shape](../concepts/tensor-shape.md) for why rank and buffer length are
 different facts.
@@ -130,7 +132,7 @@ earlier. The properties cannot be assigned through the Python tensor API.
 
 The resulting objects are Python presentations: `Size` is an immutable integer
 tuple with its own representation and shape-preserving tuple operations;
-`float32` is the exposed `dtype` constant; and `device` is an immutable
+`float32` and `float16` are the exposed `dtype` constants; and `device` is an immutable
 descriptor for the supported unindexed device names. CPU remains the default;
 `webgpu` selects the explicitly attached backend and is a Tabgrad extension,
 not an upstream PyTorch device. The exact domain is in the

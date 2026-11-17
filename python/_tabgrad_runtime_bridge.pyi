@@ -48,6 +48,7 @@ def tensorFromBuffer(
     shape: JsProxy,
     requiresGrad: bool = False,
     device: str = "cpu",
+    dtype: str = "float32",
 ) -> RuntimeTensor: ...
 def grad(
     output: RuntimeTensor, inputs: JsProxy, gradient: RuntimeTensor | None

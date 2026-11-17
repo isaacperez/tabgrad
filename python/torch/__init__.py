@@ -7,7 +7,7 @@ from collections.abc import Iterable, Iterator
 from math import prod
 from operator import index
 from types import NotImplementedType, TracebackType
-from typing import NoReturn, SupportsIndex, TypeAlias, cast, overload
+from typing import Literal, NoReturn, SupportsIndex, TypeAlias, cast, overload
 from warnings import warn
 from weakref import WeakValueDictionary, finalize
 
@@ -90,7 +90,7 @@ class dtype:
         raise TypeError("cannot create 'torch.dtype' instances")
 
     def __repr__(self) -> str:
-        return "torch.float32"
+        return "torch.float16" if self is float16 else "torch.float32"
 
     @property
     def is_floating_point(self) -> bool:
@@ -106,6 +106,7 @@ class dtype:
 
 
 float32 = object.__new__(dtype)
+float16 = object.__new__(dtype)
 
 
 class device:
@@ -172,9 +173,12 @@ class Tensor:
 
     @property
     def dtype(self) -> dtype:
-        if self._handle.dtype != "float32":
-            raise RuntimeError("Unsupported runtime dtype.")
-        return float32
+        name = self._handle.dtype
+        if name == "float32":
+            return float32
+        if name == "float16":
+            return float16
+        raise RuntimeError("Unsupported runtime dtype.")
 
     @property
     def device(self) -> device:
@@ -480,9 +484,11 @@ def _append_numeric_values(items: Iterable[object], buffer: array[float]) -> Non
         buffer.append(value)
 
 
-def _input_buffer(data: object) -> tuple[array[float], list[int]]:
+def _input_buffer(
+    data: object, typecode: Literal["f", "d"] = "f"
+) -> tuple[array[float], list[int]]:
     """Normalize rectangular built-in containers without recursive traversal."""
-    buffer = array("f")
+    buffer = array(typecode)
     if type(data) not in (list, tuple):
         _append_numeric_values((data,), buffer)
         return buffer, []
@@ -564,18 +570,26 @@ def tensor(
     requires_grad: bool = False,
     pin_memory: bool = False,
 ) -> Tensor:
-    """Copy a numeric scalar or rectangular list/tuple into a float32 tensor."""
-    if dtype is not float32:
-        raise RuntimeError("Tabgrad requires explicit dtype=torch.float32.")
+    """Copy numeric input into an explicitly typed, owned tensor."""
+    if dtype is not float32 and dtype is not float16:
+        raise RuntimeError(
+            "Tabgrad requires explicit dtype=torch.float32 or torch.float16."
+        )
     selected_device = _device_name(device)
     if type(requires_grad) is not bool or type(pin_memory) is not bool:
         raise TypeError("requires_grad and pin_memory must be bool.")
     if pin_memory:
         raise RuntimeError("Pinned memory is unsupported.")
-    buffer, shape = _input_buffer(data)
+    buffer, shape = _input_buffer(data, "d" if dtype is float16 else "f")
     # Creation and the sibling autograd frontend transfer owned bridge handles.
     return Tensor._from_handle(  # pyright: ignore[reportPrivateUsage]
-        _bridge.tensorFromBuffer(buffer, to_js(shape), requires_grad, selected_device)
+        _bridge.tensorFromBuffer(
+            buffer,
+            to_js(shape),
+            requires_grad,
+            selected_device,
+            "float16" if dtype is float16 else "float32",
+        )
     )
 
 
@@ -671,6 +685,7 @@ __all__ = [
     "autograd",
     "device",
     "dtype",
+    "float16",
     "float32",
     "matmul",
     "mul",

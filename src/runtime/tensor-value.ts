@@ -63,13 +63,13 @@ export class StorageState {
   constructor(readonly value: TensorValue, public producer: OperationRecord | null) {}
 }
 
-export class OperationRecord {
-  readonly definition: NumericalOperationDefinition;
+export class OperationRecord<Definition extends NumericalOperationDefinition = NumericalOperationDefinition> {
+  readonly definition: Definition;
   readonly inputs: readonly TensorValue[];
   readonly provenance: ProgramProvenance;
 
   constructor(
-    definition: NumericalOperationDefinition,
+    definition: Definition,
     inputs: readonly TensorValue[],
     readonly alphaBits?: number,
     readonly matrixFlags?: number,

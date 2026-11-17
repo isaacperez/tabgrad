@@ -1,8 +1,8 @@
 use crate::abi::{STATUS_OK, validate_binary_ranges};
-use crate::pointwise::{Pointwise, broadcast, dense};
+use crate::pointwise::{Float32Pointwise, broadcast, dense};
 
 struct Addition;
-impl Pointwise<2> for Addition {
+impl Float32Pointwise<2> for Addition {
     fn scalar([left, right]: [f32; 2]) -> f32 {
         left + right
     }

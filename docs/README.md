@@ -65,6 +65,7 @@ link to its primary source, but they must not create a competing version.
 | Static website publication, native delivery and recovery | [`website-publication.md`](website-publication.md) |
 | Central execution architecture and ownership boundaries | [`architecture/README.md`](architecture/README.md) |
 | Typed tensor storage, operation signatures and the binary16 pointwise contract | [`architecture/typed-tensors.md`](architecture/typed-tensors.md) |
+| Float16 calls, numerical conversion, memory accounting and exclusions | [`reference/float16.md`](reference/float16.md) |
 | Computation inspection, cross-level attribution and cost-reporting boundaries | [`architecture/computation-inspection.md`](architecture/computation-inspection.md) |
 | Python interpreter attachment, bridge ownership, and integration constraints | [`architecture/python-integration.md`](architecture/python-integration.md) |
 | Python observation mechanism, worker progress, deployment decision and alternatives | [`architecture/python-observation.md`](architecture/python-observation.md) |

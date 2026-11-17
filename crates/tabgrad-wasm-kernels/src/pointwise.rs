@@ -1,18 +1,40 @@
 use crate::abi::{
     FLOAT_ALIGNMENT, STATUS_INVALID_GEOMETRY, STATUS_OK, STATUS_OUT_OF_BOUNDS,
-    STATUS_OUTPUT_OVERLAP, STATUS_UNALIGNED, checked_range, overlaps,
+    STATUS_OUTPUT_OVERLAP, STATUS_UNALIGNED, checked_range, checked_typed_range, overlaps,
 };
 
 /// Arithmetic is statically selected; traversal has no operation-name dispatch.
-pub(crate) trait Pointwise<const N: usize> {
+pub(crate) trait Float32Pointwise<const N: usize> {
     fn scalar(values: [f32; N]) -> f32;
     #[cfg(target_feature = "simd128")]
     fn vector(values: [core::arch::wasm32::v128; N]) -> core::arch::wasm32::v128;
 }
 
+/// Storage-specific streaming is selected statically, independently of geometry.
+pub(crate) trait Pointwise<const N: usize> {
+    type Element: Copy;
+    /// Callers validate all complete typed spans and projected indices first.
+    unsafe fn run(
+        inputs: [*const Self::Element; N],
+        strides: [usize; N],
+        output: *mut Self::Element,
+        length: usize,
+    );
+}
+
+impl<P: Float32Pointwise<N>, const N: usize> Pointwise<N> for P {
+    type Element = f32;
+    unsafe fn run(inputs: [*const f32; N], strides: [usize; N], output: *mut f32, length: usize) {
+        // SAFETY: the trait caller establishes the same spans as the f32 schedule.
+        unsafe {
+            run::<P, N>(inputs, strides, output, length);
+        }
+    }
+}
+
 /// Retained binary dense schedule, with arithmetic selected statically.
 /// Separate unit-stride loops avoid imposing projected-address code on this path.
-pub(crate) unsafe fn dense<P: Pointwise<2>>(
+pub(crate) unsafe fn dense<P: Float32Pointwise<2>>(
     left: *const f32,
     right: *const f32,
     output: *mut f32,
@@ -48,7 +70,7 @@ pub(crate) unsafe fn dense<P: Pointwise<2>>(
 }
 
 /// The caller validates every projected span and distinct output first.
-pub(crate) unsafe fn run<P: Pointwise<N>, const N: usize>(
+pub(crate) unsafe fn run<P: Float32Pointwise<N>, const N: usize>(
     inputs: [*const f32; N],
     strides: [usize; N],
     output: *mut f32,
@@ -95,10 +117,12 @@ pub(crate) unsafe fn broadcast<P: Pointwise<N>, const N: usize>(
     packet_offset: u32,
     packet_words: u32,
 ) -> u32 {
-    if input_offsets
-        .iter()
-        .chain([output_offset, packet_offset].iter())
-        .any(|offset| !offset.is_multiple_of(FLOAT_ALIGNMENT))
+    let width = size_of::<P::Element>() as u32;
+    if !packet_offset.is_multiple_of(FLOAT_ALIGNMENT)
+        || input_offsets
+            .iter()
+            .chain([output_offset].iter())
+            .any(|offset| !offset.is_multiple_of(width))
     {
         return STATUS_UNALIGNED;
     }
@@ -123,12 +147,16 @@ pub(crate) unsafe fn broadcast<P: Pointwise<N>, const N: usize>(
     let count = unsafe { packet.add(2).read() };
     let lengths: [u32; N] =
         core::array::from_fn(|operand| unsafe { packet.add(3 + operand).read() });
-    let Some(output_range) = checked_range(output_offset, count, memory_bytes) else {
+    let Some(output_range) = checked_typed_range(output_offset, count, width, memory_bytes) else {
         return STATUS_OUT_OF_BOUNDS;
     };
     for operand in 0..N {
-        let Some(range) = checked_range(input_offsets[operand], lengths[operand], memory_bytes)
-        else {
+        let Some(range) = checked_typed_range(
+            input_offsets[operand],
+            lengths[operand],
+            width,
+            memory_bytes,
+        ) else {
             return STATUS_OUT_OF_BOUNDS;
         };
         if overlaps(range, output_range) || overlaps(range, packet_range) {
@@ -192,13 +220,13 @@ pub(crate) unsafe fn broadcast<P: Pointwise<N>, const N: usize>(
     let mut offsets = [0_usize; N];
     for start in (0..count as usize).step_by(inner) {
         let inputs = core::array::from_fn(|operand| unsafe {
-            (input_offsets[operand] as *const f32).add(offsets[operand])
+            (input_offsets[operand] as *const P::Element).add(offsets[operand])
         });
         unsafe {
-            run::<P, N>(
+            P::run(
                 inputs,
                 inner_strides,
-                (output_offset as *mut f32).add(start),
+                (output_offset as *mut P::Element).add(start),
                 inner,
             );
         }

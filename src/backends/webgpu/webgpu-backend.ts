@@ -57,6 +57,16 @@ interface GpuReadback {
 }
 
 type WebGpuComputationKind = LoweredComputation["kind"];
+
+/** Transfer whole GPU words, copying only the final partial word on the host. */
+function writeTensorBytes(queue: GPUQueue, buffer: GPUBuffer, bytes: Uint8Array<ArrayBuffer>): void {
+  const aligned = bytes.byteLength - bytes.byteLength % 4;
+  if (aligned === bytes.byteLength) { queue.writeBuffer(buffer, 0, bytes); return; }
+  if (aligned !== 0) queue.writeBuffer(buffer, 0, bytes.subarray(0, aligned));
+  const tail = new Uint8Array(4);
+  tail.set(bytes.subarray(aligned));
+  queue.writeBuffer(buffer, aligned, tail);
+}
 /** Owns the acquired device, its private buffers, pipelines and physical completion. */
 export class WebGpuBackend implements WebGpuExecutionBackend {
   readonly synchronousObservation = false;
@@ -97,6 +107,9 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
     if (device.limits.maxBufferSize >= WEBGPU_COEFFICIENT_UNIFORM_BYTES) computations.push("add-alpha-f32");
     if (device.limits.maxBufferSize >= WEBGPU_MATRIX_UNIFORM_BYTES) computations.push("matmul-f32");
     computations.push("mul-f32");
+    if (device.limits.maxStorageBuffersPerShaderStage >= 4 && device.limits.maxBufferSize >= 12) {
+      computations.push("add-f16", "mul-f16");
+    }
     if (sumSupported) computations.push("sum-f32");
     if (sumSupported && device.limits.maxBufferSize >= WEBGPU_RECEIVING_UNIFORM_BYTES
       && device.limits.maxStorageBuffersPerShaderStage >= 3) computations.push("reduce-f32");
@@ -249,7 +262,7 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
           if (allocation.byteLength !== 0) {
             storage.queuedWrites = true;
             // Host bindings are copied by tensor creation into owned ArrayBuffers.
-            this.#device.queue.writeBuffer(allocation.buffer, 0, binding.hostData.bytes);
+            writeTensorBytes(this.#device.queue, allocation.buffer, binding.hostData.bytes);
           }
           this.#uploadBytes += allocation.byteLength;
         }
@@ -436,7 +449,7 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
     const staging = this.#allocate(byteLength, GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST);
     readback.staging = staging;
     const encoder = this.#device.createCommandEncoder();
-    encoder.copyBufferToBuffer(source.buffer, 0, staging.buffer, 0, byteLength);
+    encoder.copyBufferToBuffer(source.buffer, 0, staging.buffer, 0, alignedByteLength(byteLength, 4));
     this.#device.queue.submit([encoder.finish()]);
     readback.drained = this.#drain();
     await this.#awaitLive(staging.buffer.mapAsync(GPUMapMode.READ));

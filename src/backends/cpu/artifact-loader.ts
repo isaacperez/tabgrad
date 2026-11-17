@@ -12,7 +12,8 @@ const CAPABILITY_ADD_ALPHA_FLOAT32 = 16;
 const CAPABILITY_MATMUL_FLOAT32 = 32;
 const CAPABILITY_BROADCAST_FLOAT32 = 64;
 const CAPABILITY_REDUCE_FLOAT32 = 128;
-const REQUIRED_CAPABILITIES = CAPABILITY_ADD_FLOAT32 | CAPABILITY_SUM_FLOAT32 | CAPABILITY_MUL_FLOAT32 | CAPABILITY_EXPAND_FLOAT32 | CAPABILITY_ADD_ALPHA_FLOAT32 | CAPABILITY_MATMUL_FLOAT32 | CAPABILITY_BROADCAST_FLOAT32 | CAPABILITY_REDUCE_FLOAT32;
+const CAPABILITY_POINTWISE_FLOAT16 = 256;
+const REQUIRED_CAPABILITIES = CAPABILITY_ADD_FLOAT32 | CAPABILITY_SUM_FLOAT32 | CAPABILITY_MUL_FLOAT32 | CAPABILITY_EXPAND_FLOAT32 | CAPABILITY_ADD_ALPHA_FLOAT32 | CAPABILITY_MATMUL_FLOAT32 | CAPABILITY_BROADCAST_FLOAT32 | CAPABILITY_REDUCE_FLOAT32 | CAPABILITY_POINTWISE_FLOAT16;
 
 type BackendPreparationPhase =
   | "manifest-fetch"
@@ -54,6 +55,10 @@ interface WasmManifest {
 }
 
 export interface KernelExports extends WebAssembly.Exports {
+  readonly tabgrad_add_f16: (left: number, right: number, output: number, length: number) => number;
+  readonly tabgrad_mul_f16: (left: number, right: number, output: number, length: number) => number;
+  readonly tabgrad_broadcast_add_f16: (left: number, right: number, output: number, packet: number, words: number) => number;
+  readonly tabgrad_broadcast_mul_f16: (left: number, right: number, output: number, packet: number, words: number) => number;
   readonly tabgrad_abi_version: () => number;
   readonly tabgrad_capabilities: () => number;
   readonly tabgrad_arena_base: () => number;
@@ -344,7 +349,7 @@ export class CpuArtifactLoader {
       && value.addressWidth === 32
       && value.sharedMemory === false
       && Array.isArray(value.capabilities)
-      && value.capabilities.length === 8
+      && value.capabilities.length === 9
       && value.capabilities[0] === "add-f32"
       && value.capabilities[1] === "sum-f32"
       && value.capabilities[2] === "mul-f32"
@@ -353,6 +358,7 @@ export class CpuArtifactLoader {
       && value.capabilities[5] === "matmul-f32"
       && value.capabilities[6] === "broadcast-f32"
       && value.capabilities[7] === "reduce-f32"
+      && value.capabilities[8] === "pointwise-f16"
       && Array.isArray(value.imports)
       && value.imports.length === 1
       && this.#isMemoryImport(value.imports[0])
@@ -436,6 +442,7 @@ export class CpuArtifactLoader {
       "tabgrad_broadcast_add_f32",
       "tabgrad_broadcast_mul_f32",
       "tabgrad_receive_f32",
+      "tabgrad_add_f16", "tabgrad_mul_f16", "tabgrad_broadcast_add_f16", "tabgrad_broadcast_mul_f16",
     ]) {
       if (typeof exports[name] !== "function") {
         throw new TabgradError(

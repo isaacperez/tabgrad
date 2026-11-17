@@ -85,9 +85,10 @@ for (const kind of ["add-f32", "add-alpha-f32", "mul-f32", "sum-f32", "expand-f3
 test("binding-only reconstruction validates canonical dtype and complete alias metadata", () => {
   const value = { slot: 0, storageSlot: 0, shape: [0], dtype: "float32", device: "cpu",
     layout: "contiguous", source: "binding", provenance };
-  for (const dtype of ["float16", "toString", undefined]) {
+  for (const dtype of ["bfloat16", "toString", undefined]) {
     assert.throws(() => new ExecutableProgram([{ ...value, dtype }], [], 0), TypeError);
   }
+  assert.equal(new ExecutableProgram([{ ...value, dtype: "float16" }], [], 0).values[0].dtype, "float16");
   assert.throws(() => new ExecutableProgram([value, { ...value, slot: 1, source: "alias", dtype: "float16" }], [], 1), TypeError);
   assert.equal(new ExecutableProgram([value], [], 0).values[0].dtype, "float32");
 });
