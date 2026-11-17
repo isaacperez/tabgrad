@@ -270,6 +270,10 @@ GPU leaves CPU as the default; device selection remains explicit. Missing
 secure isolation, shared-memory or worker prerequisites rejects with
 `UNSUPPORTED_DEVICE` before worker creation. Acquisition and setup failures
 use `UNSUPPORTED_DEVICE`, `BACKEND_LOAD_FAILED` or an observed backend failure.
+The physical worker and caller must come from the same package. A missing or
+mismatched private payload-protocol version rejects with `BACKEND_LOAD_FAILED`
+before a usable connection is returned; it does not enable an older worker as
+a fallback. Cleanup acknowledgment remains separate from that rejection.
 For a physical-worker acquisition rejection, `BACKEND_LOAD_FAILED` retains a
 bounded diagnostic cause with the originating code, message and phase, and
 an immediate native cause when readable. These are diagnostic reconstructions,

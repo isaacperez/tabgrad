@@ -1,5 +1,7 @@
 import type { ExecutableProgram, LoweredComputation, ProgramSlot } from "./executable-program.js";
 import type { ExecutionTicket } from "./execution-ticket.js";
+import type { HostTensorPayload } from "./tensor-payload.js";
+import type { TensorDType } from "../shared/tensor-dtype.js";
 
 export type TensorDevice = "cpu" | "webgpu";
 
@@ -7,7 +9,7 @@ export type TensorDevice = "cpu" | "webgpu";
 export type ResidentAllocation = object;
 
 export interface ProgramBinding {
-  readonly hostData?: Float32Array;
+  readonly hostData?: HostTensorPayload;
   readonly resident?: ResidentAllocation;
 }
 
@@ -29,7 +31,7 @@ export interface ExecutionBackend {
   prepare(program?: ExecutableProgram): Promise<void> | ExecutionTicket<void> | undefined;
   execute(program: ExecutableProgram, bindings: ReadonlyMap<ProgramSlot, ProgramBinding>, retainedSlots: readonly boolean[]):
     ReadonlyMap<ProgramSlot, ResidentAllocation> | ExecutionTicket<ReadonlyMap<ProgramSlot, ResidentAllocation>>;
-  read(allocation: ResidentAllocation, length: number): Float32Array | ExecutionTicket<Float32Array>;
+  read(allocation: ResidentAllocation, length: number, dtype: TensorDType): HostTensorPayload | ExecutionTicket<HostTensorPayload>;
   release(allocation: ResidentAllocation): void;
   /** Joins physical work even when a result has already failed. */
   close(): Promise<void>;

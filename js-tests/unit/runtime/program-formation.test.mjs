@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { float32TensorPayload } from "../../../dist/execution/tensor-payload.js";
 import { formExecutableProgram } from "../../../dist/runtime/program-formation.js";
 
 function input(length = 1) {
@@ -32,12 +33,12 @@ test("formation preserves branch order, repeated inputs and shared ancestry once
   const secondBranch = add(shared, shared);
   const root = add(firstBranch, secondBranch);
   const unrelated = add(input(), input());
-  const leftData = new Float32Array([2]);
-  const rightData = new Float32Array([3]);
+  const leftData = float32TensorPayload(new Float32Array([2]));
+  const rightData = float32TensorPayload(new Float32Array([3]));
   const entries = new Map([
-    [left, { kind: "host", data: leftData }],
-    [right, { kind: "host", data: rightData }],
-    [unrelated, { kind: "host", data: new Float32Array([9]) }],
+    [left, leftData],
+    [right, rightData],
+    [unrelated, float32TensorPayload(new Float32Array([9]))],
   ]);
   const reads = [];
   const formed = formExecutableProgram(root, {
@@ -88,8 +89,8 @@ test("resident values cut traversal even when producer ancestry remains attached
 test("formation snapshots immutable structure but leaves payloads and occurrences in bindings", () => {
   const source = input(0);
   const root = add(source, source);
-  const data = new Float32Array(0);
-  const formed = formExecutableProgram(root, new Map([[source, { kind: "host", data }]]));
+  const data = float32TensorPayload(new Float32Array(0));
+  const formed = formExecutableProgram(root, new Map([[source, data]]));
   source.shape[0] = 7;
   root.provenance.source = "changed after formation";
   assert.deepEqual(formed.program.values[0].shape, [0]);
@@ -111,8 +112,8 @@ test("formation snapshots immutable structure but leaves payloads and occurrence
 
 test("host-only formation produces a binding without computations", () => {
   const root = input();
-  const data = new Float32Array([4]);
-  const formed = formExecutableProgram(root, new Map([[root, { kind: "host", data }]]));
+  const data = float32TensorPayload(new Float32Array([4]));
+  const formed = formExecutableProgram(root, new Map([[root, data]]));
   assert.equal(formed.program.values.length, 1);
   assert.equal(formed.program.result, 0);
   assert.deepEqual(formed.program.computations, []);
@@ -127,7 +128,7 @@ test("alias slots preserve logical metadata and aggregate physical uses without 
   const sibling = { ...alias, shape: [3, 2] };
   const first = add(alias, alias);
   first.shape = [2, 3];
-  const formed = formExecutableProgram(first, new Map([[base, { kind: "host", data: new Float32Array(6) }]]));
+  const formed = formExecutableProgram(first, new Map([[base, float32TensorPayload(new Float32Array(6))]]));
   assert.deepEqual(formed.program.values.map(({ shape }) => shape), [[6], [2, 3], [2, 3]]);
   assert.deepEqual(formed.program.values.map(({ storageSlot }) => storageSlot), [0, 0, 2]);
   assert.deepEqual(formed.program.inputUseCounts, [0, 2, 0]);

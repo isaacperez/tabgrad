@@ -1,5 +1,7 @@
 import { TabgradError } from "../../shared/errors.js";
 import type { BackendCapabilities, ExecutionBackend, ProgramBinding, ResidentAllocation } from "../../execution/backend.js";
+import { assertTensorPayload, hostTensorPayload, type HostTensorPayload } from "../../execution/tensor-payload.js";
+import { tensorByteLength, type TensorDType } from "../../shared/tensor-dtype.js";
 import type { ExecutableProgram, ProgramSlot } from "../../execution/executable-program.js";
 import { tensorElementCount } from "../../runtime/tensor-shape.js";
 import { CpuArtifactLoader, type KernelExports } from "./artifact-loader.js";
@@ -112,11 +114,12 @@ export class WebAssemblyCpuBackend implements ExecutionBackend {
           continue;
         }
         const length = tensorElementCount(value.shape);
-        const byteLength = length * Float32Array.BYTES_PER_ELEMENT;
+        const byteLength = tensorByteLength(value.dtype, length);
         const allocation = context.allocator.allocate(byteLength);
         allocations.set(value.slot, allocation);
         if (binding?.hostData !== undefined) {
-          this.#floatView(context.memory, allocation, length).set(binding.hostData);
+          assertTensorPayload(binding.hostData, value.dtype, length);
+          new Uint8Array(context.memory.buffer, allocation.offset, byteLength).set(binding.hostData.bytes);
           this.#hostToWasmBytes += byteLength;
           this.#hostToWasmCopies += 1;
         } else if (value.source === "binding") {
@@ -148,7 +151,7 @@ export class WebAssemblyCpuBackend implements ExecutionBackend {
         const length = tensorElementCount(value.shape);
         // Reserve the output before retiring inputs: kernels require disjoint
         // output storage, including at the final use of an input.
-        const output = context.allocator.allocate(length * Float32Array.BYTES_PER_ELEMENT);
+        const output = context.allocator.allocate(tensorByteLength(value.dtype, length));
         allocations.set(computation.output, output);
         let parameters: Uint32Array | undefined;
         if (computation.kind === "reduce-f32") {
@@ -250,13 +253,15 @@ export class WebAssemblyCpuBackend implements ExecutionBackend {
     }
   }
 
-  read(allocation: ResidentAllocation, length: number): Float32Array {
+  read(allocation: ResidentAllocation, length: number, dtype: TensorDType): HostTensorPayload {
     const context = this.#requiredContext();
     this.#validateAllocation(context, allocation);
-    const result = this.#floatView(context.memory, allocation, length).slice();
-    this.#wasmToHostBytes += result.byteLength;
+    const byteLength = tensorByteLength(dtype, length);
+    if (byteLength !== allocation.byteLength) throw new TabgradError("BACKEND_STATUS_ERROR", "Invalid CPU readback extent.");
+    const bytes = new Uint8Array(context.memory.buffer, allocation.offset, byteLength).slice();
+    this.#wasmToHostBytes += bytes.byteLength;
     this.#wasmToHostCopies += 1;
-    return result;
+    return hostTensorPayload(dtype, length, bytes);
   }
 
   release(allocation: ResidentAllocation): void {
@@ -324,14 +329,6 @@ export class WebAssemblyCpuBackend implements ExecutionBackend {
     } catch (error) {
       throw this.#artifactLoader.asLoadError(error, "abi-validation");
     }
-  }
-
-  #floatView(
-    memory: WebAssembly.Memory,
-    allocation: CpuAllocation,
-    length: number,
-  ): Float32Array {
-    return new Float32Array(memory.buffer, allocation.offset, length);
   }
 
   #validateAllocation(context: BackendContext, allocation: ResidentAllocation): asserts allocation is CpuAllocation {

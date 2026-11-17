@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { float32TensorPayload } from "../../../dist/execution/tensor-payload.js";
 import { WebGpuBackend } from "../../../dist/backends/webgpu/webgpu-backend.js";
 import { ExecutableProgram } from "../../../dist/execution/executable-program.js";
 import { executionDevice, deferred } from "./helpers/webgpu-device.mjs";
@@ -22,8 +23,8 @@ function coefficientProgram(length = 65, alphas = [0xbdcccccd, 0x3f000000]) {
 }
 
 function hostBindings(length) {
-  return new Map([[0, { hostData: new Float32Array(length).fill(2) }],
-    [1, { hostData: new Float32Array(length).fill(3) }]]);
+  return new Map([[0, { hostData: float32TensorPayload(new Float32Array(length).fill(2)) }],
+    [1, { hostData: float32TensorPayload(new Float32Array(length).fill(3)) }]]);
 }
 
 test("actual JavaScript collection retires unrooted GPU optimizer/parameter/gradient cycles", () => {

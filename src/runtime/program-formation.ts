@@ -1,4 +1,6 @@
 import type { ExecutionBackend, ProgramBinding, ResidentAllocation, TensorDevice } from "../execution/backend.js";
+import type { HostTensorPayload } from "../execution/tensor-payload.js";
+import type { TensorDType } from "../shared/tensor-dtype.js";
 import {
   ExecutableProgram,
   type LoweredComputation,
@@ -11,7 +13,7 @@ import {
 export interface FormationValue<Value> {
   readonly storageValue: Value;
   readonly shape: readonly number[];
-  readonly dtype: "float32";
+  readonly dtype: TensorDType;
   readonly device: TensorDevice;
   readonly layout: "contiguous";
   readonly provenance: ProgramProvenance;
@@ -25,7 +27,7 @@ export interface FormationValue<Value> {
 }
 
 export type Materialization =
-  | { readonly kind: "host"; readonly data: Float32Array }
+  | HostTensorPayload
   | { readonly kind: "resident"; readonly allocation: ResidentAllocation; readonly backend: ExecutionBackend };
 
 /** Invocation associations stay separate from immutable, payload-free structure. */
@@ -107,7 +109,7 @@ export function formExecutableProgram<Value extends FormationValue<Value>>(
     if (storageSlot !== slot) {
       // Aliases retain their own metadata without owning another payload binding.
     } else if (materialization?.kind === "host") {
-      bindings.set(slot, { hostData: materialization.data });
+      bindings.set(slot, { hostData: materialization });
     } else if (materialization?.kind === "resident") {
       bindings.set(slot, { resident: materialization.allocation });
     }

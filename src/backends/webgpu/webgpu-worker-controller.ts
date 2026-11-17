@@ -3,7 +3,7 @@ import { TabgradError } from "../../shared/errors.js";
 import { isRecord } from "../../shared/object-shape.js";
 import type { WebGpuDiagnostics } from "./webgpu-backend.js";
 import { decodeGpuFailure } from "./webgpu-failure-diagnostic.js";
-import { GPU_ACCOUNTED, GPU_CONTROL_LENGTH, GPU_METRIC_LENGTH, readGpuMetrics, retireGpuConnection, snapshotWebGpuDiagnostics, type WebGpuConnection, type WebGpuConnectionData } from "./webgpu-connection.js";
+import { WEBGPU_PAYLOAD_PROTOCOL_VERSION, GPU_ACCOUNTED, GPU_CONTROL_LENGTH, GPU_METRIC_LENGTH, readGpuMetrics, retireGpuConnection, snapshotWebGpuDiagnostics, type WebGpuConnection, type WebGpuConnectionData } from "./webgpu-connection.js";
 
 export type { WebGpuConnection } from "./webgpu-connection.js";
 
@@ -75,7 +75,8 @@ class GpuWorkerController implements WebGpuWorkerController {
     // acquisition settles. The returned close Promise still reports its error.
     void this.#cleanup.promise.catch(() => undefined);
     try {
-      this.#worker.postMessage({ kind: "initialize", port: this.#channel.port1, control: this.#control.buffer, metrics: this.#metrics }, [this.#channel.port1]);
+      this.#worker.postMessage({ kind: "initialize", protocolVersion: WEBGPU_PAYLOAD_PROTOCOL_VERSION,
+        port: this.#channel.port1, control: this.#control.buffer, metrics: this.#metrics }, [this.#channel.port1]);
       if (this.#signal?.aborted) this.#onAbort();
     } catch (error) {
       this.#lost(error);
@@ -123,6 +124,11 @@ class GpuWorkerController implements WebGpuWorkerController {
     const message = event.data;
     if (message.kind === "ready") {
       if (this.#closing || this.#connection !== undefined) return;
+      if (message.protocolVersion !== WEBGPU_PAYLOAD_PROTOCOL_VERSION) {
+        this.#setup.reject(new TabgradError("BACKEND_LOAD_FAILED", "The GPU worker payload protocol does not match this package."));
+        void this.close();
+        return;
+      }
       if (!isRecord(message.capabilities) || !isRecord(message.diagnostics)
         || message.capabilities.device !== "webgpu" || !Array.isArray(message.capabilities.computations)
         || !message.capabilities.computations.every((computation: unknown) => typeof computation === "string")
@@ -133,7 +139,7 @@ class GpuWorkerController implements WebGpuWorkerController {
         void this.close();
         return;
       }
-      this.#connection = Object.freeze({ connectionType: "tabgrad-webgpu", protocolVersion: 1,
+      this.#connection = Object.freeze({ connectionType: "tabgrad-webgpu", protocolVersion: WEBGPU_PAYLOAD_PROTOCOL_VERSION,
         port: this.#channel.port2, control: this.#control.buffer as SharedArrayBuffer,
         supervision: this.#supervision.port2, metrics: this.#metrics,
         capabilities: message.capabilities as unknown as BackendCapabilities,

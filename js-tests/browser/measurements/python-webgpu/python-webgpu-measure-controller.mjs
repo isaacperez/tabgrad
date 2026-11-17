@@ -181,7 +181,7 @@ function transportCounters(connection) {
     if (message.kind === "execute") {
       counts.programComputations += message.program.computations.length;
       for (const binding of message.bindings) {
-        if (binding.hostData !== undefined) { counts.hostBindingCopies += 1; counts.hostBindingBytes += binding.hostData.byteLength; }
+        if (binding.hostData !== undefined) { counts.hostBindingCopies += 1; counts.hostBindingBytes += binding.hostData.bytes.byteLength; }
       }
     }
     original(message, transferables);

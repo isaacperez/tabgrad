@@ -7,9 +7,12 @@ export interface WebGpuConnection {
   readonly connectionType: "tabgrad-webgpu";
 }
 
+/** The raw-payload wire format requires matching packaged endpoints. */
+export const WEBGPU_PAYLOAD_PROTOCOL_VERSION = 2;
+
 /** @internal Physical connection data, not a user-supplied backend interface. */
 export interface WebGpuConnectionData extends WebGpuConnection {
-  readonly protocolVersion: 1;
+  readonly protocolVersion: typeof WEBGPU_PAYLOAD_PROTOCOL_VERSION;
   readonly port: MessagePort;
   readonly supervision: MessagePort;
   readonly control: SharedArrayBuffer;

@@ -3,9 +3,12 @@ import { wakeGpuObservers } from "./webgpu-connection.js";
 import { WebGpuBackend } from "./webgpu-backend.js";
 import type { ProgramBinding, ResidentAllocation } from "../../execution/backend.js";
 import { ExecutableProgram } from "../../execution/executable-program.js";
+import { assertTensorPayload, type HostTensorPayload } from "../../execution/tensor-payload.js";
+import { tensorElementCount } from "../../runtime/tensor-shape.js";
+import type { TensorDType } from "../../shared/tensor-dtype.js";
 import { ExecutionTicket } from "../../execution/execution-ticket.js";
 import { acquireWebGpuDevice } from "./webgpu-device.js";
-import { GPU_ACCOUNTED, GPU_CONTROL_LENGTH, GPU_METRIC_LENGTH, assertGpuConnectionActive, retireGpuConnection, writeGpuMetrics } from "./webgpu-connection.js";
+import { WEBGPU_PAYLOAD_PROTOCOL_VERSION, GPU_ACCOUNTED, GPU_CONTROL_LENGTH, GPU_METRIC_LENGTH, assertGpuConnectionActive, retireGpuConnection, writeGpuMetrics } from "./webgpu-connection.js";
 import { publishSharedGpuDrain, publishSharedGpuFailure, publishSharedGpuSuccess } from "./webgpu-shared-completion.js";
 import { TabgradError } from "../../shared/errors.js";
 import { isRecord } from "../../shared/object-shape.js";
@@ -43,13 +46,20 @@ class PhysicalGpuWorker {
   readonly #onMessage = (event: MessageEvent<unknown>): void => {
     if (!isRecord(event.data)) return;
     const message = event.data;
-    if (message.kind === "initialize" && this.#acquisition === undefined
+    if (message.kind === "initialize" && this.#acquisition === undefined && this.#closing === undefined
       && message.port instanceof MessagePort && message.control instanceof SharedArrayBuffer
       && message.control.byteLength === GPU_CONTROL_LENGTH * Int32Array.BYTES_PER_ELEMENT
       && message.metrics instanceof SharedArrayBuffer && message.metrics.byteLength === GPU_METRIC_LENGTH * 8) {
       this.#control = new Int32Array(message.control);
       this.#port = message.port;
       this.#metrics = message.metrics;
+      if (message.protocolVersion !== WEBGPU_PAYLOAD_PROTOCOL_VERSION) {
+        this.#scope.postMessage({ kind: "failure", diagnostic: encodeGpuFailure(new TabgradError(
+          "BACKEND_LOAD_FAILED", "The GPU worker payload protocol does not match this package.",
+        )) });
+        this.#closing = this.#close();
+        return;
+      }
       this.#port.addEventListener("message", this.#onBackendMessage);
       this.#port.start();
       this.#acquisition = this.#acquire();
@@ -128,7 +138,12 @@ class PhysicalGpuWorker {
       const definition = message.program as ExecutableProgram;
       const program = new ExecutableProgram(definition.values, definition.computations, definition.result);
       const bindings = new Map<number, ProgramBinding>();
-      for (const binding of message.bindings as { slot: number; resident?: number; hostData?: Float32Array }[]) {
+      for (const binding of message.bindings as { slot: number; resident?: number; hostData?: HostTensorPayload }[]) {
+        if (binding.resident === undefined) {
+          const value = program.values[binding.slot];
+          if (value === undefined) throw new TabgradError("BACKEND_STATUS_ERROR", "Unknown GPU binding slot.");
+          assertTensorPayload(binding.hostData, value.dtype, tensorElementCount(value.shape));
+        }
         bindings.set(binding.slot, binding.resident === undefined ? { hostData: binding.hostData! }
           : { resident: this.#requireAllocation(binding.resident) });
       }
@@ -139,9 +154,9 @@ class PhysicalGpuWorker {
       return new ExecutionTicket(result, drained);
     }
     if (message.kind === "read") {
-      const result = backend.read(this.#requireAllocation(message.allocation as number), message.length as number);
-      if (!(result instanceof ExecutionTicket)) return new Uint8Array(result.buffer, result.byteOffset, result.byteLength);
-      return new ExecutionTicket(result.result.then((value) => new Uint8Array(value.buffer, value.byteOffset, value.byteLength)), result.drained);
+      const result = backend.read(this.#requireAllocation(message.allocation as number), message.length as number, message.dtype as TensorDType);
+      if (!(result instanceof ExecutionTicket)) return result.bytes;
+      return new ExecutionTicket(result.result.then((value) => value.bytes), result.drained);
     }
     if (message.kind === "release") {
       const id = message.allocation as number;
@@ -207,7 +222,8 @@ class PhysicalGpuWorker {
       assertGpuConnectionActive(this.#control!);
       this.#backend.assertAvailable();
       this.#updateMetrics();
-      this.#scope.postMessage({ kind: "ready", capabilities: this.#backend.capabilities, diagnostics: this.#backend.diagnostics() });
+      this.#scope.postMessage({ kind: "ready", protocolVersion: WEBGPU_PAYLOAD_PROTOCOL_VERSION,
+        capabilities: this.#backend.capabilities, diagnostics: this.#backend.diagnostics() });
     } catch (error) {
       this.#scope.postMessage({ kind: "failure", diagnostic: encodeGpuFailure(error) });
       // Do not await close here: it joins this acquisition itself.

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { float32TensorPayload } from "../../../dist/execution/tensor-payload.js";
 import { runManagedGpuMeasurement } from "../../browser/measurements/python-webgpu/python-webgpu-measure-controller.mjs";
 
 const length = 262144;
@@ -38,7 +39,7 @@ async function runController({ lastSampleMilliseconds = 0, closeMilliseconds = 0
       if (!code.startsWith("measurement_result =")) return;
       if (sampleError) throw new Error(sampleError);
       connection.port.postMessage({ kind: "execute", program: { computations: Array(8) },
-        bindings: [{ hostData: new Float32Array(length) }, { hostData: new Float32Array(length) }] });
+        bindings: [{ hostData: float32TensorPayload(new Float32Array(length)) }, { hostData: float32TensorPayload(new Float32Array(length)) }] });
       for (const kind of ["read", "read", "release", "release", "release"]) connection.port.postMessage({ kind });
     },
     async close() { closed += 1; elapsed += closeMilliseconds; },

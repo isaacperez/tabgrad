@@ -42,7 +42,9 @@ import {
   type Materialization,
 } from "./program-formation.js";
 
-export type TensorDType = "float32";
+import { tensorByteLength, tensorDType, type TensorDType } from "../shared/tensor-dtype.js";
+import { decodeTensorPayload, float32TensorPayload, type HostTensorPayload } from "../execution/tensor-payload.js";
+export type { TensorDType } from "../shared/tensor-dtype.js";
 export type TensorLayout = "contiguous";
 
 export interface TensorOptions {
@@ -117,7 +119,7 @@ function requireNumericElement(value: unknown): number {
   return value;
 }
 
-function copyFloat32TensorData(data: unknown): Float32Array {
+function copyFloat32TensorData(data: unknown): Float32Array<ArrayBuffer> {
   try {
     if (typeof data !== "object" || data === null) {
       throw invalidTensorData();
@@ -206,8 +208,8 @@ class MaterializationTable {
     return this.#entries.get(value.storage);
   }
 
-  setHost(value: TensorValue, data: Float32Array): void {
-    this.#entries.set(value.storage, { kind: "host", data });
+  setHost(value: TensorValue, payload: HostTensorPayload): void {
+    this.#entries.set(value.storage, payload);
   }
 
   setResident(
@@ -1250,7 +1252,7 @@ export class RuntimeSession {
       layout: "contiguous",
     }, null);
     this.#registerValue(value);
-    this.#materializations.setHost(value, payload);
+    this.#materializations.setHost(value, float32TensorPayload(payload));
     const handle = this.#createHandle(value, null, options.requiresGrad === true);
     if (options.requiresGrad === true) {
       const identity = requireTensorState(handle).identity;
@@ -2064,7 +2066,8 @@ export class RuntimeSession {
     this.#requireComputation(admitted.record.inputs[0]!, definition);
     if (definition.matrixFlags !== undefined || admitted.broadcast !== undefined) {
       const backend = this.#backendFor(admitted.outputMetadata.device, definition.name);
-      const bytes = tensorElementCount(admitted.outputMetadata.shape) * Float32Array.BYTES_PER_ELEMENT;
+      // Capacity admission owns unrepresentable extents before a physical span exists.
+      const bytes = tensorElementCount(admitted.outputMetadata.shape) * tensorDType(admitted.outputMetadata.dtype).bytesPerElement;
       if (!Number.isSafeInteger(bytes) || bytes > backend.capabilities.maximumTensorBytes) {
         throw new TabgradError("RESOURCE_EXHAUSTED", "Operation output exceeds the selected device's tensor limit.", {
           operation: definition.name, device: admitted.outputMetadata.device, byteLength: bytes,
@@ -2212,7 +2215,7 @@ export class RuntimeSession {
       if (host?.kind === "host" && value.device === "cpu") {
         try {
           this.#beforeReadback?.();
-          return host.data.slice();
+          return decodeTensorPayload(host, value.dtype, tensorElementCount(value.shape), "copy");
         } catch (error) {
           throw retainProgramFailureContext(error, formed.program, "readback");
         }
@@ -2229,7 +2232,9 @@ export class RuntimeSession {
       }
       try {
         this.#beforeReadback?.();
-        return yield* awaitBackendResult(backend.read(materialization.allocation, tensorElementCount(value.shape)));
+        const elements = tensorElementCount(value.shape);
+        const payload = yield* awaitBackendResult(backend.read(materialization.allocation, elements, value.dtype));
+        return decodeTensorPayload(payload, value.dtype, elements);
       } catch (error) {
         throw retainProgramFailureContext(error, formed.program, "readback");
       }
@@ -2268,7 +2273,7 @@ export class RuntimeSession {
     const families = new Set([...this.#identities].map((identity) => identity.family));
     const backings = new Set([...this.#values].map((value) => value.storage));
     const valueReferences = [...this.#values].reduce((total, value) => total + value.references, 0);
-    const backingBytes = [...backings].reduce((total, backing) => total + tensorElementCount(backing.value.shape) * 4, 0);
+    const backingBytes = [...backings].reduce((total, backing) => total + tensorByteLength(backing.value.dtype, tensorElementCount(backing.value.shape)), 0);
     const controlReferences = [...this.#writers.live].reduce((total, outcome) => total + outcome.references, 0);
     if (valueReferences !== this.#valueReferences || backingBytes !== this.#liveBackingBytes || controlReferences !== this.#writers.references) {
       throw new TabgradError("BACKEND_STATUS_ERROR", "Live ownership and its admission accounting disagree.");
@@ -2506,7 +2511,7 @@ export class RuntimeSession {
     this.#values.add(value);
     this.#valueReferences += 1;
     if (value.storage.value === value && value.storage.references === 1) {
-      this.#liveBackingBytes += tensorElementCount(value.shape) * 4;
+      this.#liveBackingBytes += tensorByteLength(value.dtype, tensorElementCount(value.shape));
     }
     retainWriterOutcomes(value.outcomes);
     if (value.producer !== null) {
@@ -2520,7 +2525,7 @@ export class RuntimeSession {
       if (origin.producer === null) throw new TabgradError("BACKEND_STATUS_ERROR", "An unowned scalar projection lost its producer.");
       for (const input of origin.producer.inputs) this.#retainValue(input);
       this.#operationRecords += 1;
-      this.#liveBackingBytes += tensorElementCount(origin.shape) * 4;
+      this.#liveBackingBytes += tensorByteLength(origin.dtype, tensorElementCount(origin.shape));
     }
     if (value.references === 0) {
       // A fresh owner needs unresolved/failed controls, not completed writes.
@@ -2554,7 +2559,7 @@ export class RuntimeSession {
       }
       if (current.references === 0) { this.#values.delete(current); releaseWriterOutcomes(current.outcomes); }
       if (current.storage.references > 0) continue;
-      this.#liveBackingBytes -= tensorElementCount(current.storage.value.shape) * 4;
+      this.#liveBackingBytes -= tensorByteLength(current.storage.value.dtype, tensorElementCount(current.storage.value.shape));
       const materialization = this.#materializations.delete(current);
       if (materialization?.kind === "resident") {
         try { materialization.backend.release(materialization.allocation); }

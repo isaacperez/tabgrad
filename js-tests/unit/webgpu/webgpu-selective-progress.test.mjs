@@ -24,7 +24,7 @@ function fixture({ delayAcknowledgment = false, rejectSubscription = false } = {
     }
   };
   const backend = new ConnectedWebGpuBackend({
-    connectionType: "tabgrad-webgpu", protocolVersion: 1,
+    connectionType: "tabgrad-webgpu", protocolVersion: 2,
     port: physical.port1, supervision: supervision.port1, control: control.buffer,
     metrics: new SharedArrayBuffer(GPU_METRIC_LENGTH * 8),
     capabilities: { device: "webgpu", computations: ["add-f32"], gradients: false, maximumTensorBytes: 1048576 },

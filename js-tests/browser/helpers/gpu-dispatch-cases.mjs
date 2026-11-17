@@ -99,6 +99,7 @@ export async function checkGpuDispatchComposition(session) {
 
 /** Nonuniform orientation fixtures distinguish the four matrix addressing modes. */
 export async function checkGridMatrixOrientations(backend, Program) {
+  const { float32TensorPayload, decodeTensorPayload } = await import("/execution/tensor-payload.js");
   const rows = 33, contraction = 3, columns = 65;
   for (const flags of [0, 1, 2, 3]) {
     const left = new Float32Array(rows * contraction), right = new Float32Array(contraction * columns);
@@ -115,10 +116,11 @@ export async function checkGridMatrixOrientations(backend, Program) {
       layout: "contiguous", source: slot === 2 ? "computed" : "binding", provenance }));
     const program = new Program(values, [{ kind: "matmul-f32", matrixFlags: flags, inputs: [0, 1], output: 2, provenance }], 2);
     await backend.prepare(program);
-    const ticket = backend.execute(program, new Map([[0, { hostData: left }], [1, { hostData: right }]]), [false, false, true]);
+    const ticket = backend.execute(program, new Map([[0, { hostData: float32TensorPayload(left) }], [1, { hostData: float32TensorPayload(right) }]]), [false, false, true]);
     const allocations = await ticket.result; await ticket.drained;
     try {
-      const read = backend.read(allocations.get(2), rows * columns), actual = await read.result;
+      const read = backend.read(allocations.get(2), rows * columns, "float32");
+      const actual = decodeTensorPayload(await read.result, "float32", rows * columns);
       await read.drained;
       for (let row = 0; row < rows; row++) for (let column = 0; column < columns; column++) {
         let expected = 0;

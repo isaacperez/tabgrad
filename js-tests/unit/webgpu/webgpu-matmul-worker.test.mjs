@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { Worker } from "node:worker_threads";
 import { test } from "node:test";
+import { float32TensorPayload } from "../../../dist/execution/tensor-payload.js";
 import { ConnectedWebGpuBackend } from "../../../dist/backends/webgpu/webgpu-connected-backend.js";
 import { ExecutableProgram } from "../../../dist/execution/executable-program.js";
 import { GPU_CONTROL_LENGTH, GPU_METRIC_LENGTH } from "../../../dist/backends/webgpu/webgpu-connection.js";
@@ -29,9 +30,9 @@ test("actual GPU worker reconstructs matrix packets and rejects malformed empty 
   worker.on("error", error => { ready.reject(error); closed.reject(error); });
   let backend;
   try {
-    worker.postMessage({ kind: "initialize", port: physical.port2, control, metrics }, [physical.port2]);
+    worker.postMessage({ kind: "initialize", protocolVersion: 2, port: physical.port2, control, metrics }, [physical.port2]);
     const advertised = await ready.promise;
-    backend = new ConnectedWebGpuBackend({ connectionType: "tabgrad-webgpu", protocolVersion: 1,
+    backend = new ConnectedWebGpuBackend({ connectionType: "tabgrad-webgpu", protocolVersion: 2,
       port: physical.port1, supervision: supervision.port1, control, metrics,
       capabilities: advertised.capabilities, diagnostics: advertised.diagnostics });
     assert.ok(advertised.capabilities.computations.includes("matmul-f32"));
@@ -54,7 +55,7 @@ test("actual GPU worker reconstructs matrix packets and rejects malformed empty 
     }
     for (const flags of [0, 1, 2, 3]) {
       const program = matrixProgram(flags);
-      const bindings = new Map([[0, { hostData: new Float32Array(6) }], [1, { hostData: new Float32Array(12) }]]);
+      const bindings = new Map([[0, { hostData: float32TensorPayload(new Float32Array(6)) }], [1, { hostData: float32TensorPayload(new Float32Array(12)) }]]);
       const ticket = backend.execute(program, bindings, [false, false, false]);
       const allocations = await ticket.result; await ticket.drained;
       for (const allocation of allocations.values()) backend.release(allocation);

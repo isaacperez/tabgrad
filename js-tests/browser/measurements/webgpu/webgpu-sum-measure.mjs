@@ -1,6 +1,7 @@
 import { WebGpuBackend } from "/backends/webgpu/webgpu-backend.js";
 import { ExecutableProgram } from "/execution/executable-program.js";
 import { ExecutionTicket } from "/execution/execution-ticket.js";
+import { float32TensorPayload, decodeTensorPayload } from "/execution/tensor-payload.js";
 
 const query = new URLSearchParams(location.search);
 const mode = query.get("mode");
@@ -68,7 +69,7 @@ async function batch(backend, selected, bindings, expected) {
   budget(backend, executionMilliseconds);
   const resident = backend.diagnostics();
   const reading = performance.now();
-  const result = await completed(backend.read(output, 1));
+  const result = decodeTensorPayload(await completed(backend.read(output, 1, "float32")), "float32", 1);
   const readbackMilliseconds = performance.now() - reading;
   if (result[0] !== expected) throw new Error("Incorrect exact dyadic total.");
   backend.release(output);
@@ -99,7 +100,7 @@ async function measureCase(length, repetitions) {
     // All subset sums are exactly representable for these sizes (8*N < 2^24).
     const expected = Math.fround(integerTotal / 4096);
     const uploading = performance.now();
-    const allocations = await completed(backend.execute(program(length, false), new Map([[0, { hostData: input }]]), [true]));
+    const allocations = await completed(backend.execute(program(length, false), new Map([[0, { hostData: float32TensorPayload(input) }]]), [true]));
     const uploadMilliseconds = performance.now() - uploading;
     const bindings = new Map([[0, { resident: allocations.get(0) }]]);
     budget(backend, uploadMilliseconds);
