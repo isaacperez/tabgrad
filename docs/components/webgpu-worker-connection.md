@@ -105,7 +105,7 @@ the program and invokes the existing backend's preparation and execution
 methods. A chain with many operations can therefore cross this boundary as
 one finite program rather than many semantic remote calls.
 
-The current numerical payload domain is contiguous float32. Host bindings carry
+The numerical payload domain is contiguous float32 and float16. Host bindings carry
 an explicit dtype, encoding, element count and bounded byte view. The connected
 backend copies only that span before transferring its new buffer, so sending
 it cannot detach storage still owned by the semantic runtime or include unrelated
@@ -128,15 +128,16 @@ backend owners, not a Python-specific operation list in the transport.
 
 This private wire representation is not a public extension interface. Its
 encoding may change together with both endpoints while preserving the
-capability, lifetime and observation contracts. Its float32 specialization
-does not imply that arbitrary data types are already supported.
+capability, lifetime and observation contracts. Supported encodings follow the
+finite [tensor type contract](../architecture/typed-tensors.md); the wire does
+not imply that arbitrary data types or operations are supported.
 
 ## Shared completion separates publication from physical drain
 
 Each accepted physical request owns a bounded completion record. It contains
 a control header of 16 bytes, a failure diagnostic region of 4096 bytes and
 payload capacity determined by the request. Execution returns an allocation
-mapping; readback returns float32 data. Published payload length can be smaller
+mapping; readback returns bounded encoded tensor bytes. Published payload length can be smaller
 than its reserved capacity. The record is not a global queue of completed
 tensor data. The producer writes bytes and then atomically publishes their
 status. A shared pulse wakes the consumer; the consumer reads that pulse before

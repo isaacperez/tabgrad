@@ -107,7 +107,8 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
     if (device.limits.maxBufferSize >= WEBGPU_COEFFICIENT_UNIFORM_BYTES) computations.push("add-alpha-f32");
     if (device.limits.maxBufferSize >= WEBGPU_MATRIX_UNIFORM_BYTES) computations.push("matmul-f32");
     computations.push("mul-f32");
-    if (device.limits.maxStorageBuffersPerShaderStage >= 4 && device.limits.maxBufferSize >= 12) {
+    if (device.limits.maxStorageBuffersPerShaderStage >= 4 && device.limits.maxBufferSize >= 12
+      && device.limits.maxStorageBufferBindingSize >= 12) {
       computations.push("add-f16", "mul-f16");
     }
     if (sumSupported) computations.push("sum-f32");
