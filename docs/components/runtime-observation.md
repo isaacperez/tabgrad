@@ -63,8 +63,8 @@ backend alignment or minimum allocation, protocol headers or private scratch.
 
 For the supported float32 domain, numeric decoding exposes an already owned
 readback buffer as a Float32Array, or copies retained host storage into an
-independent result. Neither route adds another payload copy or a conversion
-loop. Import wraps the existing synchronous input copy; ready-host observation
+independent result. Neither route adds another explicit library payload copy
+or a conversion loop. Import wraps the existing synchronous input copy; ready-host observation
 copies its bounded span once. CPU readback creates
 a fresh view of current Wasm memory and copies that span once, so a later memory
 growth cannot invalidate the observed result. Direct GPU readback copies mapped
@@ -79,6 +79,10 @@ copy before releasing their leases. The codec validates dtype, encoding, count,
 offset and extent before memory interpretation. Decode failures retain the
 invocation's readback context and do not release physical pins before drain.
 This internal representation adds no public raw-buffer interface or dtype.
+These copy descriptions concern explicit library data movement. Exposing a
+typed array's buffer can also materialize an engine's inline backing storage;
+views and payload metadata have their own object costs. Library copy counters
+do not measure those costs or total process memory.
 The [typed-tensor architecture](../architecture/typed-tensors.md) explains the
 separate rules for extending the numerical domain.
 

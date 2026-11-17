@@ -31,7 +31,8 @@ export function hostTensorPayload(dtype: TensorDType, elements: number, bytes: U
   return Object.freeze(payload);
 }
 
-/** The caller already owns the import copy; wrapping it does not copy its payload. */
+/** Wrap the existing import without an explicit clone or numeric conversion.
+ * Exposing its buffer may materialize an engine's inline backing storage. */
 export function float32TensorPayload(data: Float32Array<ArrayBuffer>): HostTensorPayload {
   return hostTensorPayload("float32", data.length, new Uint8Array(data.buffer, data.byteOffset, data.byteLength));
 }
