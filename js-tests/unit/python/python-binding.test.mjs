@@ -3147,14 +3147,14 @@ test("Python attachment captures shared memory limits before loading source asse
 
 test("connected Python keeps CPU capacity and validates limits before claiming a GPU connection", { timeout: 20_000 }, async () => {
   const { attachPython } = await import("../../../dist/python.js");
-  const { GPU_ACCOUNTED, GPU_CONSUMED, GPU_CONTROL_LENGTH, GPU_METRIC_LENGTH } = await import("../../../dist/backends/webgpu/webgpu-connection.js");
+  const { WEBGPU_PAYLOAD_PROTOCOL_VERSION, GPU_ACCOUNTED, GPU_CONSUMED, GPU_CONTROL_LENGTH, GPU_METRIC_LENGTH } = await import("../../../dist/backends/webgpu/webgpu-connection.js");
   const interpreter = await getInterpreter();
   const physical = new MessageChannel(), supervision = new MessageChannel();
   const control = new Int32Array(new SharedArrayBuffer(GPU_CONTROL_LENGTH * 4));
   // Transport is idle: this test executes actual CPU kernels in a GPU-connected
   // attachment, not simulated GPU numerics or remote completion.
   const connection = {
-    connectionType: "tabgrad-webgpu", protocolVersion: 1,
+    connectionType: "tabgrad-webgpu", protocolVersion: WEBGPU_PAYLOAD_PROTOCOL_VERSION,
     port: physical.port1, supervision: supervision.port1, control: control.buffer,
     metrics: new SharedArrayBuffer(GPU_METRIC_LENGTH * 8),
     capabilities: { device: "webgpu", computations: ["add-f32"], gradients: false, maximumTensorBytes: 1048576 },

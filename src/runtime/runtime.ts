@@ -42,7 +42,7 @@ import {
   type Materialization,
 } from "./program-formation.js";
 
-import { tensorByteLength, type TensorDType } from "../shared/tensor-dtype.js";
+import { tensorByteLength, tensorDType, type TensorDType } from "../shared/tensor-dtype.js";
 import { decodeTensorPayload, float32TensorPayload, type HostTensorPayload } from "../execution/tensor-payload.js";
 export type { TensorDType } from "../shared/tensor-dtype.js";
 export type TensorLayout = "contiguous";
@@ -2066,7 +2066,8 @@ export class RuntimeSession {
     this.#requireComputation(admitted.record.inputs[0]!, definition);
     if (definition.matrixFlags !== undefined || admitted.broadcast !== undefined) {
       const backend = this.#backendFor(admitted.outputMetadata.device, definition.name);
-      const bytes = tensorByteLength(admitted.outputMetadata.dtype, tensorElementCount(admitted.outputMetadata.shape));
+      // Capacity admission owns unrepresentable extents before a physical span exists.
+      const bytes = tensorElementCount(admitted.outputMetadata.shape) * tensorDType(admitted.outputMetadata.dtype).bytesPerElement;
       if (!Number.isSafeInteger(bytes) || bytes > backend.capabilities.maximumTensorBytes) {
         throw new TabgradError("RESOURCE_EXHAUSTED", "Operation output exceeds the selected device's tensor limit.", {
           operation: definition.name, device: admitted.outputMetadata.device, byteLength: bytes,

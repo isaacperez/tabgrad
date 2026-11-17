@@ -7,6 +7,7 @@ import { GPU_CONTROL_LENGTH } from "../../../dist/backends/webgpu/webgpu-connect
 import { WebGpuBackend } from "../../../dist/backends/webgpu/webgpu-backend.js";
 import { TabgradError } from "../../../dist/shared/errors.js";
 import { ExecutionTicket } from "../../../dist/execution/execution-ticket.js";
+import { float32TensorPayload } from "../../../dist/execution/tensor-payload.js";
 import { executionDevice, deferred } from "./helpers/webgpu-device.mjs";
 
 /** Controls shared completion/ownership only; numerical qualification uses physical GPU. */
@@ -36,7 +37,7 @@ class CopyBackend {
       () => { if (!decoded) for (const value of created) this.allocations.delete(value); });
     this.requests.push(completion); return completion.ticket;
   }
-  read(_allocation, length) { this.assertAvailable(); return new Float32Array(length); }
+  read(_allocation, length) { this.assertAvailable(); return float32TensorPayload(new Float32Array(length)); }
   release(allocation) { assert.ok(this.allocations.delete(allocation), "duplicate allocation retirement"); }
   async close() { this.allocations.clear(); }
   publish(index, failure, drained = true) {

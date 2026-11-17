@@ -2,7 +2,7 @@ import { planKernelDispatch, requestedPipelines, selectPipeline, pipelineSource,
 import { gpuTensorCapacityBytes } from "./webgpu-capacity.js";
 import type { BackendCapabilities, ExecutionBackend, ProgramBinding, ResidentAllocation } from "../../execution/backend.js";
 import { assertTensorPayload, hostTensorPayload, type HostTensorPayload } from "../../execution/tensor-payload.js";
-import { alignedByteLength, tensorByteLength, type TensorDType } from "../../shared/tensor-dtype.js";
+import { alignedByteLength, tensorByteLength, tensorDType, type TensorDType } from "../../shared/tensor-dtype.js";
 import { TabgradError } from "../../shared/errors.js";
 import type { ExecutableProgram, LoweredComputation, ProgramSlot } from "../../execution/executable-program.js";
 import { tensorElementCount } from "../../runtime/tensor-shape.js";
@@ -159,7 +159,7 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
 
   #planProgram(program: ExecutableProgram): readonly KernelDispatchPlan[] {
     for (const value of program.values) {
-      const bytes = tensorByteLength(value.dtype, tensorElementCount(value.shape));
+      const bytes = tensorElementCount(value.shape) * tensorDType(value.dtype).bytesPerElement;
       if (!Number.isSafeInteger(bytes) || bytes > this.capabilities.maximumTensorBytes) {
         throw new TabgradError("RESOURCE_EXHAUSTED", "GPU program storage exceeds its admitted byte extent.", {
           backend: "webgpu", phase: "preparation", programValueSlot: value.slot,
