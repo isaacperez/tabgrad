@@ -1,6 +1,7 @@
 import type { TensorDevice } from "../execution/backend.js";
 import type { TensorDType } from "../shared/tensor-dtype.js";
-import { assertComputationCoefficient, type LoweredComputation, type ProgramProvenance } from "../execution/executable-program.js";
+import type { LoweredComputation, ProgramProvenance } from "../execution/executable-program.js";
+import { assertComputationCoefficient } from "../execution/operation-types.js";
 import type { TensorFamily } from "./tensor-family.js";
 import type { WriterOutcome } from "./writer-outcome.js";
 import { assertMatrixFlags } from "../execution/matrix-geometry.js";

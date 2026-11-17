@@ -84,6 +84,44 @@ Non-contiguous execution would need access/layout facts on logical operands
 and backend support for them; it would not erase logical shapes or make the
 shared storage owner depend on an operation's axes.
 
+## Type relations and physical eligibility
+
+[`operation-types.ts`](../../src/execution/operation-types.ts) binds each finite
+numerical kind to an immutable tensor type policy and its coefficient contract.
+A fixed policy describes the ordered input types and result type. Operations
+with the same relation share that policy; a different result or coefficient
+keeps its own explicit binding. This is independent of shape laws, payload
+encoding and allocation. The [typed-tensor architecture](../architecture/typed-tensors.md)
+explains those distinctions and the accepted extension boundary.
+
+Semantic admission resolves this relation before creating history or retaining
+operands. Internal coefficient addition, receiving reduction and expansion use
+the same facts. Reconstruction validates all values, including binding-only
+programs and aliases, then checks every computation's input/result relation.
+Slot projection reads the existing value table without making operand copies.
+Neither a registered dtype nor a valid shape alone admits a numerical kind.
+
+CPU and direct/connected GPU preparation and execution check the declared
+signature against backend capabilities before compilation, uploads or tensor
+allocation. The connected worker still reconstructs the immutable program at
+its transport boundary. These checks do not move computation, acquire another
+backend or change submission and drain ownership.
+
+Current numerical kinds are explicitly float32. Their names identify the
+numerical signature; GPU preparation adds the dispatch layout, while each
+backend instance owns its device generation and feature domain. Tensor shape
+remains invocation geometry and cannot grow the pipeline cache. A new numerical
+specialization requires its own admitted kind and physical implementation;
+registering its storage format does not make the current kernels support it.
+
+Gradient state, default gradient assignment and persistent copy have explicit
+float32 policy bindings at their existing runtime admission owners. Assignment
+is not a universal rule for a future configurable gradient dtype. Implicit
+seeds, zeros, derivative reservations and update proofs retain their float32
+domain; protocol words and private accumulators keep their independent widths.
+No mixed-type derivative traversal or new public dtype follows from these
+shared contracts.
+
 ## Follow dependencies without using the call stack
 
 Formation walks inputs before emitting their consumer. This dependency-first

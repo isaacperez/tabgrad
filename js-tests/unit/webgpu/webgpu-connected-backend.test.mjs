@@ -5,6 +5,8 @@ import { ExecutionRequest } from "../../../dist/runtime/execution-request.js";
 import { TabgradError } from "../../../dist/shared/errors.js";
 import { GPU_ACCOUNTED, GPU_CONTROL_LENGTH, GPU_METRIC_LENGTH, readGpuMetrics, retireGpuConnection, writeGpuMetrics } from "../../../dist/backends/webgpu/webgpu-connection.js";
 import { publishSharedGpuFailure, publishSharedGpuDrain } from "../../../dist/backends/webgpu/webgpu-shared-completion.js";
+import { ExecutableProgram } from "../../../dist/execution/executable-program.js";
+import { float32TensorPayload } from "../../../dist/execution/tensor-payload.js";
 
 test("new synchronous backend activity retires previously drained caught failures without yielding", async () => {
   const physical = new MessageChannel();
@@ -23,11 +25,14 @@ test("new synchronous backend activity retires previously drained caught failure
     publishSharedGpuFailure(completion, control, new TabgradError("BACKEND_STATUS_ERROR", "preparation failed"));
   };
   const backend = new ConnectedWebGpuBackend(connection);
+  const provenance = { operation: "tensor", source: "test" };
+  const program = new ExecutableProgram([{ slot: 0, storageSlot: 0, shape: [0], dtype: "float32",
+    device: "webgpu", layout: "contiguous", source: "binding", provenance }], [], 0);
   let retired = 0;
   try {
     for (let index = 0; index < 32; index += 1) {
       const request = new ExecutionRequest((function* () {
-        return yield backend.execute({ values: [] }, new Map(), []);
+        return yield backend.execute(program, new Map([[0, { hostData: float32TensorPayload(new Float32Array()) }]]), [true]);
       })(), () => request.advance(), () => undefined, () => { retired += 1; });
       request.advance();
       assert.throws(() => request.read(), { code: "BACKEND_STATUS_ERROR" });

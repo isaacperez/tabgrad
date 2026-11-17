@@ -1,7 +1,9 @@
 import type { ExecutableProgram, LoweredComputation, ProgramSlot } from "./executable-program.js";
 import type { ExecutionTicket } from "./execution-ticket.js";
 import type { HostTensorPayload } from "./tensor-payload.js";
-import type { TensorDType } from "../shared/tensor-dtype.js";
+import { tensorDType, type TensorDType } from "../shared/tensor-dtype.js";
+import { operationTypeContract, resolveTensorType } from "./operation-types.js";
+import { TabgradError } from "../shared/errors.js";
 
 export type TensorDevice = "cpu" | "webgpu";
 
@@ -20,6 +22,29 @@ export interface BackendCapabilities {
   /** Tracking, functional derivatives and persistent gradient state. */
   readonly gradients: boolean;
   readonly maximumTensorBytes: number;
+}
+
+/** Physical consumers also admit before compilation, upload or allocation. */
+export function assertBackendProgram(capabilities: BackendCapabilities, program: ExecutableProgram): void {
+  for (const value of program.values) {
+    tensorDType(value.dtype);
+    if (value.device !== capabilities.device) {
+      throw new TabgradError("BACKEND_CAPABILITY_MISMATCH", "Program values require the selected backend's device.", {
+        device: capabilities.device, phase: "preparation", programValueSlot: value.slot,
+      });
+    }
+  }
+  for (const computation of program.computations) {
+    const contract = operationTypeContract(computation.kind);
+    const dtype = contract === undefined ? undefined : resolveTensorType(contract.types, program.values, computation.inputs);
+    if (contract === undefined || !capabilities.computations.includes(computation.kind)
+      || dtype === undefined || !Number.isSafeInteger(computation.output) || computation.output < 0
+      || dtype !== program.values[computation.output]?.dtype) {
+      throw new TabgradError("BACKEND_CAPABILITY_MISMATCH", "The selected backend does not support this computation signature.", {
+        device: capabilities.device, phase: "preparation", programValueSlot: computation.output,
+      });
+    }
+  }
 }
 
 /** Synchronous backends need not allocate promises or use a worker transport. */
