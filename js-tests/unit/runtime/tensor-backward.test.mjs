@@ -421,10 +421,11 @@ test("real dropped JS exposure reports fallible finalization cleanup through ses
 import assert from 'node:assert/strict';
 import { RuntimeSession } from './dist/index.js';
 import { WebAssemblyCpuBackend } from './dist/backends/cpu/cpu-backend.js';
+import { float32TensorPayload } from './dist/execution/tensor-payload.js';
 let next=0;
 WebAssemblyCpuBackend.prototype.prepare=()=>undefined;
 WebAssemblyCpuBackend.prototype.execute=(program,bindings,retained)=>new Map(program.values.filter(value=>value.storageSlot===value.slot&&retained[value.slot]).map(value=>[value.slot,{id:++next}]));
-WebAssemblyCpuBackend.prototype.read=(_allocation,length)=>new Float32Array(length);
+WebAssemblyCpuBackend.prototype.read=(_allocation,length)=>float32TensorPayload(new Float32Array(length));
 const fault=new Error('controlled real finalization cleanup');
 WebAssemblyCpuBackend.prototype.release=()=>{throw fault;};
 const session=new RuntimeSession();

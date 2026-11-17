@@ -39,9 +39,9 @@ for (const [pending, payload] of [[8, 1], [32, 1], [128, 1], [8, 1024], [32, 102
     };
     let session, input;
     try {
-      worker.postMessage({ kind: "initialize", port: physical.port2, control: control.buffer, metrics }, [physical.port2]);
+      worker.postMessage({ kind: "initialize", protocolVersion: 2, port: physical.port2, control: control.buffer, metrics }, [physical.port2]);
       const advertised = await ready.promise;
-      const backend = new ConnectedWebGpuBackend({ connectionType: "tabgrad-webgpu", protocolVersion: 1,
+      const backend = new ConnectedWebGpuBackend({ connectionType: "tabgrad-webgpu", protocolVersion: 2,
         port: physical.port1, supervision: supervision.port1, control: control.buffer, metrics,
         capabilities: advertised.capabilities, diagnostics: advertised.diagnostics });
       session = createConnectedRuntimeSession(backend);

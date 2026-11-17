@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { float32TensorPayload } from "../../../dist/execution/tensor-payload.js";
 import { WebGpuBackend } from "../../../dist/backends/webgpu/webgpu-backend.js";
 import { createConnectedRuntimeSession } from "../../../dist/runtime/runtime.js";
 import { executionDevice } from "./helpers/webgpu-device.mjs";
@@ -84,7 +85,7 @@ for (const kind of ["add-f32", "mul-f32", "add-alpha-f32", "expand-f32", "matmul
         const program = new ExecutableProgram(values, [computation], computation.output);
         await backend.prepare(program);
         const bindings = new Map(values.filter(value => value.source === "binding").map(value => [value.slot,
-          { hostData: new Float32Array(value.shape.reduce((a, b) => a * b, 1)) }]));
+          { hostData: float32TensorPayload(new Float32Array(value.shape.reduce((a, b) => a * b, 1))) }]));
         const ticket = backend.execute(program, bindings, values.map(value => value.slot === computation.output));
         const outputs = await ticket.result; await ticket.drained;
         backend.release(outputs.get(computation.output));

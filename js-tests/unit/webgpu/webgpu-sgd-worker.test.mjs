@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { Worker } from "node:worker_threads";
 import { test } from "node:test";
+import { float32TensorPayload } from "../../../dist/execution/tensor-payload.js";
 import { ConnectedWebGpuBackend } from "../../../dist/backends/webgpu/webgpu-connected-backend.js";
 import { ExecutableProgram } from "../../../dist/execution/executable-program.js";
 import { GPU_CONTROL_LENGTH, GPU_METRIC_LENGTH } from "../../../dist/backends/webgpu/webgpu-connection.js";
@@ -28,16 +29,16 @@ test("packaged physical worker validates empty coefficient metadata and preserve
   worker.on("error", error => { ready.reject(error); closed.reject(error); });
   let backend;
   try {
-    worker.postMessage({ kind: "initialize", port: physical.port2, control: control.buffer, metrics }, [physical.port2]);
+    worker.postMessage({ kind: "initialize", protocolVersion: 2, port: physical.port2, control: control.buffer, metrics }, [physical.port2]);
     const advertised = await ready.promise;
-    backend = new ConnectedWebGpuBackend({ connectionType: "tabgrad-webgpu", protocolVersion: 1,
+    backend = new ConnectedWebGpuBackend({ connectionType: "tabgrad-webgpu", protocolVersion: 2,
       port: physical.port1, supervision: supervision.port1, control: control.buffer, metrics,
       capabilities: advertised.capabilities, diagnostics: advertised.diagnostics });
     for (const alpha of [undefined, -1, 0.5, NaN, 0x100000000, "0"]) {
       const definition = structuredClone(program(0, 0));
       definition.computations[0].alphaBits = alpha;
-      const ticket = backend.execute(definition, new Map([[0, { hostData: new Float32Array() }],
-        [1, { hostData: new Float32Array() }]]), [false, false, false]);
+      const ticket = backend.execute(definition, new Map([[0, { hostData: float32TensorPayload(new Float32Array()) }],
+        [1, { hostData: float32TensorPayload(new Float32Array()) }]]), [false, false, false]);
       await assert.rejects(ticket.result, error => {
         assert.equal(error.code, "BACKEND_STATUS_ERROR");
         assert.equal(error.cause.name, "TypeError");
@@ -50,8 +51,8 @@ test("packaged physical worker validates empty coefficient metadata and preserve
     }
     const alphas = [0, 1, 0x80000000, 0xbdcccccd, 0x3f000000, 0x7fc00000];
     for (const alpha of alphas) {
-      const ticket = backend.execute(program(1, alpha), new Map([[0, { hostData: new Float32Array([2]) }],
-        [1, { hostData: new Float32Array([3]) }]]), [false, false, false]);
+      const ticket = backend.execute(program(1, alpha), new Map([[0, { hostData: float32TensorPayload(new Float32Array([2])) }],
+        [1, { hostData: float32TensorPayload(new Float32Array([3])) }]]), [false, false, false]);
       const retained = await ticket.result; await ticket.drained;
       for (const allocation of retained.values()) backend.release(allocation);
     }

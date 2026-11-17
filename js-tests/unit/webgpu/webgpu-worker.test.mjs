@@ -4,7 +4,7 @@ import { test } from "node:test";
 import * as python from "../../../dist/python.js";
 import { startWebGpuWorker } from "../../../dist/backends/webgpu/worker.js";
 import { TabgradError } from "../../../dist/shared/errors.js";
-import { GPU_METRICS, GPU_METRIC_STATE, writeGpuMetrics } from "../../../dist/backends/webgpu/webgpu-connection.js";
+import { GPU_CONTROL_LENGTH, GPU_METRIC_LENGTH, GPU_METRICS, GPU_METRIC_STATE, writeGpuMetrics } from "../../../dist/backends/webgpu/webgpu-connection.js";
 
 const capabilities = { device: "webgpu", computations: ["add-f32"], gradients: false, maximumTensorBytes: 1048576 };
 const diagnostics = {
@@ -27,7 +27,7 @@ class ControlledWorker extends EventTarget {
     this.messages.push({ message, transferables });
     if (message.kind === "initialize") this.initialization = message;
   }
-  ready(advertised = capabilities) { this.dispatchEvent(new MessageEvent("message", { data: { kind: "ready", capabilities: advertised, diagnostics } })); }
+  ready(advertised = capabilities) { this.dispatchEvent(new MessageEvent("message", { data: { kind: "ready", protocolVersion: 2, capabilities: advertised, diagnostics } })); }
   closed() {
     this.initialization?.port.close();
     this.dispatchEvent(new MessageEvent("message", { data: { kind: "closed" } }));
@@ -52,6 +52,48 @@ function environment(values) {
       else Object.defineProperty(globalThis, name, descriptor);
     }
   };
+}
+
+for (const protocolVersion of [undefined, 1, 3]) {
+  test(`the physical worker rejects payload protocol ${protocolVersion} before device acquisition`, async () => {
+    let onMessage;
+    let acquisitions = 0;
+    const replies = [];
+    const closed = Promise.withResolvers();
+    const channel = new MessageChannel();
+    const control = new SharedArrayBuffer(GPU_CONTROL_LENGTH * Int32Array.BYTES_PER_ELEMENT);
+    const restore = environment({
+      navigator: { gpu: { requestAdapter: async () => { acquisitions += 1; return null; } } },
+      addEventListener: (_type, listener) => { onMessage = listener; },
+      postMessage: (message) => { replies.push(message); if (message.kind === "closed") closed.resolve(); },
+    });
+    try {
+      startWebGpuWorker();
+      onMessage(new MessageEvent("message", { data: {
+        kind: "initialize", protocolVersion, port: channel.port1, control,
+        metrics: new SharedArrayBuffer(GPU_METRIC_LENGTH * BigInt64Array.BYTES_PER_ELEMENT),
+      } }));
+      await closed.promise;
+      assert.equal(acquisitions, 0);
+      assert.deepEqual(replies.map((reply) => reply.kind), ["failure", "closed"]);
+      assert.equal(new Int32Array(control)[3], 1);
+    } finally { channel.port1.close(); channel.port2.close(); restore(); }
+  });
+
+  test(`the controller rejects worker payload protocol ${protocolVersion} before publishing a connection`, async () => {
+    const restore = workerEnvironment();
+    let worker;
+    try {
+      const setup = python.createWebGpuWorker();
+      worker = ControlledWorker.instances[0];
+      worker.dispatchEvent(new MessageEvent("message", {
+        data: { kind: "ready", protocolVersion, capabilities, diagnostics },
+      }));
+      await assert.rejects(setup, (error) => error.code === "BACKEND_LOAD_FAILED" && /protocol/i.test(error.message));
+      assert.equal(worker.messages.at(-1).message.kind, "close");
+      assert.equal(worker.terminated, false, "protocol failure still waits for physical cleanup");
+    } finally { worker?.closed(); restore(); }
+  });
 }
 
 /** Replace acquisition and the worker scope, keeping both packaged endpoints. */
@@ -494,7 +536,7 @@ test("controller diagnostics preserve partial publication and undisclosed adapte
   try {
     const setup = python.createWebGpuWorker();
     worker = ControlledWorker.instances[0];
-    worker.dispatchEvent(new MessageEvent("message", { data: { kind: "ready", capabilities,
+    worker.dispatchEvent(new MessageEvent("message", { data: { kind: "ready", protocolVersion: 2, capabilities,
       diagnostics: { ...diagnostics, adapter: { vendor: "", architecture: "", device: "", description: "", isFallbackAdapter: true } } } }));
     const controller = await setup;
     const original = controller.diagnostics();

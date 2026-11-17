@@ -1,6 +1,8 @@
 import { planKernelDispatch, requestedPipelines, selectPipeline, pipelineSource, type PipelineKey, type PipelineSelection, type KernelDispatchPlan } from "./kernel-dispatch.js";
 import { gpuTensorCapacityBytes } from "./webgpu-capacity.js";
 import type { BackendCapabilities, ExecutionBackend, ProgramBinding, ResidentAllocation } from "../../execution/backend.js";
+import { assertTensorPayload, hostTensorPayload, type HostTensorPayload } from "../../execution/tensor-payload.js";
+import { alignedByteLength, tensorByteLength, type TensorDType } from "../../shared/tensor-dtype.js";
 import { TabgradError } from "../../shared/errors.js";
 import type { ExecutableProgram, LoweredComputation, ProgramSlot } from "../../execution/executable-program.js";
 import { tensorElementCount } from "../../runtime/tensor-shape.js";
@@ -50,7 +52,7 @@ interface GpuInvocationStorage {
 interface GpuReadback {
   staging?: GpuAllocation;
   drained?: Promise<void>;
-  mapping?: Promise<Float32Array>;
+  mapping?: Promise<HostTensorPayload>;
 }
 
 type WebGpuComputationKind = LoweredComputation["kind"];
@@ -157,7 +159,7 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
 
   #planProgram(program: ExecutableProgram): readonly KernelDispatchPlan[] {
     for (const value of program.values) {
-      const bytes = tensorElementCount(value.shape) * 4;
+      const bytes = tensorByteLength(value.dtype, tensorElementCount(value.shape));
       if (!Number.isSafeInteger(bytes) || bytes > this.capabilities.maximumTensorBytes) {
         throw new TabgradError("RESOURCE_EXHAUSTED", "GPU program storage exceeds its admitted byte extent.", {
           backend: "webgpu", phase: "preparation", programValueSlot: value.slot,
@@ -198,7 +200,7 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
 
   #allocate(byteLength: number, usage: GPUBufferUsageFlags): GpuAllocation {
     this.assertAvailable();
-    const size = Math.max(4, byteLength);
+    const size = Math.max(4, alignedByteLength(byteLength, 4));
     const allocation = new GpuAllocation(this.#device.createBuffer({ size, usage }), byteLength);
     this.#identities.add(allocation);
     this.#owned.add(allocation);
@@ -241,20 +243,23 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
         if (binding?.resident !== undefined) {
           allocations.set(value.slot, this.#allocation(binding.resident));
         } else {
-          const allocation = this.#allocate(tensorElementCount(value.shape) * 4,
+          const elements = tensorElementCount(value.shape);
+          const allocation = this.#allocate(tensorByteLength(value.dtype, elements),
             GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC);
           allocations.set(value.slot, allocation); created.add(allocation);
           if (binding?.hostData === undefined) throw new TabgradError("BACKEND_STATUS_ERROR", "Missing GPU input binding.");
+          assertTensorPayload(binding.hostData, value.dtype, elements);
           if (allocation.byteLength !== 0) {
             storage.queuedWrites = true;
             // Host bindings are copied by tensor creation into owned ArrayBuffers.
-            this.#device.queue.writeBuffer(allocation.buffer, 0, binding.hostData as Float32Array<ArrayBuffer>);
+            this.#device.queue.writeBuffer(allocation.buffer, 0, binding.hostData.bytes);
           }
           this.#uploadBytes += allocation.byteLength;
         }
       }
       for (const [index, computation] of program.computations.entries()) {
-        const byteLength = tensorElementCount(program.values[computation.output]!.shape) * 4;
+        const value = program.values[computation.output]!;
+        const byteLength = tensorByteLength(value.dtype, tensorElementCount(value.shape));
         const output = spare.get(byteLength)?.pop() ?? this.#allocate(byteLength,
           GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST);
         created.add(output); allocations.set(computation.output, output);
@@ -416,30 +421,33 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
     for (const allocation of storage.created) if (!retained.has(allocation)) this.release(allocation);
   }
 
-  read(reference: ResidentAllocation, length: number): Float32Array | ExecutionTicket<Float32Array> {
+  read(reference: ResidentAllocation, length: number, dtype: TensorDType): HostTensorPayload | ExecutionTicket<HostTensorPayload> {
     const source = this.#allocation(reference);
-    if (length === 0) return new Float32Array();
+    const byteLength = tensorByteLength(dtype, length);
+    if (byteLength !== source.byteLength) throw new TabgradError("BACKEND_STATUS_ERROR", "Invalid GPU readback extent.");
+    if (length === 0) return hostTensorPayload(dtype, 0, new Uint8Array());
     const readback: GpuReadback = {};
     const result = this.#checked("readback", () => {
-      readback.mapping = this.#copyAndMap(source, length, readback);
+      readback.mapping = this.#copyAndMap(source, length, dtype, readback);
       return readback.mapping;
     });
     return new ExecutionTicket(result, this.#releaseReadback(result, readback));
   }
 
-  async #copyAndMap(source: GpuAllocation, length: number, readback: GpuReadback): Promise<Float32Array> {
-    const staging = this.#allocate(length * 4, GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST);
+  async #copyAndMap(source: GpuAllocation, length: number, dtype: TensorDType, readback: GpuReadback): Promise<HostTensorPayload> {
+    const byteLength = tensorByteLength(dtype, length);
+    const staging = this.#allocate(byteLength, GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST);
     readback.staging = staging;
     const encoder = this.#device.createCommandEncoder();
-    encoder.copyBufferToBuffer(source.buffer, 0, staging.buffer, 0, length * 4);
+    encoder.copyBufferToBuffer(source.buffer, 0, staging.buffer, 0, byteLength);
     this.#device.queue.submit([encoder.finish()]);
     readback.drained = this.#drain();
     await this.#awaitLive(staging.buffer.mapAsync(GPUMapMode.READ));
     this.assertAvailable();
-    const result = new Float32Array(staging.buffer.getMappedRange()).slice();
+    const bytes = new Uint8Array(staging.buffer.getMappedRange(), 0, byteLength).slice();
     staging.buffer.unmap();
-    this.#readbackBytes += result.byteLength;
-    return result;
+    this.#readbackBytes += bytes.byteLength;
+    return hostTensorPayload(dtype, length, bytes);
   }
 
   async #releaseReadback(result: Promise<unknown>, readback: GpuReadback): Promise<void> {
@@ -455,7 +463,7 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
     reference.released = true;
     reference.buffer.destroy();
     this.#owned.delete(reference);
-    this.#ownedBytes -= Math.max(4, reference.byteLength);
+    this.#ownedBytes -= Math.max(4, alignedByteLength(reference.byteLength, 4));
   }
 
   async close(): Promise<void> {

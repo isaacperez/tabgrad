@@ -50,6 +50,38 @@ numerical storage, so the runtime copies that storage directly rather than
 uploading it into WebAssembly and immediately downloading it. Neither the
 Python wrapper nor the result consumer owns a competing data cache.
 
+### Decode one bounded payload
+
+Host materializations and backend readback use the same encoded payload in
+[`src/execution/tensor-payload.ts`](../../src/execution/tensor-payload.ts).
+Its immutable metadata identifies the logical dtype, encoding and element
+count; a bounded byte view identifies the actual data. The shared dtype facts
+and checked byte arithmetic live in
+[`src/shared/tensor-dtype.ts`](../../src/shared/tensor-dtype.ts), independently
+of the runtime, allocator and language frontends. Logical bytes do not include
+backend alignment or minimum allocation, protocol headers or private scratch.
+
+For the supported float32 domain, numeric decoding exposes an already owned
+readback buffer as a Float32Array, or copies retained host storage into an
+independent result. Neither route adds another payload copy or a conversion
+loop. Import wraps the existing synchronous input copy; ready-host observation
+copies its bounded span once. CPU readback creates
+a fresh view of current Wasm memory and copies that span once, so a later memory
+growth cannot invalidate the observed result. Direct GPU readback copies mapped
+bytes before unmapping. The connected path additionally publishes bytes into
+its shared completion record and copies them out before exposing an independent
+result. Those are distinct ownership boundaries, not a claim of one copy across
+the entire managed GPU path.
+
+Both JavaScript and Python consume this numeric boundary. Python list conversion
+still creates its own interpreter-side values; borrowed Python imports still
+copy before releasing their leases. The codec validates dtype, encoding, count,
+offset and extent before memory interpretation. Decode failures retain the
+invocation's readback context and do not release physical pins before drain.
+This internal representation adds no public raw-buffer interface or dtype.
+The [typed-tensor architecture](../architecture/typed-tensors.md) explains the
+separate rules for extending the numerical domain.
+
 ```mermaid
 flowchart TD
     Admit[Validate and retain demanded value] --> Queue[Queue one execution request]

@@ -2,6 +2,7 @@ import { createWebGpuRuntimeSession } from "/index.js";
 import { WebGpuBackend } from "/backends/webgpu/webgpu-backend.js";
 import { ExecutableProgram } from "/execution/executable-program.js";
 import { ExecutionTicket } from "/execution/execution-ticket.js";
+import { float32TensorPayload, decodeTensorPayload } from "/execution/tensor-payload.js";
 
 const query = new URLSearchParams(location.search);
 const mode = query.get("mode");
@@ -92,7 +93,8 @@ async function residentSample(backend, selected, bindings, retained, expected) {
   checkBudget(backend, executionMilliseconds);
   const resident = backend.diagnostics();
   const readStart = performance.now();
-  const result = await physicalResult(backend.read(allocations.get(selected.result), selected.values[0].shape[0]));
+  const elements = selected.values[0].shape[0];
+  const result = decodeTensorPayload(await physicalResult(backend.read(allocations.get(selected.result), elements, "float32")), "float32", elements);
   const readbackMilliseconds = performance.now() - readStart;
   if (result[0] !== expected[0] || result.at(-1) !== expected[1]) throw new Error("Measurement result mismatch.");
   releaseOutputs(backend, allocations, bindings);
@@ -121,7 +123,7 @@ async function measureCase(length, depth, retainIntermediate, repetitions) {
     const expected = expectedBoundary(left, right, depth);
     const uploadStart = performance.now();
     const uploaded = await physicalResult(backend.execute(inputs,
-      new Map([[0, { hostData: left }], [1, { hostData: right }]]), [true, true]));
+      new Map([[0, { hostData: float32TensorPayload(left) }], [1, { hostData: float32TensorPayload(right) }]]), [true, true]));
     const uploadMilliseconds = performance.now() - uploadStart;
     checkBudget(backend, uploadMilliseconds);
     const bindings = new Map([...uploaded].map(([slot, resident]) => [slot, { resident }]));

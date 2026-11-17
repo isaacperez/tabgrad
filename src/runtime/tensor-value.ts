@@ -1,4 +1,5 @@
 import type { TensorDevice } from "../execution/backend.js";
+import type { TensorDType } from "../shared/tensor-dtype.js";
 import { assertComputationCoefficient, type LoweredComputation, type ProgramProvenance } from "../execution/executable-program.js";
 import type { TensorFamily } from "./tensor-family.js";
 import type { WriterOutcome } from "./writer-outcome.js";
@@ -9,7 +10,7 @@ export interface TensorVersionCounter { value: number; }
 
 export interface TensorMetadata {
   readonly shape: readonly number[];
-  readonly dtype: "float32";
+  readonly dtype: TensorDType;
   readonly device: TensorDevice;
   readonly layout: "contiguous";
 }
@@ -23,7 +24,7 @@ export interface NumericalOperationDefinition {
 
 export class TensorValue {
   readonly shape: readonly number[];
-  readonly dtype: "float32";
+  readonly dtype: TensorDType;
   readonly device: TensorDevice;
   readonly layout: "contiguous";
   // Shape and provenance belong to this value; payload and producer ownership

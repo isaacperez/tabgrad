@@ -67,6 +67,13 @@ and waits for its capability snapshot. Device readiness does not evaluate an
 expression or compile every possible pipeline. Program-specific preparation
 stays with the physical backend and is performed on demand.
 
+Initialization and readiness both carry the matching private payload-protocol
+version. The physical worker rejects a missing or mismatched version before
+device acquisition; the controller rejects an incompatible readiness response
+before exposing a connection. Rejection still joins the existing cleanup owner.
+An application must serve the worker and module graph from the same package;
+the controller cannot establish compatibility by labelling an unchecked worker.
+
 The returned controller remains in the host. Its transferable connection is
 claimed atomically when `attachPython` begins, before interpreter validation,
 asset loading or installation can fail. A second attachment cannot consume
@@ -98,12 +105,19 @@ the program and invokes the existing backend's preparation and execution
 methods. A chain with many operations can therefore cross this boundary as
 one finite program rather than many semantic remote calls.
 
-The current numerical payload domain is contiguous float32. Host input bytes
-are copied before transfer so sending them cannot detach storage still owned
-by the semantic runtime. Resident bindings instead use opaque allocation
+The current numerical payload domain is contiguous float32. Host bindings carry
+an explicit dtype, encoding, element count and bounded byte view. The connected
+backend copies only that span before transferring its new buffer, so sending
+it cannot detach storage still owned by the semantic runtime or include unrelated
+bytes from its backing buffer. The physical worker validates those fields
+against the reconstructed program; structured clone does not preserve frozen
+metadata or canonical object identity. Resident bindings use opaque allocation
 identities belonging to this connection. Resident results and aliases retain
 those identities; they do not read intermediate tensors back into Python.
-An observation separately requests the demanded result's host bytes.
+An observation separately requests the demanded result's dtype and element
+extent. Both placements return encoded bytes to the shared
+[numeric observation codec](runtime-observation.md#decode-one-bounded-payload),
+without a Python-specific decoder in the physical worker.
 
 The invocation owns its program definition. Neither endpoint stages the last
 full program between requests or retains it merely because an allocation

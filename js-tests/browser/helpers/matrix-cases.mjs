@@ -8,6 +8,7 @@ const floats = bits => new Float32Array(bits.buffer, bits.byteOffset, bits.lengt
 
 /** Private backend qualification also reaches the otherwise unused both-transposed packet. */
 export async function checkMatrixBackend(backend, Program) {
+  const { float32TensorPayload, decodeTensorPayload } = await import("/execution/tensor-payload.js");
   let cases = 0, comparedWords = 0;
   const provenance = { operation: "matmul", source: "Tensor.matmul" };
   for (const fixture of matrixCases()) {
@@ -17,13 +18,14 @@ export async function checkMatrixBackend(backend, Program) {
       layout: "contiguous", source: slot === 2 ? "computed" : "binding", provenance }));
     const program = new Program(values, [{ kind: "matmul-f32", matrixFlags: flags, inputs: [0, 1], output: 2, provenance }], 2);
     await backend.prepare(program);
-    const ticket = backend.execute(program, new Map([[0, { hostData: floats(fixture.left) }],
-      [1, { hostData: floats(fixture.right) }]]), [false, false, true]);
+    const ticket = backend.execute(program, new Map([[0, { hostData: float32TensorPayload(floats(fixture.left)) }],
+      [1, { hostData: float32TensorPayload(floats(fixture.right)) }]]), [false, false, true]);
     const allocations = await ticket.result; await ticket.drained;
     try {
-      const read = backend.read(allocations.get(2), m * n);
-      const actual = read instanceof Float32Array ? read : await read.result;
-      if (!(read instanceof Float32Array)) await read.drained;
+      const read = backend.read(allocations.get(2), m * n, "float32");
+      const payload = read.kind === "host" ? read : await read.result;
+      if (read.kind !== "host") await read.drained;
+      const actual = decodeTensorPayload(payload, "float32", m * n);
       assertMatrixWords(words(actual), fixture.expected, assertions);
       cases++; comparedWords += actual.length;
     } finally { for (const allocation of new Set(allocations.values())) backend.release(allocation); }

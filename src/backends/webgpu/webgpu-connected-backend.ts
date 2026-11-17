@@ -2,9 +2,12 @@ import type { BackendCapabilities, ProgramBinding, ResidentAllocation } from "..
 import { TabgradError } from "../../shared/errors.js";
 import type { ExecutableProgram, ProgramSlot } from "../../execution/executable-program.js";
 import type { ExecutionTicket } from "../../execution/execution-ticket.js";
+import { assertTensorPayload, copyTensorPayload, hostTensorPayload, type HostTensorPayload } from "../../execution/tensor-payload.js";
+import { tensorElementCount } from "../../runtime/tensor-shape.js";
+import { tensorByteLength, type TensorDType } from "../../shared/tensor-dtype.js";
 import { isRecord } from "../../shared/object-shape.js";
 import type { WebGpuDiagnostics, WebGpuExecutionBackend } from "./webgpu-backend.js";
-import { GPU_ACCOUNTED, GPU_CONSUMED, GPU_CONTROL_LENGTH, GPU_METRIC_LENGTH, GPU_PULSE, assertGpuConnectionActive,
+import { WEBGPU_PAYLOAD_PROTOCOL_VERSION, GPU_ACCOUNTED, GPU_CONSUMED, GPU_CONTROL_LENGTH, GPU_METRIC_LENGTH, GPU_PULSE, assertGpuConnectionActive,
   readGpuMetrics, retireGpuConnection, type WebGpuConnection, type WebGpuConnectionData } from "./webgpu-connection.js";
 import { PendingGpuCompletions } from "./webgpu-pending-completions.js";
 import { SharedGpuCompletion } from "./webgpu-shared-completion.js";
@@ -15,7 +18,7 @@ class ConnectedAllocation {
 
 /** Claim once across structured clones, before any fallible interpreter setup. */
 export function consumeWebGpuConnection(connection: WebGpuConnection): WebGpuConnectionData {
-  if (!isRecord(connection) || connection.connectionType !== "tabgrad-webgpu" || connection.protocolVersion !== 1
+  if (!isRecord(connection) || connection.connectionType !== "tabgrad-webgpu" || connection.protocolVersion !== WEBGPU_PAYLOAD_PROTOCOL_VERSION
     || !(connection.port instanceof MessagePort) || !(connection.supervision instanceof MessagePort)
     || !(connection.control instanceof SharedArrayBuffer) || connection.control.byteLength !== GPU_CONTROL_LENGTH * 4
     || !(connection.metrics instanceof SharedArrayBuffer) || connection.metrics.byteLength !== GPU_METRIC_LENGTH * 8
@@ -89,21 +92,24 @@ export class ConnectedWebGpuBackend implements WebGpuExecutionBackend {
     const entries = [...bindings].map(([slot, binding]) => {
       if (binding.resident !== undefined) return { slot, resident: this.#requireAllocation(binding.resident).id };
       if (binding.hostData === undefined) throw new TabgradError("BACKEND_STATUS_ERROR", "Missing GPU binding.");
-      const hostData = binding.hostData.slice();
-      transferables.push(hostData.buffer);
+      const value = program.values[slot]!;
+      assertTensorPayload(binding.hostData, value.dtype, tensorElementCount(value.shape));
+      const hostData = copyTensorPayload(binding.hostData);
+      transferables.push(hostData.bytes.buffer);
       return { slot, hostData };
     });
     return this.#request({ kind: "execute", program, bindings: entries, retainedSlots }, program.values.length * 16,
       (payload) => this.#decodeAllocations(payload), transferables).ticket;
   }
 
-  read(allocation: ResidentAllocation, length: number): ExecutionTicket<Float32Array> {
+  read(allocation: ResidentAllocation, length: number, dtype: TensorDType): ExecutionTicket<HostTensorPayload> {
     this.assertAvailable();
     const resident = this.#requireAllocation(allocation);
-    return this.#request({ kind: "read", allocation: resident.id, length }, length * 4,
+    const byteLength = tensorByteLength(dtype, length);
+    return this.#request({ kind: "read", allocation: resident.id, length, dtype }, byteLength,
       (payload) => {
-        if (payload.byteLength !== length * 4) throw new TabgradError("BACKEND_STATUS_ERROR", "Invalid GPU readback extent.");
-        return new Float32Array(payload.buffer, payload.byteOffset, length).slice();
+        if (payload.byteLength !== byteLength) throw new TabgradError("BACKEND_STATUS_ERROR", "Invalid GPU readback extent.");
+        return hostTensorPayload(dtype, length, payload.slice());
       }).ticket;
   }
 

@@ -1,4 +1,5 @@
 import type { TensorDevice } from "./backend.js";
+import type { TensorDType } from "../shared/tensor-dtype.js";
 import { assertMatrixFlags, matrixGeometry } from "./matrix-geometry.js";
 import { operationShapeContract, assertOperationArity } from "./operation-shapes.js";
 import { pointwiseGeometry } from "./broadcast-geometry.js";
@@ -14,7 +15,7 @@ export interface ProgramValue {
   readonly slot: ProgramSlot;
   /** Canonical virtual storage slot; contiguous aliases cover its entire payload. */
   readonly storageSlot: ProgramSlot;
-  readonly dtype: "float32";
+  readonly dtype: TensorDType;
   readonly device: TensorDevice;
   readonly layout: "contiguous";
   readonly shape: readonly number[];

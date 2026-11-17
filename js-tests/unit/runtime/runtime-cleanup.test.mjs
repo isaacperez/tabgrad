@@ -6,6 +6,7 @@ import { WebAssemblyCpuBackend } from "../../../dist/backends/cpu/cpu-backend.js
 import { GPU_ACCOUNTED, GPU_CONTROL_LENGTH, GPU_METRIC_LENGTH } from "../../../dist/backends/webgpu/webgpu-connection.js";
 import { publishSharedGpuSuccess } from "../../../dist/backends/webgpu/webgpu-shared-completion.js";
 import { ExecutionTicket } from "../../../dist/execution/execution-ticket.js";
+import { float32TensorPayload } from "../../../dist/execution/tensor-payload.js";
 
 /** Controlled allocations exercise ownership only, never numerical or performance claims. */
 function controlledCpu(context) {
@@ -24,7 +25,7 @@ function controlledCpu(context) {
     }
     return allocations;
   });
-  context.mock.method(WebAssemblyCpuBackend.prototype, "read", (_allocation, length) => new Float32Array(length).fill(1));
+  context.mock.method(WebAssemblyCpuBackend.prototype, "read", (_allocation, length) => float32TensorPayload(new Float32Array(length).fill(1)));
   context.mock.method(WebAssemblyCpuBackend.prototype, "release", (allocation) => {
     released.push(allocation.id);
     if (failures.has(allocation.id)) throw failures.get(allocation.id);
@@ -44,6 +45,19 @@ function assertNoSemanticOwners(session) {
     assert.equal(diagnostics[field], 0, field);
   }
 }
+
+test("invalid encoded readback keeps failure attribution and releases the accepted request", async (context) => {
+  const { session } = controlledCpu(context);
+  context.mock.method(WebAssemblyCpuBackend.prototype, "read", () => ({
+    ...float32TensorPayload(new Float32Array([1])), encoding: "mismatched-worker-format",
+  }));
+  const source = session.tensor([1]);
+  const result = source.add(source);
+  await assert.rejects(result.toArray(), error => error.code === "BACKEND_STATUS_ERROR"
+    && error.details.phase === "readback");
+  source.close(); result.close();
+  assertNoSemanticOwners(session);
+});
 
 /** Actual connection/runtime owners with a controlled producer, not shader execution. */
 function connectedRuntime(context) {
@@ -70,7 +84,7 @@ function connectedRuntime(context) {
     publishSharedGpuSuccess(packet.completion, control, new Uint8Array(payload.buffer));
   };
   const backend = new ConnectedWebGpuBackend({
-    connectionType: "tabgrad-webgpu", protocolVersion: 1,
+    connectionType: "tabgrad-webgpu", protocolVersion: 2,
     port: physical.port1, supervision: supervision.port1, control: control.buffer,
     metrics: new SharedArrayBuffer(GPU_METRIC_LENGTH * 8),
     capabilities: { device: "webgpu", computations: ["add-f32"], gradients: false, maximumTensorBytes: 1048576 },
@@ -239,11 +253,12 @@ for (const resultFails of [false, true]) for (const closeBeforeDrain of [false, 
     let retire;
     const executionFailure = new Error("controlled readback failure");
     const payload = new Float32Array([1]);
+    const encoded = float32TensorPayload(payload);
     const ticket = new ExecutionTicket(
-      () => resultFails ? Promise.reject(executionFailure) : Promise.resolve(payload),
+      () => resultFails ? Promise.reject(executionFailure) : Promise.resolve(encoded),
       () => new Promise(() => undefined),
       {
-        read() { if (resultFails) throw executionFailure; return payload; },
+        read() { if (resultFails) throw executionFailure; return encoded; },
         isDrained: () => drained,
         onDrained(callback) { retire = callback; },
       },
