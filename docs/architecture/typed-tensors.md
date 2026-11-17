@@ -1,0 +1,208 @@
+# Typed tensor storage and operation contracts
+
+A tensor's dtype describes its logical values. It does not, by itself, tell
+the runtime how an operation accumulates, how a device packs its buffers, or
+which type an observation returns. Keeping those questions separate lets
+Tabgrad add numerical types without duplicating its execution engine.
+
+This chapter records the accepted type-extension architecture. It constrains
+implementation; it is not a claim that every signature described here is
+available. Use the [compatibility record](../compatibility.md) and the exact
+[API references](../reference/README.md) for supported behavior.
+
+## Separate meaning, representation and arithmetic
+
+Consider channel scaling followed by a bias: multiply an activation tensor by
+a scale tensor, then add a bias tensor. Broadcasting determines which elements
+participate. A type policy determines whether their types can be combined and
+what type the result has. The backend then selects arithmetic and storage that
+preserve that result.
+
+These decisions have different owners:
+
+| Question | Authoritative boundary |
+| --- | --- |
+| What logical type and binary format does this value have? | Canonical immutable dtype identity and description. |
+| Which operand types may this operation accept, and what does it produce? | The operation's type policy, shared by admission and reconstruction. |
+| Which arithmetic, rounding and conversion rules apply? | The admitted operation signature, including any accumulator or coefficient rules. |
+| Which bytes represent an imported or observed value? | A bounded encoded payload and its shared host codec. |
+| How are those bytes aligned, packed and allocated? | The selected backend's physical planner and existing memory owner. |
+| Can this type and operation participate in differentiation? | The admitted derivative capability and its resource proof. |
+
+A dtype description must not become a catalogue of every operation's
+accumulator or derivative. Conversely, a frontend must not invent promotion
+rules independently of the semantic runtime. A new operation binds its
+appropriate type policy; it does not add another dtype switch to scheduling,
+collection or derivative traversal.
+
+## Resolve type rules before numerical loops
+
+Admission resolves the accepted input/result relation once, alongside shape
+validation. Immutable program reconstruction validates that same relation.
+Policies may be shared by an operation family when their actual rules agree;
+an operation with a different result, coefficient or conversion rule keeps that
+difference explicit.
+
+Operand classification preserves distinctions that affect native behavior.
+A rank-zero tensor, a dimensional tensor and an ordinary Python number are not
+interchangeable promotion inputs. Rounding a Python number into a tensor before
+applying an operation can also change its result. A policy must not erase that
+information merely to reduce the number of call forms.
+
+Tabgrad retains finite, explicitly typed executable computations. A resolved
+signature connects semantic admission to a supported physical specialization;
+it does not replace the program with a universal interpreter. Backend
+capability checks and preparation use the same admitted facts. Unsupported
+signatures fail before numerical work or observable state changes and never
+silently move to another backend.
+
+Physical preparation identities distinguish numerical signature, encoding,
+layout and relevant capability/generation. Tensor shape remains runtime
+geometry rather than an unbounded cache key. A numerical loop uses its selected
+implementation, without consulting a dtype registry for every element.
+Adding a type still requires the arithmetic specializations that support it;
+registering a dtype does not make every operation valid automatically.
+
+## Give payloads explicit bounds
+
+An encoded payload carries its encoding, logical element count and bounded
+byte extent. Checked span calculations distinguish logical payload bytes from
+physical alignment or packing, observation bytes and backend minimum
+allocations. Validate type, encoding, offset, length, safe integer arithmetic
+and transport limits before interpreting memory.
+
+The byte allocator, resident allocation identity, virtual storage, aliases and
+completion/drain owners retain their responsibilities. Whole-storage shape
+views preserve logical dtype and encoding; changing shape does not reinterpret
+the bytes as another type. CPU views must retain their memory-growth safety.
+Python borrowed-buffer imports retain synchronous copying and lease release
+on both success and failure.
+
+Raw readback returns a bounded encoded payload. A shared host observation codec
+below the Python and JavaScript facades performs numeric decoding once.
+Backend readers do not recreate language-level conversion rules independently.
+The connected GPU worker transports bytes and joins physical drain; completion
+headers remain protocol metadata rather than tensor data.
+
+This boundary preserves the float32 path's direct decoding, copies and
+lifetimes. Supporting another encoding does not justify an unconditional extra
+conversion or payload copy for float32.
+
+## The binary16 pointwise domain
+
+Binary16 (`float16`) provides a concrete compact floating domain for creation,
+whole-storage shape views and tensor add/mul, including broadcasting, on CPU
+and explicitly selected GPU. Channel scale/bias is its motivating composition.
+It is not a full model-inference or training contract.
+
+| Boundary | Contract |
+| --- | --- |
+| Creation | Explicit float16 selection in both languages; preserve language normalization and errors. JavaScript's omitted dtype remains float32. Python requires a canonical dtype object explicitly. |
+| Operands and result | Add/mul admit `(float16, float16) -> float16` Tensor signatures, including rank-zero and empty tensors under the common shape laws. Public addition retains `alpha=1`. |
+| Numerical boundary | Each operation stores its own binary16 result with nearest-even rounding, preserved subnormals and IEEE exceptional classifications and zero signs. No NaN payload/sign identity is required. A scale/bias composition does not imply fused arithmetic. |
+| CPU storage | Owned binary16 words within the existing byte allocator. |
+| GPU storage | Two logical half values per u32 word; one invocation owns the complete output word. Each lane projects its own broadcast input indices. An odd tail neither reads a missing lane nor exposes padding. |
+| JavaScript observation | `toArray()` returns decoded numeric `Float32Array` values; the tensor's dtype remains float16. The returned array is not raw half storage. |
+| Python observation | `tolist()` returns ordinary numeric values through the same decoding boundary. |
+| Eligibility | This domain excludes tracking/backward, persistent gradient state, SGD and mutation, including same-type and cross-type copy. Reject unsupported requests before history, pins or version changes. |
+
+The closed domain also excludes float16 sum/matmul, numeric-operand overloads,
+mixed-type promotion, inferred dtype, `.to`, dtype-reinterpreting views and
+custom `grad_dtype`. These are Tabgrad domain boundaries, not claims that
+native PyTorch lacks those capabilities. They do not restrict existing
+float32 behavior.
+
+Input conversion must use the original input value and precision. An
+unconditional float32 intermediary can change a binary16 result, including
+finite versus infinity near overflow. Numeric observation is a different
+boundary: every finite binary16 value is exactly representable in float32.
+This observation contract does not impose float32 transport on other future
+types such as int64.
+
+Portable arithmetic and codecs must establish the stated numerical behavior.
+WGSL's optional native f16 conversions and packing builtins alone do not
+guarantee it. Software/integer arithmetic or a qualified specialized path may
+implement the contract; the architecture requires neither `shader-f16` nor a
+new dependency. Selecting a dependency or optional feature retains the normal
+integration, qualification and approval requirements.
+
+## Preserve derivative and protocol domains
+
+The float32 derivative domain retains its history, implicit seeds, zeros,
+gradient identity, saved-version checks, partial progress and resource proofs.
+An inference-only half domain does not require speculative mixed-gradient
+traversal. Eligibility belongs to type/operation/backend capabilities rather
+than a global rule that every floating dtype is differentiable.
+
+Default native gradient assignment constraints also do not establish a
+universal `tensor.dtype == grad.dtype` law: PyTorch's configurable gradient
+type is a separate contract. No such customization follows from this design.
+
+Not every four-byte quantity is a float32 tensor element. U32 geometry packets,
+Int32 completion headers, handle metadata and private reduction accumulators
+have independent formats. In particular, the GPU float32 sum's wider private
+accumulator is not a tensor item size. Keep those formats and float32
+derivative reservations under their existing owners and proofs.
+
+## Account for costs without inferring performance
+
+For `n` binary16 values, the logical payload has `2n` bytes. The packed GPU
+payload rounds that extent to four bytes; minimum allocation, staging and
+retained resources are separate. Numeric float32 export needs `4n` bytes and
+may add conversion or staging costs. A smaller logical payload therefore does
+not establish a halving of total memory or an execution speedup.
+
+Type policy and codec selection occur at admission, preparation or observation
+boundaries. Packed addressing and conversion remain real work. Compare actual
+float32 call/planning costs, copies and resource accounting before and after a
+refactor, and measure conversion, preparation/compilation, steady computation,
+readback and distributed-size changes separately under the
+[performance measurement rules](../performance.md). No negligible-overhead,
+startup, artifact-size or acceleration claim follows from clean interfaces.
+CPU arena/default capacity, logical update reservations and GPU storage and
+dispatch limits remain separate; adding a dtype does not raise their quotas.
+
+## Alternatives and reconsideration
+
+Retaining a float32-only domain is the lowest-change alternative when another
+representation is unnecessary. The chosen common contracts retain the existing
+engine and typed vocabulary while making the actual payload and type rules
+explicit. Operation-plus-resolved-signature IR is a viable broader alternative,
+but it needs the same specialized arithmetic, codecs and physical identities
+and additionally migrates existing program producers and consumers. The
+research does not establish fewer variants or lower cost for that replacement.
+
+Binary16 prioritizes ten fraction bits within a smaller exponent range.
+Bfloat16 has the same two-byte density, seven fraction bits and float32's
+exponent range. Preferring binary16 for bounded-range scale/bias is an accepted
+priority, not a measured winner over bfloat16; both need qualified portable
+arithmetic under a strict contract. Int32 provides integer computation without
+changing payload width, and native integral/bool sum defaults to int64. Exact
+int64 host transport and GPU arithmetic require their own contracts. Boolean
+masks need an actual producing operation and their own representation rules.
+
+Reconsider the domain when a real consumer needs wider range, reductions,
+matrix products, promotion or training. Reconsider the IR if demonstrated
+heterogeneous families create semantic duplication or specialization growth
+that shared policies cannot contain. A failed numerical contract or material
+measured regression requires correction or a new decision, not a claim that
+the abstraction is inherently efficient.
+
+## Decision and evidence
+
+The maintainer [accepted the bounded contract](https://github.com/isaacperez/tabgrad/issues/468#issuecomment-6947689676)
+in [#468](https://github.com/isaacperez/tabgrad/issues/468).
+Its [proposal and qualitative extension comparison](https://github.com/isaacperez/tabgrad/issues/468#issuecomment-6947445790)
+compare responsibility changes, conversion/copies, preparation identities,
+migration and unresolved costs. The
+[canonical evidence](https://github.com/isaacperez/tabgrad/issues/468#issuecomment-6947429290)
+contains pinned PyTorch 2.14 references, exact synthetic inputs, runnable
+sources and complete observed results; it preserves warnings and limitations.
+The [independent challenge](https://github.com/isaacperez/tabgrad/issues/468#issuecomment-6947456813)
+found the contract ready for maintainer evaluation.
+
+Those CPU and metadata controls establish representative reference facts and
+representation obligations. They do not qualify a Tabgrad numerical kernel,
+Pyodide integration, physical GPU behavior or universal equivalence across
+platforms. The [existing numerical contracts](backend-execution.md) retain
+their own evidence and domains.

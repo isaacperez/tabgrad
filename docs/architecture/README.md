@@ -141,6 +141,9 @@ Read the documents in this order when learning the architecture:
 5. [Internal representations and executable programs](internal-representations.md)
    explains the two descriptions of computation and the translation between
    them.
+   [Typed tensor storage and operation contracts](typed-tensors.md) separates
+   logical dtype, payload encoding, operation signatures and derivative
+   eligibility without adding another execution engine.
 6. [Backend execution](backend-execution.md) covers the shared backend contract
    and the deliberately different WebGPU and WebAssembly implementations.
    [Selecting and integrating WebGPU](webgpu-integration.md) explains explicit
