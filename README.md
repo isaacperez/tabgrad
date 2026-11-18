@@ -54,7 +54,7 @@ Tabgrad name and are not published as `torch`.
 
 The [browser package guide](docs/reference/browser-package.md) explains how to
 load Tabgrad from a CDN or serve the matching prebuilt files yourself. The
-[0.3.0 source and support record](docs/reference/release-0.3.0.md) identifies its
+[0.5.0 source and support record](docs/reference/release-0.5.0.md) identifies its
 bounded API and qualification; registry availability is verified separately.
 
 ## Execution model

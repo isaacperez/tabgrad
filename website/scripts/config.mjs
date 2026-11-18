@@ -25,7 +25,8 @@ export const setupNavigation = [
   ["browser-package", "JavaScript setup"], ["python-host", "Python setup"],
 ];
 export const referenceNavigation = [
-  ["python-tensors", "Python tensors"], ["webgpu-runtime", "JavaScript WebGPU"],
+  ["python-tensors", "Python tensors"], ["float16", "Float16 tensors"],
+  ["webgpu-runtime", "JavaScript WebGPU"], ["memory-capacity", "Memory limits"],
   ["tensor-view", "Tensor views"],
   ["tensor-copy", "Tensor copy"], ["tensor-sum", "Sum"],
   ["tensor-multiplication", "Multiplication"], ["tensor-matmul", "Matrix products"],
