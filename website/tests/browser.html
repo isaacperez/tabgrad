@@ -1007,10 +1007,10 @@ try {
       const gradientLimit = description('Gradients and training');
       assert(/loading pretrained models and fine-tuning are not supported/i.test(pythonLimit),
         'Python support states the pretrained-model and fine-tuning limitation');
-      assert(/first-order (?:float32 )?gradients and basic SGD/i.test(gradientLimit),
+      assert(/^first-order (?:float32 )?gradients and basic SGD\./i.test(gradientLimit.trim()),
         'gradient limits preserve first-order gradients and basic SGD');
       if (expectedSupport.version === '0.5.0') {
-        assert(/first-order float32 gradients and basic SGD/i.test(gradientLimit),
+        assert(/^first-order float32 gradients and basic SGD\./i.test(gradientLimit.trim()),
           '0.5.0 keeps gradients and SGD in the float32 domain');
         assert(/float16 gradients, training, mutation, reductions and matrix products are unavailable/i.test(description('Float16 scope')),
           '0.5.0 explains the separate float16 operation limits');
@@ -1317,15 +1317,17 @@ try {
           assert(style.borderLeftWidth === '0px' && style.borderRightWidth === '0px' && style.borderBottomWidth === '0px' && style.borderRadius === '0px' && style.backgroundColor === 'rgba(0, 0, 0, 0)', 'release history retains its unframed row style');
         }
         const capabilities = [...document.querySelectorAll('.capability-row')];
+        const visibleText = element => element?.textContent.replace(/\s+/g, ' ').trim();
         const visibleCapabilities = capabilities.map(row => ({
           title: row.querySelector('h3')?.textContent.trim(), href: row.querySelector('a')?.getAttribute('href'),
+          description: visibleText(row.querySelector('p')),
         }));
-        assert(JSON.stringify(visibleCapabilities) === JSON.stringify(expectedSupport.capabilities)
-          && capabilities.every(row => row.querySelector('p')?.textContent.trim()),
+        assert(JSON.stringify(visibleCapabilities) === JSON.stringify(expectedSupport.capabilities),
           'the selected release supplies every capability explanation and versioned reference');
-        const limitRows = [...document.querySelectorAll('.release-limits > div')];
-        assert(JSON.stringify(limitRows.map(row => row.querySelector('dt')?.textContent.trim())) === JSON.stringify(expectedSupport.limits)
-          && limitRows.every(row => row.querySelector('dd')?.textContent.trim()),
+        const visibleLimits = [...document.querySelectorAll('.release-limits > div')].map(row => ({
+          title: visibleText(row.querySelector('dt')), description: visibleText(row.querySelector('dd')),
+        }));
+        assert(JSON.stringify(visibleLimits) === JSON.stringify(expectedSupport.limits),
           'the selected release supplies every limit in its own list');
         const [cpu, gpu] = document.querySelectorAll('.compatibility-grid article');
         if (cpu.getBoundingClientRect().right <= gpu.getBoundingClientRect().left) {

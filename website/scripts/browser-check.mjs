@@ -12,6 +12,7 @@ import { loadReleaseData } from "./release-data.mjs";
 import { integrationGuides } from "./integration-files.mjs";
 
 import { exampleSource } from "../src/playground/presets.ts";
+import { inlineCodeParts } from "../src/playground/inline-code.ts";
 const fixture = "website-smoke.html";
 const requestedAssets = new Set();
 const native = nativeAssets(process.env.TABGRAD_WEBSITE_NATIVE_ORIGIN, join(websiteRoot, "dist"));
@@ -21,10 +22,14 @@ const releaseData = await loadReleaseData(repositoryRoot, runtimeVersion, { rele
   candidateRevision: prepared.sourceRevision, publication: process.env.TABGRAD_WEBSITE_MODE === "publish" });
 const selectedSupport = releaseData.releases.find(release => release.version === runtimeVersion)?.support;
 assert.ok(selectedSupport, 'the selected runtime has an admitted support record');
+/** @param {string} description */
+const visibleSupportText = description => inlineCodeParts(description).map(part => part.text).join("").replace(/\s+/g, " ").trim();
 const supportExpectation = {
   version: runtimeVersion,
-  capabilities: selectedSupport.capabilities.map(row => ({ title: row.title, href: documentRoute(row.source, runtimeVersion) })),
-  limits: selectedSupport.limits.map(row => row.title),
+  capabilities: selectedSupport.capabilities.map(row => ({
+    title: row.title, href: documentRoute(row.source, runtimeVersion), description: visibleSupportText(row.description),
+  })),
+  limits: selectedSupport.limits.map(row => ({ title: row.title, description: visibleSupportText(row.description) })),
 };
 const pythonHost = integrationGuides(releaseData.groups.find(group => group.version === runtimeVersion)).python;
 const diagnosticsSection = pythonHost.split("## Read local runtime observations\n")[1]?.split("\n## ")[0];
