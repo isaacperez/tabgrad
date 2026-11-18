@@ -848,6 +848,7 @@ try {
   const status = page.querySelector(".run-status");
   assert(page.querySelector('[data-resource-time]').textContent === 'Not started' && page.querySelector('[data-resource-memory]').textContent === 'No run yet', 'before execution the UI distinguishes an unrun program from an unavailable measurement');
   const examples = await (await fetch("/__examples.json")).json();
+  const expectedSupport = await (await fetch('/__release-support.json')).json();
   await phase("assets-loaded");
   await phase("runtime-started");
   async function execute(source, state = "complete") {
@@ -992,13 +993,28 @@ try {
     if (path === '/docs/concepts/python-in-the-browser/') assert(findDocumentationLink(frame.contentDocument.querySelector('main'), '/docs/reference/python-host/#run-a-complete-cpu-example'), 'Python introduction directs app integrators to the complete browser tutorial');
     if (path === '/versions/') {
       const doc = frame.contentDocument;
+      assert(doc.querySelector('.current-release h2').textContent.trim() === 'v' + expectedSupport.version,
+        'Versions identifies the runtime selected for this build');
       assert(doc.querySelector('main a[href="https://github.com/isaacperez/tabgrad/releases/tag/v0.2.0"]'), 'release history includes the published 0.2.0');
       assert(doc.querySelector('.current-release a.button').getAttribute('href') === '/start/', 'the release integration action offers both JavaScript and Python');
       const cpu = doc.querySelector('.compatibility-grid article');
       assert(findDocumentationLink(cpu, '/docs/reference/browser-package/#use-javascript-directly-in-html')?.textContent.includes('JavaScript CPU setup'), 'CPU setup identifies the complete JavaScript example');
       assert(findDocumentationLink(cpu, '/docs/reference/python-host/#run-a-complete-cpu-example')?.textContent.includes('Python CPU setup'), 'CPU setup identifies the complete Python example');
       const limits = doc.querySelector('#release-limits').parentElement;
-      assert(limits.textContent.includes('Loading pretrained models and fine-tuning are not supported') && limits.textContent.includes('First-order gradients and basic SGD.'), 'pretrained-model limitations remain distinct from supported gradient and SGD work');
+      const description = title => [...limits.querySelectorAll('.release-limits dt')]
+        .find(term => term.textContent.trim() === title)?.nextElementSibling?.textContent ?? '';
+      const pythonLimit = description('Python API');
+      const gradientLimit = description('Gradients and training');
+      assert(/loading pretrained models and fine-tuning are not supported/i.test(pythonLimit),
+        'Python support states the pretrained-model and fine-tuning limitation');
+      assert(/^first-order (?:float32 )?gradients and basic SGD\./i.test(gradientLimit.trim()),
+        'gradient limits preserve first-order gradients and basic SGD');
+      if (expectedSupport.version === '0.5.0') {
+        assert(/^first-order float32 gradients and basic SGD\./i.test(gradientLimit.trim()),
+          '0.5.0 keeps gradients and SGD in the float32 domain');
+        assert(/float16 gradients, training, mutation, reductions and matrix products are unavailable/i.test(description('Float16 scope')),
+          '0.5.0 explains the separate float16 operation limits');
+      }
     }
     if (['/', '/start/', '/docs/', '/playground/', '/versions/', '/about/', '/contact/'].includes(path)) {
       assert(frame.contentDocument.querySelector('[data-illustration], .integration-map'), `primary and project pages include contextual original artwork: ${path}`);
@@ -1300,9 +1316,19 @@ try {
           const style = frame.contentWindow.getComputedStyle(release);
           assert(style.borderLeftWidth === '0px' && style.borderRightWidth === '0px' && style.borderBottomWidth === '0px' && style.borderRadius === '0px' && style.backgroundColor === 'rgba(0, 0, 0, 0)', 'release history retains its unframed row style');
         }
-        const capabilities = document.querySelectorAll('.capability-row');
-        assert(capabilities.length === 5 && [...capabilities].every(row => row.querySelector('h3') && row.querySelector('a[href^="/docs/"]')), 'each capability group has an explanation and an actionable reference');
-        assert(document.querySelectorAll('.release-limits > div').length === 4, 'release limits remain explicit, separate from available capabilities');
+        const capabilities = [...document.querySelectorAll('.capability-row')];
+        const visibleText = element => element?.textContent.replace(/\s+/g, ' ').trim();
+        const visibleCapabilities = capabilities.map(row => ({
+          title: row.querySelector('h3')?.textContent.trim(), href: row.querySelector('a')?.getAttribute('href'),
+          description: visibleText(row.querySelector('p')),
+        }));
+        assert(JSON.stringify(visibleCapabilities) === JSON.stringify(expectedSupport.capabilities),
+          'the selected release supplies every capability explanation and versioned reference');
+        const visibleLimits = [...document.querySelectorAll('.release-limits > div')].map(row => ({
+          title: visibleText(row.querySelector('dt')), description: visibleText(row.querySelector('dd')),
+        }));
+        assert(JSON.stringify(visibleLimits) === JSON.stringify(expectedSupport.limits),
+          'the selected release supplies every limit in its own list');
         const [cpu, gpu] = document.querySelectorAll('.compatibility-grid article');
         if (cpu.getBoundingClientRect().right <= gpu.getBoundingClientRect().left) {
           const cpuSetup = cpu.querySelectorAll('dt')[1].getBoundingClientRect();

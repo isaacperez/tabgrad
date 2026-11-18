@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile, stat } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { browserVersion, resolveBrowser, selectBrowserDefinitions, startBrowserServer, runBrowserPage } from "../../scripts/browser-harness.mjs";
-import { websiteRoot, repositoryRoot, runtimeVersion, pyodideVersion, releaseInput } from "./config.mjs";
+import { websiteRoot, repositoryRoot, runtimeVersion, pyodideVersion, releaseInput, documentRoute } from "./config.mjs";
 import { contentType, deliveryHeaders } from "./delivery.mjs";
 import { writeChanged, sha256 } from "./files.mjs";
 import { firstCodeBlock } from "./content.mjs";
@@ -12,6 +12,7 @@ import { loadReleaseData } from "./release-data.mjs";
 import { integrationGuides } from "./integration-files.mjs";
 
 import { exampleSource } from "../src/playground/presets.ts";
+import { inlineCodeParts } from "../src/playground/inline-code.ts";
 const fixture = "website-smoke.html";
 const requestedAssets = new Set();
 const native = nativeAssets(process.env.TABGRAD_WEBSITE_NATIVE_ORIGIN, join(websiteRoot, "dist"));
@@ -19,6 +20,17 @@ const prepared = JSON.parse(await readFile(join(websiteRoot, ".generated/site-da
 assert.equal(prepared.runtimeVersion, runtimeVersion, "Build the selected website before browser qualification");
 const releaseData = await loadReleaseData(repositoryRoot, runtimeVersion, { release: releaseInput?.release,
   candidateRevision: prepared.sourceRevision, publication: process.env.TABGRAD_WEBSITE_MODE === "publish" });
+const selectedSupport = releaseData.releases.find(release => release.version === runtimeVersion)?.support;
+assert.ok(selectedSupport, 'the selected runtime has an admitted support record');
+/** @param {string} description */
+const visibleSupportText = description => inlineCodeParts(description).map(part => part.text).join("").replace(/\s+/g, " ").trim();
+const supportExpectation = {
+  version: runtimeVersion,
+  capabilities: selectedSupport.capabilities.map(row => ({
+    title: row.title, href: documentRoute(row.source, runtimeVersion), description: visibleSupportText(row.description),
+  })),
+  limits: selectedSupport.limits.map(row => ({ title: row.title, description: visibleSupportText(row.description) })),
+};
 const pythonHost = integrationGuides(releaseData.groups.find(group => group.version === runtimeVersion)).python;
 const diagnosticsSection = pythonHost.split("## Read local runtime observations\n")[1]?.split("\n## ")[0];
 assert.ok(diagnosticsSection, "the documented local diagnostics section exists");
@@ -50,6 +62,7 @@ async function readAsset(path) {
     const files = await outputFiles(join(websiteRoot, "dist"));
     return Buffer.from(JSON.stringify(files.filter(file => file.endsWith(".html")).map(file => "/" + file.replace(/index\.html$/, ""))));
   }
+  if (path === join(websiteRoot, "dist/__release-support.json")) return Buffer.from(JSON.stringify(supportExpectation));
   if (path === join(websiteRoot, "dist/__examples.json")) {
     const catalog = JSON.parse(await readFile(join(websiteRoot, "src/playground/examples.json"), "utf8"));
     return Buffer.from(JSON.stringify(catalog.map((example) => ({ ...example, python: { ...example.python, code: exampleSource(example, "python", "cpu") }, javascript: { ...example.javascript, code: exampleSource(example, "javascript", "cpu") } }))));
@@ -69,7 +82,7 @@ const server = await startBrowserServer([fixture], {
   assetHeaders(path, body) {
     // The fixture drives the app; app and worker retain the preview's real CSP.
     if (path === "/" + fixture || path === "/__examples.json") return { "content-type": contentType(path) };
-    if (native.read && ![diagnosticsPath, "/__diagnostics-worker.json", "/__routes.json", "/__blog-example.json", "/__requests.json", "/__example_checks.mjs"].includes(path)) return native.headers(path);
+    if (native.read && ![diagnosticsPath, "/__diagnostics-worker.json", "/__routes.json", "/__blog-example.json", "/__requests.json", "/__example_checks.mjs", "/__release-support.json"].includes(path)) return native.headers(path);
     const html = path.endsWith("/") || path.endsWith(".html");
     return { "content-type": contentType(html ? "index.html" : path), ...deliveryHeaders(path, html ? body.toString("utf8") : "") };
   },
