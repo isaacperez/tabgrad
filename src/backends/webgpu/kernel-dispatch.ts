@@ -14,8 +14,9 @@ import { WEBGPU_EXPANSION_SOURCE, WEBGPU_EXPANSION_WORKGROUP_SIZE, createExpansi
 import { WEBGPU_SUM_SOURCE, WEBGPU_SUM_GROUP_ELEMENTS, WEBGPU_SUM_WORKGROUP_SIZE, createSumSource } from "./kernels/sum.js";
 import { WEBGPU_BROADCAST_ADDITION_SOURCE, WEBGPU_BROADCAST_MULTIPLICATION_SOURCE, WEBGPU_POINTWISE_WORKGROUP_SIZE, pointwiseSource } from "./kernels/broadcast.js";
 import { WEBGPU_RECEIVING_SOURCE } from "./kernels/receiving.js";
+import { halfPointwiseSource, WEBGPU_HALF_WORKGROUP_SIZE } from "./kernels/half.js";
 
-type KernelKind = LoweredComputation["kind"] | "broadcast-add-f32" | "broadcast-mul-f32";
+type KernelKind = LoweredComputation["kind"] | "broadcast-add-f32" | "broadcast-mul-f32" | "broadcast-add-f16" | "broadcast-mul-f16";
 export type PipelineKey = `${KernelKind}/${LinearDispatchLayout}`;
 export interface PipelineSelection {
   readonly key: PipelineKey;
@@ -31,6 +32,10 @@ interface KernelDefinition {
 
 // This finite physical table is exhaustive over current lowering, never shape-keyed.
 const KERNELS = Object.freeze({
+  "add-f16": { indexSpace: { kind: "invocation", workgroupSize: WEBGPU_HALF_WORKGROUP_SIZE, elementsPerInvocation: 2 }, original: halfPointwiseSource("add"), source: layout => halfPointwiseSource("add", false, layout) },
+  "mul-f16": { indexSpace: { kind: "invocation", workgroupSize: WEBGPU_HALF_WORKGROUP_SIZE, elementsPerInvocation: 2 }, original: halfPointwiseSource("mul"), source: layout => halfPointwiseSource("mul", false, layout) },
+  "broadcast-add-f16": { indexSpace: { kind: "invocation", workgroupSize: WEBGPU_HALF_WORKGROUP_SIZE, elementsPerInvocation: 2 }, original: halfPointwiseSource("add", true), source: layout => halfPointwiseSource("add", true, layout) },
+  "broadcast-mul-f16": { indexSpace: { kind: "invocation", workgroupSize: WEBGPU_HALF_WORKGROUP_SIZE, elementsPerInvocation: 2 }, original: halfPointwiseSource("mul", true), source: layout => halfPointwiseSource("mul", true, layout) },
   "add-f32": { indexSpace: { kind: "invocation", workgroupSize: WEBGPU_ADDITION_WORKGROUP_SIZE, elementsPerInvocation: 1 }, original: WEBGPU_ADDITION_SOURCE, source: createAdditionSource },
   "mul-f32": { indexSpace: { kind: "invocation", workgroupSize: WEBGPU_MULTIPLICATION_WORKGROUP_SIZE, elementsPerInvocation: 1 }, original: WEBGPU_MULTIPLICATION_SOURCE, source: createMultiplicationSource },
   "add-alpha-f32": { indexSpace: { kind: "invocation", workgroupSize: WEBGPU_COEFFICIENT_ADDITION_WORKGROUP_SIZE, elementsPerInvocation: 1 }, original: WEBGPU_COEFFICIENT_ADDITION_SOURCE, source: createCoefficientAdditionSource },
@@ -80,6 +85,15 @@ export function planKernelDispatch(computation: LoweredComputation, program: Exe
   const elements = tensorElementCount(output.shape);
   const inputShapes = computation.inputs.map(slot => program.values[slot]!.shape);
   const axis = limits.maxComputeWorkgroupsPerDimension;
+  if (computation.kind === "add-f16" || computation.kind === "mul-f16") {
+    const broadcast = elements !== 0 && inputShapes.some(shape => tensorElementCount(shape) !== elements);
+    const kind = broadcast ? computation.kind === "add-f16" ? "broadcast-add-f16" : "broadcast-mul-f16" : computation.kind;
+    const words = broadcast ? pointwiseParameters(operationShapeContract(computation.kind)!.policy.plan(inputShapes), limits)
+      : new Uint32Array([0, elements, 2]);
+    words[2] = 2;
+    const dispatch = planLinearDispatch(elements, KERNELS[kind].indexSpace, axis);
+    return { path: "pointwise", dispatch, words, pipeline: selectPipeline(kind, dispatch.layout) };
+  }
   if (computation.kind === "sum-f32") {
     const stages = reductionStages(tensorElementCount(inputShapes[0]!), 1, limits).map(stage => {
       const dispatch = planLinearDispatch(Math.max(1, stage.count), KERNELS["sum-f32"].indexSpace, axis);

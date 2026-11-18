@@ -56,7 +56,9 @@ session-owned `webgpu` device **in addition to CPU**. Omitting `device` still
 means `cpu`; there are no indexed device names, implicit migrations or silent
 fallbacks. Handles from different sessions cannot be mixed.
 
-GPU tensors have contiguous `float32` storage. Creation accepts the common
+GPU tensors have contiguous `float32` or explicitly selected `float16` storage.
+[Float16 tensors](float16.md) support same-type add/mul and views, with their own
+rounding, packed-storage and inference-only boundaries. Creation accepts the common
 scalar, multidimensional and empty shapes. It copies input into owned host
 storage; upload is deferred until observation. GPU observation uploads even
 a creation-only value, so the explicitly selected device is not bypassed by
@@ -65,7 +67,7 @@ copying numerical data or performing a GPU dispatch.
 
 GPU `add` accepts two broadcast-compatible tensors on the same device. Repeated
 operands, branches and deferred chains follow the shared value/storage rules.
-Its precise rounding and exceptional-value contract is the
+For float32, its precise rounding and exceptional-value contract is the
 [binary32 addition decision](../architecture/webgpu-float32-addition.md),
 including a separately rounded result for every logical addition. It does not
 promise native WGSL floating-point behavior or NaN payload preservation.
@@ -114,7 +116,7 @@ Source and destination remain independently mutable families even when they
 share immutable resident storage. Functional copy derivatives and no-grad
 parameter updates use this same runtime and backend.
 
-Tensor storage capacity is the float32-aligned minimum of the acquired device's
+Tensor storage capacity is the four-byte-aligned minimum of the acquired device's
 buffer/binding limits, supported unsigned element indexing and the signed
 32-bit shared-completion byte count (at most 2,147,483,644 tensor bytes).
 Direct and connected sessions advertise the same extent; tensor creation and

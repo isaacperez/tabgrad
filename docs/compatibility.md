@@ -113,6 +113,20 @@ compatibility, qualify additional hardware, or change Python tensor behavior.
 
 ### Python tensor evidence
 
+The [float16 reference](reference/float16.md) defines explicit binary16 creation,
+whole-storage views and same-type pointwise add/mul. Its pinned PyTorch 2.14 CPU
+corpus records 992 construction cases and 8,976 operand pairs, including
+exceptional classes, signed zeros, subnormals and separately stored multiply/add
+rounding. Full-output browser checks cover direct JavaScript and ordinary
+Pyodide observation on CPU and a nonfallback GPU, with JSPI disabled for Python.
+Raw CPU scalar/SIMD tests and controlled GPU tests cover typed spans, odd packed
+tails, broadcasts, transfer alignment and rejected requests. Those test purposes
+are distinct: host models do not qualify shaders, and native CPU results do not
+establish support on every GPU. A named release's own record must admit this
+scope before that release claims it. Float16 tracking, reductions, matrix
+products, mutation, SGD and mixed-type promotion are explicit exclusions, not
+native PyTorch errors.
+
 The [managed GPU connection reference](reference/python-host.md) defines the
 host helper, single-use attachment, independent physical worker and ordinary
 Python observation. `webgpu` is a Tabgrad device extension, not a native

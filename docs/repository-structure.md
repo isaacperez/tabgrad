@@ -93,7 +93,10 @@ redefine the WebAssembly artifact set.
 Within `crates/tabgrad-wasm-kernels/src/`, each numerical operation owns its
 raw entry point and scalar/SIMD algorithms in one module: `addition.rs`,
 `multiplication.rs`, `reduction.rs` and `expansion.rs`. The shared `abi.rs`
-owns metadata, arena bounds and range/alias validation. `lib.rs` composes these
+owns metadata, arena bounds and typed range/alias validation. `binary16.rs`
+owns CPU half encoding/decoding; `half.rs` binds half arithmetic to the shared
+`pointwise.rs` geometry and streaming boundary. Float32 retains its scalar/SIMD
+schedule. `lib.rs` composes these
 private modules and the panic boundary. Source ownership is separate from
 distribution: both complete variant artifacts are built from the same crate,
 not downloaded or compiled separately for each operation.

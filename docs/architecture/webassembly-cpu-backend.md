@@ -274,7 +274,7 @@ memory, instantiates the compiled module, and validates these exports:
 | Export | Signature | Meaning |
 | --- | --- | --- |
 | `tabgrad_abi_version` | `() -> u32` | Returns `1` for this ABI profile. |
-| `tabgrad_capabilities` | `() -> u32` | Returns required capability bits: `add-f32` is 1, `sum-f32` is 2, `mul-f32` is 4, `expand-f32` is 8, `add-alpha-f32` is 16, `matmul-f32` is 32, `broadcast-f32` is 64 and `reduce-f32` is 128. |
+| `tabgrad_capabilities` | `() -> u32` | Returns required capability bits: `add-f32` is 1, `sum-f32` is 2, `mul-f32` is 4, `expand-f32` is 8, `add-alpha-f32` is 16, `matmul-f32` is 32, `broadcast-f32` is 64, `reduce-f32` is 128 and `pointwise-f16` is 256. |
 | `tabgrad_arena_base` | `() -> u32` | Returns the first byte available to the host allocator. |
 | `tabgrad_add_f32` | `(left_offset, right_offset, output_offset, length) -> u32` | Adds two contiguous `float32` input ranges into a distinct output range. |
 | `tabgrad_sum_f32` | `(input_offset, output_offset, input_length) -> u32` | Reduces a contiguous input range to a distinct scalar output. |
@@ -285,6 +285,8 @@ memory, instantiates the compiled module, and validates these exports:
 | `tabgrad_broadcast_add_f32` | `(left_offset, right_offset, output_offset, packet_offset, packet_words) -> u32` | Adds projected float32 pairs using a validated private geometry packet. |
 | `tabgrad_broadcast_mul_f32` | `(left_offset, right_offset, output_offset, packet_offset, packet_words) -> u32` | Multiplies projected float32 pairs using the same traversal and packet format. |
 | `tabgrad_receive_f32` | `(input_offset, output_offset, packet_offset, packet_words) -> u32` | Reduces each ordered receiving group with the ordinary CPU float32 sum tree. |
+| `tabgrad_add_f16` / `tabgrad_mul_f16` | `(left_offset, right_offset, output_offset, length) -> u32` | Computes one stored binary16 sum/product per element in disjoint two-byte ranges. |
+| `tabgrad_broadcast_add_f16` / `tabgrad_broadcast_mul_f16` | `(left_offset, right_offset, output_offset, packet_offset, packet_words) -> u32` | Uses the shared checked geometry and typed ranges for the float16 pointwise domain. |
 
 Both `kernels-scalar.wasm` and `kernels-simd128.wasm` implement the complete
 module capability profile. The module version identifies that profile; the
@@ -297,7 +299,8 @@ Operation-specific numerical, empty-range and cost contracts belong in the
 scalar expansion belongs to the [functional gradient reference](../reference/functional-gradients.md#numerical-and-execution-boundary).
 
 All offsets and lengths are WebAssembly `i32` values interpreted as unsigned
-32-bit integers. Each kernel checks four-byte alignment, the byte ranges
+32-bit integers. Each kernel checks its payload alignment (four bytes for
+float32 and two for float16), four-byte packet alignment, and the byte ranges
 defined by its signature within the imported memory, and non-overlap between
 the output and nonempty inputs. Input-to-input aliasing is legal. Status 0 means success; status 1 means
 misalignment, status 2 means an out-of-bounds range, and status 3 means output

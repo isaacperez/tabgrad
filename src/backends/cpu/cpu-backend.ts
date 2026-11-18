@@ -30,7 +30,7 @@ interface BackendContext {
 export class WebAssemblyCpuBackend implements ExecutionBackend {
   readonly synchronousObservation = true;
   readonly capabilities: BackendCapabilities = Object.freeze({
-    device: "cpu", computations: Object.freeze(["add-f32", "add-alpha-f32", "mul-f32", "sum-f32", "expand-f32", "matmul-f32", "reduce-f32"] as const),
+    device: "cpu", computations: Object.freeze(["add-f32", "add-alpha-f32", "mul-f32", "sum-f32", "expand-f32", "matmul-f32", "reduce-f32", "add-f16", "mul-f16"] as const),
     gradients: true, maximumTensorBytes: MAXIMUM_ADDRESS,
   });
   readonly #artifactLoader: CpuArtifactLoader;
@@ -161,8 +161,8 @@ export class WebAssemblyCpuBackend implements ExecutionBackend {
           parameters = receivingPacket(receivingGeometry(pointwiseGeometry([
             program.values[computation.inputs[0]!]!.shape, value.shape,
           ]), 1), context.maximumBytes);
-        } else if ((computation.kind === "add-f32" || computation.kind === "mul-f32") && length !== 0
-          && inputs.some(input => input.byteLength !== length * 4)) {
+        } else if (operationShapeContract(computation.kind) !== undefined && length !== 0
+          && inputs.some(input => input.byteLength !== output.byteLength)) {
           parameters = pointwisePacket(operationShapeContract(computation.kind)!.policy.plan(
             computation.inputs.map(slot => program.values[slot]!.shape),
           ), context.maximumBytes);
@@ -179,6 +179,14 @@ export class WebAssemblyCpuBackend implements ExecutionBackend {
         try {
           if (computation.kind !== "matmul-f32" || length !== 0) this.#kernelCalls += 1;
           switch (computation.kind) {
+            case "add-f16":
+              status = packet === undefined ? context.exports.tabgrad_add_f16(inputs[0]!.offset, inputs[1]!.offset, output.offset, length)
+                : context.exports.tabgrad_broadcast_add_f16(inputs[0]!.offset, inputs[1]!.offset, output.offset, packet.offset, parameters!.length);
+              break;
+            case "mul-f16":
+              status = packet === undefined ? context.exports.tabgrad_mul_f16(inputs[0]!.offset, inputs[1]!.offset, output.offset, length)
+                : context.exports.tabgrad_broadcast_mul_f16(inputs[0]!.offset, inputs[1]!.offset, output.offset, packet.offset, parameters!.length);
+              break;
             case "reduce-f32":
               status = context.exports.tabgrad_receive_f32(inputs[0]!.offset, output.offset, packet!.offset, parameters!.length);
               break;

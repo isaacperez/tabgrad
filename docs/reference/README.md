@@ -15,6 +15,9 @@ Use [CPU memory and update capacity](memory-capacity.md) for independent byte
 limits, artifact/session/arena distinctions, host-copy exclusions and capacity
 diagnostics and errors.
 
+Use [Float16 tensors](float16.md) for explicit compact creation, views,
+pointwise arithmetic, numerical conversion, memory accounting and exclusions.
+
 Use [Basic SGD](sgd.md) for Python and JavaScript optimizer calls, parameter
 groups, numerical reset, ordered updates and host ownership.
 

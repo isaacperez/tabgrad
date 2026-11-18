@@ -16,7 +16,7 @@ function extensionSource() {
 #[path = ${JSON.stringify(join(source, "abi.rs"))}] mod abi;
 #[path = ${JSON.stringify(join(source, "pointwise.rs"))}] mod pointwise;
 struct ProductPlus;
-impl pointwise::Pointwise<3> for ProductPlus {
+impl pointwise::Float32Pointwise<3> for ProductPlus {
     fn scalar([a, b, c]: [f32; 3]) -> f32 { a * b + c }
     #[cfg(target_feature = "simd128")]
     fn vector([a, b, c]: [core::arch::wasm32::v128; 3]) -> core::arch::wasm32::v128 {

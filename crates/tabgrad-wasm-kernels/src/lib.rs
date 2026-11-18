@@ -4,9 +4,11 @@ use core::panic::PanicInfo;
 
 mod abi;
 mod addition;
+mod binary16;
 mod coefficient_addition;
 mod expansion;
 mod fused_multiply_add;
+mod half;
 mod matrix_product;
 mod multiplication;
 mod pointwise;

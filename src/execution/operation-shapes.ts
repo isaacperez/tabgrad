@@ -18,6 +18,8 @@ const BINARY_POINTWISE_CONTRACT: OperationShapeContract = Object.freeze({ arity:
 const contracts: Readonly<Record<string, OperationShapeContract | undefined>> = Object.freeze({
   "add-f32": BINARY_POINTWISE_CONTRACT,
   "mul-f32": BINARY_POINTWISE_CONTRACT,
+  "add-f16": BINARY_POINTWISE_CONTRACT,
+  "mul-f16": BINARY_POINTWISE_CONTRACT,
 });
 
 export function operationShapeContract(kind: string): OperationShapeContract | undefined {

@@ -1,6 +1,7 @@
 /** Logical tensor formats; protocol words and backend scratch storage are separate. */
 export const TENSOR_DTYPES = Object.freeze({
   float32: Object.freeze({ name: "float32", encoding: "ieee754-binary32-native", bytesPerElement: 4 } as const),
+  float16: Object.freeze({ name: "float16", encoding: "ieee754-binary16-native", bytesPerElement: 2 } as const),
 });
 
 export type TensorDType = keyof typeof TENSOR_DTYPES;

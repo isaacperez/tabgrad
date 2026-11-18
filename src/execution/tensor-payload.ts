@@ -1,6 +1,7 @@
 import { TabgradError } from "../shared/errors.js";
 import { isRecord } from "../shared/object-shape.js";
 import { checkedElementBytes, tensorDType, type TensorDType } from "../shared/tensor-dtype.js";
+import { binary16ObservationBits } from "../shared/binary16.js";
 
 /** An owned, bounded encoded span. Construction freezes metadata, not the bytes. */
 export interface HostTensorPayload {
@@ -46,6 +47,13 @@ export function copyTensorPayload(payload: HostTensorPayload): HostTensorPayload
 export function decodeTensorPayload(payload: HostTensorPayload, dtype: TensorDType, elements: number,
   result: "view" | "copy" = "view"): Float32Array<ArrayBuffer> {
   assertTensorPayload(payload, dtype, elements);
+  if (dtype === "float16") {
+    const words = new Uint16Array(payload.bytes.buffer, payload.bytes.byteOffset, elements);
+    const numeric = new Float32Array(elements);
+    const observed = new Uint32Array(numeric.buffer);
+    for (let index = 0; index < elements; index++) observed[index] = binary16ObservationBits(words[index]!);
+    return numeric;
+  }
   const numeric = new Float32Array(payload.bytes.buffer, payload.bytes.byteOffset, elements);
   return result === "copy" ? numeric.slice() : numeric;
 }

@@ -11,6 +11,7 @@ const CAPABILITY_ADD_ALPHA_F32: u32 = 16;
 const CAPABILITY_MATMUL_F32: u32 = 32;
 const CAPABILITY_BROADCAST_F32: u32 = 64;
 const CAPABILITY_REDUCE_F32: u32 = 128;
+const CAPABILITY_POINTWISE_F16: u32 = 256;
 pub(crate) const STATUS_INVALID_GEOMETRY: u32 = 4;
 pub(crate) const FLOAT_ALIGNMENT: u32 = align_of::<f32>() as u32;
 
@@ -24,11 +25,20 @@ fn arena_base() -> u32 {
 }
 
 pub(crate) fn checked_range(offset: u32, length: u32, memory_bytes: u64) -> Option<(u64, u64)> {
-    if !offset.is_multiple_of(FLOAT_ALIGNMENT) {
+    checked_typed_range(offset, length, FLOAT_ALIGNMENT, memory_bytes)
+}
+
+pub(crate) fn checked_typed_range(
+    offset: u32,
+    length: u32,
+    width: u32,
+    memory_bytes: u64,
+) -> Option<(u64, u64)> {
+    if !offset.is_multiple_of(width) {
         return None;
     }
     let start = u64::from(offset);
-    let size = u64::from(length).checked_mul(size_of::<f32>() as u64)?;
+    let size = u64::from(length).checked_mul(u64::from(width))?;
     let end = start.checked_add(size)?;
     (start >= u64::from(arena_base()) && end <= memory_bytes).then_some((start, end))
 }
@@ -52,6 +62,7 @@ pub extern "C" fn tabgrad_capabilities() -> u32 {
         | CAPABILITY_MATMUL_F32
         | CAPABILITY_BROADCAST_F32
         | CAPABILITY_REDUCE_F32
+        | CAPABILITY_POINTWISE_F16
 }
 
 #[unsafe(no_mangle)]
@@ -65,21 +76,37 @@ pub(crate) fn validate_binary_ranges(
     output_offset: u32,
     length: u32,
 ) -> u32 {
-    if !left_offset.is_multiple_of(FLOAT_ALIGNMENT)
-        || !right_offset.is_multiple_of(FLOAT_ALIGNMENT)
-        || !output_offset.is_multiple_of(FLOAT_ALIGNMENT)
+    validate_typed_binary_ranges(
+        left_offset,
+        right_offset,
+        output_offset,
+        length,
+        FLOAT_ALIGNMENT,
+    )
+}
+
+pub(crate) fn validate_typed_binary_ranges(
+    left_offset: u32,
+    right_offset: u32,
+    output_offset: u32,
+    length: u32,
+    width: u32,
+) -> u32 {
+    if !left_offset.is_multiple_of(width)
+        || !right_offset.is_multiple_of(width)
+        || !output_offset.is_multiple_of(width)
     {
         return STATUS_UNALIGNED;
     }
 
     let memory_bytes = (core::arch::wasm32::memory_size(0) as u64) * 65_536;
-    let Some(left_range) = checked_range(left_offset, length, memory_bytes) else {
+    let Some(left_range) = checked_typed_range(left_offset, length, width, memory_bytes) else {
         return STATUS_OUT_OF_BOUNDS;
     };
-    let Some(right_range) = checked_range(right_offset, length, memory_bytes) else {
+    let Some(right_range) = checked_typed_range(right_offset, length, width, memory_bytes) else {
         return STATUS_OUT_OF_BOUNDS;
     };
-    let Some(output_range) = checked_range(output_offset, length, memory_bytes) else {
+    let Some(output_range) = checked_typed_range(output_offset, length, width, memory_bytes) else {
         return STATUS_OUT_OF_BOUNDS;
     };
     if overlaps(output_range, left_range) || overlaps(output_range, right_range) {
