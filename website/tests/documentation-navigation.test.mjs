@@ -28,6 +28,20 @@ test("navigation and default search are local to the selected documentation vers
   assert.deepEqual(documentationSearchScope(data, "/blog/"), "current");
 });
 
+test("reference navigation exposes admitted dtype and memory guides only in their own version", () => {
+  const sources = ["docs/reference/float16.md", "docs/reference/memory-capacity.md"];
+  const releaseData = { runtimeVersion: "0.5.0", releases: [{ version: "0.5.0", available: true }, { version: "0.4.0", available: true }],
+    documents: [doc("0.5.0", "docs/README.md"), doc("0.4.0", "docs/README.md"), ...sources.map(source => doc("0.5.0", source))] };
+  const current = documentationSidebar(releaseData, "/docs/0.5.0/reference/float16/");
+  const reference = current.find(group => group.type === "group" && group.label === "API reference");
+  assert.ok(reference, "Admitted reference guides must be reachable from the sidebar");
+  assert.deepEqual(reference.entries.map(entry => [entry.href, entry.isCurrent]), [
+    ["/docs/0.5.0/reference/float16/", true], ["/docs/0.5.0/reference/memory-capacity/", false],
+  ]);
+  const historical = documentationSidebar(releaseData, "/docs/0.4.0/");
+  assert.ok(!historical.some(group => group.type === "group" && group.label === "API reference"));
+});
+
 test("onboarding navigation follows only the current runtime while historical setup remains version-local", () => {
   const links = version => documentationSidebar(data, `/docs/${version}/javascript-api/`).flatMap(group => group.type === "group" ? group.entries : [group]);
   assert.ok(links("0.4.0").some(link => link.href === "/start/"));

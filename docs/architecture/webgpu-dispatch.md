@@ -50,10 +50,10 @@ ownership remain distinct.
 
 Pipeline identity contains numerical kind and index layout within one device
 generation. There is no shape, rank, tensor length or invocation in its cache
-key. Current kernels admit at most seventeen kind/layout identities: receiving
-has one windowed layout; the other eight physical kinds can have an original
-and a grid layout. A small-then-large or large-then-small sequence selects the
-same appropriate identities. Failed preparation retains its original cause
+key. Receiving has one windowed layout; each other registered physical kind
+can have an original and a grid layout. The finite set of registered kinds and
+layouts bounds the cache. A small-then-large or large-then-small sequence selects
+the same appropriate identities. Failed preparation retains its original cause
 while each requester receives its own program-slot provenance.
 
 All known storage, stage, parameter and dispatch bounds are checked before

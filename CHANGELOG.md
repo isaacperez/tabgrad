@@ -7,12 +7,45 @@ established by the corresponding verified release record.
 
 ## Unreleased
 
+## 0.5.0 - 2026-11-18
+
+### Added
+
+- Create compact float16 tensors, reshape their full storage without copying,
+  and add or multiply them with broadcasting on CPU or GPU, in JavaScript and
+  Python. Each value uses two logical storage bytes; observations return
+  ordinary numbers. Float16 training, mutation, reductions, matrix products
+  and mixed-type promotion are not included
+  ([#471](https://github.com/isaacperez/tabgrad/issues/471)).
+- Configure CPU linear-memory capacity independently of update reservations.
+  Sessions still default to 64 MiB and initially allocate 2 MiB; applications
+  can explicitly request up to 256 MiB of CPU linear memory. This does not
+  bound total RAM or guarantee that an arbitrary graph fits
+  ([#464](https://github.com/isaacperez/tabgrad/issues/464)).
+- Use GPU tensors beyond a single dispatch row when storage and operation
+  limits allow it. Checked multidimensional dispatch covers the existing
+  operation families without requesting larger device limits or changing
+  their numerical contracts
+  ([#465](https://github.com/isaacperez/tabgrad/issues/465)).
+
 ### Fixed
 
+- Internal CPU allocation validation rejects references owned by another
+  context before reading or changing their state, even when generation numbers
+  match ([#451](https://github.com/isaacperez/tabgrad/issues/451)).
+- Release tooling selects retained history by creation time rather than
+  assuming artifact IDs are chronological, and rejects ambiguous default
+  selection ([#449](https://github.com/isaacperez/tabgrad/issues/449)).
 - Disposable Chrome checks exclude ordinary and built-in background extensions,
   keeping unrelated extension processes out of the controlled test environment
   without changing GPU selection or the sandbox
   ([#477](https://github.com/isaacperez/tabgrad/issues/477)).
+
+The [0.5.0 source and support record](docs/reference/release-0.5.0.md) describes
+the float16 domain, capacity boundaries and memory costs. Existing supported
+float32 calls retain their defaults and numerical contracts. Replace the entire
+matched distribution, including workers and numerical assets. Source notes do
+not establish package availability or qualification of a retained release archive.
 
 ## 0.4.0 - 2026-11-15
 

@@ -65,6 +65,12 @@ recording, alias versions, derivative guards and deferred failure.
 Use [Gradient recording scopes](gradient-recording.md) for Python `no_grad`,
 JavaScript callbacks, shared mode restoration and special-view tracking.
 
+Use the [0.5.0 source and support record](release-0.5.0.md) for float16,
+CPU capacity, GPU dispatch and their release-specific limits.
+
+Use the [0.4.0 source and support record](release-0.4.0.md) for broadcasting
+with first-order gradients and its qualification boundaries.
+
 Use the [0.3.0 source and support record](release-0.3.0.md) for local managed
 Python runtime observations, migration and qualification boundaries.
 
