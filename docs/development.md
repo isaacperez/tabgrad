@@ -169,6 +169,13 @@ server, then terminates the process and removes that profile. Set
 `TABGRAD_BROWSER` to `Chrome` or `Firefox` to run just that browser; leave it
 unset to preserve the full local sequence.
 
+Disposable Chrome also disables ordinary extensions and built-in extensions
+with background pages. A fresh profile alone does not exclude their processes
+and resource use. The two [Chrome tooling switches](https://github.com/GoogleChrome/chrome-launcher/blob/main/docs/chrome-flags-for-tools.md#commonly-unwanted-browser-features)
+apply only to the launched test instance; they do not change the user's browser
+settings, GPU selection or sandbox. On macOS, the same instance uses a mock
+keychain rather than depending on access to the user's real keychain.
+
 The browser sequence also checks the Python script binding with the locked
 Pyodide assets from `node_modules/pyodide/`. Each browser runs ordinary Python
 observation and lifecycle checks in two fresh profiles: unmodified JSPI
