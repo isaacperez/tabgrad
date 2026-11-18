@@ -254,9 +254,9 @@ and call-overhead requirements with simpler total maintenance.
 
 The raw ABI profile gives the general boundary above an exact,
 small instance. The generated JSON manifest has schema version 1 and module
-version 8. It declares ABI version 1, 32-bit addresses, non-shared memory, the
+version 9. It declares ABI version 1, 32-bit addresses, non-shared memory, the
 `add-f32`, `sum-f32`, `mul-f32`, `expand-f32`, `add-alpha-f32`, `matmul-f32`,
-`broadcast-f32` and `reduce-f32` capabilities,
+`broadcast-f32`, `reduce-f32` and `pointwise-f16` capabilities,
 one `env.memory` import, an initial 32-page memory, a
 maximum 4096-page memory, and 16-byte host-arena alignment. The actual imported
 memory uses the session's independently resolved maximum, 1024 pages by default.
