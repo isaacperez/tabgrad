@@ -126,8 +126,9 @@ See the [GPU reference](webgpu-runtime.md) and
 
 Replace the complete matched distribution, including workers, Python sources
 and CPU numerical assets. Existing supported calls need no API migration.
-Float32 remains the default; applications opt into float16 and larger CPU
-capacity explicitly. The [browser package](browser-package.md) and
+JavaScript still defaults to float32; Python tensor creation requires an
+explicit dtype. Applications opt into float16 and larger CPU capacity explicitly.
+The [browser package](browser-package.md) and
 [Python setup](python-host.md) examples select this version.
 
 The [0.4.0 support record](release-0.4.0.md) supplies unchanged capabilities

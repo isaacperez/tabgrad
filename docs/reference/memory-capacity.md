@@ -45,7 +45,7 @@ the interpreter.
 
 ## Artifact ceiling and actual allocation
 
-The matched CPU artifact profile has module version 8, raw ABI version 1,
+The matched CPU artifact profile has module version 9, raw ABI version 1,
 32-bit non-shared memory, an initial size of 32 pages and an import ceiling of
 4,096 pages. Scalar and SIMD modules share this memory contract. The loader
 creates the imported memory with the resolved **session** maximum, which may
