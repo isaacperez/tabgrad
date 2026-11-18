@@ -45,6 +45,8 @@ export const browserDefinitions = Object.freeze([
         ...(process.platform === "darwin" ? ["--use-mock-keychain"] : []),
         "--no-first-run",
         "--disable-background-networking",
+        "--disable-extensions",
+        "--disable-component-extensions-with-background-pages",
         `--user-data-dir=${profile}`,
         url,
       ];

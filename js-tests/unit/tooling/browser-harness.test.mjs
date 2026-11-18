@@ -15,7 +15,7 @@ import {
   terminateBrowser,
 } from "../../../scripts/browser-harness.mjs";
 
-test("disposable Chrome avoids the real macOS keychain without changing profile or sandbox selection", () => {
+test("disposable browsers preserve profile isolation and exclude Chrome background extensions", () => {
   const profile = "/temporary/browser-profile";
   const url = "http://127.0.0.1:12345/runtime/runtime.html";
   const chrome = browserDefinitions.find((browser) => browser.name === "Chrome");
@@ -23,7 +23,9 @@ test("disposable Chrome avoids the real macOS keychain without changing profile 
   assert.deepEqual(chrome.argumentsFor(profile, url), [
     "--headless=new",
     ...(process.platform === "darwin" ? ["--use-mock-keychain"] : []),
-    "--no-first-run", "--disable-background-networking", `--user-data-dir=${profile}`, url,
+    "--no-first-run", "--disable-background-networking",
+    "--disable-extensions", "--disable-component-extensions-with-background-pages",
+    `--user-data-dir=${profile}`, url,
   ]);
   assert.deepEqual(firefox.argumentsFor(profile, url), ["--headless", "--no-remote", "--profile", profile, url]);
 });

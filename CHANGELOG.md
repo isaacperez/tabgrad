@@ -7,6 +7,13 @@ established by the corresponding verified release record.
 
 ## Unreleased
 
+### Fixed
+
+- Disposable Chrome checks exclude ordinary and built-in background extensions,
+  keeping unrelated extension processes out of the controlled test environment
+  without changing GPU selection or the sandbox
+  ([#477](https://github.com/isaacperez/tabgrad/issues/477)).
+
 ## 0.4.0 - 2026-11-15
 
 ### Added
