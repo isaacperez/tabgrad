@@ -142,9 +142,12 @@ configuration or effective operational admission cannot be treated as a hosted
 success. Actual activation, credentials, DNS and destination qualification
 retain their separate authority boundary.
 
-The check's path-filtered absence is not a pass. Add new website inputs to the
-filters and reassess coverage. Library changes alone do not update the site's
-separately pinned published runtime.
+The check's path-filtered absence is not a pass. Pull requests and pushes to
+`main` use the same path list. It covers shared browser tooling, release and
+package tooling used for released inputs, and the fixtures imported by the
+hosting tests. When adding an input outside those paths, update the shared
+list and reassess coverage. Library source changes alone do not update the
+site's separately pinned published runtime.
 
 ## Experimental producer workflow
 
