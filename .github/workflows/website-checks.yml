@@ -2,28 +2,30 @@ name: Website checks
 
 on:
   pull_request:
-    paths:
+    paths: &website_inputs
       - 'website/**'
       - 'docs/**'
       - 'assets/brand/**'
       - 'README.md'
       - 'package.json'
       - 'CHANGELOG.md'
-      - 'scripts/release-documentation.mjs'
-      - 'scripts/browser-harness.mjs'
+      - '.node-version'
+      - 'js-tests/fixtures/**'
+      - 'scripts/browser-*.mjs'
+      - 'scripts/float16-conformance.mjs'
+      - 'scripts/package-*.mjs'
+      - 'scripts/prepare-publication-plan.mjs'
+      - 'scripts/prepare-release.mjs'
+      - 'scripts/producer-trial.mjs'
+      - 'scripts/provenance-client.mjs'
+      - 'scripts/publication-*'
+      - 'scripts/release-*.mjs'
+      - 'scripts/run-package-browser-tests.mjs'
+      - 'scripts/tag-delivery.mjs'
       - '.github/workflows/website-checks.yml'
   push:
     branches: [main]
-    paths:
-      - 'website/**'
-      - 'docs/**'
-      - 'assets/brand/**'
-      - 'README.md'
-      - 'package.json'
-      - 'CHANGELOG.md'
-      - 'scripts/release-documentation.mjs'
-      - 'scripts/browser-harness.mjs'
-      - '.github/workflows/website-checks.yml'
+    paths: *website_inputs
   workflow_dispatch:
     inputs:
       publish:

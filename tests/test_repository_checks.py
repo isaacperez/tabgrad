@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from fnmatch import fnmatchcase
 from pathlib import Path
 from typing import Any
 from unittest import mock
@@ -176,6 +177,43 @@ class RepositoryCheckTests(unittest.TestCase):
             authored.write_text("maintained source without newline", encoding="utf-8")
             self.assertEqual(CHECKS.repository_files(root), [authored])
             self.assertEqual(len(CHECKS.check_text_format(root)), 1)
+
+    def test_website_workflow_selects_shared_inputs_for_both_events(self) -> None:
+        loader = CHECKS.RepositoryYamlLoader
+        assert loader is not None
+        workflow = yaml.load(
+            (SCRIPT.parents[1] / CHECKS.WEBSITE_PATH).read_text(), Loader=loader
+        )
+        events = workflow["on"]
+        paths = events["pull_request"]["paths"]
+        self.assertEqual(paths, events["push"]["paths"])
+        self.assertEqual(events["push"]["branches"], ["main"])
+
+        cases = {
+            "website/hosting/scripts/publisher.mjs": True,
+            "docs/reference/browser-package.md": True,
+            ".node-version": True,
+            "scripts/browser-harness.mjs": True,
+            "scripts/browser-run-diagnostics.mjs": True,
+            "scripts/package-artifact.mjs": True,
+            "scripts/prepare-release.mjs": True,
+            "scripts/publication-client-profile.json": True,
+            "scripts/release-record-data.mjs": True,
+            "scripts/release-website.mjs": True,
+            "js-tests/fixtures/release-site.mjs": True,
+            "src/index.ts": False,
+            "scripts/run-browser-tests.mjs": False,
+        }
+        for path, expected in cases.items():
+            with self.subTest(path=path):
+                # The filter uses only literals, single-segment globs and
+                # recursive directory prefixes.
+                selected = any(
+                    fnmatchcase(path, pattern)
+                    and ("**" in pattern or path.count("/") == pattern.count("/"))
+                    for pattern in paths
+                )
+                self.assertEqual(selected, expected)
 
     def test_website_workflow_is_read_only_and_rejects_executable_drift(self) -> None:
         loader = CHECKS.RepositoryYamlLoader
