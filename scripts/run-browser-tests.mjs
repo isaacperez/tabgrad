@@ -124,19 +124,18 @@ try {
       });
       process.stdout.write(`PASS ${browser.name} shared GPU failure diagnostics\n`);
     } finally { await isolatedServer.close(); }
-    for (const cpuVariant of ["scalar", "simd128"]) {
-      const variantServer = await startBrowserServer(["python/python-worker.html"], {
-        assets: ["python/python-worker.mjs", "helpers/cpu-profile.mjs", "helpers/python-no-grad-cases.mjs", ...copyAssets], readAsset: readCopyAsset,
+    // The disabled-JSPI worker above already requires the default SIMD profile.
+    const scalarServer = await startBrowserServer(["python/python-worker.html"], {
+      assets: ["python/python-worker.mjs", "helpers/cpu-profile.mjs", "helpers/python-no-grad-cases.mjs", ...copyAssets], readAsset: readCopyAsset,
+    });
+    try {
+      await runBrowserPage({
+        server: scalarServer, browser, executable, page: "python/python-worker.html",
+        parameters: { jspi: "disabled", variant: "scalar" }, version,
+        validateResult(result) { assertPythonWorkerResult(result, "disabled", false, "scalar"); },
       });
-      try {
-        await runBrowserPage({
-          server: variantServer, browser, executable, page: "python/python-worker.html",
-          parameters: { jspi: "disabled", variant: cpuVariant }, version,
-          validateResult(result) { assertPythonWorkerResult(result, "disabled", false, cpuVariant); },
-        });
-        process.stdout.write(`PASS ${browser.name} Python worker ${cpuVariant} (no JSPI or isolation)\n`);
-      } finally { await variantServer.close(); }
-    }
+      process.stdout.write(`PASS ${browser.name} Python worker scalar (no JSPI or isolation)\n`);
+    } finally { await scalarServer.close(); }
   }
 } finally {
   await server.close();
