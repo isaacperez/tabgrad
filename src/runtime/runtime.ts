@@ -19,16 +19,16 @@ import {
 import { ExecutionRequest, type QueuedExecutionRequest } from "./execution-request.js";
 import { ExecutionTicket, type ExecutionStep } from "../execution/execution-ticket.js";
 import { acquireWebGpuDevice, assertWebGpuSetupActive } from "../backends/webgpu/webgpu-device.js";
-import type { ExecutionBackend, ResidentAllocation, TensorDevice } from "../execution/backend.js";
-import { operationTypeContract, resolveTensorType, GRADIENT_STATE_TYPES,
+import { supportsBackendComputation, type ExecutionBackend, type ResidentAllocation, type TensorDevice } from "../execution/backend.js";
+import { COMPUTATION_SIGNATURES, type ComputationKind, type OperationFamily } from "../execution/operation-contracts.js";
+import { resolveTensorType, GRADIENT_STATE_TYPES,
   DEFAULT_GRADIENT_ASSIGNMENT_TYPES, PERSISTENT_COPY_TYPES } from "../execution/operation-types.js";
 import { WebGpuBackend, type WebGpuDiagnostics, type WebGpuExecutionBackend } from "../backends/webgpu/webgpu-backend.js";
 export type { TensorDevice } from "../execution/backend.js";
 import { DerivativeHistory, type DerivativeNode, type DerivativePlan, type DerivativeRecipe } from "./autograd/derivative-history.js";
 import { COPY_DERIVATIVE, COPY_SLICES_DERIVATIVE, REBASED_VIEW_DERIVATIVE, IDENTITY_DERIVATIVE, POINTWISE_PASS_DERIVATIVE, MUL_DERIVATIVE, MATMUL_DERIVATIVE, SUM_DERIVATIVE, hasCanonicalDerivativeControls } from "./autograd/derivative-recipes.js";
-import { matrixGeometry } from "../execution/matrix-geometry.js";
+import { MatrixShapeError } from "../execution/matrix-geometry.js";
 import { BroadcastCapacityError, type BroadcastGeometry, type ReceivingGeometry } from "../execution/broadcast-geometry.js";
-import { operationShapeContract, assertOperationArity } from "../execution/operation-shapes.js";
 import { pointwiseDerivative, hasCanonicalPointwiseControls } from "./autograd/pointwise-derivative.js";
 import { planDerivativeResources } from "./autograd/derivative-resource-plan.js";
 import { copyTensorShape, equalTensorShapes, inferViewShape, tensorElementCount } from "./tensor-shape.js";
@@ -536,24 +536,27 @@ export interface BackwardOptions {
   readonly createGraph?: boolean;
 }
 
+type BinaryOperationName = "add" | "mul" | "matmul";
+
 class BinaryOperationDefinition implements NumericalOperationDefinition {
   readonly pure = true;
-  readonly shapePolicy;
+  readonly family: Extract<OperationFamily, { geometry: "pointwise" | "matrix" }>;
   readonly typePolicy;
 
   constructor(
-    readonly name: "add" | "mul" | "matmul",
+    readonly name: BinaryOperationName,
     readonly provenanceSource: "Tensor.add" | "Tensor.mul" | "Tensor.matmul",
-    readonly loweredKind: "add-f32" | "mul-f32" | "add-f16" | "mul-f16" | "matmul-f32",
+    readonly loweredKind: ComputationKind,
     readonly description: "addition" | "multiplication" | "matrix multiplication",
     readonly derivative: DerivativeRecipe | undefined,
     readonly matrixFlags?: number,
-    readonly specializations?: Readonly<Partial<Record<TensorDType, BinaryOperationDefinition>>>,
   ) {
-    const contract = operationShapeContract(loweredKind);
-    if (contract !== undefined) assertOperationArity(contract, 2);
-    this.shapePolicy = contract?.policy;
-    this.typePolicy = operationTypeContract(loweredKind)!.types;
+    const { operation, family, types } = COMPUTATION_SIGNATURES[loweredKind];
+    if (operation !== name || (family.geometry !== "pointwise" && family.geometry !== "matrix")) {
+      throw new TypeError("Binary operation requires a matching pointwise or matrix signature.");
+    }
+    this.family = family;
+    this.typePolicy = types;
   }
 
   admit(
@@ -589,9 +592,16 @@ class BinaryOperationDefinition implements NumericalOperationDefinition {
     }
     const leftValue = left.value;
     const rightValue = right.value;
-    const definition = this.specializations?.[leftValue.dtype] ?? this;
     const inputs = [leftValue, rightValue];
-    const dtype = resolveTensorType(definition.typePolicy, inputs);
+    let definition: BinaryOperationDefinition = this;
+    let dtype = resolveTensorType(this.typePolicy, inputs);
+    if (dtype === undefined && this === DEFAULT_BINARY_OPERATIONS[this.name]) {
+      const variant = binarySpecializations[this.name].get(leftValue.dtype)?.get(rightValue.dtype);
+      if (variant !== undefined) {
+        definition = variant;
+        dtype = variant.typePolicy.result;
+      }
+    }
     if (dtype === undefined) {
       throw new TabgradError(
         "UNSUPPORTED_DTYPE",
@@ -629,23 +639,27 @@ class BinaryOperationDefinition implements NumericalOperationDefinition {
         },
       );
     }
-    let outputShape = leftValue.shape;
+    let outputShape: readonly number[];
     let broadcast: BroadcastGeometry | undefined;
-    if (definition.matrixFlags !== undefined) {
-      if (leftValue.shape.length !== 2 || rightValue.shape.length !== 2) {
-        throw new TabgradError("INVALID_SHAPE", "Matrix multiplication supports only two-dimensional inputs.", {
-          operation: definition.name, contract: "two-dimensional-inputs", leftShape: leftValue.shape, rightShape: rightValue.shape,
+    const family = definition.family;
+    if (family.geometry === "matrix") {
+      try {
+        const geometry = family.plan(leftValue.shape, rightValue.shape, definition.matrixFlags!);
+        outputShape = Object.freeze([geometry.rows, geometry.columns]);
+      } catch (error) {
+        if (!(error instanceof MatrixShapeError)) throw error;
+        const shapes = { leftShape: leftValue.shape, rightShape: rightValue.shape };
+        if (error.reason === "rank") {
+          throw new TabgradError("INVALID_SHAPE", "Matrix multiplication supports only two-dimensional inputs.", {
+            operation: definition.name, contract: "two-dimensional-inputs", ...shapes,
+          });
+        }
+        throw new TabgradError("SHAPE_MISMATCH", error.message, {
+          operation: definition.name, contract: "matrix-contraction", ...shapes,
         });
       }
-      if (leftValue.shape[definition.matrixFlags & 1 ? 0 : 1] !== rightValue.shape[definition.matrixFlags & 2 ? 1 : 0]) {
-        throw new TabgradError("SHAPE_MISMATCH", "Matrix contraction dimensions must match.", {
-          operation: definition.name, contract: "matrix-contraction", leftShape: leftValue.shape, rightShape: rightValue.shape,
-        });
-      }
-      const geometry = matrixGeometry(leftValue.shape, rightValue.shape, definition.matrixFlags);
-      outputShape = Object.freeze([geometry.rows, geometry.columns]);
-    } else if (definition.shapePolicy !== undefined) {
-      try { broadcast = definition.shapePolicy.plan([leftValue.shape, rightValue.shape]); }
+    } else {
+      try { broadcast = family.plan([leftValue.shape, rightValue.shape]); }
       catch (error) {
         throw new TabgradError(error instanceof BroadcastCapacityError ? "RESOURCE_EXHAUSTED" : "SHAPE_MISMATCH",
           "Pointwise output requires compatible broadcast shapes and safe element arithmetic.", {
@@ -653,17 +667,6 @@ class BinaryOperationDefinition implements NumericalOperationDefinition {
           }, error);
       }
       outputShape = broadcast.shape;
-    } else if (!equalTensorShapes(leftValue.shape, rightValue.shape)) {
-      throw new TabgradError(
-        "SHAPE_MISMATCH",
-        `Float32 ${definition.description} requires equal shapes.`,
-        {
-          operation: definition.name,
-          contract: "equal-shape",
-          leftShape: leftValue.shape,
-          rightShape: rightValue.shape,
-        },
-      );
     }
 
     return Object.freeze({
@@ -679,13 +682,11 @@ class BinaryOperationDefinition implements NumericalOperationDefinition {
   }
 }
 
-const ADD_HALF_OPERATION = Object.freeze(new BinaryOperationDefinition("add", "Tensor.add", "add-f16", "addition", undefined));
-const MUL_HALF_OPERATION = Object.freeze(new BinaryOperationDefinition("mul", "Tensor.mul", "mul-f16", "multiplication", undefined));
 const ADD_OPERATION = Object.freeze(new BinaryOperationDefinition(
-  "add", "Tensor.add", "add-f32", "addition", POINTWISE_PASS_DERIVATIVE, undefined, Object.freeze({ float16: ADD_HALF_OPERATION }),
+  "add", "Tensor.add", "add-f32", "addition", POINTWISE_PASS_DERIVATIVE,
 ));
 const MUL_OPERATION = Object.freeze(new BinaryOperationDefinition(
-  "mul", "Tensor.mul", "mul-f32", "multiplication", MUL_DERIVATIVE, undefined, Object.freeze({ float16: MUL_HALF_OPERATION }),
+  "mul", "Tensor.mul", "mul-f32", "multiplication", MUL_DERIVATIVE,
 ));
 const MATMUL_OPERATION = Object.freeze(new BinaryOperationDefinition(
   "matmul", "Tensor.matmul", "matmul-f32", "matrix multiplication", MATMUL_DERIVATIVE, 0,
@@ -697,13 +698,39 @@ const MATMUL_RIGHT_TRANSPOSED_OPERATION = Object.freeze(new BinaryOperationDefin
   "matmul", "Tensor.matmul", "matmul-f32", "matrix multiplication", MATMUL_DERIVATIVE, 2,
 ));
 
+const DEFAULT_BINARY_OPERATIONS = Object.freeze({ add: ADD_OPERATION, mul: MUL_OPERATION, matmul: MATMUL_OPERATION });
+type OperandPairIndex = Map<TensorDType, Map<TensorDType, BinaryOperationDefinition>>;
+
+// Build once from the finite catalogue. Default and derivative bindings stay explicit.
+const binarySpecializations: Record<BinaryOperationName, OperandPairIndex> = { add: new Map(), mul: new Map(), matmul: new Map() };
+for (const kind of Object.keys(COMPUTATION_SIGNATURES) as ComputationKind[]) {
+  const { operation, family, types } = COMPUTATION_SIGNATURES[kind];
+  if ((operation === "add" || operation === "mul" || operation === "matmul")
+    && (family.geometry === "pointwise" || family.geometry === "matrix")) {
+    const primary = DEFAULT_BINARY_OPERATIONS[operation];
+    const left = types.inputs[0]!;
+    const right = types.inputs[1]!;
+    const byLeft = binarySpecializations[operation];
+    let byRight = byLeft.get(left);
+    if (byRight === undefined) {
+      byRight = new Map();
+      byLeft.set(left, byRight);
+    }
+    if (byRight.has(right)) throw new TypeError("Ambiguous binary operation signature.");
+    const definition = kind === primary.loweredKind ? primary : Object.freeze(new BinaryOperationDefinition(
+      operation, primary.provenanceSource, kind, primary.description, undefined, primary.matrixFlags,
+    ));
+    byRight.set(right, definition);
+  }
+}
+
 class SumOperationDefinition implements NumericalOperationDefinition {
   readonly derivative = SUM_DERIVATIVE;
   readonly name = "sum";
   readonly provenanceSource = "Tensor.sum";
   readonly loweredKind = "sum-f32";
   readonly pure = true;
-  readonly typePolicy = operationTypeContract(this.loweredKind)!.types;
+  readonly typePolicy = COMPUTATION_SIGNATURES[this.loweredKind].types;
 
   admit(source: TensorState): AdmittedOperation {
     assertTensorOpen(source);
@@ -1741,7 +1768,7 @@ export class RuntimeSession {
 
   #requireBackendComputation(value: TensorValue, definition: NumericalOperationDefinition): void {
     const backend = this.#backendFor(value.device, definition.name);
-    if (!backend.capabilities.computations.includes(definition.loweredKind)) {
+    if (!supportsBackendComputation(backend.capabilities, definition.loweredKind)) {
       throw new TabgradError("BACKEND_CAPABILITY_MISMATCH", "The selected backend does not support this operation.", {
         operation: definition.name, source: definition.provenanceSource, device: value.device,
       });
@@ -1749,7 +1776,7 @@ export class RuntimeSession {
   }
 
   #requireComputation(inputs: readonly TensorValue[], definition: NumericalOperationDefinition): TensorDType {
-    const dtype = resolveTensorType(operationTypeContract(definition.loweredKind)!.types, inputs);
+    const dtype = resolveTensorType(COMPUTATION_SIGNATURES[definition.loweredKind].types, inputs);
     if (dtype === undefined) throw new TabgradError("UNSUPPORTED_DTYPE", "Operation requires its declared tensor types.", {
       operation: definition.name,
     });
@@ -2013,7 +2040,7 @@ export class RuntimeSession {
     if (origin === undefined || origin.projectionSource?.deref() !== current || tensorElementCount(origin.shape) !== count
       || (origin.storage.references === 0 && origin.producer === null)) {
       const inputs = [current];
-      const dtype = resolveTensorType(operationTypeContract(EXPAND_OPERATION.loweredKind)!.types, inputs);
+      const dtype = resolveTensorType(COMPUTATION_SIGNATURES[EXPAND_OPERATION.loweredKind].types, inputs);
       if (dtype === undefined) throw new TabgradError("UNSUPPORTED_DTYPE", "Gradient projection requires its declared tensor type.");
       origin = new TensorValue({ ...current, dtype, shape: [count] }, new OperationRecord(EXPAND_OPERATION, inputs));
       origin.references = 0;

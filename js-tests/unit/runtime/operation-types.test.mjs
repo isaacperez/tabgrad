@@ -4,7 +4,9 @@ import { createRuntimeSession } from "../../../dist/index.js";
 import { ExecutableProgram } from "../../../dist/execution/executable-program.js";
 import { WebAssemblyCpuBackend } from "../../../dist/backends/cpu/cpu-backend.js";
 import { CpuArtifactLoader } from "../../../dist/backends/cpu/artifact-loader.js";
-import { fixedTensorTypePolicy, resolveTensorType, operationTypeContract,
+import { assertBackendProgram, supportsBackendComputation } from "../../../dist/execution/backend.js";
+import { computationSignature } from "../../../dist/execution/operation-contracts.js";
+import { fixedTensorTypePolicy, resolveTensorType,
   GRADIENT_STATE_TYPES, DEFAULT_GRADIENT_ASSIGNMENT_TYPES, PERSISTENT_COPY_TYPES } from "../../../dist/execution/operation-types.js";
 
 const provenance = { operation: "type-boundary", source: "test" };
@@ -41,11 +43,10 @@ test("fixed type policies preserve distinct input/result rules and immutable con
 });
 
 test("family bindings share actual type rules while coefficient and state domains stay explicit", () => {
-  assert.equal(operationTypeContract("add-f32").types, operationTypeContract("mul-f32").types);
-  assert.equal(operationTypeContract("add-alpha-f32").types, operationTypeContract("add-f32").types);
-  assert.equal(operationTypeContract("add-alpha-f32").coefficient, "binary32");
-  assert.equal(operationTypeContract("add-f32").coefficient, "none");
-  assert.equal(operationTypeContract("toString"), undefined);
+  assert.equal(computationSignature("add-f32").types, computationSignature("mul-f32").types);
+  assert.equal(computationSignature("add-alpha-f32").types, computationSignature("add-f32").types);
+  assert.equal(computationSignature("add-alpha-f32").family.parameters, "coefficient");
+  assert.equal(computationSignature("add-f32").family.parameters, "none");
   for (const policy of [GRADIENT_STATE_TYPES, DEFAULT_GRADIENT_ASSIGNMENT_TYPES, PERSISTENT_COPY_TYPES]) {
     assert.equal(resolveTensorType(policy, policy.inputs.map(dtype => ({ dtype }))), "float32");
     assert.equal(resolveTensorType(policy, policy.inputs.map(() => ({ dtype: "float16" }))), undefined);
@@ -94,8 +95,46 @@ test("binding-only reconstruction validates canonical dtype and complete alias m
 });
 
 test("unknown captured numerical kinds cannot bypass the finite type vocabulary", () => {
-  const captured = capturedProgram("unregistered-f32");
-  assert.throws(() => new ExecutableProgram(captured.values, captured.computations, captured.result), TypeError);
+  const kinds = ["unregistered-f32", "toString", "__proto__", { toString() { throw new Error("Kind was coerced"); } }];
+  for (const kind of kinds) {
+    const captured = capturedProgram(kind);
+    assert.throws(() => new ExecutableProgram(captured.values, captured.computations, captured.result), {
+      name: "TypeError", message: "Unsupported numerical computation.",
+    });
+  }
+});
+
+test("capability admission indexes a frozen advertisement once as catalogue and graph sizes vary independently", () => {
+  for (const kindCount of [4, 1024]) {
+    for (const nodeCount of [1, 256]) {
+      let kindReads = 0;
+      const kinds = new Array(kindCount);
+      for (let index = 0; index < kindCount; index++) {
+        const kind = index === kindCount - 1 ? "add-f32" : `future-${index}`;
+        Object.defineProperty(kinds, index, { get() { kindReads++; return kind; } });
+      }
+      const capabilities = { device: "cpu", computations: Object.freeze(kinds) };
+      const captured = capturedProgram("add-f32");
+      for (let output = 3; output < nodeCount + 2; output++) {
+        captured.values.push({ ...captured.values[2], slot: output, storageSlot: output });
+        captured.computations.push({ ...captured.computations[0], inputs: [output - 1, 1], output });
+      }
+      const program = new ExecutableProgram(captured.values, captured.computations, nodeCount + 1);
+      assertBackendProgram(capabilities, program);
+      assert.equal(supportsBackendComputation(capabilities, "add-f32"), true);
+      assertBackendProgram(capabilities, program);
+      assert.equal(kindReads, kindCount);
+    }
+  }
+});
+
+test("mutable capability advertisements are revalidated and cannot admit unregistered kinds", () => {
+  const capabilities = { device: "cpu", computations: ["add-f32", "future-kind"] };
+  assertBackendProgram(capabilities, capturedProgram("add-f32"));
+  for (const kind of ["future-kind", "add-f32"]) {
+    capabilities.computations.shift();
+    assert.throws(() => assertBackendProgram(capabilities, capturedProgram(kind)), { code: "BACKEND_CAPABILITY_MISMATCH" });
+  }
 });
 
 test("CPU preparation rejects an unsupported captured kind before artifact loading", async () => {

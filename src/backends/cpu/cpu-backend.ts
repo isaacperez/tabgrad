@@ -10,7 +10,7 @@ import type { BackendDiagnostics, WasmVariant } from "./cpu-types.js";
 import { InvocationStorage } from "./invocation-storage.js";
 import { CpuAllocation, LinearMemoryAllocator, MAXIMUM_ADDRESS } from "./linear-memory.js";
 import { pointwiseGeometry, receivingGeometry } from "../../execution/broadcast-geometry.js";
-import { operationShapeContract } from "../../execution/operation-shapes.js";
+import { pointwiseFamily } from "../../execution/operation-contracts.js";
 import { pointwisePacket, receivingPacket } from "./broadcast-packet.js";
 import { DEFAULT_CPU_LINEAR_MEMORY_BYTES, WEBASSEMBLY_PAGE_BYTES, type CpuMemoryCapacity } from "./memory-capacity.js";
 
@@ -161,11 +161,11 @@ export class WebAssemblyCpuBackend implements ExecutionBackend {
           parameters = receivingPacket(receivingGeometry(pointwiseGeometry([
             program.values[computation.inputs[0]!]!.shape, value.shape,
           ]), 1), context.maximumBytes);
-        } else if (operationShapeContract(computation.kind) !== undefined && length !== 0
-          && inputs.some(input => input.byteLength !== output.byteLength)) {
-          parameters = pointwisePacket(operationShapeContract(computation.kind)!.policy.plan(
-            computation.inputs.map(slot => program.values[slot]!.shape),
-          ), context.maximumBytes);
+        } else {
+          const family = pointwiseFamily(computation.kind);
+          if (family !== undefined && length !== 0 && inputs.some(input => input.byteLength !== output.byteLength)) {
+            parameters = pointwisePacket(family.plan(computation.inputs.map(slot => program.values[slot]!.shape)), context.maximumBytes);
+          }
         }
         // Parameter construction/allocation is not a kernel trap. Create views
         // only after the last allocation that can grow and detach Wasm memory.

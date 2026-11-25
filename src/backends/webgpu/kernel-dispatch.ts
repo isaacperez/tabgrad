@@ -2,7 +2,7 @@ import { TabgradError } from "../../shared/errors.js";
 import type { ExecutableProgram, LoweredComputation } from "../../execution/executable-program.js";
 import { tensorElementCount } from "../../runtime/tensor-shape.js";
 import { pointwiseGeometry, receivingGeometry } from "../../execution/broadcast-geometry.js";
-import { operationShapeContract } from "../../execution/operation-shapes.js";
+import { pointwiseFamily } from "../../execution/operation-contracts.js";
 import { pointwiseParameters, receivingParameters, receivingStages, type ReceivingStage } from "./broadcast-dispatch.js";
 import { planLinearDispatch, type LinearDispatch, type LinearDispatchLayout, type LinearIndexSpace } from "./linear-dispatch.js";
 import { reductionStages, type ReductionStage } from "./reduction-stages.js";
@@ -88,7 +88,7 @@ export function planKernelDispatch(computation: LoweredComputation, program: Exe
   if (computation.kind === "add-f16" || computation.kind === "mul-f16") {
     const broadcast = elements !== 0 && inputShapes.some(shape => tensorElementCount(shape) !== elements);
     const kind = broadcast ? computation.kind === "add-f16" ? "broadcast-add-f16" : "broadcast-mul-f16" : computation.kind;
-    const words = broadcast ? pointwiseParameters(operationShapeContract(computation.kind)!.policy.plan(inputShapes), limits)
+    const words = broadcast ? pointwiseParameters(pointwiseFamily(computation.kind)!.plan(inputShapes), limits)
       : new Uint32Array([0, elements, 2]);
     words[2] = 2;
     const dispatch = planLinearDispatch(elements, KERNELS[kind].indexSpace, axis);
@@ -109,7 +109,7 @@ export function planKernelDispatch(computation: LoweredComputation, program: Exe
   if ((computation.kind === "add-f32" || computation.kind === "mul-f32") && elements !== 0
     && inputShapes.some(shape => tensorElementCount(shape) !== elements)) {
     const kind = computation.kind === "add-f32" ? "broadcast-add-f32" : "broadcast-mul-f32";
-    const words = pointwiseParameters(operationShapeContract(computation.kind)!.policy.plan(inputShapes), limits);
+    const words = pointwiseParameters(pointwiseFamily(computation.kind)!.plan(inputShapes), limits);
     const dispatch = planLinearDispatch(elements, { ...KERNELS[kind].indexSpace, elementsPerInvocation: words[2]! }, axis);
     return { path: "pointwise", dispatch, words, pipeline: selectPipeline(kind, dispatch.layout) };
   }
