@@ -2,11 +2,14 @@ import { TabgradError, throwCleanupFailures } from "../../shared/errors.js";
 import { getTensorIncomingIdentity, isTensorExposureOpen, acquireGradientExposure, gradientExposureNeedsCompletion, completeGradientExposure, getRecordingMode, enterNoGradScope, restoreRecordingMode, observeTensorSynchronously, completeRuntimeSession, shouldWarnUnretainedGradient, finalizeTensorExposure, registerOptimizerLease, isOptimizableParameter, type RuntimeSession, type Tensor } from "../../runtime/runtime.js";
 import type { OptimizerLease } from "../../runtime/optimizer-lease.js";
 import type { TensorDevice } from "../../execution/backend.js";
-import type { TensorDType } from "../../shared/tensor-dtype.js";
+import { TENSOR_DTYPES, tensorDType, type PythonNumericInput, type TensorDType } from "../../shared/tensor-dtype.js";
+
+const dtypeDefinitions = JSON.stringify(Object.values(TENSOR_DTYPES).map(({ name, pythonInput, properties }) =>
+  ({ name, typecode: pythonInput.typecode, ...properties })));
 
 /** Structural subset of Pyodide's borrowed buffer protocol; no interpreter owner. */
 interface PythonBuffer {
-  getBuffer(type: "f32" | "f64"): PythonBufferView;
+  getBuffer(type: PythonNumericInput["request"]): PythonBufferView;
 }
 
 interface PythonBufferView {
@@ -20,19 +23,17 @@ interface PythonBufferView {
   release(): void;
 }
 
-function boundedNumericView(view: PythonBufferView, dtype: TensorDType): Float32Array | Float64Array {
+function boundedNumericView(view: PythonBufferView, format: PythonNumericInput): Float32Array | Float64Array {
   const length = view.shape[0];
-  const validFormat = dtype === "float16"
-    ? view.data instanceof Float64Array && view.format === "d" && view.itemsize === 8
-    : view.data instanceof Float32Array && view.format === "f" && view.itemsize === 4;
-  if (!validFormat || !(view.data instanceof Float32Array || view.data instanceof Float64Array)
+  const data = view.data;
+  if (!(data instanceof format.array) || view.format !== format.typecode || view.itemsize !== format.itemsize
     || view.ndim !== 1 || view.shape.length !== 1 || !view.c_contiguous
     || length === undefined || !Number.isSafeInteger(length) || length < 0
     || !Number.isSafeInteger(view.offset) || view.offset < 0
-    || view.offset > view.data.length || length > view.data.length - view.offset) {
+    || view.offset > data.length || length > data.length - view.offset) {
     throw new TabgradError("INVALID_DATA", "Python input must expose the matching contiguous rank-one numeric buffer.");
   }
-  return view.data.subarray(view.offset, view.offset + length);
+  return data.subarray(view.offset, view.offset + length);
 }
 
 /** @internal Translate buffer borrowing into an owned runtime tensor import. */
@@ -41,6 +42,9 @@ export class PythonRuntimeBridge {
   readonly #exposureKeys = new WeakMap<object, number>();
   #nextExposureKey = 0;
   constructor(readonly session: RuntimeSession) {}
+
+  /** One projection of the shared definitions for the attached Python module. */
+  dtypeDefinitions(): string { return dtypeDefinitions; }
 
   registerSGD(groups: readonly (readonly Tensor[])[]): OptimizerLease {
     return registerOptimizerLease(this.session, groups);
@@ -137,11 +141,12 @@ export class PythonRuntimeBridge {
 
   tensorFromBuffer(buffer: PythonBuffer, shape?: readonly number[], requiresGrad = false, device: TensorDevice = "cpu",
     dtype: TensorDType = "float32"): Tensor {
-    const view = buffer.getBuffer(dtype === "float16" ? "f64" : "f32");
+    const format = tensorDType(dtype).pythonInput;
+    const view = buffer.getBuffer(format.request);
     try {
       // Runtime import performs the owned copy synchronously. Neither this view
       // nor the argument proxy may escape into deferred numerical execution.
-      return this.session.tensor(boundedNumericView(view, dtype), { ...(shape === undefined ? {} : { shape }), requiresGrad, device, dtype });
+      return this.session.tensor(boundedNumericView(view, format), { ...(shape === undefined ? {} : { shape }), requiresGrad, device, dtype });
     } finally {
       view.release();
     }

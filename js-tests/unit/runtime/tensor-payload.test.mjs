@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { createRuntimeSession } from "../../../dist/index.js";
 import { TENSOR_DTYPES, alignedByteLength, checkedElementBytes, tensorByteLength, tensorDType } from "../../../dist/shared/tensor-dtype.js";
-import { assertTensorPayload, copyTensorPayload, decodeTensorPayload, float32TensorPayload, hostTensorPayload } from "../../../dist/execution/tensor-payload.js";
+import { assertTensorPayload, captureTensorData, copyTensorPayload, decodeTensorPayload, float32TensorPayload, hostTensorPayload } from "../../../dist/execution/tensor-payload.js";
 
 test("dtype facts have one immutable identity and no inherited or unimplemented formats", () => {
   assert.equal(tensorDType("float32"), TENSOR_DTYPES.float32);
@@ -10,6 +11,51 @@ test("dtype facts have one immutable identity and no inherited or unimplemented 
   assert.equal(tensorDType("float16"), TENSOR_DTYPES.float16);
   for (const dtype of ["bfloat16", "toString", "__proto__", undefined]) assert.throws(() => tensorDType(dtype), TypeError);
 });
+
+test("dtype admission never coerces a name or touches input before rejection", async () => {
+  const session = createRuntimeSession();
+  let probes = 0;
+  const input = {
+    get [Symbol.iterator]() { probes++; throw new Error("invalid dtype must reject first"); },
+  };
+  const coercible = {
+    [Symbol.toPrimitive]() { probes++; throw new Error("dtype must not be coerced"); },
+  };
+  try {
+    for (const dtype of [new String("float32"), coercible, "__proto__", null, Symbol("float16")]) {
+      assert.throws(() => session.tensor(input, { dtype }), { code: "UNSUPPORTED_DTYPE" });
+      assert.throws(() => tensorDType(dtype), TypeError);
+    }
+    assert.equal(probes, 0);
+    assert.equal(session.diagnostics().liveTensorHandles, 0);
+  } finally { await session.close(); }
+});
+
+for (const [dtype, storage, width, observationCopies] of [
+  ["float32", Float32Array, 4, 1], ["float16", Uint16Array, 2, 0],
+]) {
+  test(`${dtype} captures one bounded owned array and selects the required observation path`, context => {
+    const from = context.mock.method(storage, "from");
+    const slice = context.mock.method(Float32Array.prototype, "slice");
+    const original = new Float64Array([99, 1.25, -0, 88]).subarray(1, 3);
+    const payload = captureTensorData(original, dtype);
+    assert.equal(from.mock.callCount(), 1);
+    assert.equal(from.mock.calls[0].arguments[0], original);
+    assert.equal(payload.bytes.byteOffset, 0);
+    assert.equal(payload.bytes.buffer.byteLength, 2 * width);
+    assert.notEqual(payload.bytes.buffer, original.buffer);
+    original.fill(99);
+
+    const view = decodeTensorPayload(payload, dtype, 2);
+    assert.equal(view.buffer === payload.bytes.buffer, dtype === "float32");
+    const owned = decodeTensorPayload(payload, dtype, 2, "copy");
+    assert.equal(slice.mock.callCount(), observationCopies);
+    assert.notEqual(owned.buffer, payload.bytes.buffer);
+    assert.deepEqual([...owned], [1.25, -0]);
+    owned[0] = 12;
+    assert.deepEqual([...decodeTensorPayload(payload, dtype, 2)], [1.25, -0]);
+  });
+}
 
 test("checked spans separate compact logical widths from physical alignment", () => {
   for (const [count, logical, physical] of [[0, 0, 0], [1, 2, 4], [3, 6, 8], [1048577, 2097154, 2097156]]) {

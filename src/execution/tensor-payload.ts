@@ -1,7 +1,6 @@
 import { TabgradError } from "../shared/errors.js";
 import { isRecord } from "../shared/object-shape.js";
-import { checkedElementBytes, tensorDType, type TensorDType } from "../shared/tensor-dtype.js";
-import { binary16ObservationBits } from "../shared/binary16.js";
+import { checkedElementBytes, invalidTensorData, tensorDType, type TensorDType, type TensorDTypeDescriptor } from "../shared/tensor-dtype.js";
 
 /** An owned, bounded encoded span. Construction freezes metadata, not the bytes. */
 export interface HostTensorPayload {
@@ -14,9 +13,12 @@ export interface HostTensorPayload {
 
 /** Validate again after structured clone; object identity and freezing do not cross realms. */
 export function assertTensorPayload(payload: unknown, dtype: TensorDType, elements: number): asserts payload is HostTensorPayload {
-  const descriptor = tensorDType(dtype);
+  assertEncodedSpan(payload, tensorDType(dtype), elements);
+}
+
+function assertEncodedSpan(payload: unknown, descriptor: TensorDTypeDescriptor, elements: number): asserts payload is HostTensorPayload {
   const byteLength = checkedElementBytes(elements, descriptor.bytesPerElement);
-  if (!isRecord(payload) || payload.kind !== "host" || payload.dtype !== dtype
+  if (!isRecord(payload) || payload.kind !== "host" || payload.dtype !== descriptor.name
     || payload.encoding !== descriptor.encoding || payload.elements !== elements
     || !(payload.bytes instanceof Uint8Array) || !(payload.bytes.buffer instanceof ArrayBuffer)
     || payload.bytes.byteLength !== byteLength || payload.bytes.byteOffset % descriptor.bytesPerElement !== 0) {
@@ -27,9 +29,33 @@ export function assertTensorPayload(payload: unknown, dtype: TensorDType, elemen
 }
 
 export function hostTensorPayload(dtype: TensorDType, elements: number, bytes: Uint8Array<ArrayBuffer>): HostTensorPayload {
-  const payload: HostTensorPayload = { kind: "host", dtype, encoding: tensorDType(dtype).encoding, elements, bytes };
-  assertTensorPayload(payload, dtype, elements);
+  return encodedSpan(tensorDType(dtype), elements, bytes);
+}
+
+function encodedSpan(descriptor: TensorDTypeDescriptor, elements: number, bytes: Uint8Array<ArrayBuffer>): HostTensorPayload {
+  const payload: HostTensorPayload = { kind: "host", dtype: descriptor.name, encoding: descriptor.encoding, elements, bytes };
+  assertEncodedSpan(payload, descriptor, elements);
   return Object.freeze(payload);
+}
+
+/** Capture one owned span before caller-owned input can change. */
+export function captureTensorData(data: Iterable<number> | ArrayLike<number>, dtype: TensorDType): HostTensorPayload {
+  const descriptor = tensorDType(dtype);
+  try {
+    if (typeof data !== "object" || data === null) throw invalidTensorData();
+    const iterator = (data as Partial<Iterable<number>>)[Symbol.iterator];
+    if (iterator === undefined) {
+      const length = (data as Partial<ArrayLike<number>>).length;
+      if (typeof length !== "number" || !Number.isSafeInteger(length) || length < 0) throw invalidTensorData();
+    } else if (typeof iterator !== "function") {
+      throw invalidTensorData();
+    }
+    const values = descriptor.capture(data);
+    return encodedSpan(descriptor, values.length, new Uint8Array(values.buffer, values.byteOffset, values.byteLength));
+  } catch (error) {
+    if (error instanceof TabgradError) throw error;
+    throw invalidTensorData(error);
+  }
 }
 
 /** Wrap the existing import without an explicit clone or numeric conversion.
@@ -46,14 +72,7 @@ export function copyTensorPayload(payload: HostTensorPayload): HostTensorPayload
 /** Numeric host observation is shared by JavaScript and Python, below their syntax. */
 export function decodeTensorPayload(payload: HostTensorPayload, dtype: TensorDType, elements: number,
   result: "view" | "copy" = "view"): Float32Array<ArrayBuffer> {
-  assertTensorPayload(payload, dtype, elements);
-  if (dtype === "float16") {
-    const words = new Uint16Array(payload.bytes.buffer, payload.bytes.byteOffset, elements);
-    const numeric = new Float32Array(elements);
-    const observed = new Uint32Array(numeric.buffer);
-    for (let index = 0; index < elements; index++) observed[index] = binary16ObservationBits(words[index]!);
-    return numeric;
-  }
-  const numeric = new Float32Array(payload.bytes.buffer, payload.bytes.byteOffset, elements);
-  return result === "copy" ? numeric.slice() : numeric;
+  const descriptor = tensorDType(dtype);
+  assertEncodedSpan(payload, descriptor, elements);
+  return descriptor.observe(payload.bytes, elements, result === "copy");
 }

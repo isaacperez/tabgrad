@@ -4,10 +4,19 @@ from __future__ import annotations
 
 from array import array
 from collections.abc import Iterable, Iterator
+from json import loads
 from math import prod
 from operator import index
 from types import NotImplementedType, TracebackType
-from typing import Literal, NoReturn, SupportsIndex, TypeAlias, cast, overload
+from typing import (
+    Literal,
+    NoReturn,
+    SupportsIndex,
+    TypeAlias,
+    TypedDict,
+    cast,
+    overload,
+)
 from warnings import warn
 from weakref import WeakValueDictionary, finalize
 
@@ -81,6 +90,14 @@ class Size(tuple[int, ...]):
         return prod(self)
 
 
+class _DTypeFacts(TypedDict):
+    name: str
+    typecode: Literal["f", "d"]
+    is_floating_point: bool
+    is_complex: bool
+    is_signed: bool
+
+
 class dtype:
     """The exposed dtype objects are constants, not constructible descriptors."""
 
@@ -90,23 +107,38 @@ class dtype:
         raise TypeError("cannot create 'torch.dtype' instances")
 
     def __repr__(self) -> str:
-        return "torch.float16" if self is float16 else "torch.float32"
+        return f"torch.{self._facts()['name']}"
+
+    def _facts(self) -> _DTypeFacts:
+        return _dtype_facts.get(id(self), _float32_facts)
 
     @property
     def is_floating_point(self) -> bool:
-        return True
+        return self._facts()["is_floating_point"]
 
     @property
     def is_complex(self) -> bool:
-        return False
+        return self._facts()["is_complex"]
 
     @property
     def is_signed(self) -> bool:
-        return True
+        return self._facts()["is_signed"]
 
 
-float32 = object.__new__(dtype)
-float16 = object.__new__(dtype)
+# The matched private bridge produces these facts from the same definitions
+# that select storage codecs. Only the canonical objects admit Python input.
+_definitions = cast("list[_DTypeFacts]", loads(_bridge.dtypeDefinitions()))
+_dtypes_by_name = {facts["name"]: object.__new__(dtype) for facts in _definitions}
+_dtype_facts = {id(_dtypes_by_name[facts["name"]]): facts for facts in _definitions}
+float32 = _dtypes_by_name["float32"]
+float16 = _dtypes_by_name["float16"]
+_float32_facts = _dtype_facts[id(float32)]
+_explicit_dtype_error = (
+    "Tabgrad requires explicit dtype="
+    + " or ".join(f"torch.{name}" for name in _dtypes_by_name)
+    + "."
+)
+del _definitions
 
 
 class device:
@@ -173,12 +205,10 @@ class Tensor:
 
     @property
     def dtype(self) -> dtype:
-        name = self._handle.dtype
-        if name == "float32":
-            return float32
-        if name == "float16":
-            return float16
-        raise RuntimeError("Unsupported runtime dtype.")
+        selected = _dtypes_by_name.get(self._handle.dtype)
+        if selected is None:
+            raise RuntimeError("Unsupported runtime dtype.")
+        return selected
 
     @property
     def device(self) -> device:
@@ -571,16 +601,15 @@ def tensor(
     pin_memory: bool = False,
 ) -> Tensor:
     """Copy numeric input into an explicitly typed, owned tensor."""
-    if dtype is not float32 and dtype is not float16:
-        raise RuntimeError(
-            "Tabgrad requires explicit dtype=torch.float32 or torch.float16."
-        )
+    facts = _dtype_facts.get(id(dtype))
+    if facts is None:
+        raise RuntimeError(_explicit_dtype_error)
     selected_device = _device_name(device)
     if type(requires_grad) is not bool or type(pin_memory) is not bool:
         raise TypeError("requires_grad and pin_memory must be bool.")
     if pin_memory:
         raise RuntimeError("Pinned memory is unsupported.")
-    buffer, shape = _input_buffer(data, "d" if dtype is float16 else "f")
+    buffer, shape = _input_buffer(data, facts["typecode"])
     # Creation and the sibling autograd frontend transfer owned bridge handles.
     return Tensor._from_handle(  # pyright: ignore[reportPrivateUsage]
         _bridge.tensorFromBuffer(
@@ -588,7 +617,7 @@ def tensor(
             to_js(shape),
             requires_grad,
             selected_device,
-            "float16" if dtype is float16 else "float32",
+            facts["name"],
         )
     )
 
