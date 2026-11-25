@@ -44,9 +44,8 @@ import {
   type Materialization,
 } from "./program-formation.js";
 
-import { tensorByteLength, tensorDType, type TensorDType } from "../shared/tensor-dtype.js";
-import { decodeTensorPayload, hostTensorPayload, type HostTensorPayload } from "../execution/tensor-payload.js";
-import { encodeBinary16 } from "../shared/binary16.js";
+import { isTensorDType, tensorByteLength, tensorDType, type TensorDType } from "../shared/tensor-dtype.js";
+import { captureTensorData, decodeTensorPayload, hostTensorPayload, type HostTensorPayload } from "../execution/tensor-payload.js";
 export type { TensorDType } from "../shared/tensor-dtype.js";
 export type TensorLayout = "contiguous";
 
@@ -104,56 +103,6 @@ interface AdmittedOperation {
   readonly record: OperationRecord;
   readonly outputMetadata: TensorMetadata;
   readonly broadcast?: BroadcastGeometry;
-}
-
-function invalidTensorData(cause?: unknown): TabgradError {
-  return new TabgradError(
-    "INVALID_DATA",
-    "Tensor data must be a finite iterable or array-like collection of numbers.",
-    { operation: "tensor", contract: "numeric-data" },
-    cause,
-  );
-}
-
-function requireNumericElement(value: unknown): number {
-  if (typeof value !== "number") {
-    throw invalidTensorData();
-  }
-  return value;
-}
-
-function requireBinary16Element(value: unknown): number {
-  return encodeBinary16(requireNumericElement(value));
-}
-
-function copyTensorData(data: unknown, dtype: TensorDType): HostTensorPayload {
-  try {
-    if (typeof data !== "object" || data === null) {
-      throw invalidTensorData();
-    }
-    const source = data as Record<PropertyKey, unknown>;
-    const iterator = source[Symbol.iterator];
-    if (iterator !== undefined) {
-      if (typeof iterator !== "function") {
-        throw invalidTensorData();
-      }
-      const values = dtype === "float32" ? Float32Array.from(data as Iterable<number>, requireNumericElement)
-        : Uint16Array.from(data as Iterable<number>, requireBinary16Element);
-      return hostTensorPayload(dtype, values.length, new Uint8Array(values.buffer, values.byteOffset, values.byteLength));
-    }
-    const length = source.length;
-    if (typeof length !== "number" || !Number.isSafeInteger(length) || length < 0) {
-      throw invalidTensorData();
-    }
-    const values = dtype === "float32" ? Float32Array.from(data as ArrayLike<number>, requireNumericElement)
-      : Uint16Array.from(data as ArrayLike<number>, requireBinary16Element);
-    return hostTensorPayload(dtype, values.length, new Uint8Array(values.buffer, values.byteOffset, values.byteLength));
-  } catch (error) {
-    if (error instanceof TabgradError) {
-      throw error;
-    }
-    throw invalidTensorData(error);
-  }
 }
 
 function retainProgramFailureContext(
@@ -1230,7 +1179,7 @@ export class RuntimeSession {
       throw new TypeError("requiresGrad must be a boolean.");
     }
     const dtype = options.dtype === undefined ? "float32" : options.dtype;
-    if (dtype !== "float32" && dtype !== "float16") {
+    if (!isTensorDType(dtype)) {
       throw new TabgradError(
         "UNSUPPORTED_DTYPE",
         "Tensor creation requires a supported explicit dtype.",
@@ -1252,7 +1201,7 @@ export class RuntimeSession {
       );
     }
 
-    const payload = copyTensorData(data, dtype);
+    const payload = captureTensorData(data, dtype);
     if (device === "webgpu" && payload.bytes.byteLength > backend.capabilities.maximumTensorBytes) {
       throw new TabgradError("RESOURCE_EXHAUSTED", "Tensor exceeds the selected device's buffer limit.", {
         operation: "tensor", device, byteLength: payload.bytes.byteLength,

@@ -93,7 +93,7 @@ export { attachPython } from ${JSON.stringify(`${fixture.metadata.name}/python`)
     const interpreter = { version: "314.0.6", ffi: { PyProxy: class {} },
       runPython() { calls += 1; throw new Error("Unexpected interpreter entry"); },
       async runPythonAsync() { calls += 1; throw new Error("Unexpected interpreter entry"); } };
-    server.virtualResponses.set("/python/old.json", { body: Buffer.from(JSON.stringify({ ...python, bridgeVersion: 5 })), contentType: "application/json" });
+    server.virtualResponses.set("/python/old.json", { body: Buffer.from(JSON.stringify({ ...python, bridgeVersion: 6 })), contentType: "application/json" });
     await assert.rejects(attachPython(interpreter, { manifestUrl: new URL("python/old.json", origin) }), error => error.code === "PYTHON_ASSET_INVALID");
     server.virtualResponses.set("/python/bootstrap.py", { body: Buffer.from("corrupt source"), contentType: "text/plain" });
     await assert.rejects(attachPython(interpreter, { manifestUrl: new URL("python/manifest.json", origin) }), error => error.code === "PYTHON_ASSET_INVALID");

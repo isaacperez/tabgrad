@@ -1488,6 +1488,20 @@ old_factory = torch.tensor
     await replacement.runPythonAsync(`
 import torch
 assert torch is not old_torch
+assert torch.float32 is not old_torch.float32 and torch.float16 is not old_torch.float16
+class ForeignDType:
+    def __hash__(self):
+        raise AssertionError("dtype must not be hashed")
+    def __eq__(self, _):
+        raise AssertionError("dtype must not be compared")
+for invalid_dtype in (old_torch.float32, object.__new__(torch.dtype), ForeignDType()):
+    try:
+        torch.tensor([1], dtype=invalid_dtype)
+    except RuntimeError as error:
+        assert str(error) == "Tabgrad requires explicit dtype=torch.float32 or torch.float16."
+    else:
+        raise AssertionError("noncanonical dtype accepted")
+del ForeignDType, invalid_dtype
 try:
     old_factory([1], dtype=old_torch.float32)
 except JsException as error:
@@ -1495,6 +1509,7 @@ except JsException as error:
 else:
     raise AssertionError('old factory rebound')
 new_tensor = torch.tensor([1], dtype=torch.float32)
+assert new_tensor.dtype is torch.float32
 assert torch._runtime_session.diagnostics().liveTensorHandles == 1
 del left, foreign, fake, old_factory, old_torch
 `);
