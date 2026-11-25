@@ -37,6 +37,15 @@ function compileExportSignatureCheck(): WebAssembly.Module {
 
 let exportSignatureCheck: WebAssembly.Module | undefined;
 
+export function assertCpuMemoryImport(module: WebAssembly.Module): void {
+  const imports = WebAssembly.Module.imports(module);
+  if (imports.length !== 1 || imports[0]?.module !== "env" || imports[0]?.name !== "memory" || imports[0]?.kind !== "memory") {
+    throw new TabgradError("BACKEND_ABI_MISMATCH", "The WebAssembly module imports do not match the raw ABI.", {
+      backend: "webassembly-cpu", imports, phase: "abi-validation",
+    });
+  }
+}
+
 export function assertCpuArtifactAbi(exports: WebAssembly.Exports): asserts exports is KernelExports {
   for (const [name] of CPU_REQUIRED_EXPORTS) {
     if (typeof exports[name] !== "function") {
@@ -64,4 +73,14 @@ export function assertCpuArtifactAbi(exports: WebAssembly.Exports): asserts expo
       backend: "webassembly-cpu", phase: "abi-validation",
     });
   }
+}
+
+export function cpuArenaBase(exports: KernelExports, memory: WebAssembly.Memory, alignment: number): number {
+  const arenaBase = exports.tabgrad_arena_base() >>> 0;
+  if (arenaBase > memory.buffer.byteLength || arenaBase % alignment !== 0) {
+    throw new TabgradError("BACKEND_ABI_MISMATCH", "The WebAssembly module returned an invalid arena boundary.", {
+      arenaBase, backend: "webassembly-cpu", phase: "abi-validation",
+    });
+  }
+  return arenaBase;
 }

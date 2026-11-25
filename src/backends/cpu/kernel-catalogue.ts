@@ -7,14 +7,14 @@ interface Capability {
   readonly bit: number;
 }
 
-interface KernelSymbol<Name extends string = string> {
+interface KernelSymbol<Name extends string = string, Arity extends number = number> {
   readonly name: Name;
-  readonly arity: number;
+  readonly arity: Arity;
   readonly capability: Capability;
 }
 
 const ABI_ARITY = Object.freeze({ pointwise: 4, broadcast: 5, inputLength: 3, outputLength: 3,
-  coefficient: 5, matrix: 7, receiving: 4 });
+  coefficient: 5, matrix: 7, receiving: 4 } as const);
 type SingleLayout = Exclude<keyof typeof ABI_ARITY, "pointwise" | "broadcast">;
 
 export type CpuKernelDeclaration =
@@ -23,7 +23,8 @@ export type CpuKernelDeclaration =
 
 function capability(name: string, bit: number): Capability { return Object.freeze({ name, bit }); }
 
-function symbol<Name extends string>(name: Name, layout: keyof typeof ABI_ARITY, capability: Capability): KernelSymbol<Name> {
+function symbol<Name extends string, Layout extends keyof typeof ABI_ARITY>(name: Name, layout: Layout, capability: Capability)
+  : KernelSymbol<Name, (typeof ABI_ARITY)[Layout]> {
   return Object.freeze({ name, arity: ABI_ARITY[layout], capability });
 }
 
@@ -77,10 +78,14 @@ const namesByBit = new Map<number, string>();
 const bootstrapExports = [
   ["tabgrad_abi_version", 0], ["tabgrad_capabilities", 0], ["tabgrad_arena_base", 0],
 ] as const;
-type SymbolName<Declaration> = Declaration extends { symbol: KernelSymbol<infer Name> } ? Name
-  : Declaration extends { dense: KernelSymbol<infer Dense>; broadcast: KernelSymbol<infer Broadcast> } ? Dense | Broadcast : never;
-type RequiredExportName = SymbolName<RegisteredKernel> | (typeof bootstrapExports)[number][0];
-export type KernelExports = WebAssembly.Exports & Readonly<Record<RequiredExportName, (...parameters: number[]) => number>>;
+type Symbols<Declaration> = Declaration extends { symbol: infer Symbol } ? Symbol
+  : Declaration extends { dense: infer Dense; broadcast: infer Broadcast } ? Dense | Broadcast : never;
+type RequiredSymbol = Symbols<RegisteredKernel> | { name: (typeof bootstrapExports)[number][0]; arity: 0 };
+type WasmArguments<Arity extends number, Parameters extends number[] = []> = Parameters["length"] extends Arity
+  ? Parameters : WasmArguments<Arity, [...Parameters, number]>;
+export type KernelExports = WebAssembly.Exports & {
+  readonly [Symbol in RequiredSymbol as Symbol["name"]]: (...parameters: WasmArguments<Symbol["arity"]>) => number;
+};
 
 const exportArities = new Map<string, number>(bootstrapExports);
 let requiredMask = 0;

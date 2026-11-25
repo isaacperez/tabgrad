@@ -297,8 +297,9 @@ Each CPU kernel declaration binds an executable signature to its raw symbols,
 calling layout, and capability bits. The declarations supply the CPU dispatch
 lookup, the ordered manifest capabilities, and the function types validated in
 both compiled artifacts. Manifest generation and runtime preparation check
-the required exports before any numerical call. The adapter verifies integer
-parameter and result types by linking an import-only WebAssembly module.
+the memory import, arena boundary, and required exports before any numerical
+call. These checks verify integer parameter and result types by linking an
+import-only WebAssembly module.
 
 Operation-specific numerical, empty-range and cost contracts belong in the
 [sum](../reference/tensor-sum.md) and

@@ -94,6 +94,7 @@ export function fixtureModule({
   arenaBase = 1_048_576,
   capabilities = CPU_CAPABILITY_MASK,
   kernelBehavior = "success",
+  importMemory = true,
   memoryImportName = "memory",
   omitExports = [],
   incompatibleAddParameter = false,
@@ -111,10 +112,10 @@ export function fixtureModule({
   return Buffer.from([
     0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
     ...section(1, [...unsignedLeb128(functionTypes.length), ...functionTypes.flat()]),
-    ...section(2, [
+    ...(importMemory ? section(2, [
       0x01, ...encodedString("env"), ...encodedString(memoryImportName), 0x02, 0x01,
       ...unsignedLeb128(CPU_MEMORY_PROFILE.initialPages), ...unsignedLeb128(CPU_MEMORY_PROFILE.maximumPages),
-    ]),
+    ]) : []),
     ...section(3, [...unsignedLeb128(exports.length), ...exports.flatMap((_, index) => unsignedLeb128(index))]),
     ...(failureCall === undefined ? [] : section(6, [0x01, i32, 0x01, 0x41, 0x00, 0x0b])),
     ...section(7, [

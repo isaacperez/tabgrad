@@ -3,7 +3,7 @@ import type { BackendDiagnostics, WasmVariant } from "./cpu-types.js";
 import { CPU_MEMORY_PROFILE, DEFAULT_CPU_LINEAR_MEMORY_BYTES, WEBASSEMBLY_PAGE_BYTES,
   validateCpuLinearMemoryBytes, type CpuMemoryCapacity } from "./memory-capacity.js";
 
-import { assertCpuArtifactAbi } from "./artifact-abi.js";
+import { assertCpuArtifactAbi, assertCpuMemoryImport, cpuArenaBase } from "./artifact-abi.js";
 import { CPU_ABI_VERSION, CPU_CAPABILITIES, type KernelExports } from "./kernel-catalogue.js";
 
 type BackendPreparationPhase =
@@ -151,19 +151,7 @@ export class CpuArtifactLoader {
       const module = await WebAssembly.compile(bytes);
       this.#timings.compilationMilliseconds = performance.now() - compilationStart;
       phase = "abi-validation";
-      const imports = WebAssembly.Module.imports(module);
-      if (
-        imports.length !== 1
-        || imports[0]?.module !== "env"
-        || imports[0]?.name !== "memory"
-        || imports[0]?.kind !== "memory"
-      ) {
-        throw new TabgradError(
-          "BACKEND_ABI_MISMATCH",
-          "The WebAssembly module imports do not match the raw ABI.",
-          { backend: "webassembly-cpu", imports, phase },
-        );
-      }
+      assertCpuMemoryImport(module);
       phase = "instantiation";
       const memory = new WebAssembly.Memory({
         initial: manifest.memory.initialPages,
@@ -175,17 +163,7 @@ export class CpuArtifactLoader {
       phase = "abi-validation";
       const exports = instance.exports;
       assertCpuArtifactAbi(exports);
-      const arenaBase = exports.tabgrad_arena_base() >>> 0;
-      if (
-        arenaBase > memory.buffer.byteLength
-        || arenaBase % manifest.memory.alignment !== 0
-      ) {
-        throw new TabgradError(
-          "BACKEND_ABI_MISMATCH",
-          "The WebAssembly module returned an invalid arena boundary.",
-          { arenaBase, backend: "webassembly-cpu", phase },
-        );
-      }
+      const arenaBase = cpuArenaBase(exports, memory, manifest.memory.alignment);
       return {
         memory,
         exports,

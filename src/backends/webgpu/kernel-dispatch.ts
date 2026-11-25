@@ -16,7 +16,7 @@ import { WEBGPU_BROADCAST_ADDITION_SOURCE, WEBGPU_BROADCAST_MULTIPLICATION_SOURC
 import { WEBGPU_RECEIVING_SOURCE } from "./kernels/receiving.js";
 import { halfPointwiseSource, WEBGPU_HALF_WORKGROUP_SIZE } from "./kernels/half.js";
 
-type KernelKind = LoweredComputation["kind"] | "broadcast-add-f32" | "broadcast-mul-f32" | "broadcast-add-f16" | "broadcast-mul-f16";
+type PossibleKernelKind = LoweredComputation["kind"] | "broadcast-add-f32" | "broadcast-mul-f32" | "broadcast-add-f16" | "broadcast-mul-f16";
 export type PipelineKey = `${KernelKind}/${LinearDispatchLayout}`;
 export interface PipelineSelection {
   readonly key: PipelineKey;
@@ -30,7 +30,7 @@ interface KernelDefinition {
   readonly source: (layout: LinearDispatchLayout) => string;
 }
 
-// This finite physical table is exhaustive over current lowering, never shape-keyed.
+// Only signatures provided by WebGPU have physical entries here.
 const KERNELS = Object.freeze({
   "add-f16": { indexSpace: { kind: "invocation", workgroupSize: WEBGPU_HALF_WORKGROUP_SIZE, elementsPerInvocation: 2 }, original: halfPointwiseSource("add"), source: layout => halfPointwiseSource("add", false, layout) },
   "mul-f16": { indexSpace: { kind: "invocation", workgroupSize: WEBGPU_HALF_WORKGROUP_SIZE, elementsPerInvocation: 2 }, original: halfPointwiseSource("mul"), source: layout => halfPointwiseSource("mul", false, layout) },
@@ -47,7 +47,11 @@ const KERNELS = Object.freeze({
     source: layout => pointwiseSource(WEBGPU_ADDITION_ARITHMETIC_SOURCE, "add_binary32", layout) },
   "broadcast-mul-f32": { indexSpace: { kind: "invocation", workgroupSize: WEBGPU_POINTWISE_WORKGROUP_SIZE, elementsPerInvocation: 1 }, original: WEBGPU_BROADCAST_MULTIPLICATION_SOURCE,
     source: layout => pointwiseSource(WEBGPU_MULTIPLICATION_ARITHMETIC_SOURCE, "multiply_binary32", layout) },
-} as const satisfies Readonly<Record<KernelKind, KernelDefinition>>);
+} as const satisfies Readonly<Partial<Record<PossibleKernelKind, KernelDefinition>>>);
+
+type KernelKind = keyof typeof KERNELS;
+export type WebGpuComputationKind = Extract<KernelKind, LoweredComputation["kind"]>;
+export type WebGpuComputation = LoweredComputation & { readonly kind: WebGpuComputationKind };
 
 export function selectPipeline(kind: KernelKind, layout: LinearDispatchLayout): PipelineSelection {
   if (KERNELS[kind].indexSpace.kind === "window" && layout !== "linear") {
@@ -80,7 +84,7 @@ interface DispatchLimits {
 }
 
 /** Derive finite invocation metadata before compilation, writes or allocation. */
-export function planKernelDispatch(computation: LoweredComputation, program: ExecutableProgram, limits: DispatchLimits): KernelDispatchPlan {
+export function planKernelDispatch(computation: WebGpuComputation, program: ExecutableProgram, limits: DispatchLimits): KernelDispatchPlan {
   const output = program.values[computation.output]!;
   const elements = tensorElementCount(output.shape);
   const inputShapes = computation.inputs.map(slot => program.values[slot]!.shape);

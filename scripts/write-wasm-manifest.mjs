@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { wasmProfile } from "./wasm-profile.mjs";
-import { assertCpuArtifactAbi } from "../dist/backends/cpu/artifact-abi.js";
+import { assertCpuArtifactAbi, assertCpuMemoryImport, cpuArenaBase } from "../dist/backends/cpu/artifact-abi.js";
 import { CPU_ABI_VERSION, CPU_CAPABILITIES } from "../dist/backends/cpu/kernel-catalogue.js";
 
 const variants = [];
@@ -12,9 +12,11 @@ for (const descriptor of [
   const relativePath = `wasm/kernels-${descriptor.id}.wasm`;
   const bytes = await readFile(new URL(`../dist/${relativePath}`, import.meta.url));
   const module = await WebAssembly.compile(bytes);
+  assertCpuMemoryImport(module);
   const memory = new WebAssembly.Memory({ initial: wasmProfile.initialPages, maximum: wasmProfile.maximumPages });
   const instance = await WebAssembly.instantiate(module, { env: { memory } });
   assertCpuArtifactAbi(instance.exports);
+  cpuArenaBase(instance.exports, memory, wasmProfile.alignment);
   variants.push({
     id: descriptor.id,
     path: relativePath,

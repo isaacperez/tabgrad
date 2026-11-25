@@ -24,7 +24,7 @@ mkdirSync(dirname(path),{recursive:true}); writeFileSync(path,bytes);
 appendFileSync("compiler-results.jsonl",JSON.stringify({variant,path,bytes:bytes.toString("base64")})+"\\n");
 `;
 
-async function fixture(context, { redirected = false, stale = false, invalidVariant } = {}) {
+async function fixture(context, { redirected = false, stale = false, modules = {} } = {}) {
   const root = await mkdtemp(join(tmpdir(), "tabgrad-wasm-build-"));
   context.after(() => rm(root, { recursive: true, force: true }));
   await mkdir(join(root, "scripts"));
@@ -37,10 +37,9 @@ async function fixture(context, { redirected = false, stale = false, invalidVari
     await copyFile(new URL(`../../../dist/${path}`, import.meta.url), output);
   }
   await writeFile(join(root, "package.json"), '{"type":"module"}\n');
-  await writeFile(join(root, "scalar.wasm"), fixtureModule(invalidVariant === "scalar"
-    ? { omitExports: ["tabgrad_broadcast_mul_f16"] } : {}));
-  await writeFile(join(root, "simd128.wasm"), fixtureModule(invalidVariant === "simd128"
-    ? { incompatibleAddResult: true } : {}));
+  for (const variant of ["scalar", "simd128"]) {
+    await writeFile(join(root, `${variant}.wasm`), fixtureModule(modules[variant]));
+  }
   const cargo = join(root, "cargo-double.mjs");
   await writeFile(cargo, `#!${process.execPath}\n${compiler}`, { mode: 0o700 });
   if (stale) {
@@ -86,9 +85,14 @@ for (const redirected of [false, "absolute", "relative"]) {
   }
 }
 
-for (const [variant, message] of [["scalar", /missing a required function export/], ["simd128", /incompatible function signature/]]) {
-  test(`manifest generation rejects an invalid ${variant} module before writing metadata`, async context => {
-    const state = await fixture(context, { invalidVariant: variant });
+for (const [label, variant, options, message] of [
+  ["missing export", "scalar", { omitExports: ["tabgrad_broadcast_mul_f16"] }, /missing a required function export/],
+  ["incompatible return type", "simd128", { incompatibleAddResult: true }, /incompatible function signature/],
+  ["missing memory import", "simd128", { importMemory: false }, /imports do not match the raw ABI/],
+  ["misaligned arena", "scalar", { arenaBase: 1_048_577 }, /invalid arena boundary/],
+]) {
+  test(`manifest generation rejects a ${variant} module with ${label} before writing metadata`, async context => {
+    const state = await fixture(context, { modules: { [variant]: options } });
     assert.equal(runScript(state, "build-wasm.mjs").status, 0);
     const result = runScript(state, "write-wasm-manifest.mjs");
     assert.notEqual(result.status, 0);

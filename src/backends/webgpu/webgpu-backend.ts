@@ -1,4 +1,5 @@
-import { planKernelDispatch, requestedPipelines, selectPipeline, pipelineSource, type PipelineKey, type PipelineSelection, type KernelDispatchPlan } from "./kernel-dispatch.js";
+import { planKernelDispatch, requestedPipelines, selectPipeline, pipelineSource, type PipelineKey, type PipelineSelection,
+  type KernelDispatchPlan, type WebGpuComputation, type WebGpuComputationKind } from "./kernel-dispatch.js";
 import { gpuTensorCapacityBytes } from "./webgpu-capacity.js";
 import type { BackendCapabilities, ExecutionBackend, ProgramBinding, ResidentAllocation } from "../../execution/backend.js";
 import { assertTensorPayload, hostTensorPayload, type HostTensorPayload } from "../../execution/tensor-payload.js";
@@ -55,8 +56,6 @@ interface GpuReadback {
   drained?: Promise<void>;
   mapping?: Promise<HostTensorPayload>;
 }
-
-type WebGpuComputationKind = LoweredComputation["kind"];
 
 /** Transfer whole GPU words, copying only the final partial word on the host. */
 function writeTensorBytes(queue: GPUQueue, buffer: GPUBuffer, bytes: Uint8Array<ArrayBuffer>): void {
@@ -185,7 +184,8 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
     }
     return program.computations.map(computation => {
       try {
-        const plan = planKernelDispatch(computation, program, this.#limits);
+        // Admission above checked this device's advertised subset before narrowing.
+        const plan = planKernelDispatch(computation as WebGpuComputation, program, this.#limits);
         if (requestedPipelines(plan).some(pipeline => pipeline.kind.startsWith("broadcast-"))
           && this.#device.limits.maxStorageBuffersPerShaderStage < 4) {
           throw new TabgradError("BACKEND_CAPABILITY_MISMATCH", "Unsupported WebGPU broadcast bindings.");
