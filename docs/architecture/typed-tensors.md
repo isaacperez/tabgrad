@@ -35,6 +35,15 @@ rules independently of the semantic runtime. A new operation binds its
 appropriate type policy; it does not add another dtype switch to scheduling,
 collection or derivative traversal.
 
+For contiguous homogeneous pointwise signatures that fit an existing physical
+family, give each dtype one canonical declaration of its logical identity,
+encoding, supported import and observation formats, and shared codecs. Derive
+the frontend metadata that represents those same facts. JavaScript validates
+explicit dtype names as primitive strings without coercion. Python owns
+normalization and the borrow lifetime for imported buffers. Dtype registration
+alone grants neither a default type nor arithmetic, differentiation or mutation
+capability.
+
 ## Resolve type rules before numerical loops
 
 Admission resolves the accepted input/result relation once, alongside shape
@@ -56,12 +65,22 @@ capability checks and preparation use the same admitted facts. Unsupported
 signatures fail before numerical work or observable state changes and never
 silently move to another backend.
 
+Within these pointwise families, declare each supported signature alongside the
+kernels that implement it. Build-time validation checks uniqueness and
+completeness and derives immutable lookup tables available to clean builds and
+standalone checks. The operation family owns arity, shape and parameters.
+Admission and reconstruction both use its validated input, result and
+arithmetic signature. Adding a signature requires its declaration and kernel
+bodies, its dtype definition and codecs if new, and independent conformance
+cases. Selection uses direct lookup without scanning the catalogue per node.
+
 Physical preparation identities distinguish numerical signature, encoding,
 layout and relevant capability/generation. Tensor shape remains runtime
 geometry rather than an unbounded cache key. A numerical loop uses its selected
-implementation, without consulting a dtype registry for every element.
-Adding a type still requires the arithmetic specializations that support it;
-registering a dtype does not make every operation valid automatically.
+implementation, without consulting a dtype registry for every element. GPU
+shader generation and compilation begin only when a validated signature and
+layout request them. The device owner remains responsible for preparation
+and cache lifetime.
 
 ## Give payloads explicit bounds
 
@@ -78,11 +97,22 @@ the bytes as another type. CPU views must retain their memory-growth safety.
 Python borrowed-buffer imports retain synchronous copying and lease release
 on both success and failure.
 
+Resident tensor identity carries the encoding and exact logical extent.
+Validate those facts at the binding and readback boundaries before interpreting
+bytes or queuing work that depends on them.
+
 Raw readback returns a bounded encoded payload. A shared host observation codec
 below the Python and JavaScript facades performs numeric decoding once.
 Backend readers do not recreate language-level conversion rules independently.
 The connected GPU worker transports bytes and joins physical drain; completion
 headers remain protocol metadata rather than tensor data.
+
+Version the CPU capability profile separately from the raw Wasm ABI and
+validate its manifest and required symbols in both scalar and SIMD artifacts.
+The GPU worker wire schema and matching package identity are separate
+contracts. Worker requests reconstruct and validate the admitted signature,
+and incompatible capabilities fail before use. Validate any change to worker
+compatibility through the installed package path.
 
 This boundary preserves the float32 path's direct decoding, copies and
 lifetimes. Supporting another encoding does not justify an unconditional extra
@@ -206,3 +236,18 @@ representation obligations. They do not qualify a Tabgrad numerical kernel,
 Pyodide integration, physical GPU behavior or universal equivalence across
 platforms. The [existing numerical contracts](backend-execution.md) retain
 their own evidence and domains.
+
+The maintainer [accepted the static declaration boundary](https://github.com/isaacperez/tabgrad/issues/490#issuecomment-7161546207)
+in [#490](https://github.com/isaacperez/tabgrad/issues/490). The
+[research result](https://github.com/isaacperez/tabgrad/issues/490#issuecomment-7161526027)
+records a local bfloat16 prototype and its independent challenge. The installed
+trial exercised one compact floating representation on scalar/SIMD CPU and
+WebGPU through JavaScript and Python. Its copy and allocation observations are
+bounded by the measured workloads, and its timing samples establish no
+equivalence bound. The compatibility record defines public support.
+
+Migrate one owner at a time, retaining explicit registrations as a rollback
+option. Compare current float32 and float16 semantics, copies, resources and
+affected execution phases for each increment. Qualify an extension from the
+exact installed archive. Reconsider the finite executable vocabulary when an
+actual signature cannot fit its shared type and operation families.
