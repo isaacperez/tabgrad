@@ -3,7 +3,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { runPackageProcess } from "./package-application.mjs";
-import { RuntimeFixtureServer } from "./runtime-fixture-server.mjs";
+import { DistributionFixtureServer } from "./distribution-fixture-server.mjs";
 
 // Public consumer checks shared by raw package-policy tests and actual candidates.
 // They register no cases and use only installed public entries for execution.
@@ -54,7 +54,7 @@ export async function checkPublicPackageCpuAssets(fixture) {
   await writeFile(consumer, `export { createRuntimeSession } from ${JSON.stringify(fixture.metadata.name)};
 export { attachPython } from ${JSON.stringify(`${fixture.metadata.name}/python`)};\n`);
   const { createRuntimeSession, attachPython } = await import(pathToFileURL(consumer));
-  const server = new RuntimeFixtureServer(join(fixture.packageDirectory, "dist"));
+  const server = new DistributionFixtureServer(join(fixture.packageDirectory, "dist"));
   const origin = await server.start();
   try {
     const session = createRuntimeSession({ manifestUrl: new URL("manifest.json", origin) });

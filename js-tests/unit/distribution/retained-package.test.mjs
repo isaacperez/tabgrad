@@ -304,7 +304,7 @@ test("retained qualification needs no verifier dist, build or matching checkout 
   const inputs = ["scripts/run-package-browser-tests.mjs", "scripts/float16-conformance.mjs", "scripts/package-artifact.mjs",
     "scripts/package-registry.mjs", "scripts/package-registry-transport.mjs",
     "scripts/browser-harness.mjs", "scripts/browser-run-diagnostics.mjs",
-    ...["package-application", "package-consumer", "runtime-fixture-server", "runtime-wasm-fixture"]
+    ...["package-application", "package-consumer", "distribution-fixture-server"]
       .map(name => `js-tests/fixtures/${name}.mjs`),
     "js-tests/browser/distribution/candidate.html", "js-tests/browser/distribution/candidate.mjs",
     "js-tests/browser/distribution/python-worker.mjs"];
