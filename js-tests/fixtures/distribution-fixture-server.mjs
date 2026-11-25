@@ -1,0 +1,80 @@
+import { readFile } from "node:fs/promises";
+import { createServer } from "node:http";
+import { extname, isAbsolute, join, relative, sep } from "node:path";
+
+/** Serve a supplied distribution with independently controlled virtual responses. */
+export class DistributionFixtureServer {
+  requestCounts = new Map();
+  virtualResponses = new Map();
+
+  constructor(distributionRoot) {
+    this.distributionRoot = distributionRoot;
+  }
+
+  async start() {
+    const server = createServer(this.handleRequest.bind(this));
+    this.server = server;
+    let onListening;
+    let onError;
+    try {
+      await new Promise((resolve, reject) => {
+        onListening = resolve;
+        onError = reject;
+        server.once("listening", onListening);
+        server.once("error", onError);
+        server.listen(0, "127.0.0.1");
+      });
+    } finally {
+      server.off("listening", onListening);
+      server.off("error", onError);
+    }
+    const address = server.address();
+    this.distributionUrl = `http://127.0.0.1:${address.port}/`;
+    return this.distributionUrl;
+  }
+
+  async close() {
+    if (this.server === undefined) return;
+    await new Promise((resolve, reject) => {
+      this.server.close((error) => {
+        if (error && error.code !== "ERR_SERVER_NOT_RUNNING") reject(error);
+        else resolve();
+      });
+    });
+  }
+
+  async handleRequest(request, response) {
+    try {
+      const pathname = new URL(request.url, "http://localhost").pathname;
+      this.requestCounts.set(pathname, (this.requestCounts.get(pathname) ?? 0) + 1);
+      const virtualResponse = this.virtualResponses.get(pathname);
+      if (virtualResponse !== undefined) {
+        if (virtualResponse.waitFor !== undefined) {
+          await virtualResponse.waitFor;
+        }
+        response.writeHead(200, { "content-type": virtualResponse.contentType })
+          .end(virtualResponse.body);
+        return;
+      }
+      const path = join(this.distributionRoot, pathname);
+      const pathFromRoot = relative(this.distributionRoot, path);
+      if (
+        pathFromRoot === ".."
+        || pathFromRoot.startsWith(`..${sep}`)
+        || isAbsolute(pathFromRoot)
+      ) {
+        response.writeHead(403).end();
+        return;
+      }
+      const body = await readFile(path);
+      const contentType = extname(path) === ".wasm"
+        ? "application/wasm"
+        : extname(path) === ".json"
+          ? "application/json"
+          : "text/javascript";
+      response.writeHead(200, { "content-type": contentType }).end(body);
+    } catch {
+      response.writeHead(404).end();
+    }
+  }
+}
