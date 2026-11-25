@@ -5,13 +5,14 @@ import { assertTensorPayload, hostTensorPayload, type HostTensorPayload } from "
 import { tensorByteLength, type TensorDType } from "../../shared/tensor-dtype.js";
 import type { ExecutableProgram, ProgramSlot } from "../../execution/executable-program.js";
 import { tensorElementCount } from "../../runtime/tensor-shape.js";
-import { CpuArtifactLoader, type KernelExports } from "./artifact-loader.js";
+import { CpuArtifactLoader } from "./artifact-loader.js";
+import { CPU_COMPUTATIONS, cpuKernel, type KernelExports } from "./kernel-catalogue.js";
 import type { BackendDiagnostics, WasmVariant } from "./cpu-types.js";
 import { InvocationStorage } from "./invocation-storage.js";
 import { CpuAllocation, LinearMemoryAllocator, MAXIMUM_ADDRESS } from "./linear-memory.js";
 import { pointwiseGeometry, receivingGeometry } from "../../execution/broadcast-geometry.js";
 import { pointwiseFamily } from "../../execution/operation-contracts.js";
-import { pointwisePacket, receivingPacket } from "./broadcast-packet.js";
+import { cpuPointwiseNeedsPacket, pointwisePacket, receivingPacket } from "./broadcast-packet.js";
 import { DEFAULT_CPU_LINEAR_MEMORY_BYTES, WEBASSEMBLY_PAGE_BYTES, type CpuMemoryCapacity } from "./memory-capacity.js";
 
 export type { BackendDiagnostics, WasmVariant } from "./cpu-types.js";
@@ -30,7 +31,7 @@ interface BackendContext {
 export class WebAssemblyCpuBackend implements ExecutionBackend {
   readonly synchronousObservation = true;
   readonly capabilities: BackendCapabilities = Object.freeze({
-    device: "cpu", computations: Object.freeze(["add-f32", "add-alpha-f32", "mul-f32", "sum-f32", "expand-f32", "matmul-f32", "reduce-f32", "add-f16", "mul-f16"] as const),
+    device: "cpu", computations: CPU_COMPUTATIONS,
     gradients: true, maximumTensorBytes: MAXIMUM_ADDRESS,
   });
   readonly #artifactLoader: CpuArtifactLoader;
@@ -156,16 +157,15 @@ export class WebAssemblyCpuBackend implements ExecutionBackend {
         // output storage, including at the final use of an input.
         const output = context.allocator.allocate(tensorByteLength(value.dtype, length));
         allocations.set(computation.output, output);
+        const kernel = cpuKernel(computation.kind)!;
         let parameters: Uint32Array | undefined;
-        if (computation.kind === "reduce-f32") {
+        if (kernel.layout === "receiving") {
           parameters = receivingPacket(receivingGeometry(pointwiseGeometry([
             program.values[computation.inputs[0]!]!.shape, value.shape,
           ]), 1), context.maximumBytes);
-        } else {
-          const family = pointwiseFamily(computation.kind);
-          if (family !== undefined && length !== 0 && inputs.some(input => input.byteLength !== output.byteLength)) {
-            parameters = pointwisePacket(family.plan(computation.inputs.map(slot => program.values[slot]!.shape)), context.maximumBytes);
-          }
+        } else if (kernel.layout === "pointwise" && cpuPointwiseNeedsPacket(program.values, computation.inputs, length)) {
+          const family = pointwiseFamily(computation.kind)!;
+          parameters = pointwisePacket(family.plan(computation.inputs.map(slot => program.values[slot]!.shape)), context.maximumBytes);
         }
         // Parameter construction/allocation is not a kernel trap. Create views
         // only after the last allocation that can grow and detach Wasm memory.
@@ -177,53 +177,40 @@ export class WebAssemblyCpuBackend implements ExecutionBackend {
         }
         let status: number;
         try {
-          if (computation.kind !== "matmul-f32" || length !== 0) this.#kernelCalls += 1;
-          switch (computation.kind) {
-            case "add-f16":
-              status = packet === undefined ? context.exports.tabgrad_add_f16(inputs[0]!.offset, inputs[1]!.offset, output.offset, length)
-                : context.exports.tabgrad_broadcast_add_f16(inputs[0]!.offset, inputs[1]!.offset, output.offset, packet.offset, parameters!.length);
+          if (kernel.layout !== "matrix" || length !== 0) this.#kernelCalls += 1;
+          switch (kernel.layout) {
+            case "pointwise":
+              status = packet === undefined
+                ? context.exports[kernel.dense.name](inputs[0]!.offset, inputs[1]!.offset, output.offset, length)
+                : context.exports[kernel.broadcast.name](inputs[0]!.offset, inputs[1]!.offset, output.offset, packet.offset, parameters!.length);
               break;
-            case "mul-f16":
-              status = packet === undefined ? context.exports.tabgrad_mul_f16(inputs[0]!.offset, inputs[1]!.offset, output.offset, length)
-                : context.exports.tabgrad_broadcast_mul_f16(inputs[0]!.offset, inputs[1]!.offset, output.offset, packet.offset, parameters!.length);
+            case "receiving":
+              status = context.exports[kernel.symbol.name](inputs[0]!.offset, output.offset, packet!.offset, parameters!.length);
               break;
-            case "reduce-f32":
-              status = context.exports.tabgrad_receive_f32(inputs[0]!.offset, output.offset, packet!.offset, parameters!.length);
-              break;
-            case "matmul-f32": {
+            case "matrix": {
               const left = program.values[computation.inputs[0]!]!.shape;
               const right = program.values[computation.inputs[1]!]!.shape;
               const flags = computation.matrixFlags!;
               // Empty output has no physical indices; preserve large unused axes.
-              status = length === 0 ? 0 : context.exports.tabgrad_matmul_f32(
+              status = length === 0 ? 0 : context.exports[kernel.symbol.name](
                 inputs[0]!.offset, inputs[1]!.offset, output.offset,
                 left[flags & 1 ? 1 : 0]!, left[flags & 1 ? 0 : 1]!, right[flags & 2 ? 0 : 1]!, flags,
               );
               break;
             }
-            case "add-alpha-f32":
-              status = context.exports.tabgrad_add_alpha_f32(
+            case "coefficient":
+              status = context.exports[kernel.symbol.name](
                 inputs[0]!.offset, inputs[1]!.offset, output.offset, length, computation.alphaBits!,
               );
               break;
-            case "expand-f32":
-              status = context.exports.tabgrad_expand_f32(inputs[0]!.offset, output.offset, length);
+            case "outputLength":
+              status = context.exports[kernel.symbol.name](inputs[0]!.offset, output.offset, length);
               break;
-            case "add-f32":
-              status = packet === undefined ? context.exports.tabgrad_add_f32(
-                inputs[0]!.offset, inputs[1]!.offset, output.offset, length,
-              ) : context.exports.tabgrad_broadcast_add_f32(inputs[0]!.offset, inputs[1]!.offset, output.offset, packet.offset, parameters!.length);
-              break;
-            case "sum-f32":
-              status = context.exports.tabgrad_sum_f32(
+            case "inputLength":
+              status = context.exports[kernel.symbol.name](
                 inputs[0]!.offset, output.offset,
                 tensorElementCount(program.values[computation.inputs[0]!]!.shape),
               );
-              break;
-            case "mul-f32":
-              status = packet === undefined ? context.exports.tabgrad_mul_f32(
-                inputs[0]!.offset, inputs[1]!.offset, output.offset, length,
-              ) : context.exports.tabgrad_broadcast_mul_f32(inputs[0]!.offset, inputs[1]!.offset, output.offset, packet.offset, parameters!.length);
               break;
           }
         } catch (error) {

@@ -3,32 +3,44 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { access, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { test } from "node:test";
+import { fixtureModule } from "../../fixtures/runtime-wasm-fixture.mjs";
 
 // This compiler double chooses its output independently, following Cargo's
 // explicit argument / environment / default precedence. Real Cargo/ABI and
 // browser checks separately qualify the resulting production modules.
-const compiler = `import {appendFileSync, mkdirSync, writeFileSync} from "node:fs";
+const compiler = `import {appendFileSync, mkdirSync, readFileSync, writeFileSync} from "node:fs";
 import {dirname, join, resolve} from "node:path";
 const args=process.argv.slice(2), index=args.indexOf("--target-dir");
 const target=resolve(index<0 ? (process.env.CARGO_TARGET_DIR ?? "target") : args[index+1]);
 const variant=process.env.RUSTFLAGS.includes("target-feature=+simd128") ? "simd128" : "scalar";
 if(process.env.TEST_CARGO_FAILURE==="yes") process.exit(9);
 if(process.env.TEST_CARGO_MISSING==="yes") process.exit(0);
-const marker=Buffer.from("fresh-"+variant), bytes=Buffer.from([0,97,115,109,1,0,0,0,0,marker.length+1,0,...marker]);
+const marker=Buffer.from("fresh-"+variant);
+const bytes=Buffer.concat([readFileSync(variant+".wasm"),Buffer.from([0,marker.length+1,0,...marker])]);
 const path=join(target,"wasm32-unknown-unknown/release/tabgrad_wasm_kernels.wasm");
 mkdirSync(dirname(path),{recursive:true}); writeFileSync(path,bytes);
 appendFileSync("compiler-results.jsonl",JSON.stringify({variant,path,bytes:bytes.toString("base64")})+"\\n");
 `;
 
-async function fixture(context, { redirected = false, stale = false } = {}) {
+async function fixture(context, { redirected = false, stale = false, invalidVariant } = {}) {
   const root = await mkdtemp(join(tmpdir(), "tabgrad-wasm-build-"));
   context.after(() => rm(root, { recursive: true, force: true }));
   await mkdir(join(root, "scripts"));
   for (const script of ["build-wasm.mjs", "write-wasm-manifest.mjs", "wasm-profile.mjs"]) {
     await copyFile(new URL(`../../../scripts/${script}`, import.meta.url), join(root, "scripts", script));
   }
+  for (const path of ["backends/cpu/artifact-abi.js", "backends/cpu/kernel-catalogue.js", "shared/errors.js"]) {
+    const output = join(root, "dist", path);
+    await mkdir(dirname(output), { recursive: true });
+    await copyFile(new URL(`../../../dist/${path}`, import.meta.url), output);
+  }
+  await writeFile(join(root, "package.json"), '{"type":"module"}\n');
+  await writeFile(join(root, "scalar.wasm"), fixtureModule(invalidVariant === "scalar"
+    ? { omitExports: ["tabgrad_broadcast_mul_f16"] } : {}));
+  await writeFile(join(root, "simd128.wasm"), fixtureModule(invalidVariant === "simd128"
+    ? { incompatibleAddResult: true } : {}));
   const cargo = join(root, "cargo-double.mjs");
   await writeFile(cargo, `#!${process.execPath}\n${compiler}`, { mode: 0o700 });
   if (stale) {
@@ -67,8 +79,22 @@ for (const redirected of [false, "absolute", "relative"]) {
         assert.equal(manifest.variants[index].sha256, createHash("sha256").update(bytes).digest("hex"));
       }
       assert.deepEqual(manifest.variants.map(item => item.requiredFeatures), [[], ["simd128"]]);
+      assert.equal(manifest.abiVersion, 1);
+      assert.deepEqual(manifest.capabilities, ["add-f32", "sum-f32", "mul-f32", "expand-f32", "add-alpha-f32",
+        "matmul-f32", "broadcast-f32", "reduce-f32", "pointwise-f16"], "v9 profile must stay compatible with matched assets");
     });
   }
+}
+
+for (const [variant, message] of [["scalar", /missing a required function export/], ["simd128", /incompatible function signature/]]) {
+  test(`manifest generation rejects an invalid ${variant} module before writing metadata`, async context => {
+    const state = await fixture(context, { invalidVariant: variant });
+    assert.equal(runScript(state, "build-wasm.mjs").status, 0);
+    const result = runScript(state, "write-wasm-manifest.mjs");
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, message);
+    await assert.rejects(access(join(state.root, "dist/manifest.json")));
+  });
 }
 
 for (const failure of ["TEST_CARGO_FAILURE", "TEST_CARGO_MISSING"]) {

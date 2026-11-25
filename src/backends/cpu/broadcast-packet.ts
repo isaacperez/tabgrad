@@ -1,5 +1,16 @@
 import type { BroadcastGeometry, ReceivingGeometry } from "../../execution/broadcast-geometry.js";
+import { tensorElementCount } from "../../runtime/tensor-shape.js";
 import { TabgradError } from "../../shared/errors.js";
+
+/** Contiguous operands with the output element count have no expanding axis. */
+export function cpuPointwiseNeedsPacket(values: readonly { readonly shape: readonly number[] }[],
+  inputs: readonly number[], outputElements: number): boolean {
+  if (outputElements === 0) return false;
+  for (const input of inputs) {
+    if (tensorElementCount(values[input]!.shape) !== outputElements) return true;
+  }
+  return false;
+}
 
 function packet(words: number, maximumBytes: number): Uint32Array {
   if (!Number.isSafeInteger(words) || words < 0 || words > Math.min(0xffff_ffff, maximumBytes) / 4) {

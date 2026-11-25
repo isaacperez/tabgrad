@@ -1,6 +1,9 @@
 // Handcrafted raw-ABI modules for runtime preparation and failure tests.
 // No production kernels or test cases are registered by importing this helper.
 
+import { CPU_ABI_VERSION, CPU_CAPABILITY_MASK, CPU_REQUIRED_EXPORTS } from "../../dist/backends/cpu/kernel-catalogue.js";
+import { CPU_MEMORY_PROFILE } from "../../dist/backends/cpu/memory-capacity.js";
+
 function unsignedLeb128(value) {
   const bytes = [];
   do {
@@ -71,108 +74,57 @@ function constantBody(value) {
   return [...unsignedLeb128(body.length), ...body];
 }
 
+// These fixture-specific operations only implement one float32 element.
+const scalarFaultOperations = Object.freeze({
+  tabgrad_sum_f32: "sum", tabgrad_expand_f32: "sum", tabgrad_receive_f32: "sum",
+  tabgrad_mul_f32: "mul", tabgrad_mul_f16: "mul", tabgrad_add_alpha_f32: "mul",
+  tabgrad_matmul_f32: "mul", tabgrad_broadcast_mul_f32: "mul", tabgrad_broadcast_mul_f16: "mul",
+});
+
+function kernelBody(name, behavior, failureCall, incompatibleAddResult) {
+  const instructions = name === "tabgrad_add_f32" && incompatibleAddResult ? [0x42, 0x00, 0x0b]
+    : failureCall !== undefined ? scalarFaultKernel(behavior, failureCall, scalarFaultOperations[name])
+      : behavior === "trap" ? [0x00, 0x0b] : [0x41, ...signedLeb128(behavior === "status" ? 7 : 0), 0x0b];
+  const body = [0x00, ...instructions];
+  return [...unsignedLeb128(body.length), ...body];
+}
+
 export function fixtureModule({
-  abiVersion = 1,
+  abiVersion = CPU_ABI_VERSION,
   arenaBase = 1_048_576,
-  capabilities = 511,
+  capabilities = CPU_CAPABILITY_MASK,
   kernelBehavior = "success",
   memoryImportName = "memory",
-  omitKernelExport = false,
-  omitSumExport = false,
-  omitMulExport = false,
-  omitExpandExport = false,
-  omitAlphaAddExport = false,
-  omitMatmulExport = false,
-  omitBroadcastAddExport = false,
-  omitBroadcastMulExport = false,
-  omitReceiveExport = false,
-  omitHalfExport = false,
+  omitExports = [],
+  incompatibleAddParameter = false,
+  incompatibleAddResult = false,
   failureCall,
 } = {}) {
   const i32 = 0x7f;
-  const types = section(1, [
-    0x05,
-    ...functionType([], [i32]),
-    ...functionType([i32, i32, i32, i32], [i32]),
-    ...functionType([i32, i32, i32], [i32]),
-    ...functionType([i32, i32, i32, i32, i32], [i32]),
-    ...functionType([i32, i32, i32, i32, i32, i32, i32], [i32]),
-  ]);
-  const imports = section(2, [
-    0x01,
-    ...encodedString("env"),
-    ...encodedString(memoryImportName),
-    0x02,
-    0x01,
-    ...unsignedLeb128(32),
-    ...unsignedLeb128(4096),
-  ]);
-  const functions = section(3, [0x0c, 0x00, 0x00, 0x00, 0x01, 0x02, 0x01, 0x02, 0x03, 0x04, 0x03, 0x03, 0x01]);
-  const exportedFunctions = [
-    ["tabgrad_abi_version", 0],
-    ["tabgrad_capabilities", 1],
-    ["tabgrad_arena_base", 2],
-    ...(omitHalfExport ? [] : [["tabgrad_add_f16", 3], ["tabgrad_mul_f16", 5], ["tabgrad_broadcast_add_f16", 9], ["tabgrad_broadcast_mul_f16", 10]]),
-    ...(omitKernelExport ? [] : [["tabgrad_add_f32", 3]]),
-    ...(omitSumExport ? [] : [["tabgrad_sum_f32", 4]]),
-    ...(omitMulExport ? [] : [["tabgrad_mul_f32", 5]]),
-    ...(omitExpandExport ? [] : [["tabgrad_expand_f32", 6]]),
-    ...(omitAlphaAddExport ? [] : [["tabgrad_add_alpha_f32", 7]]),
-    ...(omitMatmulExport ? [] : [["tabgrad_matmul_f32", 8]]),
-    ...(omitBroadcastAddExport ? [] : [["tabgrad_broadcast_add_f32", 9]]),
-    ...(omitBroadcastMulExport ? [] : [["tabgrad_broadcast_mul_f32", 10]]),
-    ...(omitReceiveExport ? [] : [["tabgrad_receive_f32", 11]]),
-  ];
-  const exports = section(7, [
-    ...unsignedLeb128(exportedFunctions.length),
-    ...exportedFunctions.flatMap(([name, index]) => [
-      ...encodedString(name),
-      0x00,
-      ...unsignedLeb128(index),
-    ]),
-  ]);
-  const kernelInstructions = failureCall !== undefined
-    ? scalarFaultKernel(kernelBehavior, failureCall)
-    : kernelBehavior === "trap"
-    ? [0x00, 0x0b]
-    : [0x41, ...signedLeb128(kernelBehavior === "status" ? 7 : 0), 0x0b];
-  const kernelBody = [0x00, ...kernelInstructions];
-  const sumBody = [0x00, ...(failureCall === undefined
-    ? kernelInstructions : scalarFaultKernel(kernelBehavior, failureCall, "sum"))];
-  const mulBody = [0x00, ...(failureCall === undefined
-    ? kernelInstructions : scalarFaultKernel(kernelBehavior, failureCall, "mul"))];
-  const code = section(10, [
-    0x0c,
-    ...constantBody(abiVersion),
-    ...constantBody(capabilities),
-    ...constantBody(arenaBase),
-    ...unsignedLeb128(kernelBody.length),
-    ...kernelBody,
-    ...unsignedLeb128(sumBody.length),
-    ...sumBody,
-    ...unsignedLeb128(mulBody.length),
-    ...mulBody,
-    ...unsignedLeb128(sumBody.length),
-    ...sumBody,
-    ...unsignedLeb128(mulBody.length),
-    ...mulBody,
-    ...unsignedLeb128(mulBody.length),
-    ...mulBody,
-    ...unsignedLeb128(kernelBody.length),
-    ...kernelBody,
-    ...unsignedLeb128(mulBody.length),
-    ...mulBody,
-    ...unsignedLeb128(sumBody.length),
-    ...sumBody,
-  ]);
+  const exports = CPU_REQUIRED_EXPORTS.filter(([name]) => !omitExports.includes(name));
+  const functionTypes = exports.map(([name, arity]) => {
+    const parameters = new Array(arity).fill(i32);
+    if (name === "tabgrad_add_f32" && incompatibleAddParameter) parameters[0] = 0x7d;
+    return functionType(parameters, [name === "tabgrad_add_f32" && incompatibleAddResult ? 0x7e : i32]);
+  });
+  const bootstrap = { tabgrad_abi_version: abiVersion, tabgrad_capabilities: capabilities, tabgrad_arena_base: arenaBase };
   return Buffer.from([
-    0x00, 0x61, 0x73, 0x6d,
-    0x01, 0x00, 0x00, 0x00,
-    ...types,
-    ...imports,
-    ...functions,
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+    ...section(1, [...unsignedLeb128(functionTypes.length), ...functionTypes.flat()]),
+    ...section(2, [
+      0x01, ...encodedString("env"), ...encodedString(memoryImportName), 0x02, 0x01,
+      ...unsignedLeb128(CPU_MEMORY_PROFILE.initialPages), ...unsignedLeb128(CPU_MEMORY_PROFILE.maximumPages),
+    ]),
+    ...section(3, [...unsignedLeb128(exports.length), ...exports.flatMap((_, index) => unsignedLeb128(index))]),
     ...(failureCall === undefined ? [] : section(6, [0x01, i32, 0x01, 0x41, 0x00, 0x0b])),
-    ...exports,
-    ...code,
+    ...section(7, [
+      ...unsignedLeb128(exports.length),
+      ...exports.flatMap(([name], index) => [...encodedString(name), 0x00, ...unsignedLeb128(index)]),
+    ]),
+    ...section(10, [
+      ...unsignedLeb128(exports.length),
+      ...exports.flatMap(([name]) => Object.hasOwn(bootstrap, name) ? constantBody(bootstrap[name])
+        : kernelBody(name, kernelBehavior, failureCall, incompatibleAddResult)),
+    ]),
   ]);
 }

@@ -4,6 +4,8 @@ import { createServer } from "node:http";
 import { extname, isAbsolute, join, relative, sep } from "node:path";
 
 import { fixtureModule } from "./runtime-wasm-fixture.mjs";
+import { CPU_ABI_VERSION, CPU_CAPABILITIES } from "../../dist/backends/cpu/kernel-catalogue.js";
+import { CPU_MEMORY_PROFILE } from "../../dist/backends/cpu/memory-capacity.js";
 
 /**
  * One loopback server for built-distribution and virtual raw-ABI fixtures.
@@ -64,13 +66,14 @@ export class RuntimeFixtureServer {
     });
     const manifest = manifestTransform({
       schemaVersion: 1,
-      moduleVersion: 9,
-      abiVersion: 1,
+      moduleVersion: CPU_MEMORY_PROFILE.moduleVersion,
+      abiVersion: CPU_ABI_VERSION,
       addressWidth: 32,
       sharedMemory: false,
-      capabilities: ["add-f32", "sum-f32", "mul-f32", "expand-f32", "add-alpha-f32", "matmul-f32", "broadcast-f32", "reduce-f32", "pointwise-f16"],
+      capabilities: [...CPU_CAPABILITIES],
       imports: [{ module: "env", name: "memory", kind: "memory" }],
-      memory: { initialPages: 32, maximumPages: 4096, alignment: 16 },
+      memory: { initialPages: CPU_MEMORY_PROFILE.initialPages, maximumPages: CPU_MEMORY_PROFILE.maximumPages,
+        alignment: CPU_MEMORY_PROFILE.alignment },
       variants: [variant("scalar", []), variant("simd128", ["simd128"])],
     });
     this.virtualResponses.set(modulePath, {

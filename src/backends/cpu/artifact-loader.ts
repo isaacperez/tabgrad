@@ -3,17 +3,8 @@ import type { BackendDiagnostics, WasmVariant } from "./cpu-types.js";
 import { CPU_MEMORY_PROFILE, DEFAULT_CPU_LINEAR_MEMORY_BYTES, WEBASSEMBLY_PAGE_BYTES,
   validateCpuLinearMemoryBytes, type CpuMemoryCapacity } from "./memory-capacity.js";
 
-const ABI_VERSION = 1;
-const CAPABILITY_ADD_FLOAT32 = 1;
-const CAPABILITY_SUM_FLOAT32 = 2;
-const CAPABILITY_MUL_FLOAT32 = 4;
-const CAPABILITY_EXPAND_FLOAT32 = 8;
-const CAPABILITY_ADD_ALPHA_FLOAT32 = 16;
-const CAPABILITY_MATMUL_FLOAT32 = 32;
-const CAPABILITY_BROADCAST_FLOAT32 = 64;
-const CAPABILITY_REDUCE_FLOAT32 = 128;
-const CAPABILITY_POINTWISE_FLOAT16 = 256;
-const REQUIRED_CAPABILITIES = CAPABILITY_ADD_FLOAT32 | CAPABILITY_SUM_FLOAT32 | CAPABILITY_MUL_FLOAT32 | CAPABILITY_EXPAND_FLOAT32 | CAPABILITY_ADD_ALPHA_FLOAT32 | CAPABILITY_MATMUL_FLOAT32 | CAPABILITY_BROADCAST_FLOAT32 | CAPABILITY_REDUCE_FLOAT32 | CAPABILITY_POINTWISE_FLOAT16;
+import { assertCpuArtifactAbi } from "./artifact-abi.js";
+import { CPU_ABI_VERSION, CPU_CAPABILITIES, type KernelExports } from "./kernel-catalogue.js";
 
 type BackendPreparationPhase =
   | "manifest-fetch"
@@ -52,30 +43,6 @@ interface WasmManifest {
     readonly alignment: number;
   };
   readonly variants: readonly ManifestVariant[];
-}
-
-export interface KernelExports extends WebAssembly.Exports {
-  readonly tabgrad_add_f16: (left: number, right: number, output: number, length: number) => number;
-  readonly tabgrad_mul_f16: (left: number, right: number, output: number, length: number) => number;
-  readonly tabgrad_broadcast_add_f16: (left: number, right: number, output: number, packet: number, words: number) => number;
-  readonly tabgrad_broadcast_mul_f16: (left: number, right: number, output: number, packet: number, words: number) => number;
-  readonly tabgrad_abi_version: () => number;
-  readonly tabgrad_capabilities: () => number;
-  readonly tabgrad_arena_base: () => number;
-  readonly tabgrad_add_f32: (
-    leftOffset: number,
-    rightOffset: number,
-    outputOffset: number,
-    length: number,
-  ) => number;
-  readonly tabgrad_sum_f32: (inputOffset: number, outputOffset: number, length: number) => number;
-  readonly tabgrad_expand_f32: (inputOffset: number, outputOffset: number, length: number) => number;
-  readonly tabgrad_mul_f32: (leftOffset: number, rightOffset: number, outputOffset: number, length: number) => number;
-  readonly tabgrad_add_alpha_f32: (leftOffset: number, rightOffset: number, outputOffset: number, length: number, alphaBits: number) => number;
-  readonly tabgrad_matmul_f32: (leftOffset: number, rightOffset: number, outputOffset: number, rows: number, contraction: number, columns: number, flags: number) => number;
-  readonly tabgrad_broadcast_add_f32: (left: number, right: number, output: number, packet: number, words: number) => number;
-  readonly tabgrad_broadcast_mul_f32: (left: number, right: number, output: number, packet: number, words: number) => number;
-  readonly tabgrad_receive_f32: (input: number, output: number, packet: number, words: number) => number;
 }
 
 interface PreparedCpuArtifact {
@@ -206,27 +173,8 @@ export class CpuArtifactLoader {
       const instance = await WebAssembly.instantiate(module, { env: { memory } });
       this.#timings.instantiationMilliseconds = performance.now() - instantiationStart;
       phase = "abi-validation";
-      const exports = instance.exports as KernelExports;
-      this.#validateExports(exports);
-      if (exports.tabgrad_abi_version() !== ABI_VERSION) {
-        throw new TabgradError(
-          "BACKEND_ABI_MISMATCH",
-          "The WebAssembly module ABI version is incompatible.",
-          {
-            actual: exports.tabgrad_abi_version(),
-            backend: "webassembly-cpu",
-            expected: ABI_VERSION,
-            phase,
-          },
-        );
-      }
-      if ((exports.tabgrad_capabilities() & REQUIRED_CAPABILITIES) !== REQUIRED_CAPABILITIES) {
-        throw new TabgradError(
-          "BACKEND_CAPABILITY_MISMATCH",
-          "The WebAssembly module does not provide the required numerical capabilities.",
-          { backend: "webassembly-cpu", phase },
-        );
-      }
+      const exports = instance.exports;
+      assertCpuArtifactAbi(exports);
       const arenaBase = exports.tabgrad_arena_base() >>> 0;
       if (
         arenaBase > memory.buffer.byteLength
@@ -343,22 +291,15 @@ export class CpuArtifactLoader {
     const value = candidate as Record<string, unknown>;
     const memory = value.memory as Record<string, unknown> | undefined;
     const variants = value.variants;
+    const capabilities = value.capabilities;
     return value.schemaVersion === 1
       && value.moduleVersion === CPU_MEMORY_PROFILE.moduleVersion
-      && value.abiVersion === ABI_VERSION
+      && value.abiVersion === CPU_ABI_VERSION
       && value.addressWidth === 32
       && value.sharedMemory === false
-      && Array.isArray(value.capabilities)
-      && value.capabilities.length === 9
-      && value.capabilities[0] === "add-f32"
-      && value.capabilities[1] === "sum-f32"
-      && value.capabilities[2] === "mul-f32"
-      && value.capabilities[3] === "expand-f32"
-      && value.capabilities[4] === "add-alpha-f32"
-      && value.capabilities[5] === "matmul-f32"
-      && value.capabilities[6] === "broadcast-f32"
-      && value.capabilities[7] === "reduce-f32"
-      && value.capabilities[8] === "pointwise-f16"
+      && Array.isArray(capabilities)
+      && capabilities.length === CPU_CAPABILITIES.length
+      && CPU_CAPABILITIES.every((name, index) => capabilities[index] === name)
       && Array.isArray(value.imports)
       && value.imports.length === 1
       && this.#isMemoryImport(value.imports[0])
@@ -426,32 +367,6 @@ export class CpuArtifactLoader {
     const resolved = new URL(path, this.#manifestUrl);
     return resolved.protocol === this.#manifestUrl.protocol
       && resolved.origin === this.#manifestUrl.origin;
-  }
-
-  #validateExports(exports: WebAssembly.Exports): asserts exports is KernelExports {
-    for (const name of [
-      "tabgrad_abi_version",
-      "tabgrad_capabilities",
-      "tabgrad_arena_base",
-      "tabgrad_add_f32",
-      "tabgrad_sum_f32",
-      "tabgrad_mul_f32",
-      "tabgrad_expand_f32",
-      "tabgrad_add_alpha_f32",
-      "tabgrad_matmul_f32",
-      "tabgrad_broadcast_add_f32",
-      "tabgrad_broadcast_mul_f32",
-      "tabgrad_receive_f32",
-      "tabgrad_add_f16", "tabgrad_mul_f16", "tabgrad_broadcast_add_f16", "tabgrad_broadcast_mul_f16",
-    ]) {
-      if (typeof exports[name] !== "function") {
-        throw new TabgradError(
-          "BACKEND_ABI_MISMATCH",
-          "The WebAssembly module is missing a required function export.",
-          { exportName: name },
-        );
-      }
-    }
   }
 
   async #sha256(bytes: ArrayBuffer): Promise<string> {

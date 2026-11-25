@@ -711,7 +711,7 @@ test('readback failure after copy publication preserves the successful version a
 });
 
 test('preparation failures terminally gate copy snapshots and payload-free sum derivatives', async () => {
-  const manifest = fixtures.installFixture('copy-preparation-failure', { omitKernelExport: true });
+  const manifest = fixtures.installFixture('copy-preparation-failure', { omitExports: ["tabgrad_add_f32"] });
   const session = createTestRuntimeSession({ manifestUrl: manifest, forceVariant: 'scalar' });
   const input = session.tensor([2], { requiresGrad: true });
   const destination = session.tensor([0], { requiresGrad: true });

@@ -292,6 +292,14 @@ Both `kernels-scalar.wasm` and `kernels-simd128.wasm` implement the complete
 module capability profile. The module version identifies that profile; the
 ABI version identifies the primitive calling convention. A stale module profile
 or missing required capability/export is rejected during preparation.
+
+Each CPU kernel declaration binds an executable signature to its raw symbols,
+calling layout, and capability bits. The declarations supply the CPU dispatch
+lookup, the ordered manifest capabilities, and the function types validated in
+both compiled artifacts. Manifest generation and runtime preparation check
+the required exports before any numerical call. The adapter verifies integer
+parameter and result types by linking an import-only WebAssembly module.
+
 Operation-specific numerical, empty-range and cost contracts belong in the
 [sum](../reference/tensor-sum.md) and
 [multiplication](../reference/tensor-multiplication.md) and
@@ -315,6 +323,10 @@ length, products, contiguous projections and spans before using those counters.
 The packet is disjoint from all payloads. Singleton axes are removed and
 adjacent axes coalesce only when all projections permit it. Empty forward uses
 the existing zero-length dense call, without narrowing unused logical axes.
+For admitted contiguous operands with a nonempty result, the adapter uses the
+dense kernel when all operand element counts equal the result element count.
+Smaller counts select the broadcast kernel and its packet. Encoded byte widths
+do not enter this choice.
 
 Receiving packets contain source count, group count, terms per group, group
 rank and term rank, followed by `(dimension, stride)` pairs for each group and

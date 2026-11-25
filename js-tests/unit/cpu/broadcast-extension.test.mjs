@@ -6,9 +6,20 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import { broadcastGeometry, receivingGeometry } from "../../../dist/execution/broadcast-geometry.js";
-import { pointwisePacket, receivingPacket } from "../../../dist/backends/cpu/broadcast-packet.js";
+import { cpuPointwiseNeedsPacket, pointwisePacket, receivingPacket } from "../../../dist/backends/cpu/broadcast-packet.js";
 import { pointwiseDerivative } from "../../../dist/runtime/autograd/pointwise-derivative.js";
 import { DerivativeResources } from "../../../dist/runtime/autograd/derivative-resources.js";
+
+test("CPU pointwise layout follows logical expansion when encoded spans are equal", () => {
+  // Metadata for a private layout control. No mixed computation is executed.
+  const operands = [{ shape: [1], byteLength: 4 }, { shape: [2], byteLength: 4 }];
+  const output = { shape: [2], byteLength: 4 };
+  assert.equal(operands.some(input => input.byteLength !== output.byteLength), false);
+  assert.equal(cpuPointwiseNeedsPacket(operands, [0, 1], output.shape[0]), true);
+  operands[0] = { shape: [1, 2], byteLength: 8 };
+  assert.equal(cpuPointwiseNeedsPacket(operands, [0, 1], 2), false);
+  assert.equal(cpuPointwiseNeedsPacket(operands, [0, 1], 0), false);
+});
 
 function extensionSource() {
   const source = fileURLToPath(new URL("../../../crates/tabgrad-wasm-kernels/src/", import.meta.url));
