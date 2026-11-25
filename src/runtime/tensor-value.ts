@@ -1,10 +1,9 @@
 import type { TensorDevice } from "../execution/backend.js";
 import type { TensorDType } from "../shared/tensor-dtype.js";
 import type { LoweredComputation, ProgramProvenance } from "../execution/executable-program.js";
-import { assertComputationCoefficient } from "../execution/operation-types.js";
+import { assertComputationParameters, requireComputationSignature } from "../execution/operation-contracts.js";
 import type { TensorFamily } from "./tensor-family.js";
 import type { WriterOutcome } from "./writer-outcome.js";
-import { assertMatrixFlags } from "../execution/matrix-geometry.js";
 
 /** Mutable version only: captured descriptors never retain a family current. */
 export interface TensorVersionCounter { value: number; }
@@ -74,8 +73,7 @@ export class OperationRecord<Definition extends NumericalOperationDefinition = N
     readonly alphaBits?: number,
     readonly matrixFlags?: number,
   ) {
-    assertComputationCoefficient(definition.loweredKind, alphaBits);
-    assertMatrixFlags(definition.loweredKind, matrixFlags);
+    assertComputationParameters(requireComputationSignature(definition.loweredKind).family, alphaBits, matrixFlags);
     this.definition = definition;
     this.inputs = Object.freeze([...inputs]);
     this.provenance = Object.freeze({

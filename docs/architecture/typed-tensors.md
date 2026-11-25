@@ -65,6 +65,14 @@ capability checks and preparation use the same admitted facts. Unsupported
 signatures fail before numerical work or observable state changes and never
 silently move to another backend.
 
+The semantic catalogue binds each executable identity to its operation family
+and concrete input and result types. Admission indexes binary variants by their
+ordered operand types. Reconstruction reads the family from the executable
+identity, so a matrix signature inherits orientation and contraction rules
+independent of its dtype. Backend preparation indexes advertised signatures
+once per immutable capability list. The executable format and ordered worker
+advertisements do not need additional fields for these lookups.
+
 Within these pointwise families, declare each supported signature alongside the
 kernels that implement it. Build-time validation checks uniqueness and
 completeness and derives immutable lookup tables available to clean builds and

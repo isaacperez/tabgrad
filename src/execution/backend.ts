@@ -2,7 +2,8 @@ import type { ExecutableProgram, LoweredComputation, ProgramSlot } from "./execu
 import type { ExecutionTicket } from "./execution-ticket.js";
 import type { HostTensorPayload } from "./tensor-payload.js";
 import { tensorDType, type TensorDType } from "../shared/tensor-dtype.js";
-import { operationTypeContract, resolveTensorType } from "./operation-types.js";
+import { computationSignature, type ComputationKind } from "./operation-contracts.js";
+import { resolveTensorType } from "./operation-types.js";
 import { TabgradError } from "../shared/errors.js";
 
 export type TensorDevice = "cpu" | "webgpu";
@@ -24,6 +25,22 @@ export interface BackendCapabilities {
   readonly maximumTensorBytes: number;
 }
 
+const computationIndexes = new WeakMap<readonly ComputationKind[], ReadonlySet<ComputationKind>>();
+
+function backendComputations(capabilities: BackendCapabilities): ReadonlySet<ComputationKind> {
+  const kinds = capabilities.computations;
+  const cached = computationIndexes.get(kinds);
+  if (cached !== undefined) return cached;
+  const indexed = new Set(kinds);
+  // Only runtime-owned immutable advertisements can reuse their index across calls.
+  if (Object.isFrozen(kinds)) computationIndexes.set(kinds, indexed);
+  return indexed;
+}
+
+export function supportsBackendComputation(capabilities: BackendCapabilities, kind: ComputationKind): boolean {
+  return backendComputations(capabilities).has(kind);
+}
+
 /** Physical consumers also admit before compilation, upload or allocation. */
 export function assertBackendProgram(capabilities: BackendCapabilities, program: ExecutableProgram): void {
   for (const value of program.values) {
@@ -34,10 +51,11 @@ export function assertBackendProgram(capabilities: BackendCapabilities, program:
       });
     }
   }
+  let supported: ReadonlySet<ComputationKind> | undefined;
   for (const computation of program.computations) {
-    const contract = operationTypeContract(computation.kind);
+    const contract = computationSignature(computation.kind);
     const dtype = contract === undefined ? undefined : resolveTensorType(contract.types, program.values, computation.inputs);
-    if (contract === undefined || !capabilities.computations.includes(computation.kind)
+    if (contract === undefined || !(supported ??= backendComputations(capabilities)).has(computation.kind)
       || dtype === undefined || !Number.isSafeInteger(computation.output) || computation.output < 0
       || dtype !== program.values[computation.output]?.dtype) {
       throw new TabgradError("BACKEND_CAPABILITY_MISMATCH", "The selected backend does not support this computation signature.", {

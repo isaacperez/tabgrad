@@ -53,11 +53,21 @@ test("semantic coefficient validation precedes observable operand iteration", ()
   assert.throws(() => new OperationRecord({ ...definition, loweredKind: "add-f32" }, inputs, 1), {
     name: "TypeError", message: "This operation has no coefficient.",
   });
+  assert.throws(() => new OperationRecord(definition, inputs, undefined, 0), {
+    name: "TypeError", message: "Coefficient addition requires captured binary32 bits.",
+  });
+  assert.throws(() => new OperationRecord(definition, inputs, 0x3f800000, 0), {
+    name: "TypeError", message: "This operation has no matrix orientation.",
+  });
   assert.equal(iterations, 1);
 });
 
 test("program validation and publication use the same captured coefficient", () => {
   const original = coefficientProgram("webgpu", 1, "add-alpha-f32", 0x3f800000);
+  const invalid = { ...original.computations[0], matrixFlags: 0, alphaBits: undefined };
+  assert.throws(() => new ExecutableProgram(original.values, [invalid], original.result), {
+    name: "TypeError", message: "Coefficient addition requires captured binary32 bits.",
+  });
   let reads = 0;
   const computation = { ...original.computations[0], get alphaBits() {
     reads += 1;
