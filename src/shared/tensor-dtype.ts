@@ -51,7 +51,13 @@ function observeBinary16(bytes: Uint8Array<ArrayBuffer>, elements: number): Floa
   const words = new Uint16Array(bytes.buffer, bytes.byteOffset, elements);
   const numeric = new Float32Array(elements);
   const observed = new Uint32Array(numeric.buffer);
-  for (let index = 0; index < elements; index++) observed[index] = binary16ObservationBits(words[index]!);
+  // Process two words per iteration to reduce loop overhead on large readbacks.
+  let index = 0;
+  for (; index + 1 < elements; index += 2) {
+    observed[index] = binary16ObservationBits(words[index]!);
+    observed[index + 1] = binary16ObservationBits(words[index + 1]!);
+  }
+  if (index < elements) observed[index] = binary16ObservationBits(words[index]!);
   return numeric;
 }
 
