@@ -10,6 +10,8 @@ const release = data.releases.find(entry => entry.version === data.runtimeVersio
 if (!release?.support || !release.available) throw new Error("Selected runtime has no complete release-owned support record.");
 const support = release.support;
 const previousReleases = data.releases.slice(data.releases.indexOf(release) + 1);
+const compatibilityByVersion = new Map(data.documents.filter(document =>
+  !document.alias && document.source === "docs/compatibility.md").map(document => [document.version, document.route]));
 ---
 <StarlightPage frontmatter={{ title: "Versions and compatibility", description, template: "splash", editUrl: false }}>
   <div class="not-content marketing">
@@ -56,7 +58,7 @@ const previousReleases = data.releases.slice(data.releases.indexOf(release) + 1)
       </dl>
       <p class="support-records">
         <a href={`https://github.com/isaacperez/tabgrad/blob/v${release.version}/docs/reference/release-${release.version}.md`}>Release support record ↗</a>
-        <a href={documentRoute("docs/compatibility.md", release.version)}>PyTorch compatibility →</a>
+        <a href={compatibilityByVersion.get(release.version)}>PyTorch compatibility →</a>
       </p>
     </section>
     <section class="version-history version-section">
@@ -65,9 +67,12 @@ const previousReleases = data.releases.slice(data.releases.indexOf(release) + 1)
         <a class="link-card" href={`https://github.com/isaacperez/tabgrad/releases/tag/v${previous.version}`}>
           <strong data-link-title>{previous.version}</strong><span>{previous.title}</span><span data-link-title>Release notes ↗</span>
         </a>
-        <a class="text-link" href={previous.available ? `/docs/${previous.version}/` : `https://github.com/isaacperez/tabgrad/tree/${previous.sourceRevision}/docs`}>
-          {previous.available ? "Documentation →" : "Source documentation ↗"}
-        </a>
+        <div class="action-links">
+          <a class="text-link" href={previous.available ? `/docs/${previous.version}/` : `https://github.com/isaacperez/tabgrad/tree/${previous.sourceRevision}/docs`}>
+            {previous.available ? "Documentation →" : "Source documentation ↗"}
+          </a>
+          {compatibilityByVersion.has(previous.version) && <a class="text-link" href={compatibilityByVersion.get(previous.version)}>PyTorch compatibility →</a>}
+        </div>
       </div>)}
     </section>
   </div>

@@ -1,6 +1,7 @@
 import { createDocumentIndex, adaptDocument } from "./content.mjs";
 import { documentRoute, repositoryUrl } from "./config.mjs";
 import { integrationSource } from "./integration-files.mjs";
+import { renderOperationCompatibility } from "./operation-compatibility-page.mjs";
 
 /** @param {object} metadata @param {string} revision @param {boolean} alias @returns {string} */
 function frontmatter(metadata, revision, alias, isOverview) {
@@ -114,12 +115,15 @@ export function prepareDocumentationPages(releaseData, runtimeVersion, rendererK
     for (const entry of all) {
       const isOverview = entry === overviewEntry;
       const metadata = isOverview ? overviewMetadata : index.get(entry.source);
+      const operationCompatibility = entry.source === "docs/compatibility.md" && group.operationCompatibility !== undefined
+        ? renderOperationCompatibility(group.operationCompatibility, index) : undefined;
       const adapted = isOverview ? { diagrams: [], render: () => entry.body } : adaptDocument(entry, index, group.baselineRevision,
-        { diagramKey: rendererKey, repositoryPaths: group.paths, repositoryDirectories: group.directories });
+        { diagramKey: rendererKey, repositoryPaths: group.paths, repositoryDirectories: group.directories, operationCompatibility: operationCompatibility?.markup });
       for (const diagram of adapted.diagrams) diagrams.set(diagram.id, diagram);
       const context = { source: entry.source, title: metadata.title, description: metadata.description,
-        headings: metadata.headings, version: group.version, baselineRevision: group.baselineRevision,
-        correction: group.correction, canonicalRoute: metadata.route };
+        headings: operationCompatibility ? [...metadata.headings, ...operationCompatibility.anchors] : metadata.headings,
+        version: group.version, baselineRevision: group.baselineRevision,
+        correction: group.correction, canonicalRoute: metadata.route, operationCompatibility: operationCompatibility !== undefined };
       prepared.push({ path: metadata.route.slice(1) + "index.md", frontmatter: frontmatter(metadata, group.baselineRevision, false, isOverview), adapted });
       documents.push({ ...context, route: metadata.route, alias: false });
       if (group.version === runtimeVersion) {
