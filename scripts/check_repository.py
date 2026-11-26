@@ -487,6 +487,9 @@ CI_LINT_COMMAND = ".venv/bin/python -m ruff check scripts tests python"
 CI_VALIDATE_COMMAND = ".venv/bin/python scripts/check_repository.py"
 CI_TEST_COMMAND = ".venv/bin/python scripts/run_tests.py"
 CI_PYTHON_TYPES_COMMAND = "npm run check:python"
+CI_DTYPE_CHECK_COMMAND = (
+    "npm run build:javascript && node scripts/check-dtype-registrations.mjs"
+)
 CI_RUST_INSTALL_COMMAND = (
     "rustup toolchain install 1.98.1 --profile minimal --component rustfmt "
     "--component clippy --target wasm32-unknown-unknown"
@@ -529,6 +532,7 @@ REQUIRED_CI_COMMANDS = {
     CI_VALIDATE_COMMAND,
     CI_TEST_COMMAND,
     CI_PYTHON_TYPES_COMMAND,
+    CI_DTYPE_CHECK_COMMAND,
     CI_RUST_INSTALL_COMMAND,
     CI_RUST_BUILD_INSTALL_COMMAND,
     CI_NPM_INSTALL_COMMAND,
@@ -721,6 +725,10 @@ EXPECTED_REPOSITORY_CHECKS_WORKFLOW = {
                     "run": CI_NPM_INSTALL_COMMAND,
                 },
                 {"name": "Check Python types", "run": CI_PYTHON_TYPES_COMMAND},
+                {
+                    "name": "Verify tensor dtype registrations",
+                    "run": CI_DTYPE_CHECK_COMMAND,
+                },
                 {
                     "name": "Validate repository policies and structure",
                     "run": CI_VALIDATE_COMMAND,

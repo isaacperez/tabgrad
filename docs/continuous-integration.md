@@ -29,8 +29,10 @@ Python tooling and the selected Node/npm environment with locked Pyright. It run
 1. `.venv/bin/python -m ruff format --check scripts tests python`.
 2. `.venv/bin/python -m ruff check scripts tests python`.
 3. `npm run check:python` for strict Python type checking.
-4. `.venv/bin/python scripts/check_repository.py`.
-5. `.venv/bin/python scripts/run_tests.py`.
+4. `npm run build:javascript && node scripts/check-dtype-registrations.mjs`
+   for dtype identity and documented arithmetic registrations.
+5. `.venv/bin/python scripts/check_repository.py`.
+6. `.venv/bin/python scripts/run_tests.py`.
 
 After Node setup it also selects execution applicability with
 `node scripts/validation-scope.mjs` and always runs
@@ -45,6 +47,11 @@ Pyodide interpreter target, separately from native tooling's Python target.
 The check reads upstream type sources from the locked npm-installed Pyodide
 archive; it does not install dependencies or import browser modules into
 native Python. See [the command coverage](development.md#configured-commands).
+
+The dtype check reads the [arithmetic table](compatibility.md#arithmetic) and
+the compiled TypeScript definitions. It runs on documentation-only changes
+without preparing Wasm or a browser. Runtime and physical device qualification
+remain separate checks.
 
 When runtime execution applies, the `runtime` job uses Node.js 22.12.0 from `.node-version`, installs the Rust
 1.98.1 minimal toolchain with `wasm32-unknown-unknown`, Rustfmt, and Clippy,

@@ -85,6 +85,13 @@ For either route, place the numerical implementation with its backend:
 Qualify the affected operation against an independent oracle. Update the
 [operation reference and dtype table](../compatibility.md#tensor-dtypes-by-operation)
 with the verified public combinations, including any backend differences.
+Run `npm run build:javascript` followed by
+`node scripts/check-dtype-registrations.mjs` to compare canonical dtype names
+and documented arithmetic support with the compiled catalogues. For an
+arithmetic operation that is unavailable on one backend, use `Unavailable`
+in that backend's table cell. The repository consistency job runs this check
+for documentation and code changes. Continue to verify runtime admission,
+actual device limits, numerical results and exact package support separately.
 
 ## Qualify an added compact floating dtype
 

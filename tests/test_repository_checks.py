@@ -1560,6 +1560,12 @@ class RepositoryCheckTests(unittest.TestCase):
                 "        if: false\n",
             ),
             (
+                "conditional dtype coverage skips documentation changes",
+                f"        run: {CHECKS.CI_DTYPE_CHECK_COMMAND}\n",
+                f"        run: {CHECKS.CI_DTYPE_CHECK_COMMAND}\n"
+                "        if: steps.validation.outputs.runtime == 'true'\n",
+            ),
+            (
                 "push comparison missing its actual event base",
                 "          TABGRAD_VALIDATION_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}\n",
                 "          TABGRAD_VALIDATION_BASE: ${{ github.event.pull_request.base.sha }}\n",

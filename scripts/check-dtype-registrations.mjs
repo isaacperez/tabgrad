@@ -1,0 +1,84 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import { pathToFileURL } from "node:url";
+import { Tensor } from "../dist/index.js";
+import { TENSOR_DTYPES } from "../dist/shared/tensor-dtype.js";
+import { COMPUTATION_SIGNATURES } from "../dist/execution/operation-contracts.js";
+import { cpuKernel } from "../dist/backends/cpu/kernel-catalogue.js";
+import { webGpuKernel } from "../dist/backends/webgpu/kernel-catalogue.js";
+
+const compatibility = new URL("../docs/compatibility.md", import.meta.url);
+const dtypeCell = /^`[a-z][a-z0-9_]*`(?:, `[a-z][a-z0-9_]*`)*$/;
+
+function documentedTypes(cell, operation, backend) {
+  if (cell === "Unavailable") return [];
+  assert.match(cell, dtypeCell, `Invalid dtype list for ${backend} ${operation}`);
+  const types = cell.split(", ").map(type => type.slice(1, -1)).sort();
+  assert.equal(new Set(types).size, types.length, `Duplicate dtype for ${backend} ${operation}`);
+  return types;
+}
+
+function documentedArithmetic(markdown) {
+  const sections = markdown.split(/^## /m).filter(section => section.startsWith("Tensor dtypes by operation\n"));
+  assert.equal(sections.length, 1, "Expected one tensor dtype section");
+  const table = sections[0].match(/^### Arithmetic\n\n((?:\|[^\n]*\n)+)/m)?.[1];
+  assert.ok(table, "Missing arithmetic dtype table");
+  const [header, separator, ...rows] = table.trimEnd().split("\n");
+  assert.equal(header, "| Operation | CPU | WebGPU |");
+  assert.equal(separator, "| --- | --- | --- |");
+  assert.ok(rows.length > 0, "Empty arithmetic dtype table");
+
+  const expected = new Map();
+  for (const row of rows) {
+    const [start, label, cpu, webgpu, end, ...extra] = row.split("|").map(cell => cell.trim());
+    const operation = /^\[`([a-z][a-z0-9_]*)`\]\([^)]+\)$/.exec(label)?.[1];
+    assert.ok(operation && start === "" && end === "" && extra.length === 0, `Invalid arithmetic row: ${row}`);
+    assert.ok(!expected.has(operation), `Duplicate arithmetic operation ${operation}`);
+    expected.set(operation, {
+      CPU: documentedTypes(cpu, operation, "CPU"),
+      WebGPU: documentedTypes(webgpu, operation, "WebGPU"),
+    });
+  }
+  return expected;
+}
+
+function isPublicArithmetic(signature) {
+  // The optimizer's coefficient lowering shares the name "add" with Tensor.add.
+  return signature.family.parameters !== "coefficient"
+    && typeof Object.getOwnPropertyDescriptor(Tensor.prototype, signature.operation)?.value === "function";
+}
+
+export function verifyDTypeRegistrations(markdown, {
+  definitions = TENSOR_DTYPES, signatures = COMPUTATION_SIGNATURES, cpu = cpuKernel, webgpu = webGpuKernel,
+} = {}) {
+  for (const [key, definition] of Object.entries(definitions)) {
+    assert.equal(definition.name, key, `Dtype ${key} must expose the same canonical name to Python`);
+  }
+
+  const expected = documentedArithmetic(markdown.replaceAll("\r\n", "\n"));
+  const actual = new Map([...expected.keys()].map(operation => [operation, { CPU: new Set(), WebGPU: new Set() }]));
+  for (const [kind, signature] of Object.entries(signatures)) {
+    if (!isPublicArithmetic(signature)) continue;
+    const { operation, types } = signature;
+    const registered = actual.get(operation);
+    assert.ok(registered, `Missing arithmetic dtype row for ${operation}`);
+    const dtype = types.result;
+    assert.ok(Object.hasOwn(definitions, dtype), `Unknown registered dtype ${dtype} for ${kind}`);
+    assert.ok(types.inputs.length > 0 && types.inputs.every(input => input === dtype),
+      `Arithmetic dtype table cannot describe the input/result types of ${kind}`);
+    if (cpu(kind)) registered.CPU.add(dtype);
+    if (webgpu(kind)) registered.WebGPU.add(dtype);
+  }
+
+  for (const [operation, documented] of expected) {
+    for (const backend of ["CPU", "WebGPU"]) {
+      assert.deepEqual([...actual.get(operation)[backend]].sort(), documented[backend],
+        `${backend} ${operation} dtype registrations differ from the documentation`);
+    }
+  }
+}
+
+if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
+  verifyDTypeRegistrations(await readFile(compatibility, "utf8"));
+  console.log("Tensor dtype names and public arithmetic registrations match.");
+}
