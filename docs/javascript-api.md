@@ -146,8 +146,11 @@ and contiguous storage.
 `left.add(right)` validates both operands synchronously and returns a new
 tensor handle. It does not prepare or submit numerical backend work.
 The operands must be open, belong to the same session and device, and have
-broadcast-compatible shapes. Align dimensions from the right: each pair must
-be equal or include a singleton; missing leading axes act as singletons.
+broadcast-compatible shapes. Use two `float32` tensors or two `float16`
+tensors. The result keeps that dtype. See
+[tensor dtypes by operation](compatibility.md#tensor-dtypes-by-operation) for
+the other operations. Align dimensions from the right. Each pair must
+be equal or include a singleton, and missing leading axes act as singletons.
 For example, `[2, 1]` and `[3]` produce `[2, 3]`, and a scalar `[]` can pair
 with any supported shape. Zero with one produces zero, but empty payloads
 still require compatibility at every axis. Equal element counts alone are

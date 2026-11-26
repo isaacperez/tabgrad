@@ -5,6 +5,32 @@ support boundaries of its public Python and JavaScript interfaces. A
 compatibility record describes a named release and evidence, not implementation
 progress or a product roadmap.
 
+## Tensor dtypes by operation
+
+The table applies to the documented contiguous tensor operations in Python
+and JavaScript. Python requires an explicit `torch.float32` or `torch.float16`
+when creating a tensor. JavaScript defaults to `"float32"` and accepts an
+explicit `"float16"`. Binary arithmetic requires two operands of the same
+dtype on the same device.
+
+| Operation | CPU | WebGPU |
+| --- | --- | --- |
+| [Creation and observation](reference/python-tensors.md) | `float32`, `float16` | `float32`, `float16` |
+| [Whole-storage views](reference/tensor-view.md) | `float32`, `float16` | `float32`, `float16` |
+| [`add`](reference/python-tensors.md#admit-addition) | `float32`, `float16` | `float32`, `float16` |
+| [`mul`](reference/tensor-multiplication.md) | `float32`, `float16` | `float32`, `float16` |
+| [`sum`](reference/tensor-sum.md) | `float32` | `float32` |
+| [`matmul`](reference/tensor-matmul.md) | `float32` | `float32` |
+| [`copy_`](reference/tensor-copy.md) | `float32` | `float32` |
+| [First-order gradients](reference/functional-gradients.md) and [`backward`](reference/backward-gradients.md) | `float32` | `float32` |
+| [Basic SGD](reference/sgd.md) | `float32` | `float32` |
+
+WebGPU arithmetic also depends on the [acquired device's limits](reference/webgpu-runtime.md#device-and-operation-domain).
+A device can admit `float16` storage while its limits exclude those
+arithmetic kernels. The individual references define shapes, gradient
+coverage and numerical behavior. Use the named release's support record for
+qualified environments and release-specific claims.
+
 ## Meaning of compatibility
 
 Tabgrad is an independent implementation. A compatible operation must match

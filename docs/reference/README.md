@@ -17,6 +17,8 @@ diagnostics and errors.
 
 Use [Float16 tensors](float16.md) for explicit compact creation, views,
 pointwise arithmetic, numerical conversion, memory accounting and exclusions.
+Use [Tensor dtypes by operation](../compatibility.md#tensor-dtypes-by-operation)
+to compare supported types in Python and JavaScript on CPU and WebGPU.
 
 Use [Basic SGD](sgd.md) for Python and JavaScript optimizer calls, parameter
 groups, numerical reset, ordered updates and host ownership.
@@ -90,6 +92,8 @@ build correction and its preserved API, numerical and qualification boundaries.
 
 Use [Qualifying a browser package](package-qualification.md) for admitted local
 archives or exact registry installations, shared consumers and JSON reports.
+The [dtype extension procedure](package-qualification.md#extend-dtype-coverage)
+identifies source owners and the checks for new specializations.
 
 Use [Verifying retained producer proofs](package-provenance.md) for offline
 signature, identity, claim and original-candidate verification under admitted trust.

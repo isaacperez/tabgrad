@@ -65,31 +65,33 @@ a creation-only value, so the explicitly selected device is not bypassed by
 a host-copy shortcut. Whole-storage `view(shape)` changes metadata without
 copying numerical data or performing a GPU dispatch.
 
-GPU `add` accepts two broadcast-compatible tensors on the same device. Repeated
+GPU `add` accepts two broadcast-compatible tensors of the same dtype on the
+same device. Repeated
 operands, branches and deferred chains follow the shared value/storage rules.
 For float32, its precise rounding and exceptional-value contract is the
 [binary32 addition decision](../architecture/webgpu-float32-addition.md),
 including a separately rounded result for every logical addition. It does not
 promise native WGSL floating-point behavior or NaN payload preservation.
 
-GPU `sum()` reduces the whole contiguous tensor to a distinct scalar, including
+GPU `sum()` reduces a whole contiguous `float32` tensor to a distinct scalar, including
 an empty input's positive-zero write. Its exact-total accumulation and logical
 rounding boundaries are specified by the [sum reference](tensor-sum.md).
 Admission requires the acquired device's sum workgroup and parameter-buffer
 limits before recording work. Kernels use input geometry, not the output's
 single element.
 
-GPU [`matmul`](tensor-matmul.md) contracts two same-device 2D matrices, including
+GPU [`matmul`](tensor-matmul.md) contracts two same-device 2D `float32` matrices, including
 empty geometry. Both derivatives use the same integer sequential-FMA kernel
 with captured internal orientation; there is no host transpose or fallback.
 Output capacity is checked independently of inputs and each dispatch owns its
 immutable 16-byte geometry packet until physical completion.
 
-GPU `mul` accepts the same broadcast-compatible operands and composes with addition,
-views and total sum. The [multiplication reference](tensor-multiplication.md)
+GPU `mul` accepts the same broadcast-compatible operands and composes with
+addition and views. A `float32` product can also feed a total sum.
+The [multiplication reference](tensor-multiplication.md)
 owns its call forms, exact stored-binary32 product rounding and exclusions.
 
-Creation accepts `requiresGrad: true`; `session.grad` returns resident-capable,
+For `float32` tensors, creation accepts `requiresGrad: true`. `session.grad` returns resident-capable,
 untracked first-order gradients through add/mul/total sum/views under the
 [functional reference](functional-gradients.md). Shared history owns saved
 values; derivative operations use this backend, including internal scalar
@@ -100,7 +102,7 @@ same operations, histories and mandatory effects. Leaf slots retain canonical
 identity across accumulation; selected nonleaf slots can be replaced. Assignment
 and clearing preserve exposed gradients and their aliases.
 
-[Basic SGD](sgd.md) uses ordinary coefficient computations, immutable
+[Basic SGD](sgd.md) updates `float32` parameters using ordinary coefficient computations, immutable
 per-computation metadata and device-local numerical reset. Groups may mix
 enabled CPU/GPU parameters while each gradient stays on its parameter's device.
 Its arithmetic has one rounding of the exact product plus parameter, as defined
@@ -110,11 +112,13 @@ Capability rejection happens before recording unsupported work. Mixing CPU and G
 operands is rejected, not interpreted as a transfer. CPU behavior remains
 governed by its own operation references.
 
-Same-device equal-shape [`copy_`](tensor-copy.md) updates a tensor and its
+Same-device equal-shape [`copy_`](tensor-copy.md) updates a `float32` tensor and its
 whole-storage aliases while preserving public identity and captured old reads.
 Source and destination remain independently mutable families even when they
 share immutable resident storage. Functional copy derivatives and no-grad
-parameter updates use this same runtime and backend.
+parameter updates use this same runtime and backend. The
+[dtype table](../compatibility.md#tensor-dtypes-by-operation) lists the
+operation domains across CPU and WebGPU.
 
 Tensor storage capacity is the four-byte-aligned minimum of the acquired device's
 buffer/binding limits, supported unsigned element indexing and the signed

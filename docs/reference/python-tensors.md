@@ -21,7 +21,8 @@ The [wrapper component](../components/python-tensor-wrappers.md) explains the
 owners behind these calls. This page covers creation, metadata, addition
 admission and ordinary observation, not general PyTorch support. GPU use
 requires the explicit [managed connection](python-host.md#acquire-a-managed-gpu-connection).
-Release claims follow the [compatibility policy](../compatibility.md).
+See [tensor dtypes by operation](../compatibility.md#tensor-dtypes-by-operation)
+for the supported types and devices.
 
 Shape-only `Tensor.view` has its own [operation reference](tensor-view.md),
 covering syntax, inference, errors and storage sharing.
@@ -47,9 +48,8 @@ right = torch.tensor((3, 4), dtype=torch.float32)
 ```
 
 The accepted form is
-`torch.tensor(data, *, dtype=torch.float32, device='cpu', requires_grad=False, pin_memory=False)`.
-The explicit dtype argument is required by policy even though omission can be
-bound by Python: there is no silent inference of an integer or default dtype.
+`torch.tensor(data, *, dtype, device='cpu', requires_grad=False, pin_memory=False)`.
+Pass the dtype explicitly.
 
 - `data` must be a built-in `int`, `float` or `bool`, or a rectangular nested
   structure of built-in lists/tuples containing those types. A numeric scalar
@@ -106,8 +106,11 @@ operator = left + right
 ```
 
 `torch.add(input, other, *, alpha=1, out=None)` and
-`Tensor.add(other, *, alpha=1)` require two broadcast-compatible tensors of the same supported dtype on the
-same supported device. GPU admission also requires an attached, ready backend.
+`Tensor.add(other, *, alpha=1)` require two broadcast-compatible tensors in
+one session on the same device. Use two `torch.float32` tensors or two
+[`torch.float16` tensors](float16.md). The result keeps that dtype.
+GPU admission also requires an attached, ready backend that supports the
+selected dtype for addition.
 Align dimensions from the right: each pair must be equal or include a
 singleton; missing leading axes act as singletons. Thus `[2, 1]` plus `[3]`
 produces `[2, 3]`, and a scalar tensor can pair with a vector or matrix.

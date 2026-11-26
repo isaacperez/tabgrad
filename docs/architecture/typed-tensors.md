@@ -73,14 +73,17 @@ independent of its dtype. Backend preparation indexes advertised signatures
 once per immutable capability list. The executable format and ordered worker
 advertisements do not need additional fields for these lookups.
 
-Within these pointwise families, declare each supported signature alongside the
-kernels that implement it. Build-time validation checks uniqueness and
-completeness and derives immutable lookup tables available to clean builds and
-standalone checks. The operation family owns arity, shape and parameters.
-Admission and reconstruction both use its validated input, result and
-arithmetic signature. Adding a signature requires its declaration and kernel
-bodies, its dtype definition and codecs if new, and independent conformance
-cases. Selection uses direct lookup without scanning the catalogue per node.
+The [semantic catalogue](../../src/execution/operation-contracts.ts) owns the
+signature. The [CPU catalogue](../../src/backends/cpu/kernel-catalogue.ts) and
+[WebGPU catalogue](../../src/backends/webgpu/kernel-catalogue.ts) declare their
+physical kernels independently. A backend can implement a subset. Its
+registered entries drive its capabilities and preparation, and the CPU
+loader validates the exports and capability bits required by its profile.
+The operation family owns arity, shape and parameters. Admission and
+reconstruction use the same validated input, result and arithmetic signature.
+Selection uses direct lookup without scanning the catalogue per node. The
+[contributor procedure](../reference/package-qualification.md#extend-dtype-coverage)
+explains where to add a signature, its kernels and its conformance cases.
 
 Physical preparation identities distinguish numerical signature, encoding,
 layout and relevant capability/generation. Tensor shape remains runtime

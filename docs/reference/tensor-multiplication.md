@@ -36,9 +36,10 @@ result has the broadcast output shape and its inputs' dtype and device; `await r
 returns the ordinary independent flat `Float32Array`. Close JavaScript handles
 and their session under the existing explicit lifetime contract.
 
-The supported domain is two broadcast-compatible contiguous tensors of the same
-supported dtype on the same
-device in one session: CPU, or `webgpu` with an attached ready GPU owner. It
+Multiplication accepts two broadcast-compatible contiguous `float32` tensors
+or two [`float16` tensors](float16.md) in one session on the same device.
+The result keeps their dtype. WebGPU requires a ready backend that supports
+multiplication for the selected dtype. This domain
 includes scalar tensors, every supported contiguous rank,
 singleton and empty dimensions, and whole-contiguous views. Align axes from
 the right; each pair must be equal or include a singleton, including missing
