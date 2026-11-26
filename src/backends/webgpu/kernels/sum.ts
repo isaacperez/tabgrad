@@ -130,5 +130,3 @@ ${entry.signature}${entry.guard}
 }
 `;
 }
-
-export const WEBGPU_SUM_SOURCE = createSumSource();

@@ -18,20 +18,22 @@ function program(shapes, kind = "add-f16") {
   return new ExecutableProgram(values, shapes.length === 1 ? [] : [{ kind, inputs: [0, 1], output: 2, provenance }], shapes.length - 1);
 }
 
-test("half GPU capabilities require a bindable geometry packet before any physical work", async () => {
-  const device = executionDevice();
-  device.limits.maxStorageBufferBindingSize = 8;
-  const backend = new WebGpuBackend(device);
-  try {
-    for (const kind of ["add-f16", "mul-f16"]) {
-      assert(!backend.capabilities.computations.includes(kind));
-      assert.throws(() => backend.prepare(program([[1], [1], [1]], kind)),
-        { code: "BACKEND_CAPABILITY_MISMATCH" });
-    }
-    assert.equal(device.buffers.length, 0);
-    assert.equal(device.shaderSources.length, 0);
-  } finally { await backend.close(); }
-});
+for (const [limit, value] of [["maxBufferSize", 8], ["maxStorageBufferBindingSize", 8], ["maxStorageBuffersPerShaderStage", 3]]) {
+  test(`packed kernels are unavailable before device work when ${limit} is too small`, async () => {
+    const device = executionDevice();
+    device.limits[limit] = value;
+    const backend = new WebGpuBackend(device);
+    try {
+      for (const kind of ["add-f16", "mul-f16"]) {
+        assert(!backend.capabilities.computations.includes(kind));
+        assert.throws(() => backend.prepare(program([[1], [1], [1]], kind)),
+          { code: "BACKEND_CAPABILITY_MISMATCH" });
+      }
+      assert.equal(device.buffers.length, 0);
+      assert.equal(device.shaderSources.length, 0);
+    } finally { await backend.close(); }
+  });
+}
 for (const count of [0, 1, 2, 3, 5]) {
   test(`half GPU ${count}-element bounded transfers align physical bytes without exposing padding`, async () => {
     const device = executionDevice();

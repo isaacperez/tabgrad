@@ -170,7 +170,7 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
       try {
         const plan = planKernelDispatch(computation, program, this.#limits);
         if (plan.path === "pointwise"
-          && this.#device.limits.maxStorageBuffersPerShaderStage < plan.pipeline.kernel.minimumStorageBindings) {
+          && this.#device.limits.maxStorageBuffersPerShaderStage < plan.pipeline.minimumStorageBindings) {
           throw new TabgradError("BACKEND_CAPABILITY_MISMATCH", "Unsupported WebGPU broadcast bindings.");
         }
         return plan;

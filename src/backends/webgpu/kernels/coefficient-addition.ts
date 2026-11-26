@@ -23,5 +23,3 @@ ${entry.signature}
 }
 `;
 }
-
-export const WEBGPU_COEFFICIENT_ADDITION_SOURCE = createCoefficientAdditionSource();

@@ -2,28 +2,23 @@ import { TabgradError } from "../../shared/errors.js";
 import type { ExecutableProgram, LoweredComputation } from "../../execution/executable-program.js";
 import { tensorElementCount } from "../../runtime/tensor-shape.js";
 import { pointwiseGeometry, receivingGeometry } from "../../execution/broadcast-geometry.js";
-import { pointwiseFamily } from "../../execution/operation-contracts.js";
 import { pointwiseParameters, receivingParameters, receivingStages, type BroadcastDispatchLimits, type ReceivingStage } from "./broadcast-dispatch.js";
 import { planLinearDispatch, type LinearDispatch, type LinearDispatchLayout } from "./linear-dispatch.js";
 import { reductionStages, type ReductionStage } from "./reduction-stages.js";
-import { webGpuKernel, type KernelKind, type PhysicalKernel, type UniformParameters } from "./kernel-catalogue.js";
+import { webGpuKernel, type PhysicalKernel, type PipelineSelection, type UniformParameters } from "./kernel-catalogue.js";
 
-export type PipelineKey = `${KernelKind}/${LinearDispatchLayout}`;
-export interface PipelineSelection {
-  readonly key: PipelineKey;
-  readonly layout: LinearDispatchLayout;
-  readonly kernel: PhysicalKernel;
-}
+export type { PipelineKey, PipelineSelection } from "./kernel-catalogue.js";
 
 export function selectPipeline(kernel: PhysicalKernel, layout: LinearDispatchLayout): PipelineSelection {
-  if (kernel.indexSpace.kind === "window" && layout !== "linear") {
+  const selection = kernel[layout];
+  if (selection === undefined) {
     throw new TabgradError("BACKEND_CAPABILITY_MISMATCH", "Windowed GPU kernels require their own immutable-offset layout.");
   }
-  return { key: `${kernel.kind}/${layout}`, kernel, layout };
+  return selection;
 }
 
 export function pipelineSource(pipeline: PipelineSelection): string {
-  return pipeline.kernel.source(pipeline.layout);
+  return pipeline.source(pipeline.layout);
 }
 
 interface SumStage extends ReductionStage {
@@ -51,19 +46,28 @@ export function planKernelDispatch(computation: LoweredComputation, program: Exe
   switch (registration.strategy) {
     case "pointwise": {
       const elements = tensorElementCount(output.shape);
-      const broadcast = elements !== 0 && computation.inputs.some(slot => tensorElementCount(program.values[slot]!.shape) !== elements);
+      let broadcast = false;
+      if (elements !== 0) {
+        for (const slot of computation.inputs) {
+          if (tensorElementCount(program.values[slot]!.shape) !== elements) {
+            broadcast = true;
+            break;
+          }
+        }
+      }
+      if (!broadcast && !registration.densePacket) {
+        const kernel = registration.direct;
+        const dispatch = planLinearDispatch(elements, kernel.indexSpace, axis);
+        return { path: "dense", dispatch, pipeline: selectPipeline(kernel, dispatch.layout), uniform: undefined };
+      }
       const kernel = broadcast ? registration.projected : registration.direct;
       const fixedWidth = registration.densePacket ? kernel.indexSpace.elementsPerInvocation : undefined;
-      if (broadcast || fixedWidth !== undefined) {
-        const words = broadcast
-          ? pointwiseParameters(pointwiseFamily(computation.kind)!.plan(computation.inputs.map(slot => program.values[slot]!.shape)), limits, fixedWidth)
-          : new Uint32Array([0, elements, fixedWidth!]);
-        const space = fixedWidth === undefined ? { ...kernel.indexSpace, elementsPerInvocation: words[2]! } : kernel.indexSpace;
-        const dispatch = planLinearDispatch(elements, space, axis);
-        return { path: "pointwise", dispatch, words, pipeline: selectPipeline(kernel, dispatch.layout) };
-      }
-      const dispatch = planLinearDispatch(elements, kernel.indexSpace, axis);
-      return { path: "dense", dispatch, pipeline: selectPipeline(kernel, dispatch.layout), uniform: undefined };
+      const words = broadcast
+        ? pointwiseParameters(registration.geometry.plan(computation.inputs.map(slot => program.values[slot]!.shape)), limits, fixedWidth)
+        : new Uint32Array([0, elements, kernel.indexSpace.elementsPerInvocation]);
+      const space = fixedWidth === undefined ? { ...kernel.indexSpace, elementsPerInvocation: words[2]! } : kernel.indexSpace;
+      const dispatch = planLinearDispatch(elements, space, axis);
+      return { path: "pointwise", dispatch, words, pipeline: selectPipeline(kernel, dispatch.layout) };
     }
     case "dense": {
       const dispatch = planLinearDispatch(tensorElementCount(output.shape), registration.direct.indexSpace, axis);

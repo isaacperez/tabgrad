@@ -3,7 +3,8 @@ import { WEBGPU_EXACT_SUM_ARITHMETIC_SOURCE, WEBGPU_SUM_GROUP_ELEMENTS, WEBGPU_S
 export const WEBGPU_RECEIVING_UNIFORM_BYTES = 32;
 
 /** One group/chunk per workgroup; later stages merge the same exact partials. */
-export const WEBGPU_RECEIVING_SOURCE = `${WEBGPU_EXACT_SUM_ARITHMETIC_SOURCE}
+export function createReceivingSource(): string {
+  return `${WEBGPU_EXACT_SUM_ARITHMETIC_SOURCE}
 struct Parameters { count: u32, chunks: u32, terms: u32, groups: u32, partial_input: u32, final_stage: u32, window_base: u32, padding: u32 }
 @group(0) @binding(0) var<storage, read> input: array<u32>;
 @group(0) @binding(1) var<storage, read_write> output: array<u32>;
@@ -56,3 +57,4 @@ fn main(@builtin(local_invocation_index) lane: u32, @builtin(workgroup_id) workg
   }
 }
 `;
+}

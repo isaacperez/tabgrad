@@ -1,6 +1,4 @@
 import { invocationEntry, type LinearDispatchLayout } from "../linear-dispatch.js";
-import { WEBGPU_ADDITION_ARITHMETIC_SOURCE } from "./addition.js";
-import { WEBGPU_MULTIPLICATION_ARITHMETIC_SOURCE } from "./multiplication.js";
 
 export const WEBGPU_POINTWISE_WORKGROUP_SIZE = 64;
 
@@ -43,6 +41,3 @@ ${entry.signature}
 }
 `;
 }
-
-export const WEBGPU_BROADCAST_ADDITION_SOURCE = pointwiseSource(WEBGPU_ADDITION_ARITHMETIC_SOURCE, "add_binary32");
-export const WEBGPU_BROADCAST_MULTIPLICATION_SOURCE = pointwiseSource(WEBGPU_MULTIPLICATION_ARITHMETIC_SOURCE, "multiply_binary32");
