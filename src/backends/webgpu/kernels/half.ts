@@ -1,9 +1,5 @@
-import { invocationEntry, type LinearDispatchLayout } from "../linear-dispatch.js";
-
-export const WEBGPU_HALF_WORKGROUP_SIZE = 64;
-
 /** Binary16 arithmetic in bounded u32 significands; no optional or relaxed float operations. */
-const ARITHMETIC = `
+export const BINARY16_ARITHMETIC = `
 fn half_shift_jam(value: u32, distance: u32) -> u32 {
   if distance == 0u { return value; }
   if distance >= 32u { return select(0u, 1u, value != 0u); }
@@ -84,41 +80,3 @@ fn multiply_binary16(left: u32, right: u32) -> u32 {
   return sign | (u32(exponent) << 10u) | (rounded & 1023u);
 }
 `;
-
-/** Each invocation owns a complete word. Odd tails never load a missing half. */
-export function halfPointwiseSource(operation: "add" | "mul", broadcast = false, layout: LinearDispatchLayout = "linear"): string {
-  const entry = invocationEntry(layout, WEBGPU_HALF_WORKGROUP_SIZE);
-  const calculate = operation === "add" ? "add_binary16" : "multiply_binary16";
-  const indices = broadcast ? `
-      var remaining = index;
-      var indices = vec2<u32>(0u);
-      for (var axis = geometry[0]; axis > 0u; axis--) {
-        let base = 3u + (axis - 1u) * 3u;
-        let coordinate = remaining % geometry[base];
-        remaining /= geometry[base];
-        indices += coordinate * vec2<u32>(geometry[base + 1u], geometry[base + 2u]);
-      }` : "let indices = vec2<u32>(index);";
-  return `${ARITHMETIC}
-@group(0) @binding(0) var<storage, read> left: array<u32>;
-@group(0) @binding(1) var<storage, read> right: array<u32>;
-@group(0) @binding(2) var<storage, read_write> output: array<u32>;
-@group(0) @binding(3) var<storage, read> geometry: array<u32>;
-@compute @workgroup_size(${WEBGPU_HALF_WORKGROUP_SIZE})
-${entry.signature}
-  let word_index = ${entry.index};
-  let first = word_index * 2u;
-  if first >= geometry[1] { return; }
-  var packed = 0u;
-  for (var lane = 0u; lane < 2u; lane++) {
-    let index = first + lane;
-    if index < geometry[1] {
-      ${indices}
-      let a = (left[indices.x / 2u] >> ((indices.x % 2u) * 16u)) & 65535u;
-      let b = (right[indices.y / 2u] >> ((indices.y % 2u) * 16u)) & 65535u;
-      packed |= ${calculate}(a, b) << (lane * 16u);
-    }
-  }
-  output[word_index] = packed;
-}
-`;
-}

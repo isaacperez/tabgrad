@@ -48,6 +48,13 @@ ownership remain distinct.
 
 ## Prepare bounded identities and finite invocation metadata
 
+The WebGPU kernel catalogue binds executable signatures to physical variants and
+device requirements. The device advertises the eligible declarations in order.
+The planner looks up the chosen signature, then selects the calling layout and
+shader source for its existing geometry. A two-lane packed pointwise declaration
+supplies its own arithmetic to a shared shader traversal. The traversal owns
+whole-word writes, independent broadcast indices for each lane, and odd tails.
+
 Pipeline identity contains numerical kind and index layout within one device
 generation. There is no shape, rank, tensor length or invocation in its cache
 key. Receiving has one windowed layout; each other registered physical kind

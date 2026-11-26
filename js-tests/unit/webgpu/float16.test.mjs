@@ -85,8 +85,29 @@ test("half GPU dispatch owns complete output words and projects both broadcast l
       assert(!source.includes("enable f16"));
     }
   }
-  const p = program([[1048577], [1048577], [1048577]]);
-  const plan = planKernelDispatch(p.computations[0], p, { ...limits, maxComputeWorkgroupsPerDimension: 100 });
-  assert.equal(plan.pipeline.layout, "grid");
-  assert.equal(plan.dispatch.workgroups, Math.ceil(1048577 / 128));
+  for (const shapes of [[[2181], [2181], [2181]], [[727, 1], [1, 3], [727, 3]]]) {
+    const p = program(shapes);
+    const plan = planKernelDispatch(p.computations[0], p, { ...limits, maxComputeWorkgroupsPerDimension: 17 });
+    assert.equal(plan.pipeline.layout, "grid");
+    assert.equal(plan.dispatch.workgroups, Math.ceil(2181 / 128));
+    assert.equal(plan.words[1], 2181);
+  }
+});
+
+test("packed pipelines stay bounded across distinct dense and broadcast shapes", async () => {
+  const device = executionDevice();
+  device.limits.maxComputeWorkgroupsPerDimension = 17;
+  const backend = new WebGpuBackend(device);
+  try {
+    assert.deepEqual(backend.capabilities.computations, [
+      "add-f32", "add-alpha-f32", "matmul-f32", "mul-f32", "add-f16", "mul-f16", "sum-f32", "reduce-f32", "expand-f32",
+    ]);
+    for (const rows of [729, 3, 727, 1, 727]) {
+      for (const shapes of [[[rows, 3], [rows, 3], [rows, 3]], [[rows, 1], [1, 3], [rows, 3]]]) {
+        for (const kind of ["add-f16", "mul-f16"]) await backend.prepare(program(shapes, kind));
+      }
+    }
+    assert.equal(device.shaderSources.length, 8, "one pipeline per kernel, access pattern and index layout");
+    assert.equal(device.buffers.length, 0);
+  } finally { await backend.close(); }
 });

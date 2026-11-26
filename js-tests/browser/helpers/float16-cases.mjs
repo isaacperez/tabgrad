@@ -21,6 +21,10 @@ function halfTensor(session, owned, device, values, shape) {
   return result;
 }
 
+// 2,181 values span more than 17 groups of 128 and leave an odd tail.
+const PACKED_ROWS = 727;
+const PACKED_COLUMNS = [2, -3, 5];
+
 export async function halfJavaScriptCases(session, oracle, device) {
   const owned = [], options = { dtype: 'float16', device };
   try {
@@ -44,6 +48,18 @@ export async function halfJavaScriptCases(session, oracle, device) {
       const product = first.mul(second); owned.push(product);
       sameValues(await product.toArray(), multiplied, 'broadcast multiplication');
     }
+    const rows = Array.from({ length: PACKED_ROWS }, (_, index) => 1 + index % 7);
+    for (const broadcast of [false, true]) {
+      const shape = [PACKED_ROWS, PACKED_COLUMNS.length];
+      const a = halfTensor(session, owned, device, broadcast ? rows : rows.flatMap(row => PACKED_COLUMNS.map(() => row)),
+        broadcast ? [PACKED_ROWS, 1] : shape);
+      const b = halfTensor(session, owned, device, broadcast ? PACKED_COLUMNS : rows.flatMap(() => PACKED_COLUMNS),
+        broadcast ? [1, PACKED_COLUMNS.length] : shape);
+      const total = a.add(b), product = a.mul(b);
+      owned.push(total, product);
+      sameValues(await total.toArray(), rows.flatMap(row => PACKED_COLUMNS.map(column => row + column)), 'odd packed addition');
+      sameValues(await product.toArray(), rows.flatMap(row => PACKED_COLUMNS.map(column => row * column)), 'odd packed multiplication');
+    }
     const channels = halfTensor(session, owned, device, [-1, 2, 3, 4, -2, 1, 0, .5, -4], [3, 3]);
     const scale = halfTensor(session, owned, device, [.5, 1, 2], [3]);
     const bias = halfTensor(session, owned, device, [1, .5, -1], [3]);
@@ -64,7 +80,7 @@ export async function halfJavaScriptCases(session, oracle, device) {
     for (const key of ['liveTensorHandles', 'liveDerivativeNodes', 'hostToWasmCopies', 'kernelCalls']) {
       if (after[key] !== before[key]) throw Error(`Rejected request changed ${key}`);
     }
-    return { construction: oracle.construction.words.length, pointwise: p.left.length, broadcasts: 8, channelCompositions: 1 };
+    return { construction: oracle.construction.words.length, pointwise: p.left.length, broadcasts: 10, oddDense: 2, channelCompositions: 1 };
   } finally { for (const value of owned) value.close(); }
 }
 
@@ -116,6 +132,14 @@ def check_half() -> None:
         multiplied_output = first * second
         assert multiplied_output.tolist() == multiplied
         del first, second, output, multiplied_output
+    rows = [1 + index % 7 for index in range(${PACKED_ROWS})]
+    columns = ${JSON.stringify(PACKED_COLUMNS)}
+    for broadcast in (False, True):
+        first = _half_construct([[row] if broadcast else [row for _ in columns] for row in rows])
+        second = _half_construct([columns] if broadcast else [columns for _ in rows])
+        assert (first + second).tolist() == [[row + column for column in columns] for row in rows]
+        assert (first * second).tolist() == [[row * column for column in columns] for row in rows]
+        del first, second
     channels = _half_construct([[-1.,2.,3.],[4.,-2.,1.],[0.,.5,-4.]])
     scale, bias = _half_construct([.5,1.,2.]), _half_construct([1.,.5,-1.])
     scaled = channels * scale
