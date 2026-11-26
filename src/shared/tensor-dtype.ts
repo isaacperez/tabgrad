@@ -78,6 +78,12 @@ export const TENSOR_DTYPES = Object.freeze({
 
 export type TensorDType = keyof typeof TENSOR_DTYPES;
 export type TensorDTypeDescriptor = typeof TENSOR_DTYPES[TensorDType];
+export type TensorEncoding = TensorDTypeDescriptor["encoding"];
+
+/** Encodings supported by the current byte-oriented CPU and GPU storage. */
+export const TENSOR_STORAGE_ENCODINGS = Object.freeze([...new Set(
+  Object.values(TENSOR_DTYPES).map(descriptor => descriptor.encoding),
+)]);
 
 export function isTensorDType(dtype: unknown): dtype is TensorDType {
   return typeof dtype === "string" && Object.hasOwn(TENSOR_DTYPES, dtype);

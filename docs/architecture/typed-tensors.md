@@ -105,9 +105,17 @@ the bytes as another type. CPU views must retain their memory-growth safety.
 Python borrowed-buffer imports retain synchronous copying and lease release
 on both success and failure.
 
-Resident tensor identity carries the encoding and exact logical extent.
-Validate those facts at the binding and readback boundaries before interpreting
-bytes or queuing work that depends on them.
+A live resident tensor identity carries its canonical format and exact logical
+byte extent. The format determines the encoding and bytes per element, so
+padding never decides the logical element count. CPU and WebGPU validate the
+format and extent at binding and readback before interpreting bytes or queuing
+dependent work. Whole-storage views borrow the same identity. A recycled raw
+range or buffer takes the format of its new resident tensor after its last use.
+
+Storage and observation admit supported encodings independently of
+computation signatures. For example, a device can store and read packed
+binary16 bytes while its binding limits exclude packed arithmetic. The
+storage capability does not enable any numerical kernel.
 
 Raw readback returns a bounded encoded payload. A shared host observation codec
 below the Python and JavaScript facades performs numeric decoding once.

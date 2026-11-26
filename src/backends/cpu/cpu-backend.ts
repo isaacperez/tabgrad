@@ -1,10 +1,9 @@
 import { TabgradError } from "../../shared/errors.js";
 import type { BackendCapabilities, ExecutionBackend, ProgramBinding, ResidentAllocation } from "../../execution/backend.js";
 import { assertBackendProgram } from "../../execution/backend.js";
-import { assertTensorPayload, hostTensorPayload, type HostTensorPayload } from "../../execution/tensor-payload.js";
-import { tensorByteLength, type TensorDType } from "../../shared/tensor-dtype.js";
-import type { ExecutableProgram, ProgramSlot } from "../../execution/executable-program.js";
-import { tensorElementCount } from "../../runtime/tensor-shape.js";
+import { assertResidentTensor, assertTensorPayload, hostTensorPayload, type HostTensorPayload } from "../../execution/tensor-payload.js";
+import { TENSOR_STORAGE_ENCODINGS, checkedElementBytes, tensorDType, type TensorDType } from "../../shared/tensor-dtype.js";
+import type { ExecutableProgram, ProgramSlot, ProgramValue } from "../../execution/executable-program.js";
 import { CpuArtifactLoader } from "./artifact-loader.js";
 import { CPU_COMPUTATIONS, cpuKernel, type KernelExports } from "./kernel-catalogue.js";
 import type { BackendDiagnostics, WasmVariant } from "./cpu-types.js";
@@ -31,7 +30,7 @@ interface BackendContext {
 export class WebAssemblyCpuBackend implements ExecutionBackend {
   readonly synchronousObservation = true;
   readonly capabilities: BackendCapabilities = Object.freeze({
-    device: "cpu", computations: CPU_COMPUTATIONS,
+    device: "cpu", storageEncodings: TENSOR_STORAGE_ENCODINGS, computations: CPU_COMPUTATIONS,
     gradients: true, maximumTensorBytes: MAXIMUM_ADDRESS,
   });
   readonly #artifactLoader: CpuArtifactLoader;
@@ -109,30 +108,36 @@ export class WebAssemblyCpuBackend implements ExecutionBackend {
     const storage = new InvocationStorage(context.allocator, program, bindings, retainedSlots);
     const { allocations } = storage;
     try {
+      let hostValues: ProgramValue[] | undefined;
       for (const value of program.values) {
         if (value.source !== "binding") continue;
-        const binding = bindings.get(value.slot);
-        if (binding?.resident !== undefined) {
-          this.#validateAllocation(context, binding.resident);
-          allocations.set(value.slot, binding.resident);
+        const resident = bindings.get(value.slot)?.resident;
+        if (resident === undefined) {
+          (hostValues ??= []).push(value);
           continue;
         }
-        const length = tensorElementCount(value.shape);
-        const byteLength = tensorByteLength(value.dtype, length);
-        const allocation = context.allocator.allocate(byteLength);
-        allocations.set(value.slot, allocation);
-        if (binding?.hostData !== undefined) {
-          assertTensorPayload(binding.hostData, value.dtype, length);
-          new Uint8Array(context.memory.buffer, allocation.offset, byteLength).set(binding.hostData.bytes);
-          this.#hostToWasmBytes += byteLength;
-          this.#hostToWasmCopies += 1;
-        } else if (value.source === "binding") {
+        this.#validateAllocation(context, resident);
+        assertResidentTensor(resident.format, resident.byteLength, value.dtype, program.elementCount(value.slot));
+        allocations.set(value.slot, resident);
+      }
+      if (hostValues !== undefined) for (const value of hostValues) {
+        const payload = bindings.get(value.slot)?.hostData;
+        if (payload === undefined) {
           throw new TabgradError(
             "BACKEND_STATUS_ERROR",
             "An executable input has no host or resident binding.",
             { backend: "webassembly-cpu", phase: "execution", slot: value.slot },
           );
         }
+        const length = program.elementCount(value.slot);
+        assertTensorPayload(payload, value.dtype, length);
+        const format = tensorDType(value.dtype);
+        const byteLength = checkedElementBytes(length, format.bytesPerElement);
+        const allocation = context.allocator.allocate(byteLength, format);
+        allocations.set(value.slot, allocation);
+        new Uint8Array(context.memory.buffer, allocation.offset, byteLength).set(payload.bytes);
+        this.#hostToWasmBytes += byteLength;
+        this.#hostToWasmCopies += 1;
       }
 
       for (const computation of program.computations) {
@@ -152,10 +157,11 @@ export class WebAssemblyCpuBackend implements ExecutionBackend {
             },
           );
         }
-        const length = tensorElementCount(value.shape);
+        const length = program.elementCount(value.slot);
         // Reserve the output before retiring inputs: kernels require disjoint
         // output storage, including at the final use of an input.
-        const output = context.allocator.allocate(tensorByteLength(value.dtype, length));
+        const format = tensorDType(value.dtype);
+        const output = context.allocator.allocate(checkedElementBytes(length, format.bytesPerElement), format);
         allocations.set(computation.output, output);
         const kernel = cpuKernel(computation.kind)!;
         let parameters: Uint32Array | undefined;
@@ -209,7 +215,7 @@ export class WebAssemblyCpuBackend implements ExecutionBackend {
             case "inputLength":
               status = context.exports[kernel.symbol.name](
                 inputs[0]!.offset, output.offset,
-                tensorElementCount(program.values[computation.inputs[0]!]!.shape),
+                program.elementCount(computation.inputs[0]!),
               );
               break;
           }
@@ -254,9 +260,8 @@ export class WebAssemblyCpuBackend implements ExecutionBackend {
   read(allocation: ResidentAllocation, length: number, dtype: TensorDType): HostTensorPayload {
     const context = this.#requiredContext();
     this.#validateAllocation(context, allocation);
-    const byteLength = tensorByteLength(dtype, length);
-    if (byteLength !== allocation.byteLength) throw new TabgradError("BACKEND_STATUS_ERROR", "Invalid CPU readback extent.");
-    const bytes = new Uint8Array(context.memory.buffer, allocation.offset, byteLength).slice();
+    assertResidentTensor(allocation.format, allocation.byteLength, dtype, length);
+    const bytes = new Uint8Array(context.memory.buffer, allocation.offset, allocation.byteLength).slice();
     this.#wasmToHostBytes += bytes.byteLength;
     this.#wasmToHostCopies += 1;
     return hostTensorPayload(dtype, length, bytes);

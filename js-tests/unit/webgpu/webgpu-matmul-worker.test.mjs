@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { Worker } from "node:worker_threads";
 import { test } from "node:test";
-import { float32TensorPayload } from "../../../dist/execution/tensor-payload.js";
+import { captureTensorData, float32TensorPayload } from "../../../dist/execution/tensor-payload.js";
 import { ConnectedWebGpuBackend } from "../../../dist/backends/webgpu/webgpu-connected-backend.js";
 import { ExecutableProgram } from "../../../dist/execution/executable-program.js";
-import { GPU_CONTROL_LENGTH, GPU_METRIC_LENGTH } from "../../../dist/backends/webgpu/webgpu-connection.js";
+import { WEBGPU_PAYLOAD_PROTOCOL_VERSION, GPU_CONTROL_LENGTH, GPU_METRIC_LENGTH } from "../../../dist/backends/webgpu/webgpu-connection.js";
 
 function matrixProgram(flags = 0, empty = false) {
   const provenance = { operation: "matmul", source: "Tensor.matmul" };
@@ -15,7 +15,7 @@ function matrixProgram(flags = 0, empty = false) {
   return new ExecutableProgram(values, [{ kind: "matmul-f32", matrixFlags: flags, inputs: [0, 1], output: 2, provenance }], 2);
 }
 
-test("actual GPU worker reconstructs matrix packets and rejects malformed empty and nonempty metadata", async () => {
+test("actual GPU worker checks resident formats and reconstructs matrix packets", async () => {
   const gate = new Int32Array(new SharedArrayBuffer(4));
   const worker = new Worker(new URL("./helpers/physical-worker.mjs", import.meta.url),
     { workerData: { gate: gate.buffer, mode: "success" } });
@@ -44,9 +44,9 @@ test("actual GPU worker reconstructs matrix packets and rejects malformed empty 
   worker.on("error", error => { ready.reject(error); closed.reject(error); });
   let backend;
   try {
-    worker.postMessage({ kind: "initialize", protocolVersion: 2, port: physical.port2, control, metrics }, [physical.port2]);
+    worker.postMessage({ kind: "initialize", protocolVersion: WEBGPU_PAYLOAD_PROTOCOL_VERSION, port: physical.port2, control, metrics }, [physical.port2]);
     const advertised = await ready.promise;
-    backend = new ConnectedWebGpuBackend({ connectionType: "tabgrad-webgpu", protocolVersion: 2,
+    backend = new ConnectedWebGpuBackend({ connectionType: "tabgrad-webgpu", protocolVersion: WEBGPU_PAYLOAD_PROTOCOL_VERSION,
       port: physical.port1, supervision: supervision.port1, control, metrics,
       capabilities: advertised.capabilities, diagnostics: advertised.diagnostics });
     assert.ok(advertised.capabilities.computations.includes("matmul-f32"));
@@ -54,6 +54,36 @@ test("actual GPU worker reconstructs matrix packets and rejects malformed empty 
     unsupported.values[0].dtype = "invalid";
     assert.throws(() => backend.execute(unsupported, new Map(), [false, false, false]), TypeError);
     assert.equal(executions, 0, "host type rejection precedes the physical request");
+    const input = new ExecutableProgram([{
+      ...matrixProgram().values[0], shape: [1],
+    }], [], 0);
+    const initial = backend.execute(input, new Map([[0, {
+      hostData: captureTensorData([7], "float32"),
+    }]]), [true]);
+    const allocation = (await initial.result).get(0);
+    await initial.drained;
+    const beforeMismatch = backend.diagnostics();
+    const wrongRead = backend.read(allocation, 2, "float16");
+    await assert.rejects(wrongRead.result, { code: "BACKEND_STATUS_ERROR" });
+    await wrongRead.drained;
+
+    // The logical request is well formed, but its borrowed physical identity
+    // uses float32. Put the resident after a valid host binding.
+    const host = { ...input.values[0], dtype: "float16", shape: [2] };
+    const wrongProgram = new ExecutableProgram([
+      host, { ...host, slot: 1, storageSlot: 1 }, { ...host, slot: 2, storageSlot: 2, source: "computed" },
+    ], [{ kind: "add-f16", inputs: [0, 1], output: 2, provenance: host.provenance }], 2);
+    const wrongBinding = backend.execute(wrongProgram, new Map([
+      [0, { hostData: captureTensorData([1, 2], "float16") }], [1, { resident: allocation }],
+    ]), [true, true, true]);
+    await assert.rejects(wrongBinding.result, { code: "BACKEND_STATUS_ERROR" });
+    await wrongBinding.drained;
+    assert.deepEqual(backend.diagnostics(), beforeMismatch);
+    const original = backend.read(allocation, 1, "float32");
+    assert.deepEqual([...new Float32Array((await original.result).bytes.buffer)], [7]);
+    await original.drained;
+    backend.release(allocation);
+
     for (const empty of [false, true]) {
       const mutations = [
         ...[undefined, -1, 0.5, NaN, 4, "0"].map(flags => p => { p.computations[0].matrixFlags = flags; }),

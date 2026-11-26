@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { float32TensorPayload } from "../../../dist/execution/tensor-payload.js";
 import { ConnectedWebGpuBackend } from "../../../dist/backends/webgpu/webgpu-connected-backend.js";
 import { ExecutableProgram } from "../../../dist/execution/executable-program.js";
-import { GPU_CONTROL_LENGTH, GPU_METRIC_LENGTH } from "../../../dist/backends/webgpu/webgpu-connection.js";
+import { WEBGPU_PAYLOAD_PROTOCOL_VERSION, GPU_CONTROL_LENGTH, GPU_METRIC_LENGTH } from "../../../dist/backends/webgpu/webgpu-connection.js";
 
 function program(length, alphaBits) {
   const provenance = { operation: "add", source: "SGD.step" };
@@ -29,9 +29,9 @@ test("packaged physical worker validates empty coefficient metadata and preserve
   worker.on("error", error => { ready.reject(error); closed.reject(error); });
   let backend;
   try {
-    worker.postMessage({ kind: "initialize", protocolVersion: 2, port: physical.port2, control: control.buffer, metrics }, [physical.port2]);
+    worker.postMessage({ kind: "initialize", protocolVersion: WEBGPU_PAYLOAD_PROTOCOL_VERSION, port: physical.port2, control: control.buffer, metrics }, [physical.port2]);
     const advertised = await ready.promise;
-    backend = new ConnectedWebGpuBackend({ connectionType: "tabgrad-webgpu", protocolVersion: 2,
+    backend = new ConnectedWebGpuBackend({ connectionType: "tabgrad-webgpu", protocolVersion: WEBGPU_PAYLOAD_PROTOCOL_VERSION,
       port: physical.port1, supervision: supervision.port1, control: control.buffer, metrics,
       capabilities: advertised.capabilities, diagnostics: advertised.diagnostics });
     for (const alpha of [undefined, -1, 0.5, NaN, 0x100000000, "0"]) {

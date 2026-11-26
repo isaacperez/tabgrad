@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { ConnectedWebGpuBackend } from "../../../dist/backends/webgpu/webgpu-connected-backend.js";
 import { GpuProgressNotifications } from "../../../dist/backends/webgpu/webgpu-progress-notification.js";
 import { SharedGpuCompletion } from "../../../dist/backends/webgpu/webgpu-shared-completion.js";
-import { GPU_CONTROL_LENGTH, GPU_METRIC_LENGTH, GPU_PULSE } from "../../../dist/backends/webgpu/webgpu-connection.js";
+import { WEBGPU_PAYLOAD_PROTOCOL_VERSION, GPU_CONTROL_LENGTH, GPU_METRIC_LENGTH, GPU_PULSE } from "../../../dist/backends/webgpu/webgpu-connection.js";
 import { createConnectedRuntimeSession, observeTensorSynchronously } from "../../../dist/runtime/runtime.js";
 import { getTestRuntimeOwnership, getTestRuntimeSemanticOwnership } from "../../../dist/testing.js";
 
@@ -39,9 +39,9 @@ for (const [pending, payload] of [[8, 1], [32, 1], [128, 1], [8, 1024], [32, 102
     };
     let session, input;
     try {
-      worker.postMessage({ kind: "initialize", protocolVersion: 2, port: physical.port2, control: control.buffer, metrics }, [physical.port2]);
+      worker.postMessage({ kind: "initialize", protocolVersion: WEBGPU_PAYLOAD_PROTOCOL_VERSION, port: physical.port2, control: control.buffer, metrics }, [physical.port2]);
       const advertised = await ready.promise;
-      const backend = new ConnectedWebGpuBackend({ connectionType: "tabgrad-webgpu", protocolVersion: 2,
+      const backend = new ConnectedWebGpuBackend({ connectionType: "tabgrad-webgpu", protocolVersion: WEBGPU_PAYLOAD_PROTOCOL_VERSION,
         port: physical.port1, supervision: supervision.port1, control: control.buffer, metrics,
         capabilities: advertised.capabilities, diagnostics: advertised.diagnostics });
       session = createConnectedRuntimeSession(backend);

@@ -4,9 +4,9 @@ import { test } from "node:test";
 import * as python from "../../../dist/python.js";
 import { startWebGpuWorker } from "../../../dist/backends/webgpu/worker.js";
 import { TabgradError } from "../../../dist/shared/errors.js";
-import { GPU_CONTROL_LENGTH, GPU_METRIC_LENGTH, GPU_METRICS, GPU_METRIC_STATE, writeGpuMetrics } from "../../../dist/backends/webgpu/webgpu-connection.js";
+import { WEBGPU_PAYLOAD_PROTOCOL_VERSION, GPU_CONTROL_LENGTH, GPU_METRIC_LENGTH, GPU_METRICS, GPU_METRIC_STATE, writeGpuMetrics } from "../../../dist/backends/webgpu/webgpu-connection.js";
 
-const capabilities = { device: "webgpu", computations: ["add-f32"], gradients: false, maximumTensorBytes: 1048576 };
+const capabilities = { device: "webgpu", storageEncodings: ["ieee754-binary32-native"], computations: ["add-f32"], gradients: false, maximumTensorBytes: 1048576 };
 const diagnostics = {
   state: "ready", adapter: { vendor: "test", architecture: "test", device: "test", description: "test", isFallbackAdapter: false },
   features: [], limits: { maxBufferSize: 1048576, maxStorageBufferBindingSize: 1048576, maxComputeWorkgroupsPerDimension: 64 },
@@ -27,7 +27,7 @@ class ControlledWorker extends EventTarget {
     this.messages.push({ message, transferables });
     if (message.kind === "initialize") this.initialization = message;
   }
-  ready(advertised = capabilities) { this.dispatchEvent(new MessageEvent("message", { data: { kind: "ready", protocolVersion: 2, capabilities: advertised, diagnostics } })); }
+  ready(advertised = capabilities) { this.dispatchEvent(new MessageEvent("message", { data: { kind: "ready", protocolVersion: WEBGPU_PAYLOAD_PROTOCOL_VERSION, capabilities: advertised, diagnostics } })); }
   closed() {
     this.initialization?.port.close();
     this.dispatchEvent(new MessageEvent("message", { data: { kind: "closed" } }));
@@ -54,7 +54,7 @@ function environment(values) {
   };
 }
 
-for (const protocolVersion of [undefined, 1, 3]) {
+for (const protocolVersion of [undefined, 2, WEBGPU_PAYLOAD_PROTOCOL_VERSION + 1]) {
   test(`the physical worker rejects payload protocol ${protocolVersion} before device acquisition`, async () => {
     let onMessage;
     let acquisitions = 0;
@@ -319,6 +319,25 @@ test("public API imports do not start the GPU service and its packaged entry sta
   execFileSync(process.execPath, ["--input-type=module", "-e", program], { stdio: "pipe" });
 });
 
+test("worker capability handshake rejects a missing, unknown or duplicate storage encoding", async () => {
+  for (const storageEncodings of [undefined, ["unknown-encoding"], ["ieee754-binary16-native", "ieee754-binary16-native"]]) {
+    const restore = workerEnvironment();
+    let worker;
+    try {
+      const setup = python.createWebGpuWorker();
+      worker = ControlledWorker.instances[0];
+      worker.ready({ ...capabilities, storageEncodings });
+      const outcome = await setup.then(controller => controller, error => error);
+      if (!(outcome instanceof Error)) {
+        const closed = outcome.close();
+        worker.closed();
+        await closed;
+      }
+      assert.equal(outcome.code, "BACKEND_LOAD_FAILED");
+    } finally { worker?.closed(); restore(); }
+  }
+});
+
 test("readiness transports capabilities rather than a frontend-specific support list", async () => {
   const restore = workerEnvironment();
   try {
@@ -536,7 +555,7 @@ test("controller diagnostics preserve partial publication and undisclosed adapte
   try {
     const setup = python.createWebGpuWorker();
     worker = ControlledWorker.instances[0];
-    worker.dispatchEvent(new MessageEvent("message", { data: { kind: "ready", protocolVersion: 2, capabilities,
+    worker.dispatchEvent(new MessageEvent("message", { data: { kind: "ready", protocolVersion: WEBGPU_PAYLOAD_PROTOCOL_VERSION, capabilities,
       diagnostics: { ...diagnostics, adapter: { vendor: "", architecture: "", device: "", description: "", isFallbackAdapter: true } } } }));
     const controller = await setup;
     const original = controller.diagnostics();

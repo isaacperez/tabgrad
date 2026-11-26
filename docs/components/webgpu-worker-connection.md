@@ -382,10 +382,18 @@ establish universal browser support or whole-model throughput.
 
 ## Storage and result-length admission
 
-The physical owner advertises the same encoded-byte storage capacity used by direct
-GPU sessions, independently of its dispatch axis. The connected runtime uses
-that immutable capability for creation and inferred outputs. Shared completion
-validates its signed byte-count domain before allocating a payload, including
-the separate sixteen-byte-per-selected-value allocation mapping. A large
+The physical owner advertises the same storage encodings and encoded-byte
+capacity used by direct GPU sessions. Readiness in the private worker schema
+requires a matching protocol version and a valid encoding list before the
+controller exposes the connection. The connected runtime uses these immutable
+storage capabilities for creation and program admission independently of
+computation signatures.
+
+Allocation replies keep sixteen bytes per selected value for the slot and
+physical identity. The physical worker uses the reconstructed program's dtype
+and shape to check a borrowed identity before pipeline preparation. Readback
+validates the requested dtype and element count against the same resident
+identity before mapping or copying. Shared completion validates its signed
+byte-count domain before allocating a payload. A large
 tensor limit does not authorize an oversized mapping or a larger semantic
 quota. See [GPU capacity and dispatch](../architecture/webgpu-dispatch.md).

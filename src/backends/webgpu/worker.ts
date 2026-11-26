@@ -4,7 +4,6 @@ import { WebGpuBackend } from "./webgpu-backend.js";
 import type { ProgramBinding, ResidentAllocation } from "../../execution/backend.js";
 import { ExecutableProgram } from "../../execution/executable-program.js";
 import { assertTensorPayload, type HostTensorPayload } from "../../execution/tensor-payload.js";
-import { tensorElementCount } from "../../runtime/tensor-shape.js";
 import type { TensorDType } from "../../shared/tensor-dtype.js";
 import { ExecutionTicket } from "../../execution/execution-ticket.js";
 import { acquireWebGpuDevice } from "./webgpu-device.js";
@@ -139,13 +138,19 @@ class PhysicalGpuWorker {
       const program = new ExecutableProgram(definition.values, definition.computations, definition.result);
       const bindings = new Map<number, ProgramBinding>();
       for (const binding of message.bindings as { slot: number; resident?: number; hostData?: HostTensorPayload }[]) {
-        if (binding.resident === undefined) {
-          const value = program.values[binding.slot];
-          if (value === undefined) throw new TabgradError("BACKEND_STATUS_ERROR", "Unknown GPU binding slot.");
-          assertTensorPayload(binding.hostData, value.dtype, tensorElementCount(value.shape));
+        const value = program.values[binding.slot];
+        if (value === undefined || value.source !== "binding") {
+          throw new TabgradError("BACKEND_STATUS_ERROR", "Unknown GPU binding slot.");
         }
-        bindings.set(binding.slot, binding.resident === undefined ? { hostData: binding.hostData! }
-          : { resident: this.#requireAllocation(binding.resident) });
+        const elements = program.elementCount(value.slot);
+        if (binding.resident === undefined) {
+          assertTensorPayload(binding.hostData, value.dtype, elements);
+          bindings.set(binding.slot, { hostData: binding.hostData });
+        } else {
+          const resident = this.#requireAllocation(binding.resident);
+          backend.validateResidentBinding(resident, value.dtype, elements);
+          bindings.set(binding.slot, { resident });
+        }
       }
       const state: { execution?: ExecutionTicket<ReadonlyMap<number, ResidentAllocation>> } = {};
       const result = this.#executePrepared(program, bindings, message.retainedSlots as readonly boolean[], state)

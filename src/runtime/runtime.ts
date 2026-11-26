@@ -19,7 +19,7 @@ import {
 import { ExecutionRequest, type QueuedExecutionRequest } from "./execution-request.js";
 import { ExecutionTicket, type ExecutionStep } from "../execution/execution-ticket.js";
 import { acquireWebGpuDevice, assertWebGpuSetupActive } from "../backends/webgpu/webgpu-device.js";
-import { supportsBackendComputation, type ExecutionBackend, type ResidentAllocation, type TensorDevice } from "../execution/backend.js";
+import { assertBackendStorage, supportsBackendComputation, type ExecutionBackend, type ResidentAllocation, type TensorDevice } from "../execution/backend.js";
 import { COMPUTATION_SIGNATURES, type ComputationKind, type OperationFamily } from "../execution/operation-contracts.js";
 import { resolveTensorType, GRADIENT_STATE_TYPES,
   DEFAULT_GRADIENT_ASSIGNMENT_TYPES, PERSISTENT_COPY_TYPES } from "../execution/operation-types.js";
@@ -1228,6 +1228,7 @@ export class RuntimeSession {
       );
     }
 
+    assertBackendStorage(backend.capabilities, dtype, "tensor");
     const payload = captureTensorData(data, dtype);
     if (device === "webgpu" && payload.bytes.byteLength > backend.capabilities.maximumTensorBytes) {
       throw new TabgradError("RESOURCE_EXHAUSTED", "Tensor exceeds the selected device's buffer limit.", {

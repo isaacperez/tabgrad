@@ -3,12 +3,11 @@ import { planKernelDispatch, requestedPipelines, selectPipeline, pipelineSource,
 import { webGpuComputations, webGpuKernel } from "./kernel-catalogue.js";
 import { gpuTensorCapacityBytes } from "./webgpu-capacity.js";
 import type { BackendCapabilities, ExecutionBackend, ProgramBinding, ResidentAllocation } from "../../execution/backend.js";
-import { assertTensorPayload, hostTensorPayload, type HostTensorPayload } from "../../execution/tensor-payload.js";
-import { alignedByteLength, tensorByteLength, tensorDType, type TensorDType } from "../../shared/tensor-dtype.js";
+import { assertResidentTensor, assertTensorPayload, hostTensorPayload, type HostTensorPayload } from "../../execution/tensor-payload.js";
+import { alignedByteLength, checkedElementBytes, TENSOR_STORAGE_ENCODINGS, tensorDType, type TensorDType, type TensorDTypeDescriptor } from "../../shared/tensor-dtype.js";
 import { TabgradError } from "../../shared/errors.js";
 import { assertBackendProgram } from "../../execution/backend.js";
-import type { ExecutableProgram, LoweredComputation, ProgramSlot } from "../../execution/executable-program.js";
-import { tensorElementCount } from "../../runtime/tensor-shape.js";
+import type { ExecutableProgram, LoweredComputation, ProgramSlot, ProgramValue } from "../../execution/executable-program.js";
 import { WEBGPU_COEFFICIENT_UNIFORM_BYTES } from "./kernels/coefficient-addition.js";
 import { WEBGPU_MATRIX_UNIFORM_BYTES } from "./kernels/matrix-product.js";
 import { ExecutionTicket } from "../../execution/execution-ticket.js";
@@ -40,6 +39,7 @@ export interface WebGpuExecutionBackend extends ExecutionBackend {
 
 class GpuAllocation {
   released = false;
+  format?: TensorDTypeDescriptor;
   constructor(readonly buffer: GPUBuffer, readonly byteLength: number) {}
 }
 
@@ -98,7 +98,7 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
     this.#limits = Object.freeze({ maxBufferSize: device.limits.maxBufferSize,
       maxStorageBufferBindingSize: device.limits.maxStorageBufferBindingSize,
       maxComputeWorkgroupsPerDimension: device.limits.maxComputeWorkgroupsPerDimension });
-    this.capabilities = Object.freeze({ device: "webgpu", computations: webGpuComputations(device.limits),
+    this.capabilities = Object.freeze({ device: "webgpu", storageEncodings: TENSOR_STORAGE_ENCODINGS, computations: webGpuComputations(device.limits),
       gradients: true, maximumTensorBytes: gpuTensorCapacityBytes(this.#limits) });
     void device.lost.then((info) => {
       if (!this.#closed) this.#retire(new TabgradError("BACKEND_STATUS_ERROR", "The WebGPU device was lost.", {
@@ -158,7 +158,7 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
   #planProgram(program: ExecutableProgram): readonly KernelDispatchPlan[] {
     assertBackendProgram(this.capabilities, program);
     for (const value of program.values) {
-      const bytes = tensorElementCount(value.shape) * tensorDType(value.dtype).bytesPerElement;
+      const bytes = program.elementCount(value.slot) * tensorDType(value.dtype).bytesPerElement;
       if (!Number.isSafeInteger(bytes) || bytes > this.capabilities.maximumTensorBytes) {
         throw new TabgradError("RESOURCE_EXHAUSTED", "GPU program storage exceeds its admitted byte extent.", {
           backend: "webgpu", phase: "preparation", programValueSlot: value.slot,
@@ -211,6 +211,16 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
     return reference;
   }
 
+  #residentTensor(reference: ResidentAllocation, dtype: TensorDType, elements: number): GpuAllocation {
+    const allocation = this.#allocation(reference);
+    assertResidentTensor(allocation.format, allocation.byteLength, dtype, elements);
+    return allocation;
+  }
+
+  validateResidentBinding(reference: ResidentAllocation, dtype: TensorDType, elements: number): void {
+    this.#residentTensor(reference, dtype, elements);
+  }
+
   execute(program: ExecutableProgram, bindings: ReadonlyMap<ProgramSlot, ProgramBinding>, retainedSlots: readonly boolean[]): ExecutionTicket<ReadonlyMap<ProgramSlot, ResidentAllocation>> {
     this.assertAvailable();
     const storage: GpuInvocationStorage = { allocations: new Map(), created: new Set(), success: false, queuedWrites: false };
@@ -230,32 +240,43 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
     const spare = new Map<number, GpuAllocation[]>();
     const uses = program.storageUseCounts.slice();
     try {
-      const encoder = this.#device.createCommandEncoder();
+      let hostValues: ProgramValue[] | undefined;
       for (const value of program.values) {
         if (value.source !== "binding") continue;
-        const binding = bindings.get(value.slot);
-        if (binding?.resident !== undefined) {
-          allocations.set(value.slot, this.#allocation(binding.resident));
-        } else {
-          const elements = tensorElementCount(value.shape);
-          const allocation = this.#allocate(tensorByteLength(value.dtype, elements),
-            GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC);
-          allocations.set(value.slot, allocation); created.add(allocation);
-          if (binding?.hostData === undefined) throw new TabgradError("BACKEND_STATUS_ERROR", "Missing GPU input binding.");
-          assertTensorPayload(binding.hostData, value.dtype, elements);
-          if (allocation.byteLength !== 0) {
-            storage.queuedWrites = true;
-            // Host bindings are copied by tensor creation into owned ArrayBuffers.
-            writeTensorBytes(this.#device.queue, allocation.buffer, binding.hostData.bytes);
-          }
-          this.#uploadBytes += allocation.byteLength;
+        const resident = bindings.get(value.slot)?.resident;
+        if (resident === undefined) {
+          (hostValues ??= []).push(value);
+          continue;
         }
+        allocations.set(value.slot, this.#residentTensor(resident, value.dtype, program.elementCount(value.slot)));
+      }
+      const encoder = this.#device.createCommandEncoder();
+      if (hostValues !== undefined) for (const value of hostValues) {
+        const payload = bindings.get(value.slot)?.hostData;
+        if (payload === undefined) throw new TabgradError("BACKEND_STATUS_ERROR", "Missing GPU input binding.");
+        const elements = program.elementCount(value.slot);
+        assertTensorPayload(payload, value.dtype, elements);
+        const format = tensorDType(value.dtype);
+        const allocation = this.#allocate(checkedElementBytes(elements, format.bytesPerElement),
+          GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC);
+        allocation.format = format;
+        allocations.set(value.slot, allocation); created.add(allocation);
+        if (allocation.byteLength !== 0) {
+          storage.queuedWrites = true;
+          // Host bindings are copied by tensor creation into owned ArrayBuffers.
+          writeTensorBytes(this.#device.queue, allocation.buffer, payload.bytes);
+        }
+        this.#uploadBytes += allocation.byteLength;
       }
       for (const [index, computation] of program.computations.entries()) {
         const value = program.values[computation.output]!;
-        const byteLength = tensorByteLength(value.dtype, tensorElementCount(value.shape));
+        const format = tensorDType(value.dtype);
+        const byteLength = checkedElementBytes(program.elementCount(value.slot), format.bytesPerElement);
         const output = spare.get(byteLength)?.pop() ?? this.#allocate(byteLength,
           GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST);
+        // Only retired, invocation-owned buffers enter the spare pool. A new
+        // tensor may use the same physical bytes with a different format.
+        output.format = format;
         created.add(output); allocations.set(computation.output, output);
         if (byteLength !== 0) {
           const inputs = computation.inputs.map((slot) => allocations.get(program.values[slot]!.storageSlot)!);
@@ -416,9 +437,7 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
   }
 
   read(reference: ResidentAllocation, length: number, dtype: TensorDType): HostTensorPayload | ExecutionTicket<HostTensorPayload> {
-    const source = this.#allocation(reference);
-    const byteLength = tensorByteLength(dtype, length);
-    if (byteLength !== source.byteLength) throw new TabgradError("BACKEND_STATUS_ERROR", "Invalid GPU readback extent.");
+    const source = this.#residentTensor(reference, dtype, length);
     if (length === 0) return hostTensorPayload(dtype, 0, new Uint8Array());
     const readback: GpuReadback = {};
     const result = this.#checked("readback", () => {
@@ -429,7 +448,7 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
   }
 
   async #copyAndMap(source: GpuAllocation, length: number, dtype: TensorDType, readback: GpuReadback): Promise<HostTensorPayload> {
-    const byteLength = tensorByteLength(dtype, length);
+    const { byteLength } = source;
     const staging = this.#allocate(byteLength, GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST);
     readback.staging = staging;
     const encoder = this.#device.createCommandEncoder();

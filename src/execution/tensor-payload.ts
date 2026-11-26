@@ -11,6 +11,15 @@ export interface HostTensorPayload {
   readonly bytes: Uint8Array<ArrayBuffer>;
 }
 
+/** Format belongs to the live tensor identity. Its logical bytes exclude physical padding. */
+export function assertResidentTensor(format: TensorDTypeDescriptor | undefined, byteLength: number,
+  dtype: TensorDType, elements: number): void {
+  const expected = tensorDType(dtype);
+  if (format !== expected || byteLength !== checkedElementBytes(elements, expected.bytesPerElement)) {
+    throw new TabgradError("BACKEND_STATUS_ERROR", "Resident tensor format or extent does not match.");
+  }
+}
+
 /** Validate again after structured clone; object identity and freezing do not cross realms. */
 export function assertTensorPayload(payload: unknown, dtype: TensorDType, elements: number): asserts payload is HostTensorPayload {
   assertEncodedSpan(payload, tensorDType(dtype), elements);

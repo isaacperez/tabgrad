@@ -1,9 +1,11 @@
+import type { TensorDTypeDescriptor } from "../../shared/tensor-dtype.js";
 import { TabgradError } from "../../shared/errors.js";
 import { WEBASSEMBLY_PAGE_BYTES } from "./memory-capacity.js";
 export const MAXIMUM_ADDRESS = 0xffff_ffff;
 
 export class CpuAllocation {
   readonly #owner: object;
+  readonly #format: TensorDTypeDescriptor | undefined;
   released = false;
   constructor(
     owner: object,
@@ -11,7 +13,15 @@ export class CpuAllocation {
     readonly offset: number,
     readonly byteLength: number,
     readonly reservedByteLength: number,
-  ) { this.#owner = owner; }
+    format?: TensorDTypeDescriptor,
+  ) {
+    this.#owner = owner;
+    this.#format = format;
+  }
+
+  get format(): TensorDTypeDescriptor | undefined {
+    return this.#format;
+  }
 
   static belongsTo(allocation: object, owner: object): allocation is CpuAllocation {
     return #owner in allocation && allocation.#owner === owner;
@@ -67,7 +77,7 @@ export class LinearMemoryAllocator {
     return this.#highWaterReservedBytes;
   }
 
-  allocate(byteLength: number): CpuAllocation {
+  allocate(byteLength: number, format?: TensorDTypeDescriptor): CpuAllocation {
     const reservedByteLength = this.#align(byteLength);
     let offset: number | undefined;
     if (reservedByteLength <= this.#freeSegmentByteBound) {
@@ -115,7 +125,7 @@ export class LinearMemoryAllocator {
       this.#highWaterReservedBytes,
       this.#liveReservedBytes,
     );
-    return new CpuAllocation(this.#identity, this.#generation, offset, byteLength, reservedByteLength);
+    return new CpuAllocation(this.#identity, this.#generation, offset, byteLength, reservedByteLength, format);
   }
 
   /** Identity is allocator-local; generation numbers alone can coincide. */
