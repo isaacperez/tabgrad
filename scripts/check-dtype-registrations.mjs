@@ -11,22 +11,34 @@ const compatibility = new URL("../docs/compatibility.md", import.meta.url);
 const dtypeCell = /^`[a-z][a-z0-9_]*`(?:, `[a-z][a-z0-9_]*`)*$/;
 
 function visibleMarkdown(markdown) {
-  const lines = markdown.replaceAll("\r\n", "\n")
-    .replace(/<!--[\s\S]*?(?:-->|$)/g, comment => comment.replace(/[^\n]/g, "")).split("\n");
   const visible = [];
   let fence;
-  for (const line of lines) {
+  let inComment = false;
+  for (const line of markdown.split(/\r?\n/)) {
     const marker = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
     if (fence !== undefined) {
       if (marker && marker[1][0] === fence[0] && marker[1].length >= fence.length && marker[2].trim() === "") {
         fence = undefined;
       }
-    } else if (marker) {
+      visible.push("");
+      continue;
+    }
+    if (inComment) {
+      if (line.includes("-->")) inComment = false;
+      visible.push("");
+      continue;
+    }
+    if (marker && (marker[1][0] === "~" || !marker[2].includes("`"))) {
       fence = marker[1];
       visible.push("");
-    } else {
-      visible.push(line);
+      continue;
     }
+    const text = line.replace(/<!--.*?(?:-->|$)/g, comment => {
+      inComment = !comment.endsWith("-->");
+      return "";
+    });
+    const heading = /^ {0,3}(#{1,6})[ \t]+(.*)$/.exec(text);
+    visible.push(heading ? `${heading[1]} ${heading[2].replace(/[ \t]+#+[ \t]*$/, "").trim()}` : text);
   }
   return visible.join("\n");
 }
@@ -41,9 +53,9 @@ function documentedTypes(cell, operation, backend) {
 
 function documentedArithmetic(markdown) {
   const sections = visibleMarkdown(markdown).split(/^## /m)
-    .filter(section => section.startsWith("Tensor dtypes by operation\n"));
+    .filter(section => section.toLowerCase().startsWith("tensor dtypes by operation\n"));
   assert.equal(sections.length, 1, "Expected one tensor dtype section");
-  const arithmetic = sections[0].split(/^### /m).filter(section => section.startsWith("Arithmetic\n"));
+  const arithmetic = sections[0].split(/^### /m).filter(section => section.toLowerCase().startsWith("arithmetic\n"));
   assert.equal(arithmetic.length, 1, "Expected one visible arithmetic dtype table");
   const [header, separator, ...rows] = arithmetic[0].slice("Arithmetic\n".length).trim().split("\n");
   assert.equal(header, "| Operation | CPU | WebGPU |");

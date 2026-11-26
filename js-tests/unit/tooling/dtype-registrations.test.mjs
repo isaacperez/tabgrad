@@ -64,7 +64,10 @@ test("the documented arithmetic table must be visible and unique", () => {
   for (const hidden of [`<!--\n${section}-->\n\n`, `~~~markdown\n${section}~~~~\n\n`]) {
     assert.throws(() => verifyDTypeRegistrations(docs.replace(section, hidden)), /one visible arithmetic dtype table/);
   }
-  const conflicting = section.replace("`float16`", "`float128`");
-  assert.throws(() => verifyDTypeRegistrations(docs.replace(section, section + conflicting)),
-    /one visible arithmetic dtype table/);
+  for (const heading of ["### Arithmetic", "  ### Arithmetic", "### Arithmetic   ", "### Arithmetic ###"]) {
+    const conflicting = section.replace("### Arithmetic", heading).replace("`float16`", "`float128`");
+    assert.throws(() => verifyDTypeRegistrations(docs.replace(section, section + conflicting)),
+      /one visible arithmetic dtype table/);
+  }
+  verifyDTypeRegistrations(docs.replace(section, "```html\n<!-- open a comment\n```\n\n" + section));
 });
