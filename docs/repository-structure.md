@@ -75,6 +75,13 @@ use those contracts; the contracts do not import a concrete runtime session,
 frontend or backend. Directory names make these responsibilities navigable,
 but do not introduce packages, registries or additional scheduling layers.
 
+For dtype extensions, [the shared registry](../src/shared/tensor-dtype.ts) owns
+format and codec selection. [Execution signatures](../src/execution/operation-contracts.ts)
+own the admitted combinations. Keep the concrete registration and numerical
+implementation with each backend. Follow the
+[extension procedure](reference/package-qualification.md#extend-dtype-coverage)
+for the exact placement and qualification steps.
+
 `src/backends/cpu/` owns the TypeScript adapter. `artifact-loader.ts` verifies
 and instantiates CPU artifacts; `linear-memory.ts` owns persistent arena ranges
 and allocation identity; `invocation-storage.ts` tracks physical use and rollback

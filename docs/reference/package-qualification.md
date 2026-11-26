@@ -45,18 +45,52 @@ requires clean, identified source and the full prepared build environment;
 it builds a disposable candidate before using the same verifier. Supplying
 only one option, repeating an option or using an unknown option fails.
 
+## Extend dtype coverage
+
+Start with the intended input dtypes, result dtype and operation variants.
+Record which backends implement them and how rounding, broadcasting and
+gradient eligibility work. The
+[typed tensor architecture](../architecture/typed-tensors.md) explains the
+separation between a storage format, a computation signature and a kernel.
+
+- **Enable an existing dtype in an operation.** Reuse the registered format
+  and codec. Define the concrete input and result types in the
+  [semantic catalogue](../../src/execution/operation-contracts.ts) and check
+  that the operation admits that signature. The pointwise binary operations
+  index their declared operand pairs. Total sum currently binds one float32
+  signature, so extending it also requires changing its admission policy
+  and qualifying the reduction.
+- **Add a compact floating dtype.** Define the canonical name, encoding,
+  width, capture and observation codec, and Python buffer format in the
+  [shared dtype registry](../../src/shared/tensor-dtype.ts). Keep format-specific
+  conversion in its own codec, as in [binary16](../../src/shared/binary16.ts).
+  Runtime Python names come from the registry. A public Python type also needs
+  its static annotation and export in [the Python module](../../python/torch/__init__.py).
+
+For either route, place the numerical implementation with its backend:
+
+- **CPU.** Add or extend the typed kernel in the
+  [Rust crate](../../crates/tabgrad-wasm-kernels/src). The compact pointwise
+  kernels use the crate's shared traversal. Register its raw symbols, layout
+  and capability in the [CPU catalogue](../../src/backends/cpu/kernel-catalogue.ts).
+  Update the CPU module version when the required export profile changes, and
+  agree on the capability with the Rust kernel group. The raw ABI and Python
+  worker protocol have separate version boundaries.
+- **WebGPU.** Keep arithmetic with the
+  [shader sources](../../src/backends/webgpu/kernels). Register its physical
+  layout and device eligibility in the
+  [WebGPU catalogue](../../src/backends/webgpu/kernel-catalogue.ts). Reuse
+  packed pointwise dispatch when the signature fits its storage and geometry.
+
+Qualify the affected operation against an independent oracle. Update the
+[operation reference and dtype table](../compatibility.md#tensor-dtypes-by-operation)
+with the verified public combinations, including any backend differences.
+
 ## Qualify an added compact floating dtype
 
-For a dtype within the existing packed 16-bit floating family, add its format
-and codec in the shared dtype definitions. Declare its concrete input and
-result signature under the existing operation family, then register the Wasm
-exports and WebGPU arithmetic in their kernel catalogues. Retain the shared
-shape planner, frontend transports, payload storage and physical dispatch.
-Python exposes the runtime dtype names from those same definitions. Static
-annotations describe the supported public Python API.
-When the required Wasm exports change, update the CPU module version and
-register the matching capability in the Wasm kernel and host catalogue.
-The raw ABI and Python worker protocol have separate version boundaries.
+The shared installed harness covers the packed 16-bit floating pointwise
+family: creation, views, homogeneous addition and multiplication. Use
+operation-specific conformance for other arithmetic or representation families.
 
 Build an identified candidate from a clean experimental commit. Keep a private
 trial in its own checkout and retain the diff against the comparable base:
