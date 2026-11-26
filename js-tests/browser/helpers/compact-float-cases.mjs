@@ -97,6 +97,7 @@ export function compactPythonSource(oracle, device, dtype, fractionBits) {
 import torch, math, json, gc
 
 _compact_dtype = getattr(torch, ${JSON.stringify(dtype)})
+assert ${JSON.stringify(dtype)} in torch.__all__
 _compact_fraction_bits = ${fractionBits}
 
 def _half_value(bits: int) -> float:

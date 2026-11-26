@@ -52,6 +52,8 @@ and codec in the shared dtype definitions. Declare its concrete input and
 result signature under the existing operation family, then register the Wasm
 exports and WebGPU arithmetic in their kernel catalogues. Retain the shared
 shape planner, frontend transports, payload storage and physical dispatch.
+Python exposes the runtime dtype names from those same definitions. Static
+annotations describe the supported public Python API.
 When the required Wasm exports change, update the CPU module version and
 register the matching capability in the Wasm kernel and host catalogue.
 The raw ABI and Python worker protocol have separate version boundaries.
