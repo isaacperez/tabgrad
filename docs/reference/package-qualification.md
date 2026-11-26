@@ -45,6 +45,52 @@ requires clean, identified source and the full prepared build environment;
 it builds a disposable candidate before using the same verifier. Supplying
 only one option, repeating an option or using an unknown option fails.
 
+## Qualify an added compact floating dtype
+
+For a dtype within the existing packed 16-bit floating family, add its format
+and codec in the shared dtype definitions. Declare its concrete input and
+result signature under the existing operation family, then register the Wasm
+exports and WebGPU arithmetic in their kernel catalogues. Retain the shared
+shape planner, frontend transports, payload storage and physical dispatch.
+When the required Wasm exports change, update the CPU module version and
+register the matching capability in the Wasm kernel and host catalogue.
+The raw ABI and Python worker protocol have separate version boundaries.
+
+Build an identified candidate from a clean experimental commit. Keep a private
+trial in its own checkout and retain the diff against the comparable base:
+
+```console
+npm run package -- path/to/new-candidate-directory
+node scripts/qualify-dtype-extension.mjs path/to/archive.tgz path/to/candidate.json path/to/oracle.json
+```
+
+Generate the independent oracle from a pinned reference implementation. Record
+its version, build and generator with the evidence. The JSON contains:
+
+- `dtype` and `fractionBits` for the packed format. The verifier expects a
+  sign bit, a biased exponent and 7–13 fraction bits, with numeric readings
+  representable as float32.
+- `construction.inputs` as a nonempty even-length list of JSON numbers or
+  the strings `nan`, `inf`, `-inf` and `-0`, and `construction.words` as the
+  expected encodings.
+- `pointwise.left`, `right`, `add`, `mul` and `mulThenAdd` as equally sized
+  nonempty lists of unsigned 16-bit words. Compute the last result from the
+  stored rounded product plus the first operand.
+
+The verifier uses the same offline npm installer and conformance fixtures as
+the package checks. It checks full observed outputs, views, broadcast and odd
+packed tails via JavaScript and Pyodide. Chrome runs both actual Wasm variants
+by controlling the scalar feature probe and runs the normal and restricted
+grid dispatch on a physical GPU. The report identifies the exact installed
+archive and corpus hashes and records dispatch, drainage and resource counters.
+The ordinary source and installed float16 checks keep their pinned corpus.
+
+Keep any further format or capability probes and comparative cost evidence
+with the qualification. Use the same build and tooling on each side under the
+[measurement protocol](../performance.md). A passing private trial applies
+only to its exact archive, tested operation signatures and environments.
+Public support follows the [compatibility record](../compatibility.md).
+
 ## Admitted evidence and archive format
 
 The expected JSON uses the producer's `candidate.json` schema version 1:

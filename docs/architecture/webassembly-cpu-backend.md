@@ -262,7 +262,10 @@ maximum 4096-page memory, and 16-byte host-arena alignment. The actual imported
 memory uses the session's independently resolved maximum, 1024 pages by default.
 Each scalar or
 `simd128` variant records its relative path, byte length, required features, and
-SHA-256 digest.
+SHA-256 digest. The CPU kernel catalogue owns the supported module version
+and required capability table. Both the manifest producer and the loader
+consume that profile. The Rust kernel groups supply the corresponding raw
+capability bits.
 
 The adapter validates the manifest before using it, selects one variant from a
 WebAssembly feature probe, fetches only that module, verifies its byte length

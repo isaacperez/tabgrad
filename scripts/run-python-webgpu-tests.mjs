@@ -1,4 +1,4 @@
-import { runFloat16Conformance } from "./float16-conformance.mjs";
+import { runDTypeConformance } from "./dtype-conformance.mjs";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { browserDefinitions, browserVersion, resolveBrowser, runBrowserPage, selectBrowserDefinitions, startBrowserServer } from "./browser-harness.mjs";
@@ -26,7 +26,7 @@ try {
   for (const browser of selectBrowserDefinitions(process.env.TABGRAD_BROWSER ?? "Chrome", browserDefinitions)) {
     const executable = await resolveBrowser(browser);
     const version = browserVersion(executable);
-    await runFloat16Conformance({ browser, executable, version, language: "python", device: "webgpu" });
+    await runDTypeConformance({ browser, executable, version, language: "python", device: "webgpu" });
     process.stdout.write(`PASS ${browser.name} float16 python GPU\n`);
     for (const { page, mode, operation, failure } of profiles) await runBrowserPage({
       server, browser, executable, version, page, parameters: { ...(mode === undefined ? {} : { mode }), ...(operation === undefined ? {} : { operation }), ...(failure === undefined ? {} : { failure }) },

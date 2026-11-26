@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { DistributionFixtureServer } from "./distribution-fixture-server.mjs";
 import { fixtureModule } from "./runtime-wasm-fixture.mjs";
-import { CPU_ABI_VERSION, CPU_CAPABILITIES } from "../../dist/backends/cpu/kernel-catalogue.js";
+import { CPU_ABI_VERSION, CPU_CAPABILITIES, CPU_MODULE_VERSION } from "../../dist/backends/cpu/kernel-catalogue.js";
 import { CPU_MEMORY_PROFILE } from "../../dist/backends/cpu/memory-capacity.js";
 
 /** Create synthetic CPU artifacts from the compiled catalogue for runtime tests. */
@@ -20,7 +20,7 @@ export class RuntimeFixtureServer extends DistributionFixtureServer {
     });
     const manifest = manifestTransform({
       schemaVersion: 1,
-      moduleVersion: CPU_MEMORY_PROFILE.moduleVersion,
+      moduleVersion: CPU_MODULE_VERSION,
       abiVersion: CPU_ABI_VERSION,
       addressWidth: 32,
       sharedMemory: false,

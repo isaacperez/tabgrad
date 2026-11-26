@@ -4,7 +4,7 @@ import { CPU_MEMORY_PROFILE, DEFAULT_CPU_LINEAR_MEMORY_BYTES, WEBASSEMBLY_PAGE_B
   validateCpuLinearMemoryBytes, type CpuMemoryCapacity } from "./memory-capacity.js";
 
 import { assertCpuArtifactAbi, assertCpuMemoryImport, cpuArenaBase } from "./artifact-abi.js";
-import { CPU_ABI_VERSION, CPU_CAPABILITIES, type KernelExports } from "./kernel-catalogue.js";
+import { CPU_ABI_VERSION, CPU_CAPABILITIES, CPU_MODULE_VERSION, type KernelExports } from "./kernel-catalogue.js";
 
 type BackendPreparationPhase =
   | "manifest-fetch"
@@ -271,7 +271,7 @@ export class CpuArtifactLoader {
     const variants = value.variants;
     const capabilities = value.capabilities;
     return value.schemaVersion === 1
-      && value.moduleVersion === CPU_MEMORY_PROFILE.moduleVersion
+      && value.moduleVersion === CPU_MODULE_VERSION
       && value.abiVersion === CPU_ABI_VERSION
       && value.addressWidth === 32
       && value.sharedMemory === false
