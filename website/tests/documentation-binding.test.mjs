@@ -3,6 +3,7 @@ import test from "node:test";
 import { documentationBaseline, loadReleaseData } from "../scripts/release-data.mjs";
 
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -22,15 +23,35 @@ test("completed documentation retains its exact baseline after main advances or 
     environments: [{ title: "CPU", usage: "Default", tested: "Chrome", setup: "Load the package.", links: [{ label: "Setup", source: "docs/reference/a.md" }] }], limits: [{ title: "Data", description: "Float32." }] };
   await writeFile(join(root, "docs/reference/release-0.4.0.md"), `# Tabgrad 0.4.0 source and support record\n\n<!-- tabgrad-release\n${JSON.stringify({ schemaVersion: 1, version: "0.4.0", title: "Broadcasting", documentationImpact: "Updated arithmetic references.", support })}\n-->\n`);
   await writeFile(join(root, "docs/reference/a.md"), "# Released behavior\n");
-  await writeFile(join(root, "website/release-catalogue.json"), JSON.stringify({ schemaVersion: 1, releases: [{ version: "0.4.0", source: "candidate", documentation: { directories: [], individual: ["docs/reference/a.md"] } }] }));
+  const compatibility = "docs/compatibility.md";
+  const inventory = { schemaVersion: 1, operations: [{
+    id: "add", name: "torch.add", module: "torch", aliases: [], arithmetic: true,
+    source: "docs/reference/a.md", fragment: "released-behavior", limits: "Test.", variants: [
+      { inputs: ["float32", "float32"], result: "float32",
+        cpu: { status: "supported", gradients: "none" },
+        webgpu: { status: "unavailable", gradients: "not-applicable" } },
+    ],
+  }] };
+  const releaseCompatibility = `# Compatibility\n\n<!-- tabgrad-operations\n${JSON.stringify(inventory)}\n-->\n`;
+  await writeFile(join(root, compatibility), releaseCompatibility);
+  await writeFile(join(root, "website/release-catalogue.json"), JSON.stringify({ schemaVersion: 1, releases: [{ version: "0.4.0", source: "candidate", documentation: { directories: [], individual: ["docs/reference/a.md", compatibility] } }] }));
   git(root, "init", "--quiet"); git(root, "add", "."); git(root, "commit", "--quiet", "-m", "Released source");
   const released = git(root, "rev-parse", "HEAD");
   await writeFile(join(root, "docs/reference/a.md"), "# Future behavior\n");
+  await mkdir(join(root, "website/content/corrections"), { recursive: true });
+  const correction = { schemaVersion: 1, version: "0.4.0", baseline: released, documents: [{
+    source: compatibility, baselineSha256: createHash("sha256").update(releaseCompatibility).digest("hex"),
+    replacements: [{ find: '"webgpu":{"status":"unavailable"', replace: '"webgpu":{"status":"supported"' }],
+  }] };
+  await writeFile(join(root, "website/content/corrections/0.4.0.json"), JSON.stringify(correction));
+  git(root, "add", "website/content/corrections/0.4.0.json");
   git(root, "commit", "--quiet", "-am", "Advance main");
   const later = git(root, "rev-parse", "HEAD");
   const loaded = await loadReleaseData(root, "0.4.0", { release: { version: "0.4.0", sourceRevision: released }, candidateRevision: later, publication: true });
   assert.equal(loaded.groups[0].baselineRevision, released);
-  assert.equal(loaded.groups[0].entries[0].body, "# Released behavior\n");
+  assert.equal(loaded.groups[0].entries.find(entry => entry.source === "docs/reference/a.md").body, "# Released behavior\n");
+  assert.deepEqual(loaded.groups[0].operationCompatibility, inventory);
+  assert.match(loaded.groups[0].entries.find(entry => entry.source === compatibility).body, /"webgpu":\{"status":"supported"/);
 });
 
 test("candidate previews require explicit validation and cannot enter a publication without completion", () => {

@@ -6,6 +6,7 @@ import { TENSOR_DTYPES } from "../dist/shared/tensor-dtype.js";
 import { COMPUTATION_SIGNATURES } from "../dist/execution/operation-contracts.js";
 import { cpuKernel } from "../dist/backends/cpu/kernel-catalogue.js";
 import { webGpuKernel } from "../dist/backends/webgpu/kernel-catalogue.js";
+import { compatibilitySignature, readOperationCompatibility, withOperationCompatibilityTables } from "./operation-compatibility.mjs";
 
 const compatibility = new URL("../docs/compatibility.md", import.meta.url);
 const dtypeCell = /^`[a-z][a-z0-9_]*`(?:, `[a-z][a-z0-9_]*`)*$/;
@@ -44,7 +45,7 @@ function visibleMarkdown(markdown) {
 }
 
 function documentedTypes(cell, operation, backend) {
-  if (cell === "Unavailable") return [];
+  if (cell === "Unavailable" || cell === "Not evaluated") return [];
   assert.match(cell, dtypeCell, `Invalid dtype list for ${backend} ${operation}`);
   const types = cell.split(", ").map(type => type.slice(1, -1)).sort();
   assert.equal(new Set(types).size, types.length, `Duplicate dtype for ${backend} ${operation}`);
@@ -82,32 +83,40 @@ function isPublicArithmetic(signature) {
     && typeof Object.getOwnPropertyDescriptor(Tensor.prototype, signature.operation)?.value === "function";
 }
 
-export function verifyDTypeRegistrations(markdown, {
+export function verifyDTypeRegistrations(markdown, options) {
+  const inventory = readOperationCompatibility(markdown);
+  assert.ok(inventory, "Missing current operation compatibility inventory");
+  documentedArithmetic(markdown);
+  assert.equal(withOperationCompatibilityTables(markdown, inventory), markdown, "Operation compatibility summaries must match their inventory");
+  verifyOperationCompatibilityRegistrations(inventory, options);
+}
+
+export function verifyOperationCompatibilityRegistrations(inventory, {
   definitions = TENSOR_DTYPES, signatures = COMPUTATION_SIGNATURES, cpu = cpuKernel, webgpu = webGpuKernel,
 } = {}) {
   for (const [key, definition] of Object.entries(definitions)) {
     assert.equal(definition.name, key, `Dtype ${key} must expose the same canonical name to Python`);
   }
-
-  const expected = documentedArithmetic(markdown);
-  const actual = new Map([...expected.keys()].map(operation => [operation, { CPU: new Set(), WebGPU: new Set() }]));
-  for (const [kind, signature] of Object.entries(signatures)) {
-    if (!isPublicArithmetic(signature)) continue;
-    const { operation, types } = signature;
-    const registered = actual.get(operation);
-    assert.ok(registered, `Missing arithmetic dtype row for ${operation}`);
-    const dtype = types.result;
-    assert.ok(Object.hasOwn(definitions, dtype), `Unknown registered dtype ${dtype} for ${kind}`);
-    assert.ok(types.inputs.length > 0 && types.inputs.every(input => input === dtype),
-      `Arithmetic dtype table cannot describe the input/result types of ${kind}`);
-    if (cpu(kind)) registered.CPU.add(dtype);
-    if (webgpu(kind)) registered.WebGPU.add(dtype);
+  const arithmetic = new Map(inventory.operations.filter(operation => operation.arithmetic).map(operation => [operation.id, operation]));
+  for (const operation of inventory.operations) {
+    for (const { inputs, result } of operation.variants) {
+      for (const dtype of result === null ? inputs : [...inputs, result]) {
+        assert.ok(Object.hasOwn(definitions, dtype), `Unknown compatibility dtype ${dtype} for ${operation.id}`);
+      }
+    }
   }
-
-  for (const [operation, documented] of expected) {
-    for (const backend of ["CPU", "WebGPU"]) {
-      assert.deepEqual([...actual.get(operation)[backend]].sort(), documented[backend],
-        `${backend} ${operation} dtype registrations differ from the documentation`);
+  for (const [device, label, lookup] of [["cpu", "CPU", cpu], ["webgpu", "WebGPU", webgpu]]) {
+    const actual = new Map([...arithmetic.keys()].map(id => [id, new Set()]));
+    for (const [kind, signature] of Object.entries(signatures)) {
+      if (!isPublicArithmetic(signature) || !lookup(kind)) continue;
+      const registered = actual.get(signature.operation);
+      assert.ok(registered, `Missing arithmetic compatibility record for ${signature.operation}`);
+      registered.add(compatibilitySignature(signature.types.inputs, signature.types.result));
+    }
+    for (const [id, { variants }] of arithmetic) {
+      const expected = variants.filter(variant => variant[device].status === "supported")
+        .map(variant => compatibilitySignature(variant.inputs, variant.result)).sort();
+      assert.deepEqual([...actual.get(id)].sort(), expected, `${label} ${id} compatibility registrations differ from the inventory`);
     }
   }
 }

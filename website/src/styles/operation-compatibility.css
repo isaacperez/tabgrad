@@ -1,0 +1,223 @@
+.operation-compatibility {
+  container-type: inline-size;
+  --operation-columns: minmax(9rem, 1.15fr) repeat(2, minmax(6rem, 1fr)) 1.25rem;
+  --operation-gap: var(--tg-space-3);
+}
+
+.operation-compatibility [hidden],
+.operation-count:empty {
+  display: none;
+}
+
+.operation-compatibility :is([id], summary) {
+  scroll-margin-block-start: calc(var(--sl-nav-height) + var(--tg-space-4));
+}
+
+.operation-filters {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(7rem, 9.5rem);
+  gap: var(--tg-space-3);
+  margin-block-end: var(--tg-space-3);
+}
+
+.operation-filters label {
+  display: grid;
+  gap: var(--tg-space-1);
+  font-size: var(--tg-text-interface);
+  font-weight: 600;
+}
+
+.operation-filters :is(input, select) {
+  min-width: 0;
+  min-height: var(--tg-control-size);
+  padding-inline: var(--tg-space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--tg-radius-md);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 400;
+}
+
+.operation-modules {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--tg-space-2) var(--tg-space-4);
+  margin-block: var(--tg-space-3) var(--tg-space-6);
+  color: var(--accent-text);
+  font-size: var(--tg-text-interface);
+}
+
+.operation-modules a {
+  color: inherit;
+  text-underline-offset: var(--tg-link-underline-offset);
+  text-decoration-thickness: var(--tg-link-underline-thickness);
+}
+
+.operation-compatibility :focus-visible {
+  outline: var(--tg-focus-width) solid var(--violet);
+  outline-offset: var(--tg-space-1);
+}
+
+.operation-count,
+.operation-detail {
+  font-size: var(--tg-text-interface);
+  color: var(--muted);
+}
+
+.operation-module + .operation-module {
+  margin-block-start: var(--tg-space-6);
+}
+
+.operation-module h3 {
+  margin-block: 0 var(--tg-space-2);
+}
+
+.operation-list {
+  border: 1px solid var(--line);
+  border-radius: var(--tg-radius-lg);
+  background: var(--surface);
+}
+
+.operation-columns,
+.operation-row > summary {
+  display: grid;
+  grid-template-columns: var(--operation-columns);
+  gap: var(--operation-gap);
+  align-items: center;
+  padding: var(--tg-space-3) var(--tg-space-4);
+}
+
+.operation-columns {
+  color: var(--muted);
+  font-size: var(--tg-text-meta);
+}
+
+.operation-row {
+  border-block-start: 1px solid var(--line);
+}
+
+.operation-row summary {
+  min-height: var(--tg-control-size);
+  list-style: none;
+  cursor: pointer;
+}
+
+.operation-row summary::-webkit-details-marker {
+  display: none;
+}
+
+.operation-row summary:hover {
+  background: color-mix(in srgb, var(--tint) 48%, var(--surface));
+}
+
+.operation-compatibility code {
+  font-family: var(--tg-font-mono);
+}
+
+.operation-name {
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.operation-name small {
+  display: block;
+  color: var(--muted);
+  font-size: var(--tg-text-meta);
+  font-weight: 400;
+}
+
+.operation-dtype {
+  display: inline-block;
+  margin: var(--tg-space-1) var(--tg-space-1) 0 0;
+  padding: 0 var(--tg-space-1);
+  border-radius: var(--tg-radius-sm);
+  color: var(--accent-text);
+  background: var(--tint);
+  font-size: var(--tg-text-interface);
+}
+
+.operation-device-label {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.operation-toggle {
+  justify-self: center;
+  color: var(--muted);
+}
+
+.operation-toggle::before {
+  content: "+";
+}
+
+.operation-row[open] .operation-toggle::before {
+  content: "−";
+}
+
+.operation-detail {
+  padding: 0 var(--tg-space-4) var(--tg-space-4);
+}
+
+.operation-detail p,
+.operation-detail ul {
+  margin-block: 0 var(--tg-space-3);
+}
+
+.operation-detail ul {
+  list-style: none;
+  padding-inline-start: 0;
+}
+
+.operation-detail li + li {
+  margin-block-start: var(--tg-space-2);
+}
+
+.operation-detail li span {
+  display: block;
+}
+
+.operation-detail a {
+  color: var(--accent-text);
+}
+
+@container (max-width: 33rem) {
+  .operation-columns {
+    display: none;
+  }
+
+  .operation-row > summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) 1.25rem;
+  }
+
+  .operation-row:first-of-type {
+    border-block-start: 0;
+  }
+
+  .operation-name {
+    grid-column: 1 / 3;
+  }
+
+  .operation-toggle {
+    grid-column: 3;
+    grid-row: 1;
+  }
+
+  .operation-device-label {
+    position: static;
+    display: block;
+    inline-size: auto;
+    block-size: auto;
+    clip-path: none;
+    color: var(--muted);
+    font-size: var(--tg-text-meta);
+  }
+
+  .operation-dtype {
+    font-size: var(--tg-text-meta);
+  }
+}

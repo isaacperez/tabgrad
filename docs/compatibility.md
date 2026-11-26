@@ -7,36 +7,209 @@ progress or a product roadmap.
 
 ## Tensor dtypes by operation
 
-The table applies to the documented contiguous tensor operations in Python
-and JavaScript. Python requires an explicit `torch.float32` or `torch.float16`
-when creating a tensor. JavaScript defaults to `"float32"` and accepts an
-explicit `"float16"`. Binary arithmetic requires two operands of the same
-dtype on the same device.
+The tables summarize the finite set of PyTorch call forms Tabgrad supports.
+The linked references describe exact signatures, shapes and gradients.
+Python requires an explicit `torch.float32` or `torch.float16` when creating a
+tensor. The [JavaScript API](javascript-api.md) defaults to `"float32"` and
+accepts an explicit `"float16"`. Binary arithmetic requires two operands
+of the same dtype on the same device.
 
 ### Arithmetic
 
 | Operation | CPU | WebGPU |
 | --- | --- | --- |
 | [`add`](reference/python-tensors.md#admit-addition) | `float32`, `float16` | `float32`, `float16` |
-| [`mul`](reference/tensor-multiplication.md) | `float32`, `float16` | `float32`, `float16` |
-| [`sum`](reference/tensor-sum.md) | `float32` | `float32` |
-| [`matmul`](reference/tensor-matmul.md) | `float32` | `float32` |
+| [`mul`](reference/tensor-multiplication.md#call-forms-and-result) | `float32`, `float16` | `float32`, `float16` |
+| [`sum`](reference/tensor-sum.md#call-forms-and-result) | `float32` | `float32` |
+| [`matmul`](reference/tensor-matmul.md#calls-and-differentiation) | `float32` | `float32` |
 
 ### Storage and state
 
 | Operation | CPU | WebGPU |
 | --- | --- | --- |
-| [Creation and observation](reference/python-tensors.md) | `float32`, `float16` | `float32`, `float16` |
-| [Whole-storage views](reference/tensor-view.md) | `float32`, `float16` | `float32`, `float16` |
-| [`copy_`](reference/tensor-copy.md) | `float32` | `float32` |
-| [First-order gradients](reference/functional-gradients.md) and [`backward`](reference/backward-gradients.md) | `float32` | `float32` |
-| [Basic SGD](reference/sgd.md) | `float32` | `float32` |
+| [`torch.tensor`](reference/python-tensors.md#create-a-tensor) | `float32`, `float16` | `float32`, `float16` |
+| [`Tensor.tolist`](reference/python-tensors.md#observe-numerical-values) | `float32`, `float16` | `float32`, `float16` |
+| [`Tensor.view`](reference/tensor-view.md#call-forms-and-shape-rules) | `float32`, `float16` | `float32`, `float16` |
+| [`Tensor.copy_`](reference/tensor-copy.md#calling-forms-and-values) | `float32` | `float32` |
+| [`Tensor.backward`](reference/backward-gradients.md#python-calls) | `float32` | `float32` |
+| [`torch.no_grad`](reference/gradient-recording.md#python-context) | Supported | Supported |
+| [`torch.autograd.grad`](reference/functional-gradients.md#python-call-and-example) | `float32` | `float32` |
+| [`torch.optim.SGD`](reference/sgd.md#python-calls) | `float32` | `float32` |
 
 WebGPU arithmetic also depends on the [acquired device's limits](reference/webgpu-runtime.md#device-and-operation-domain).
 A device can admit `float16` storage while its limits exclude those
 arithmetic kernels. The individual references define shapes, gradient
 coverage and numerical behavior. Use the named release's support record for
 qualified environments and release-specific claims.
+
+<!-- tabgrad-operations
+{
+  "schemaVersion": 1,
+  "operations": [
+    {
+      "id": "tensor",
+      "name": "torch.tensor",
+      "module": "torch",
+      "aliases": [],
+      "arithmetic": false,
+      "source": "docs/reference/python-tensors.md",
+      "fragment": "create-a-tensor",
+      "limits": "Creates a contiguous tensor with the dtype specified by the caller.",
+      "variants": [
+        {"inputs": [], "result": "float32", "cpu": {"status": "supported", "gradients": "first-order"}, "webgpu": {"status": "supported", "gradients": "first-order"}},
+        {"inputs": [], "result": "float16", "cpu": {"status": "supported", "gradients": "none"}, "webgpu": {"status": "supported", "gradients": "none"}}
+      ]
+    },
+    {
+      "id": "add",
+      "name": "torch.add",
+      "module": "torch",
+      "aliases": ["Tensor.add", "+"],
+      "arithmetic": true,
+      "source": "docs/reference/python-tensors.md",
+      "fragment": "admit-addition",
+      "limits": "Elementwise addition with broadcasting for tensors of the same dtype. The public coefficient is one.",
+      "variants": [
+        {"inputs": ["float32", "float32"], "result": "float32", "cpu": {"status": "supported", "gradients": "first-order"}, "webgpu": {"status": "supported", "gradients": "first-order"}},
+        {"inputs": ["float16", "float16"], "result": "float16", "cpu": {"status": "supported", "gradients": "none"}, "webgpu": {"status": "supported", "gradients": "none"}}
+      ]
+    },
+    {
+      "id": "mul",
+      "name": "torch.mul",
+      "module": "torch",
+      "aliases": ["Tensor.mul", "*"],
+      "arithmetic": true,
+      "source": "docs/reference/tensor-multiplication.md",
+      "fragment": "call-forms-and-result",
+      "limits": "Elementwise multiplication with broadcasting for tensors of the same dtype.",
+      "variants": [
+        {"inputs": ["float32", "float32"], "result": "float32", "cpu": {"status": "supported", "gradients": "first-order"}, "webgpu": {"status": "supported", "gradients": "first-order"}},
+        {"inputs": ["float16", "float16"], "result": "float16", "cpu": {"status": "supported", "gradients": "none"}, "webgpu": {"status": "supported", "gradients": "none"}}
+      ]
+    },
+    {
+      "id": "sum",
+      "name": "torch.sum",
+      "module": "torch",
+      "aliases": ["Tensor.sum"],
+      "arithmetic": true,
+      "source": "docs/reference/tensor-sum.md",
+      "fragment": "call-forms-and-result",
+      "limits": "Adds all elements and returns a scalar. The current call has no axis or dtype option.",
+      "variants": [
+        {"inputs": ["float32"], "result": "float32", "cpu": {"status": "supported", "gradients": "first-order"}, "webgpu": {"status": "supported", "gradients": "first-order"}}
+      ]
+    },
+    {
+      "id": "matmul",
+      "name": "torch.matmul",
+      "module": "torch",
+      "aliases": ["Tensor.matmul", "@"],
+      "arithmetic": true,
+      "source": "docs/reference/tensor-matmul.md",
+      "fragment": "calls-and-differentiation",
+      "limits": "Multiplies two dense, contiguous matrices of the same dtype on the same device.",
+      "variants": [
+        {"inputs": ["float32", "float32"], "result": "float32", "cpu": {"status": "supported", "gradients": "first-order"}, "webgpu": {"status": "supported", "gradients": "first-order"}}
+      ]
+    },
+    {
+      "id": "tolist",
+      "name": "Tensor.tolist",
+      "module": "torch.Tensor",
+      "aliases": [],
+      "arithmetic": false,
+      "source": "docs/reference/python-tensors.md",
+      "fragment": "observe-numerical-values",
+      "limits": "Reads the values as ordinary Python numbers or lists matching the tensor shape.",
+      "variants": [
+        {"inputs": ["float32"], "result": null, "cpu": {"status": "supported", "gradients": "not-applicable"}, "webgpu": {"status": "supported", "gradients": "not-applicable"}},
+        {"inputs": ["float16"], "result": null, "cpu": {"status": "supported", "gradients": "not-applicable"}, "webgpu": {"status": "supported", "gradients": "not-applicable"}}
+      ]
+    },
+    {
+      "id": "view",
+      "name": "Tensor.view",
+      "module": "torch.Tensor",
+      "aliases": [],
+      "arithmetic": false,
+      "source": "docs/reference/tensor-view.md",
+      "fragment": "call-forms-and-shape-rules",
+      "limits": "Creates a shape-only view over the whole contiguous storage.",
+      "variants": [
+        {"inputs": ["float32"], "result": "float32", "cpu": {"status": "supported", "gradients": "first-order"}, "webgpu": {"status": "supported", "gradients": "first-order"}},
+        {"inputs": ["float16"], "result": "float16", "cpu": {"status": "supported", "gradients": "none"}, "webgpu": {"status": "supported", "gradients": "none"}}
+      ]
+    },
+    {
+      "id": "copy_",
+      "name": "Tensor.copy_",
+      "module": "torch.Tensor",
+      "aliases": [],
+      "arithmetic": false,
+      "source": "docs/reference/tensor-copy.md",
+      "fragment": "calling-forms-and-values",
+      "limits": "Copies values in place between equal-shape float32 tensors on the same device. Alias and recording rules apply.",
+      "variants": [
+        {"inputs": ["float32", "float32"], "result": "float32", "cpu": {"status": "supported", "gradients": "first-order"}, "webgpu": {"status": "supported", "gradients": "first-order"}}
+      ]
+    },
+    {
+      "id": "backward",
+      "name": "Tensor.backward",
+      "module": "torch.Tensor",
+      "aliases": [],
+      "arithmetic": false,
+      "source": "docs/reference/backward-gradients.md",
+      "fragment": "python-calls",
+      "limits": "Accumulates first-order gradients for the supported tracked operations.",
+      "variants": [
+        {"inputs": ["float32"], "result": null, "cpu": {"status": "supported", "gradients": "first-order"}, "webgpu": {"status": "supported", "gradients": "first-order"}}
+      ]
+    },
+    {
+      "id": "no_grad",
+      "name": "torch.no_grad",
+      "module": "torch",
+      "aliases": [],
+      "arithmetic": false,
+      "source": "docs/reference/gradient-recording.md",
+      "fragment": "python-context",
+      "limits": "Temporarily disables recording for operations within the Python context.",
+      "variants": [
+        {"inputs": [], "result": null, "cpu": {"status": "supported", "gradients": "not-applicable"}, "webgpu": {"status": "supported", "gradients": "not-applicable"}}
+      ]
+    },
+    {
+      "id": "grad",
+      "name": "torch.autograd.grad",
+      "module": "torch.autograd",
+      "aliases": [],
+      "arithmetic": false,
+      "source": "docs/reference/functional-gradients.md",
+      "fragment": "python-call-and-example",
+      "limits": "Returns first-order gradients for supported tracked operations. The returned gradients are untracked.",
+      "variants": [
+        {"inputs": ["float32"], "result": "float32", "cpu": {"status": "supported", "gradients": "first-order"}, "webgpu": {"status": "supported", "gradients": "first-order"}}
+      ]
+    },
+    {
+      "id": "sgd",
+      "name": "torch.optim.SGD",
+      "module": "torch.optim",
+      "aliases": [],
+      "arithmetic": false,
+      "source": "docs/reference/sgd.md",
+      "fragment": "python-calls",
+      "limits": "Updates float32 parameters with the documented basic options and gradient reset behavior.",
+      "variants": [
+        {"inputs": ["float32"], "result": null, "cpu": {"status": "supported", "gradients": "not-applicable"}, "webgpu": {"status": "supported", "gradients": "not-applicable"}}
+      ]
+    }
+  ]
+}
+-->
 
 ## Meaning of compatibility
 

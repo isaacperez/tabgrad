@@ -31,3 +31,32 @@ test("candidate completeness covers both guide presence and every future selecte
     assert.throws(() => prepareDocumentationPages(value, "0.3.0", "renderer", ""), /integration|sample/);
   }
 });
+
+test("the operation matrix is static and version-local without duplicating Markdown headings", () => {
+  const value = data();
+  const group = value.groups[0];
+  const compatibility = "docs/compatibility.md";
+  group.entries.push({ source: compatibility, body: "# Compatibility\n\n## Tensor dtypes by operation\n\n### Arithmetic\n\n| Operation |\n| --- |\n| Add |\n\n### Storage and state\n\n| Operation |\n| --- |\n| View |\n\n## Evidence\n\nReviewed.\n" });
+  group.paths.add(compatibility);
+  group.operationCompatibility = { operations: [{
+    id: "add", name: "torch.add", aliases: ["<add>"], module: "torch", source, fragment: "setup", limits: "Same dtype.",
+    variants: [{ inputs: ["float32", "float32"], result: "float32",
+      cpu: { status: "supported", gradients: "first-order" }, webgpu: { status: "unavailable", gradients: "not-applicable" } }],
+  }] };
+  const result = prepareDocumentationPages(value, "0.4.0", "renderer", "");
+  const pages = result.prepared.filter(page => page.path.endsWith("compatibility/index.md"));
+  assert.equal(pages.length, 2);
+  assert.equal(result.documents.filter(document => document.operationCompatibility && document.source === compatibility).length, 2);
+  for (const page of pages) {
+    const body = page.adapted.render();
+    assert.match(body, /<details [^>]+id="operation-add"/);
+    assert.match(body, /href="\/docs\/0\.4\.0\/concepts\/a\/#setup"/);
+    assert.match(body, /id="arithmetic"/);
+    assert.match(body, /id="storage-and-state"/);
+    assert.match(body, /&lt;add&gt;/);
+    assert.match(body, /GPU: Unavailable/);
+    assert.doesNotMatch(body, /### Arithmetic|\| Add \|/);
+  }
+  group.operationCompatibility.operations[0].fragment = "missing";
+  assert.throws(() => prepareDocumentationPages(value, "0.4.0", "renderer", ""), /version-local operation compatibility reference/);
+});

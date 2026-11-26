@@ -6,6 +6,7 @@ import { COMPUTATION_SIGNATURES } from "../../../dist/execution/operation-contra
 import { cpuKernel } from "../../../dist/backends/cpu/kernel-catalogue.js";
 import { webGpuKernel } from "../../../dist/backends/webgpu/kernel-catalogue.js";
 import { verifyDTypeRegistrations } from "../../../scripts/check-dtype-registrations.mjs";
+import { readOperationCompatibility, withOperationCompatibilityTables } from "../../../scripts/operation-compatibility.mjs";
 
 const docs = await readFile(new URL("../../../docs/compatibility.md", import.meta.url), "utf8");
 
@@ -13,10 +14,13 @@ function without(lookup, excludedKind) {
   return kind => kind === excludedKind ? undefined : lookup(kind);
 }
 
-function changeAddCoverage(cpu, gpu) {
-  const row = /^(\| \[`add`\]\([^)]+\) \|) [^|]+\| [^|]+\|$/m;
-  assert.match(docs, row);
-  return docs.replace(row, (_original, link) => `${link} ${cpu} | ${gpu} |`);
+function removeGpuHalfAddition() {
+  const inventory = readOperationCompatibility(docs);
+  const half = inventory.operations.find(operation => operation.id === "add").variants.find(variant => variant.result === "float16");
+  half.webgpu = { status: "unavailable", gradients: "not-applicable" };
+  const changed = docs.replace(/<!-- tabgrad-operations\n[\s\S]*?\n-->/m,
+    () => `<!-- tabgrad-operations\n${JSON.stringify(inventory)}\n-->`);
+  return withOperationCompatibilityTables(changed, inventory);
 }
 
 test("the public dtype table matches the compiled registrations", () => {
@@ -25,24 +29,24 @@ test("the public dtype table matches the compiled registrations", () => {
 
 test("a documented arithmetic signature must exist on each promised backend", () => {
   assert.throws(() => verifyDTypeRegistrations(docs, { cpu: without(cpuKernel, "add-f16") }),
-    /CPU add dtype registrations differ/);
+    /CPU add compatibility registrations differ/);
   assert.throws(() => verifyDTypeRegistrations(docs, { webgpu: without(webGpuKernel, "add-f16") }),
-    /WebGPU add dtype registrations differ/);
+    /WebGPU add compatibility registrations differ/);
   const signatures = { ...COMPUTATION_SIGNATURES };
   delete signatures["add-f16"];
-  assert.throws(() => verifyDTypeRegistrations(docs, { signatures }), /add dtype registrations differ/);
+  assert.throws(() => verifyDTypeRegistrations(docs, { signatures }), /add compatibility registrations differ/);
 });
 
 test("declared backend asymmetry passes but an undocumented registration fails", () => {
-  const asymmetric = changeAddCoverage("`float32`, `float16`", "`float32`");
+  const asymmetric = removeGpuHalfAddition();
   verifyDTypeRegistrations(asymmetric, { webgpu: without(webGpuKernel, "add-f16") });
-  assert.throws(() => verifyDTypeRegistrations(asymmetric), /WebGPU add dtype registrations differ/);
+  assert.throws(() => verifyDTypeRegistrations(asymmetric), /WebGPU add compatibility registrations differ/);
 });
 
 test("internal coefficient addition cannot stand in for public addition", () => {
   assert.ok(cpuKernel("add-alpha-f32"));
   assert.throws(() => verifyDTypeRegistrations(docs, { cpu: without(cpuKernel, "add-f32") }),
-    /CPU add dtype registrations differ/);
+    /CPU add compatibility registrations differ/);
 });
 
 test("a divergent registry name cannot replace another dtype in Python", () => {
@@ -54,7 +58,7 @@ test("a divergent registry name cannot replace another dtype in Python", () => {
 test("a missing or duplicate arithmetic row is never ignored", () => {
   const row = docs.split("\n").find(line => line.startsWith("| [`add`]("));
   assert.ok(row);
-  assert.throws(() => verifyDTypeRegistrations(docs.replace(row + "\n", "")), /Missing arithmetic dtype row for add/);
+  assert.throws(() => verifyDTypeRegistrations(docs.replace(row + "\n", "")), /summaries must match their inventory/);
   assert.throws(() => verifyDTypeRegistrations(docs.replace(row, `${row}\n${row}`)), /Duplicate arithmetic operation add/);
 });
 

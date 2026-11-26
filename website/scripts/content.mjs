@@ -103,7 +103,7 @@ function rewriteLink(target, source, documents, revision, inventory) {
  * @param {{source:string, body:string}} entry
  * @param {Map} documents
  * @param {string} revision
- * @param {{diagramKey?:string,repositoryPaths?:Set<string>,repositoryDirectories?:Set<string>}} options
+ * @param {{diagramKey?:string,repositoryPaths?:Set<string>,repositoryDirectories?:Set<string>,operationCompatibility?:string}} options
  * @returns {{render:(sizes?:Map<string,{width:number,height:number}>)=>string, diagrams:{id:string, definition:string, label:string}[]}}
  */
 export function adaptDocument(entry, documents, revision, options = {}) {
@@ -112,6 +112,16 @@ export function adaptDocument(entry, documents, revision, options = {}) {
     throw new Error("Versioned documentation requires its source inventory");
   }
   const tree = markdown.parse(entry.body);
+  if (options.operationCompatibility !== undefined) {
+    const tableAfter = label => tree.children.findIndex(node => node.type === "heading" && node.depth === 3 && nodeText(node) === label);
+    const arithmetic = tableAfter("Arithmetic"), storage = tableAfter("Storage and state");
+    if (arithmetic < 0 || storage <= arithmetic
+      || tree.children[arithmetic + 1]?.type !== "table" || tree.children[storage + 1]?.type !== "table") {
+      throw new Error("Operation compatibility requires the linked Markdown summaries");
+    }
+    tree.children.splice(storage, 2);
+    tree.children.splice(arithmetic, 2, { type: "html", value: options.operationCompatibility });
+  }
   const diagrams = [];
   const diagramNodes = [];
   let heading = metadata.title;

@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { documentationCataloguePath, parseReleaseCatalogue, resolveReleaseCatalogue, releaseNotesSection } from "../../scripts/release-documentation.mjs";
+import { readOperationCompatibility } from "../../scripts/operation-compatibility.mjs";
 import { readTrackedSource } from "./source-files.mjs";
 import { gitDocumentationSource, admittedSourceDocuments, correctSourceDocuments } from "./documentation-source.mjs";
 
@@ -44,12 +45,15 @@ export async function loadReleaseData(root, selectedVersion, context = {}) {
       available: entry.documentation !== null, candidate: binding.candidate, support: entry.support });
     if (entry.documentation === null) continue;
     const original = admittedSourceDocuments(source, entry.documentation);
+    const compatibility = original.find(document => document.source === "docs/compatibility.md");
+    const operationCompatibility = compatibility === undefined ? undefined : readOperationCompatibility(compatibility.body);
     const correctionPath = `website/content/corrections/${entry.version}.json`;
     const raw = await readTrackedSource(root, correctionPath, true);
     const correction = raw === undefined ? null : correctSourceDocuments(original, raw, entry.version, baseline);
     groups.push({ version: entry.version, baselineRevision: baseline, recordRevision: currentRevision, candidate: binding.candidate,
       correction: correction === null ? null : { path: correctionPath, revision: currentRevision, sha256: correction.sha256 },
-      entries: correction?.documents ?? original, paths: source.paths, directories: source.directories, admission: entry.documentation });
+      entries: correction?.documents ?? original, paths: source.paths, directories: source.directories, admission: entry.documentation,
+      operationCompatibility });
   }
   if (!groups.some(group => group.version === selectedVersion)) throw new Error("Selected runtime has no completed documentation source");
   return { releases, groups };

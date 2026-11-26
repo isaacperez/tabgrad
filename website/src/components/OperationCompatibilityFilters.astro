@@ -1,0 +1,37 @@
+<script>
+  const matrix = document.querySelector<HTMLElement>("[data-operation-compatibility]");
+  const form = matrix?.querySelector<HTMLFormElement>("[data-operation-filters]");
+  const search = form?.querySelector<HTMLInputElement>("[data-operation-search]");
+  const dtype = form?.querySelector<HTMLSelectElement>("[data-operation-dtype]");
+  const status = matrix?.querySelector<HTMLElement>("[data-operation-count]");
+
+  if (matrix && form && search && dtype && status) {
+    const root = matrix;
+    const input = search;
+    const selectedType = dtype;
+    const result = status;
+    const rows = [...root.querySelectorAll<HTMLDetailsElement>("[data-operation-row]")];
+    const modules = [...root.querySelectorAll<HTMLElement>("[data-operation-module]")];
+    const moduleLinks = [...root.querySelectorAll<HTMLAnchorElement>("[data-operation-link]")];
+
+    function update() {
+      const query = input.value.trim().toLowerCase();
+      const type = selectedType.value;
+      let matches = 0;
+      for (const row of rows) {
+        row.hidden = !row.dataset.names?.toLowerCase().includes(query)
+          || (type !== "" && !row.dataset.dtypes?.split(" ").includes(type));
+        if (!row.hidden) matches++;
+      }
+      for (const module of modules) module.hidden = !module.querySelector("[data-operation-row]:not([hidden])");
+      for (const link of moduleLinks) link.hidden = !modules.some(module => module.id === link.dataset.operationLink && !module.hidden);
+      result.textContent = matches === 0 ? "No matching operations. Try another name or dtype."
+        : query || type ? `${matches} matching operation${matches === 1 ? "" : "s"}` : "";
+    }
+
+    form.addEventListener("submit", event => event.preventDefault());
+    form.addEventListener("input", update);
+    form.hidden = false;
+    update();
+  }
+</script>

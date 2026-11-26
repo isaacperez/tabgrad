@@ -82,9 +82,13 @@ For either route, place the numerical implementation with its backend:
   [WebGPU catalogue](../../src/backends/webgpu/kernel-catalogue.ts). Reuse
   packed pointwise dispatch when the signature fits its storage and geometry.
 
-Qualify the affected operation against an independent oracle. Update the
-[operation reference and dtype table](../compatibility.md#tensor-dtypes-by-operation)
-with the verified public combinations, including any backend differences.
+Qualify the affected operation against an independent oracle. Record the
+verified combinations in the operation reference and in the inventory in
+[the compatibility reference](../compatibility.md#tensor-dtypes-by-operation).
+Include input and result types, device coverage and gradients. Run
+`node scripts/operation-compatibility.mjs --sync-tables` to update the readable
+Markdown summaries. The versioned website uses the inventory to group PyTorch
+calls and project their qualified dtype coverage.
 Run `npm run build:javascript` followed by
 `node scripts/check-dtype-registrations.mjs` to compare canonical dtype names
 and documented arithmetic support with the compiled catalogues. For an
