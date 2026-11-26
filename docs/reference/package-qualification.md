@@ -70,11 +70,11 @@ Generate the independent oracle from a pinned reference implementation. Record
 its version, build and generator with the evidence. The JSON contains:
 
 - `dtype` and `fractionBits` for the packed format. The verifier expects a
-  sign bit, a biased exponent and 7–13 fraction bits, with numeric readings
-  representable as float32.
+  sign bit, a biased exponent and 7–11 fraction bits, with numeric readings
+  representable as float32 and enough exponent range for the shared cases.
 - `construction.inputs` as a nonempty even-length list of JSON numbers or
   the strings `nan`, `inf`, `-inf` and `-0`, and `construction.words` as the
-  expected encodings.
+  expected encodings. Use the string `-0` to preserve the sign in transport.
 - `pointwise.left`, `right`, `add`, `mul` and `mulThenAdd` as equally sized
   nonempty lists of unsigned 16-bit words. Compute the last result from the
   stored rounded product plus the first operand.

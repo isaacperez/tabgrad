@@ -12,15 +12,16 @@ const binary16Oracle = new URL("../js-tests/fixtures/float16-oracle.json", impor
 
 export function validateCompactFloatOracle(profile, oracle) {
   assert.match(profile.dtype, /^[a-z][a-z0-9_]*$/);
-  assert.ok(Number.isInteger(profile.fractionBits) && profile.fractionBits >= 7 && profile.fractionBits <= 13,
-    "The corpus represents a packed 16-bit float observable as float32.");
+  assert.ok(Number.isInteger(profile.fractionBits) && profile.fractionBits >= 7 && profile.fractionBits <= 11,
+    "The corpus requires a packed 16-bit float with 7–11 fraction bits.");
   const { construction, pointwise } = oracle ?? {};
   assert.ok(Array.isArray(construction?.inputs) && Array.isArray(pointwise?.left),
     "The corpus requires construction inputs and pointwise operand words.");
   const count = construction.inputs.length;
   const pairs = pointwise.left.length;
   assert.ok(count > 0 && count % 2 === 0 && pairs > 0);
-  assert.ok(construction.inputs.every(value => Number.isFinite(value) || ["nan", "inf", "-inf", "-0"].includes(value)),
+  assert.ok(construction.inputs.every(value => (Number.isFinite(value) && !Object.is(value, -0))
+    || ["nan", "inf", "-inf", "-0"].includes(value)),
     "Construction inputs use JSON numbers and explicit nonfinite or signed-zero tokens.");
   for (const [words, size] of [[construction.words, count],
     ...["left", "right", "add", "mul", "mulThenAdd"].map(name => [pointwise[name], pairs])]) {
