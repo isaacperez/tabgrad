@@ -138,6 +138,38 @@ search is an explicit reader choice and results identify their version.
 Historical pages remain self-canonical; stable aliases identify their selected
 canonical version rather than competing with it.
 
+### Show PyTorch compatibility for the selected release
+
+The [compatibility presentation decision](https://github.com/isaacperez/tabgrad/issues/513)
+keeps the existing compatibility page and documentation version selector.
+The Versions page links to compatibility for the same release. Readers can
+find a PyTorch call by module, name or alias, filter by dtype, and compare CPU
+and WebGPU. A call's detail links to the reference for that release and
+describes the admitted operands, result dtype, gradient coverage and any
+material argument or device limits. A module groups calls without making a
+support claim about the module as a whole.
+
+The arithmetic table alone answers homogeneous dtype support by device.
+Explicit operation records also describe overloads, aliases and combinations
+whose input and result types differ. This avoids inferring Python coverage
+from physical kernel names and makes stale or duplicate entries checkable.
+
+An admitted compatibility reference can carry a structured operation inventory
+as data. The build reads it from the exact release baseline before editorial
+corrections, validates operation identities and version-local reference targets,
+and projects the supported combinations into static HTML. Filters enhance that
+HTML. Use the same inventory for arithmetic registration checks and any
+maintained generated summary. Registration checks establish kernel coverage
+within their declared scope. Numerical semantics, shape limits, gradients and
+device qualification retain their operation and release evidence.
+
+Keep the existing compatibility routes and anchors. Older releases without
+the inventory use their admitted compatibility reference or support record.
+Editorial corrections can improve wording while conserving the admitted
+operation claims. Canonical and alias pages, search and version switching
+must preserve these source boundaries. Desktop and mobile show the same
+operation data, with visible device labels and keyboard-operable controls.
+
 Every checked website output contains the complete admitted documentation set
 and its required navigation, search, style and diagram resources. Reconstruct
 that set from identified sources on updates and rollback; do not rely on the
