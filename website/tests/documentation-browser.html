@@ -53,6 +53,9 @@ try {
     const staticDocument = new DOMParser().parseFromString(body, "text/html");
     assert(staticDocument.querySelector("#operation-matmul > summary"), "Compatibility coverage is not present without JS");
     assert(staticDocument.querySelector("[data-operation-filters][hidden]"), "Filters appear before they can respond");
+    const filterScript = staticDocument.querySelector("[data-operation-compatibility-script]");
+    assert(filterScript?.getAttribute("src")?.startsWith("/_astro/") && !filterScript.textContent.trim(),
+      "Compatibility filters need a same-origin external asset");
     assert(staticDocument.querySelector("#operation-matmul a")?.getAttribute("href")
       ?.startsWith(matrixRoute.replace(/compatibility\/$/, "reference/")),
       "The operation reference crosses release versions");

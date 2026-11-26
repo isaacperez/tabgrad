@@ -1,5 +1,5 @@
 ---
-import OperationCompatibilityFilters from "./OperationCompatibilityFilters.astro";
+import compatibilityFiltersUrl from "../documentation/operation-compatibility-filters.mjs?url&no-inline";
 import siteData from "../../.generated/site-data.json";
 
 // The authoritative Markdown supplies its original H1 and fragment identity.
@@ -8,4 +8,4 @@ const showCompatibilityFilters = siteData.documents.some(document =>
   document.route === Astro.url.pathname && document.operationCompatibility);
 ---
 <span id="_top" class="tabgrad-page-start" tabindex="-1"></span>
-{showCompatibilityFilters && <OperationCompatibilityFilters />}
+{showCompatibilityFilters && <script is:inline type="module" src={compatibilityFiltersUrl} data-operation-compatibility-script></script>}
