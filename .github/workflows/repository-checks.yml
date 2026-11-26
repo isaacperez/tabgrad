@@ -71,6 +71,9 @@ jobs:
       - name: Check Python types
         run: npm run check:python
 
+      - name: Verify tensor dtype registrations
+        run: npm run build:javascript && node scripts/check-dtype-registrations.mjs
+
       - name: Validate repository policies and structure
         run: .venv/bin/python scripts/check_repository.py
 
