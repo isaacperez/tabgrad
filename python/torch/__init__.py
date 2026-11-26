@@ -710,7 +710,7 @@ def _require_sum_input(value: object) -> Tensor:
 
 
 # The submodule consumes the initialized Tensor class.
-from . import autograd as autograd, optim as optim  # noqa: E402
+from . import autograd, optim  # noqa: E402
 
 __all__ = [
     "Size",
