@@ -10,6 +10,27 @@ import { webGpuKernel } from "../dist/backends/webgpu/kernel-catalogue.js";
 const compatibility = new URL("../docs/compatibility.md", import.meta.url);
 const dtypeCell = /^`[a-z][a-z0-9_]*`(?:, `[a-z][a-z0-9_]*`)*$/;
 
+function visibleMarkdown(markdown) {
+  const lines = markdown.replaceAll("\r\n", "\n")
+    .replace(/<!--[\s\S]*?(?:-->|$)/g, comment => comment.replace(/[^\n]/g, "")).split("\n");
+  const visible = [];
+  let fence;
+  for (const line of lines) {
+    const marker = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
+    if (fence !== undefined) {
+      if (marker && marker[1][0] === fence[0] && marker[1].length >= fence.length && marker[2].trim() === "") {
+        fence = undefined;
+      }
+    } else if (marker) {
+      fence = marker[1];
+      visible.push("");
+    } else {
+      visible.push(line);
+    }
+  }
+  return visible.join("\n");
+}
+
 function documentedTypes(cell, operation, backend) {
   if (cell === "Unavailable") return [];
   assert.match(cell, dtypeCell, `Invalid dtype list for ${backend} ${operation}`);
@@ -19,11 +40,12 @@ function documentedTypes(cell, operation, backend) {
 }
 
 function documentedArithmetic(markdown) {
-  const sections = markdown.split(/^## /m).filter(section => section.startsWith("Tensor dtypes by operation\n"));
+  const sections = visibleMarkdown(markdown).split(/^## /m)
+    .filter(section => section.startsWith("Tensor dtypes by operation\n"));
   assert.equal(sections.length, 1, "Expected one tensor dtype section");
-  const table = sections[0].match(/^### Arithmetic\n\n((?:\|[^\n]*\n)+)/m)?.[1];
-  assert.ok(table, "Missing arithmetic dtype table");
-  const [header, separator, ...rows] = table.trimEnd().split("\n");
+  const arithmetic = sections[0].split(/^### /m).filter(section => section.startsWith("Arithmetic\n"));
+  assert.equal(arithmetic.length, 1, "Expected one visible arithmetic dtype table");
+  const [header, separator, ...rows] = arithmetic[0].slice("Arithmetic\n".length).trim().split("\n");
   assert.equal(header, "| Operation | CPU | WebGPU |");
   assert.equal(separator, "| --- | --- | --- |");
   assert.ok(rows.length > 0, "Empty arithmetic dtype table");
@@ -55,7 +77,7 @@ export function verifyDTypeRegistrations(markdown, {
     assert.equal(definition.name, key, `Dtype ${key} must expose the same canonical name to Python`);
   }
 
-  const expected = documentedArithmetic(markdown.replaceAll("\r\n", "\n"));
+  const expected = documentedArithmetic(markdown);
   const actual = new Map([...expected.keys()].map(operation => [operation, { CPU: new Set(), WebGPU: new Set() }]));
   for (const [kind, signature] of Object.entries(signatures)) {
     if (!isPublicArithmetic(signature)) continue;

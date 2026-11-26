@@ -57,3 +57,14 @@ test("a missing or duplicate arithmetic row is never ignored", () => {
   assert.throws(() => verifyDTypeRegistrations(docs.replace(row + "\n", "")), /Missing arithmetic dtype row for add/);
   assert.throws(() => verifyDTypeRegistrations(docs.replace(row, `${row}\n${row}`)), /Duplicate arithmetic operation add/);
 });
+
+test("the documented arithmetic table must be visible and unique", () => {
+  const section = docs.match(/^### Arithmetic\n[\s\S]*?(?=^### Storage and state$)/m)?.[0];
+  assert.ok(section);
+  for (const hidden of [`<!--\n${section}-->\n\n`, `~~~markdown\n${section}~~~~\n\n`]) {
+    assert.throws(() => verifyDTypeRegistrations(docs.replace(section, hidden)), /one visible arithmetic dtype table/);
+  }
+  const conflicting = section.replace("`float16`", "`float128`");
+  assert.throws(() => verifyDTypeRegistrations(docs.replace(section, section + conflicting)),
+    /one visible arithmetic dtype table/);
+});

@@ -211,8 +211,8 @@ The conservative policy is:
 
 | Complete change set | Execution coverage |
 | --- | --- |
-| Maintained Markdown documentation/root policy files, brand Markdown/SVG, issue forms/template, or native Python tests under `tests/` only | Repository consistency and the applicable independent content/instruction/tooling review; no runtime build or browser execution |
-| Website package or its own workflow, optionally with the previous group | Repository consistency plus the independently selected website workflow; no library rebuild for website-only changes |
+| Maintained Markdown documentation/root policy files, brand Markdown/SVG, issue forms/template, or native Python tests under `tests/` only | Repository consistency and the applicable independent content/instruction/tooling review. Wasm and the library runtime and browser suites are outside this group. |
+| Website package or its own workflow, optionally with the previous group | Repository consistency plus the independently selected website workflow. The conditional library runtime and browser suites stay inapplicable. |
 | Node unit `.mjs` cases under `js-tests/unit/`, optionally mixed with the previous group | Runtime checks and the complete Node suite; unchanged browser execution is not selected |
 | Runtime, Python compatibility, Rust, browser fixtures, build/dependency inputs, selector/workflow code, mixed executable areas, or an unclassified path | Both runtime and browser families |
 | Manual or unknown event, empty diff, zero/malformed identifiers, missing history, non-ancestor base, checkout mismatch or failed/incomplete Git comparison | Both runtime and browser families |
