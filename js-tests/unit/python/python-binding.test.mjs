@@ -3172,7 +3172,7 @@ test("connected Python keeps CPU capacity and validates limits before claiming a
     connectionType: "tabgrad-webgpu", protocolVersion: WEBGPU_PAYLOAD_PROTOCOL_VERSION,
     port: physical.port1, supervision: supervision.port1, control: control.buffer,
     metrics: new SharedArrayBuffer(GPU_METRIC_LENGTH * 8),
-    capabilities: { device: "webgpu", computations: ["add-f32"], gradients: false, maximumTensorBytes: 1048576 },
+    capabilities: { device: "webgpu", storageEncodings: ["ieee754-binary32-native"], computations: ["add-f32"], gradients: false, maximumTensorBytes: 1048576 },
     diagnostics: { state: "ready", adapter: {}, features: [], limits: {} },
   };
   let binding;

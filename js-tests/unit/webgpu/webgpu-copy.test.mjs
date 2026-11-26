@@ -12,7 +12,7 @@ import { executionDevice, deferred } from "./helpers/webgpu-device.mjs";
 
 /** Controls shared completion/ownership only; numerical qualification uses physical GPU. */
 class CopyBackend {
-  capabilities = { device: "webgpu", computations: ["add-f32", "mul-f32", "sum-f32", "expand-f32"], gradients: true, maximumTensorBytes: 134217728 };
+  capabilities = { device: "webgpu", storageEncodings: ["ieee754-binary32-native"], computations: ["add-f32", "mul-f32", "sum-f32", "expand-f32"], gradients: true, maximumTensorBytes: 134217728 };
   ready = true;
   synchronousObservation = true;
   control = new Int32Array(new SharedArrayBuffer(GPU_CONTROL_LENGTH * 4));

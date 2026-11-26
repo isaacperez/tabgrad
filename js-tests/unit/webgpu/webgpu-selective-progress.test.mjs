@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ConnectedWebGpuBackend } from "../../../dist/backends/webgpu/webgpu-connected-backend.js";
 import { SharedGpuCompletion, publishSharedGpuFailure, publishSharedGpuDrain } from "../../../dist/backends/webgpu/webgpu-shared-completion.js";
-import { GPU_ACCOUNTED, GPU_CONTROL_LENGTH, GPU_METRIC_LENGTH } from "../../../dist/backends/webgpu/webgpu-connection.js";
+import { WEBGPU_PAYLOAD_PROTOCOL_VERSION, GPU_ACCOUNTED, GPU_CONTROL_LENGTH, GPU_METRIC_LENGTH } from "../../../dist/backends/webgpu/webgpu-connection.js";
 import { TabgradError } from "../../../dist/shared/errors.js";
 import { ExecutableProgram } from "../../../dist/execution/executable-program.js";
 import { float32TensorPayload } from "../../../dist/execution/tensor-payload.js";
@@ -26,10 +26,10 @@ function fixture({ delayAcknowledgment = false, rejectSubscription = false } = {
     }
   };
   const backend = new ConnectedWebGpuBackend({
-    connectionType: "tabgrad-webgpu", protocolVersion: 2,
+    connectionType: "tabgrad-webgpu", protocolVersion: WEBGPU_PAYLOAD_PROTOCOL_VERSION,
     port: physical.port1, supervision: supervision.port1, control: control.buffer,
     metrics: new SharedArrayBuffer(GPU_METRIC_LENGTH * 8),
-    capabilities: { device: "webgpu", computations: ["add-f32"], gradients: false, maximumTensorBytes: 1048576 },
+    capabilities: { device: "webgpu", storageEncodings: ["ieee754-binary32-native"], computations: ["add-f32"], gradients: false, maximumTensorBytes: 1048576 },
     diagnostics: { state: "ready" },
   });
   function acknowledge(packet) {

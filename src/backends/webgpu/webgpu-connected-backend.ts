@@ -9,7 +9,7 @@ import { tensorByteLength, type TensorDType } from "../../shared/tensor-dtype.js
 import { isRecord } from "../../shared/object-shape.js";
 import type { WebGpuDiagnostics, WebGpuExecutionBackend } from "./webgpu-backend.js";
 import { WEBGPU_PAYLOAD_PROTOCOL_VERSION, GPU_ACCOUNTED, GPU_CONSUMED, GPU_CONTROL_LENGTH, GPU_METRIC_LENGTH, GPU_PULSE, assertGpuConnectionActive,
-  readGpuMetrics, retireGpuConnection, type WebGpuConnection, type WebGpuConnectionData } from "./webgpu-connection.js";
+  isWebGpuCapabilities, readGpuMetrics, retireGpuConnection, snapshotWebGpuCapabilities, type WebGpuConnection, type WebGpuConnectionData } from "./webgpu-connection.js";
 import { PendingGpuCompletions } from "./webgpu-pending-completions.js";
 import { SharedGpuCompletion } from "./webgpu-shared-completion.js";
 
@@ -23,7 +23,7 @@ export function consumeWebGpuConnection(connection: WebGpuConnection): WebGpuCon
     || !(connection.port instanceof MessagePort) || !(connection.supervision instanceof MessagePort)
     || !(connection.control instanceof SharedArrayBuffer) || connection.control.byteLength !== GPU_CONTROL_LENGTH * 4
     || !(connection.metrics instanceof SharedArrayBuffer) || connection.metrics.byteLength !== GPU_METRIC_LENGTH * 8
-    || !isRecord(connection.capabilities) || !isRecord(connection.diagnostics)) {
+    || !isWebGpuCapabilities(connection.capabilities) || !isRecord(connection.diagnostics)) {
     throw new TabgradError("BACKEND_LOAD_FAILED", "A library-issued WebGPU connection is required.");
   }
   const control = new Int32Array(connection.control);
@@ -59,7 +59,7 @@ export class ConnectedWebGpuBackend implements WebGpuExecutionBackend {
     catch (cause) {
       throw new TabgradError("SYNCHRONOUS_OBSERVATION_UNAVAILABLE", "Managed WebGPU attachment requires a worker where Atomics.wait is allowed.", {}, cause);
     }
-    this.capabilities = Object.freeze({ ...connection.capabilities, computations: Object.freeze([...connection.capabilities.computations]) });
+    this.capabilities = snapshotWebGpuCapabilities(connection.capabilities);
     connection.port.addEventListener("message", this.#onProgress);
     connection.supervision.addEventListener("message", this.#onProgress);
     connection.port.start();

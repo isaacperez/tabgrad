@@ -2,15 +2,16 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ExecutableProgram } from "../../../dist/execution/executable-program.js";
 import { ExecutionTicket } from "../../../dist/execution/execution-ticket.js";
-import { float32TensorPayload, decodeTensorPayload } from "../../../dist/execution/tensor-payload.js";
+import { captureTensorData, float32TensorPayload, decodeTensorPayload } from "../../../dist/execution/tensor-payload.js";
+import { createConnectedRuntimeSession } from "../../../dist/runtime/runtime.js";
 import { WebGpuBackend } from "../../../dist/backends/webgpu/webgpu-backend.js";
 import { ConnectedWebGpuBackend, consumeWebGpuConnection } from "../../../dist/backends/webgpu/webgpu-connected-backend.js";
 import { GPU_ACCOUNTED, GPU_CONTROL_LENGTH, GPU_METRIC_LENGTH, WEBGPU_PAYLOAD_PROTOCOL_VERSION } from "../../../dist/backends/webgpu/webgpu-connection.js";
 import { publishSharedGpuSuccess } from "../../../dist/backends/webgpu/webgpu-shared-completion.js";
 import { executionDevice } from "./helpers/webgpu-device.mjs";
 
-function bindingProgram(length) {
-  return new ExecutableProgram([{ slot: 0, storageSlot: 0, shape: [length], dtype: "float32", device: "webgpu",
+function bindingProgram(length, dtype = "float32") {
+  return new ExecutableProgram([{ slot: 0, storageSlot: 0, shape: [length], dtype, device: "webgpu",
     layout: "contiguous", source: "binding", provenance: { operation: "tensor", source: "test" } }], [], 0);
 }
 
@@ -39,6 +40,9 @@ for (const count of [0, 1, 3]) {
       await backend.prepare(program);
       const allocations = await completed(backend.execute(program, new Map([[0, { hostData: payload }]]), [true]));
       const allocation = allocations.get(0);
+      if (count === 0) {
+        assert.throws(() => backend.read(allocation, 0, "float16"), { code: "BACKEND_STATUS_ERROR" });
+      }
       const result = await completed(backend.read(allocation, count, "float32"));
       const numeric = decodeTensorPayload(result, "float32", count);
       assert.equal(numeric.buffer, result.bytes.buffer);
@@ -56,15 +60,74 @@ for (const count of [0, 1, 3]) {
   });
 }
 
+test("direct GPU rejects equal-byte resident reinterpretation before a transfer or submission", async () => {
+  const device = executionDevice();
+  const backend = new WebGpuBackend(device);
+  try {
+    const binding = new Map([[0, { hostData: captureTensorData([-3], "float32") }]]);
+    const [allocation] = (await completed(backend.execute(bindingProgram(1), binding, [true]))).values();
+    const before = backend.diagnostics();
+    const buffers = device.buffers.length;
+    const program = new ExecutableProgram([
+      bindingProgram(2, "float16").values[0],
+      { ...bindingProgram(2, "float16").values[0], slot: 1, storageSlot: 1 },
+    ], [], 1);
+    const rejected = backend.execute(program, new Map([
+      [0, { hostData: captureTensorData([1, 2], "float16") }],
+      [1, { resident: allocation }],
+    ]), [true, true]);
+    await assert.rejects(rejected.result, { code: "BACKEND_STATUS_ERROR" });
+    await rejected.drained;
+    assert.throws(() => backend.read(allocation, 2, "float16"), { code: "BACKEND_STATUS_ERROR" });
+    assert.equal(device.buffers.length, buffers);
+    assert.deepEqual(backend.diagnostics(), before);
+    const payload = await completed(backend.read(allocation, 1, "float32"));
+    assert.deepEqual([...decodeTensorPayload(payload, "float32", 1)], [-3]);
+    backend.release(allocation);
+    assert.equal(backend.diagnostics().ownedBufferBytes, 0);
+  } finally { await backend.close(); }
+});
+
+test("GPU retags a recycled buffer without changing its logical byte extent", async () => {
+  const device = executionDevice();
+  const backend = new WebGpuBackend(device);
+  const float = bindingProgram(1).values[0];
+  const half = { ...bindingProgram(2, "float16").values[0], slot: 1, storageSlot: 1 };
+  const program = new ExecutableProgram([
+    float, half, { ...float, slot: 2, storageSlot: 2, shape: [], source: "computed" },
+    { ...half, slot: 3, storageSlot: 3, source: "computed" },
+  ], [
+    { kind: "sum-f32", inputs: [0], output: 2, provenance: float.provenance },
+    { kind: "add-f16", inputs: [1, 1], output: 3, provenance: half.provenance },
+  ], 3);
+  try {
+    await backend.prepare(program);
+    const allocations = await completed(backend.execute(program, new Map([
+      [0, { hostData: captureTensorData([1], "float32") }],
+      [1, { hostData: captureTensorData([3, 5], "float16") }],
+    ]), [false, false, true, true]));
+    const retained = allocations.get(3);
+    assert.equal(retained.buffer, device.buffers[0], "the existing scratch pool reuses bytes across formats");
+    assert.throws(() => backend.read(retained, 1, "float32"), { code: "BACKEND_STATUS_ERROR" });
+    assert.throws(() => backend.read(retained, 1, "float16"), { code: "BACKEND_STATUS_ERROR" });
+    const observed = await completed(backend.read(retained, 2, "float16"));
+    assert.equal(observed.dtype, "float16");
+    assert.equal(observed.bytes.byteLength, 4);
+    for (const allocation of allocations.values()) backend.release(allocation);
+    assert.equal(backend.diagnostics().ownedBufferBytes, 0);
+    assert.equal(backend.diagnostics().pendingSubmissions, 0);
+  } finally { await backend.close(); }
+});
+
 test("connected GPU transfers one bounded owned clone and escapes shared readback storage", async () => {
   const physical = new MessageChannel(), supervision = new MessageChannel();
   const control = new Int32Array(new SharedArrayBuffer(GPU_CONTROL_LENGTH * 4));
   const connection = { connectionType: "tabgrad-webgpu", protocolVersion: WEBGPU_PAYLOAD_PROTOCOL_VERSION,
     port: physical.port1, supervision: supervision.port1, control: control.buffer,
     metrics: new SharedArrayBuffer(GPU_METRIC_LENGTH * 8),
-    capabilities: { device: "webgpu", computations: [], gradients: false, maximumTensorBytes: 1048576 },
+    capabilities: { device: "webgpu", storageEncodings: ["ieee754-binary32-native"], computations: [], gradients: false, maximumTensorBytes: 1048576 },
     diagnostics: { state: "ready" } };
-  for (const protocolVersion of [undefined, 1, 3]) {
+  for (const protocolVersion of [undefined, 2, WEBGPU_PAYLOAD_PROTOCOL_VERSION + 1]) {
     assert.throws(() => consumeWebGpuConnection({ ...connection, protocolVersion }), { code: "BACKEND_LOAD_FAILED" });
   }
   consumeWebGpuConnection(connection);
@@ -87,7 +150,11 @@ test("connected GPU transfers one bounded owned clone and escapes shared readbac
     else publishSharedGpuSuccess(packet.completion, control, new Uint8Array());
   };
   const backend = new ConnectedWebGpuBackend(connection);
+  const session = createConnectedRuntimeSession(backend);
   try {
+    assert.throws(() => session.tensor([1, 2], { dtype: "float16", device: "webgpu" }),
+      { code: "BACKEND_CAPABILITY_MISMATCH" });
+    assert.throws(() => backend.prepare(bindingProgram(2, "float16")), { code: "BACKEND_CAPABILITY_MISMATCH" });
     const allocations = await completed(backend.execute(bindingProgram(2), new Map([[0, {
       hostData: float32TensorPayload(input.subarray(1, 3)),
     }]]), [true]));
@@ -102,6 +169,6 @@ test("connected GPU transfers one bounded owned clone and escapes shared readbac
     backend.release(allocations.get(0));
   } finally {
     Atomics.store(control, GPU_ACCOUNTED, 1);
-    await backend.close(); physical.port2.close(); supervision.port2.close();
+    await session.close(); physical.port2.close(); supervision.port2.close();
   }
 });

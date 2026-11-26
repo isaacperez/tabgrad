@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { decodeTensorPayload, float32TensorPayload } from "../../../dist/execution/tensor-payload.js";
+import { captureTensorData, decodeTensorPayload, float32TensorPayload } from "../../../dist/execution/tensor-payload.js";
 import { WebAssemblyCpuBackend } from "../../../dist/backends/cpu/cpu-backend.js";
 import { CpuArtifactLoader } from "../../../dist/backends/cpu/artifact-loader.js";
 import { CpuAllocation } from "../../../dist/backends/cpu/linear-memory.js";
@@ -14,9 +14,9 @@ let manifestUrl;
 before(async () => { manifestUrl = new URL("manifest.json", await fixtures.start()); });
 after(async () => { await fixtures.close(); });
 
-function bindingProgram(length = 1) {
+function bindingProgram(length = 1, dtype = "float32") {
   return new ExecutableProgram([{
-    slot: 0, storageSlot: 0, shape: [length], dtype: "float32", device: "cpu",
+    slot: 0, storageSlot: 0, shape: [length], dtype, device: "cpu",
     layout: "contiguous", source: "binding",
     provenance: { operation: "tensor", source: "RuntimeSession.tensor" },
   }], [], 0);
@@ -49,6 +49,39 @@ for (const variant of ["scalar", "simd128"]) {
       const empty = backend.execute(bindingProgram(0), new Map([[0, { hostData: float32TensorPayload(new Float32Array()) }]]), [true]).get(0);
       assert.equal(backend.read(empty, 0, "float32").bytes.byteLength, 0);
       for (const value of [allocation, large, empty]) backend.release(value);
+      assert.equal(backend.diagnostics().liveAllocationBytes, 0);
+    } finally { await backend.close(); }
+  });
+}
+
+for (const variant of ["scalar", "simd128"]) {
+  test(`CPU rejects resident format reinterpretation and accepts a reused extent (${variant})`, async () => {
+    const backend = new WebAssemblyCpuBackend(manifestUrl, variant);
+    const float = bindingProgram(1);
+    const half = bindingProgram(2, "float16");
+    try {
+      await backend.prepare();
+      const original = backend.execute(float, new Map([[0, {
+        hostData: captureTensorData([2], "float32"),
+      }]]), [true]).get(0);
+      const before = backend.diagnostics();
+      assert.throws(() => backend.read(original, 2, "float16"), { code: "BACKEND_STATUS_ERROR" });
+      assert.throws(() => backend.execute(half, new Map([[0, { resident: original }]]), [true]), {
+        code: "BACKEND_STATUS_ERROR",
+      });
+      assert.throws(() => backend.execute(bindingProgram(2), new Map([[0, { resident: original }]]), [true]), {
+        code: "BACKEND_STATUS_ERROR",
+      });
+      assert.deepEqual(backend.diagnostics(), before);
+      assert.deepEqual([...decodeTensorPayload(backend.read(original, 1, "float32"), "float32", 1)], [2]);
+      backend.release(original);
+      const reused = backend.execute(half, new Map([[0, {
+        hostData: captureTensorData([3, -4], "float16"),
+      }]]), [true]).get(0);
+      assert.equal(reused.offset, original.offset, "the byte allocator still recycles equal-sized ranges");
+      assert.deepEqual([...decodeTensorPayload(backend.read(reused, 2, "float16"), "float16", 2)], [3, -4]);
+      assert.throws(() => backend.read(original, 1, "float32"), { code: "BACKEND_STATUS_ERROR" });
+      backend.release(reused);
       assert.equal(backend.diagnostics().liveAllocationBytes, 0);
     } finally { await backend.close(); }
   });

@@ -1,4 +1,6 @@
 import type { BackendCapabilities } from "../../execution/backend.js";
+import { isRecord } from "../../shared/object-shape.js";
+import { TENSOR_STORAGE_ENCODINGS } from "../../shared/tensor-dtype.js";
 import { TabgradError } from "../../shared/errors.js";
 import type { WebGpuDiagnostics } from "./webgpu-backend.js";
 
@@ -8,7 +10,7 @@ export interface WebGpuConnection {
 }
 
 /** The raw-payload wire format requires matching packaged endpoints. */
-export const WEBGPU_PAYLOAD_PROTOCOL_VERSION = 2;
+export const WEBGPU_PAYLOAD_PROTOCOL_VERSION = 3;
 
 /** @internal Physical connection data, not a user-supplied backend interface. */
 export interface WebGpuConnectionData extends WebGpuConnection {
@@ -19,6 +21,26 @@ export interface WebGpuConnectionData extends WebGpuConnection {
   readonly capabilities: BackendCapabilities;
   readonly diagnostics: WebGpuDiagnostics;
   readonly metrics: SharedArrayBuffer;
+}
+
+export function isWebGpuCapabilities(value: unknown): value is BackendCapabilities {
+  if (!isRecord(value) || value.device !== "webgpu" || !Array.isArray(value.computations)
+    || !value.computations.every((computation: unknown) => typeof computation === "string")
+    || typeof value.gradients !== "boolean" || typeof value.maximumTensorBytes !== "number"
+    || !Number.isSafeInteger(value.maximumTensorBytes) || value.maximumTensorBytes < 0
+    || !Array.isArray(value.storageEncodings) || value.storageEncodings.length === 0) return false;
+
+  const seen = new Set<unknown>();
+  for (const encoding of value.storageEncodings) {
+    if (!TENSOR_STORAGE_ENCODINGS.some(known => known === encoding) || seen.has(encoding)) return false;
+    seen.add(encoding);
+  }
+  return true;
+}
+
+export function snapshotWebGpuCapabilities(value: BackendCapabilities): BackendCapabilities {
+  return Object.freeze({ ...value, computations: Object.freeze([...value.computations]),
+    storageEncodings: Object.freeze([...value.storageEncodings]) });
 }
 
 /** Detach acquired metadata as well as counters from the connection owner. */

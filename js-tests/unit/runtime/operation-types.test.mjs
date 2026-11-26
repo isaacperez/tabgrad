@@ -113,7 +113,7 @@ test("capability admission indexes a frozen advertisement once as catalogue and 
         const kind = index === kindCount - 1 ? "add-f32" : `future-${index}`;
         Object.defineProperty(kinds, index, { get() { kindReads++; return kind; } });
       }
-      const capabilities = { device: "cpu", computations: Object.freeze(kinds) };
+      const capabilities = { device: "cpu", storageEncodings: ["ieee754-binary32-native"], computations: Object.freeze(kinds) };
       const captured = capturedProgram("add-f32");
       for (let output = 3; output < nodeCount + 2; output++) {
         captured.values.push({ ...captured.values[2], slot: output, storageSlot: output });
@@ -129,7 +129,7 @@ test("capability admission indexes a frozen advertisement once as catalogue and 
 });
 
 test("mutable capability advertisements are revalidated and cannot admit unregistered kinds", () => {
-  const capabilities = { device: "cpu", computations: ["add-f32", "future-kind"] };
+  const capabilities = { device: "cpu", storageEncodings: ["ieee754-binary32-native"], computations: ["add-f32", "future-kind"] };
   assertBackendProgram(capabilities, capturedProgram("add-f32"));
   for (const kind of ["future-kind", "add-f32"]) {
     capabilities.computations.shift();

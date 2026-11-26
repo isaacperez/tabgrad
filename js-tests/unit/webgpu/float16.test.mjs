@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { ExecutableProgram } from "../../../dist/execution/executable-program.js";
 import { ExecutionTicket } from "../../../dist/execution/execution-ticket.js";
 import { hostTensorPayload, decodeTensorPayload } from "../../../dist/execution/tensor-payload.js";
+import { createConnectedRuntimeSession } from "../../../dist/runtime/runtime.js";
 import { WebGpuBackend } from "../../../dist/backends/webgpu/webgpu-backend.js";
 import { planKernelDispatch, pipelineSource } from "../../../dist/backends/webgpu/kernel-dispatch.js";
 import { executionDevice } from "./helpers/webgpu-device.mjs";
@@ -34,6 +35,27 @@ for (const [limit, value] of [["maxBufferSize", 8], ["maxStorageBufferBindingSiz
     } finally { await backend.close(); }
   });
 }
+test("a GPU can create and observe float16 without offering float16 arithmetic", async () => {
+  const device = executionDevice();
+  device.limits.maxStorageBuffersPerShaderStage = 3;
+  const backend = new WebGpuBackend(device);
+  const session = createConnectedRuntimeSession(backend);
+  const input = session.tensor([1, 2], { dtype: "float16", device: "webgpu" });
+  const view = input.view([1, 2]);
+  try {
+    assert.ok(backend.capabilities.storageEncodings.includes("ieee754-binary16-native"));
+    assert.throws(() => view.add(view), { code: "BACKEND_CAPABILITY_MISMATCH" });
+    assert.deepEqual([...await view.toArray()], [1, 2]);
+    assert.deepEqual([...await input.toArray()], [1, 2]);
+    assert.equal(backend.diagnostics().uploadBytes, 4, "the alias borrows the same resident tensor");
+    assert.equal(backend.diagnostics().kernelCalls, 0);
+  } finally {
+    view.close();
+    input.close();
+    await session.close();
+  }
+});
+
 for (const count of [0, 1, 2, 3, 5]) {
   test(`half GPU ${count}-element bounded transfers align physical bytes without exposing padding`, async () => {
     const device = executionDevice();

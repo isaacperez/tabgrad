@@ -41,19 +41,19 @@ function copyProgramValue(value: ProgramValue): ProgramValue {
   return Object.freeze(captured);
 }
 
-function valueElements(value: ProgramValue, counts: Map<ProgramSlot, number>): number {
-  const known = counts.get(value.slot);
+function valueElements(value: ProgramValue, counts: number[]): number {
+  const known = counts[value.slot];
   if (known !== undefined) return known;
   if (value.shape.some(dimension => !Number.isSafeInteger(dimension) || dimension < 0)) {
     throw new TypeError("Program storage requires nonnegative safe dimensions.");
   }
   const count = value.shape.includes(0) ? 0 : value.shape.reduce((size, dimension) => size * dimension, 1);
   if (!Number.isSafeInteger(count)) throw new TypeError("Program storage exceeds safe element arithmetic.");
-  counts.set(value.slot, count);
+  counts[value.slot] = count;
   return count;
 }
 
-function requireContiguousValue(slot: ProgramSlot, values: readonly ProgramValue[], counts: Map<ProgramSlot, number>): ProgramValue {
+function requireContiguousValue(slot: ProgramSlot, values: readonly ProgramValue[], counts: number[]): ProgramValue {
   const value = values[slot];
   if (!Number.isSafeInteger(slot) || slot < 0 || value === undefined || value.slot !== slot
     || value.layout !== "contiguous"
@@ -115,6 +115,7 @@ export class ExecutableProgram {
   /** Physical input occurrences aggregated across aliases of each storage slot. */
   readonly storageUseCounts: readonly number[];
   readonly result: ProgramSlot;
+  readonly #elementCounts: readonly number[];
 
   constructor(
     values: readonly ProgramValue[],
@@ -125,8 +126,9 @@ export class ExecutableProgram {
     this.domain = this.values[result]?.device === "webgpu" ? "webgpu" : "webassembly-cpu";
     const inputUseCounts = new Array<number>(this.values.length).fill(0);
     const storageUseCounts = new Array<number>(this.values.length).fill(0);
-    const elementCounts = new Map<ProgramSlot, number>();
+    const elementCounts = new Array<number>(this.values.length);
     for (let slot = 0; slot < this.values.length; slot++) requireContiguousValue(slot, this.values, elementCounts);
+    this.#elementCounts = elementCounts;
     if (!Number.isSafeInteger(result) || result < 0 || this.values[result] === undefined) {
       throw new TypeError("Program result requires a valid value slot.");
     }
@@ -163,5 +165,10 @@ export class ExecutableProgram {
     this.storageUseCounts = Object.freeze(storageUseCounts);
     this.result = result;
     Object.freeze(this);
+  }
+
+  /** Validated logical extent, reconstructed locally at the worker boundary. */
+  elementCount(slot: ProgramSlot): number {
+    return this.#elementCounts[slot]!;
   }
 }

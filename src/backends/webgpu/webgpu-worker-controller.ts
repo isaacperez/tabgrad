@@ -1,9 +1,8 @@
-import type { BackendCapabilities } from "../../execution/backend.js";
 import { TabgradError } from "../../shared/errors.js";
 import { isRecord } from "../../shared/object-shape.js";
 import type { WebGpuDiagnostics } from "./webgpu-backend.js";
 import { decodeGpuFailure } from "./webgpu-failure-diagnostic.js";
-import { WEBGPU_PAYLOAD_PROTOCOL_VERSION, GPU_ACCOUNTED, GPU_CONTROL_LENGTH, GPU_METRIC_LENGTH, readGpuMetrics, retireGpuConnection, snapshotWebGpuDiagnostics, type WebGpuConnection, type WebGpuConnectionData } from "./webgpu-connection.js";
+import { WEBGPU_PAYLOAD_PROTOCOL_VERSION, GPU_ACCOUNTED, GPU_CONTROL_LENGTH, GPU_METRIC_LENGTH, isWebGpuCapabilities, readGpuMetrics, retireGpuConnection, snapshotWebGpuCapabilities, snapshotWebGpuDiagnostics, type WebGpuConnection, type WebGpuConnectionData } from "./webgpu-connection.js";
 
 export type { WebGpuConnection } from "./webgpu-connection.js";
 
@@ -129,12 +128,7 @@ class GpuWorkerController implements WebGpuWorkerController {
         void this.close();
         return;
       }
-      if (!isRecord(message.capabilities) || !isRecord(message.diagnostics)
-        || message.capabilities.device !== "webgpu" || !Array.isArray(message.capabilities.computations)
-        || !message.capabilities.computations.every((computation: unknown) => typeof computation === "string")
-        || typeof message.capabilities.gradients !== "boolean"
-        || typeof message.capabilities.maximumTensorBytes !== "number"
-        || !Number.isSafeInteger(message.capabilities.maximumTensorBytes) || message.capabilities.maximumTensorBytes < 0) {
+      if (!isWebGpuCapabilities(message.capabilities) || !isRecord(message.diagnostics)) {
         this.#setup.reject(new TabgradError("BACKEND_LOAD_FAILED", "The GPU worker returned invalid readiness data."));
         void this.close();
         return;
@@ -142,7 +136,7 @@ class GpuWorkerController implements WebGpuWorkerController {
       this.#connection = Object.freeze({ connectionType: "tabgrad-webgpu", protocolVersion: WEBGPU_PAYLOAD_PROTOCOL_VERSION,
         port: this.#channel.port2, control: this.#control.buffer as SharedArrayBuffer,
         supervision: this.#supervision.port2, metrics: this.#metrics,
-        capabilities: message.capabilities as unknown as BackendCapabilities,
+        capabilities: snapshotWebGpuCapabilities(message.capabilities),
         diagnostics: message.diagnostics as unknown as WebGpuDiagnostics });
       this.#setup.resolve(this);
     } else if (message.kind === "closed") {
