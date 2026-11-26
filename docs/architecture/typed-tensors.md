@@ -155,7 +155,7 @@ It is not a full model-inference or training contract.
 | Python observation | `tolist()` returns ordinary numeric values through the same decoding boundary. |
 | Eligibility | This domain excludes tracking/backward, persistent gradient state, SGD and mutation, including same-type and cross-type copy. Reject unsupported requests before history, pins or version changes. |
 
-The closed domain also excludes float16 sum/matmul, numeric-operand overloads,
+The pointwise domain also excludes numeric-operand overloads,
 mixed-type promotion, inferred dtype, `.to`, dtype-reinterpreting views and
 custom `grad_dtype`. These are Tabgrad domain boundaries, not claims that
 native PyTorch lacks those capabilities. They do not restrict existing
@@ -174,6 +174,76 @@ guarantee it. Software/integer arithmetic or a qualified specialized path may
 implement the contract; the architecture requires neither `shader-f16` nor a
 new dependency. Selecting a dependency or optional feature retains the normal
 integration, qualification and approval requirements.
+
+## Compact floating reductions and matrix products
+
+The [binary16 arithmetic decision](https://github.com/isaacperez/tabgrad/issues/509)
+defines the forward numerical contract for total sum and dense two-dimensional
+matrix products. The operation references and each release's compatibility
+record identify the implementations and environments that are qualified.
+
+Both forms retain contiguous, same-device operands and a binary16 result.
+Total sum accepts an input of any admitted rank, including a scalar, and
+produces a distinct scalar. Dense matrix multiplication uses the existing
+two-dimensional shape and contraction rules. A zero output dimension produces
+an empty result. A zero contraction with nonempty output produces positive
+zeros. Compact types participate only in forward execution under this
+contract. The float32 derivative and receiving paths keep their own rules.
+
+### Total sum
+
+Accumulate exactly over the stored finite binary16 inputs on CPU and WebGPU.
+Round the total once to nearest binary16, with ties to even. Every exact zero
+produces positive zero, including an empty tensor and an input of negative
+zeros. Any NaN or both signs of infinity produce NaN. Otherwise a single
+infinity sign dominates all finite inputs. Overflow at the final rounding
+produces infinity of the corresponding sign.
+
+A finite half is a signed integer in units of 2⁻²⁴ with magnitude below 2⁴⁰.
+A u32 element count bounds every disjoint partial and the finite total below
+2⁷², so signed 96-bit accumulation suffices. Backend-private stage layout,
+partial representation and dispatch remain with the reduction owner. Check
+u32 ranges and nonoverlapping stage slices before execution.
+
+### Dense matrix product
+
+For each output element start at positive zero and visit contraction indices
+in ascending order. Compute each exact product plus accumulator with one
+nearest-even binary32 rounding. Preserve the exceptional-value and signed-zero
+behavior of the [float32 matrix contract](float32-matrix-product.md). Round
+the final value once to nearest binary16, ties to even, retaining the sign of
+a negative value rounded to zero. A finite binary16 product fits exactly in
+binary32. A specialization must still establish equivalent accumulation and
+terminal rounding, including exceptional values. WGSL builtins alone do not
+establish that equivalence.
+
+The backends keep compact operands and outputs resident. A GPU writer owns
+a complete packed word, including separately indexed neighboring matrix
+elements when a word crosses a row boundary. Decode values inside the
+arithmetic path without full-size float32 copies of operands or results.
+Private reduction partials and scalar accumulators can be wider. Dtype-specific
+forward selection and stage planning use the existing semantic and physical
+owners.
+
+### Comparison boundary
+
+Native PyTorch may associate the same values differently. On the observed
+PyTorch 2.14 CPU path, the total of `[65504, 2**-24, -65504]` rounded to zero,
+while the exact total preserves the least positive half subnormal. A padded
+arrangement retained that subnormal in PyTorch. Arithmetic comparisons
+must identify these association-sensitive cases separately from ordinary
+value comparisons. Test the exact contract with an independent oracle and
+the accepted public call forms against the pinned native oracle.
+
+Float32 accumulation on both devices or float32 CPU with exact GPU sum
+can reduce implementation cost, with association-dependent results.
+The selected total sum gives CPU and WebGPU a common exact result rule.
+The matrix product instead preserves the existing contraction order and
+avoids adding a separate exact-dot contract. The experimental record in
+[#509](https://github.com/isaacperez/tabgrad/issues/509) establishes numerical
+feasibility. Timing and stage scratch costs require representative evidence
+from the actual kernels. A material cost or a failed qualification warrants
+review of the design. Other compact formats require their own range evidence.
 
 ## Preserve derivative and protocol domains
 
