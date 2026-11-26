@@ -3,6 +3,8 @@ use crate::pointwise::{Pointwise, broadcast};
 
 use crate::binary16::{decode, encode};
 
+pub(crate) const POINTWISE_CAPABILITIES: u32 = 256;
+
 trait Arithmetic {
     fn calculate(left: f32, right: f32) -> f32;
 }

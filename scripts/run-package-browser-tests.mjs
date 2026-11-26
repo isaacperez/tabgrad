@@ -1,4 +1,4 @@
-import { runFloat16Conformance } from "./float16-conformance.mjs";
+import { runDTypeConformance } from "./dtype-conformance.mjs";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { cp, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
@@ -145,10 +145,10 @@ async function runCandidateProfile(fixture, browser, executable, version, mode) 
       || path === "vendor/tabgrad/python.js"));
     if (mode === "gpu") await runDispatchProfiles(fixture, browser, executable, version, notes);
     if (mode === "direct" || mode === "python" || mode === "gpu") {
-      await runFloat16Conformance({ browser, executable, version, language: mode === "direct" ? "javascript" : "python",
+      await runDTypeConformance({ browser, executable, version, language: mode === "direct" ? "javascript" : "python",
         device: mode === "gpu" ? "webgpu" : "cpu", distributionDirectory: join(fixture.packageDirectory, "dist"),
         reportNote: message => notes.push(message.trimEnd()) });
-      if (mode === "gpu") await runFloat16Conformance({ browser, executable, version, language: "javascript",
+      if (mode === "gpu") await runDTypeConformance({ browser, executable, version, language: "javascript",
         device: "webgpu", distributionDirectory: join(fixture.packageDirectory, "dist"),
         reportNote: message => notes.push(message.trimEnd()) });
       notes.push("Binary16 construction, stored pointwise outputs, broadcasting and resource closure passed from installed bytes.");

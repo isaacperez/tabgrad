@@ -9,6 +9,7 @@ from math import prod
 from operator import index
 from types import NotImplementedType, TracebackType
 from typing import (
+    TYPE_CHECKING,
     Literal,
     NoReturn,
     SupportsIndex,
@@ -130,9 +131,13 @@ class dtype:
 _definitions = cast("list[_DTypeFacts]", loads(_bridge.dtypeDefinitions()))
 _dtypes_by_name = {facts["name"]: object.__new__(dtype) for facts in _definitions}
 _dtype_facts = {id(_dtypes_by_name[facts["name"]]): facts for facts in _definitions}
-float32 = _dtypes_by_name["float32"]
-float16 = _dtypes_by_name["float16"]
-_float32_facts = _dtype_facts[id(float32)]
+_float32_facts = _dtype_facts[id(_dtypes_by_name["float32"])]
+# Runtime names come from the bridge; retain static types for the public API.
+if TYPE_CHECKING:
+    float16: dtype
+    float32: dtype
+else:
+    globals().update(_dtypes_by_name)
 _explicit_dtype_error = (
     "Tabgrad requires explicit dtype="
     + " or ".join(f"torch.{name}" for name in _dtypes_by_name)
@@ -714,8 +719,6 @@ __all__ = [
     "autograd",
     "device",
     "dtype",
-    "float16",
-    "float32",
     "matmul",
     "mul",
     "no_grad",
@@ -723,3 +726,7 @@ __all__ = [
     "sum",
     "tensor",
 ]
+if TYPE_CHECKING:
+    __all__ += ["float16", "float32"]
+else:
+    __all__[:] = sorted([*__all__, *_dtypes_by_name])

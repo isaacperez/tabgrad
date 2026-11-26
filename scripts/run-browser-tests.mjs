@@ -1,4 +1,4 @@
-import { runFloat16Conformance } from "./float16-conformance.mjs";
+import { runDTypeConformance } from "./dtype-conformance.mjs";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
@@ -66,7 +66,7 @@ try {
     const executable = await resolveBrowser(browser);
     const version = browserVersion(executable);
     for (const language of ["javascript", "python"]) {
-      await runFloat16Conformance({ browser, executable, version, language, device: "cpu" });
+      await runDTypeConformance({ browser, executable, version, language, device: "cpu" });
       process.stdout.write(`PASS ${browser.name} float16 ${language} CPU\n`);
     }
     process.stdout.write(`${browser.name}: ${version}\n`);

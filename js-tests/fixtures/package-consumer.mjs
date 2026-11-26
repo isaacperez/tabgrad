@@ -74,7 +74,7 @@ export { attachPython } from ${JSON.stringify(`${fixture.metadata.name}/python`)
     const manifest = JSON.parse(await readFile(join(fixture.packageDirectory, "dist/manifest.json"), "utf8"));
     const corrupt = structuredClone(manifest);
     for (const variant of corrupt.variants) variant.sha256 = "0".repeat(64);
-    for (const [path, value] of [["/corrupt.json", corrupt], ["/incompatible.json", { ...manifest, abiVersion: 2 }]]) {
+    for (const [path, value] of [["/corrupt.json", corrupt], ["/incompatible.json", { ...manifest, abiVersion: manifest.abiVersion + 1 }]]) {
       server.virtualResponses.set(path, { body: Buffer.from(JSON.stringify(value)), contentType: "application/json" });
     }
     for (const [path, code] of [["missing.json", "BACKEND_LOAD_FAILED"], ["corrupt.json", "BACKEND_HASH_MISMATCH"], ["incompatible.json", "BACKEND_MANIFEST_INVALID"]]) {
@@ -93,7 +93,7 @@ export { attachPython } from ${JSON.stringify(`${fixture.metadata.name}/python`)
     const interpreter = { version: "314.0.6", ffi: { PyProxy: class {} },
       runPython() { calls += 1; throw new Error("Unexpected interpreter entry"); },
       async runPythonAsync() { calls += 1; throw new Error("Unexpected interpreter entry"); } };
-    server.virtualResponses.set("/python/old.json", { body: Buffer.from(JSON.stringify({ ...python, bridgeVersion: 6 })), contentType: "application/json" });
+    server.virtualResponses.set("/python/old.json", { body: Buffer.from(JSON.stringify({ ...python, bridgeVersion: python.bridgeVersion + 1 })), contentType: "application/json" });
     await assert.rejects(attachPython(interpreter, { manifestUrl: new URL("python/old.json", origin) }), error => error.code === "PYTHON_ASSET_INVALID");
     server.virtualResponses.set("/python/bootstrap.py", { body: Buffer.from("corrupt source"), contentType: "text/plain" });
     await assert.rejects(attachPython(interpreter, { manifestUrl: new URL("python/manifest.json", origin) }), error => error.code === "PYTHON_ASSET_INVALID");

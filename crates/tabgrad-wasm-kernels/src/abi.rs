@@ -11,7 +11,6 @@ const CAPABILITY_ADD_ALPHA_F32: u32 = 16;
 const CAPABILITY_MATMUL_F32: u32 = 32;
 const CAPABILITY_BROADCAST_F32: u32 = 64;
 const CAPABILITY_REDUCE_F32: u32 = 128;
-const CAPABILITY_POINTWISE_F16: u32 = 256;
 pub(crate) const STATUS_INVALID_GEOMETRY: u32 = 4;
 pub(crate) const FLOAT_ALIGNMENT: u32 = align_of::<f32>() as u32;
 
@@ -62,7 +61,7 @@ pub extern "C" fn tabgrad_capabilities() -> u32 {
         | CAPABILITY_MATMUL_F32
         | CAPABILITY_BROADCAST_F32
         | CAPABILITY_REDUCE_F32
-        | CAPABILITY_POINTWISE_F16
+        | crate::half::POINTWISE_CAPABILITIES
 }
 
 #[unsafe(no_mangle)]

@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { wasmProfile } from "./wasm-profile.mjs";
 import { assertCpuArtifactAbi, assertCpuMemoryImport, cpuArenaBase } from "../dist/backends/cpu/artifact-abi.js";
-import { CPU_ABI_VERSION, CPU_CAPABILITIES } from "../dist/backends/cpu/kernel-catalogue.js";
+import { CPU_ABI_VERSION, CPU_CAPABILITIES, CPU_MODULE_VERSION } from "../dist/backends/cpu/kernel-catalogue.js";
 
 const variants = [];
 for (const descriptor of [
@@ -28,7 +28,7 @@ for (const descriptor of [
 
 const manifest = {
   schemaVersion: 1,
-  moduleVersion: wasmProfile.moduleVersion,
+  moduleVersion: CPU_MODULE_VERSION,
   abiVersion: CPU_ABI_VERSION,
   addressWidth: 32,
   sharedMemory: false,

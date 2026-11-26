@@ -301,7 +301,7 @@ test("failure reports preserve observed admission but do not claim unavailable b
 test("retained qualification needs no verifier dist, build or matching checkout metadata", async context => {
   const input = await packageFixture(context, { fullRuntime: true });
   const verifier = join(input.directory, "unrelated-verifier");
-  const inputs = ["scripts/run-package-browser-tests.mjs", "scripts/float16-conformance.mjs", "scripts/package-artifact.mjs",
+  const inputs = ["scripts/run-package-browser-tests.mjs", "scripts/dtype-conformance.mjs", "scripts/package-artifact.mjs",
     "scripts/package-registry.mjs", "scripts/package-registry-transport.mjs",
     "scripts/browser-harness.mjs", "scripts/browser-run-diagnostics.mjs",
     ...["package-application", "package-consumer", "distribution-fixture-server"]

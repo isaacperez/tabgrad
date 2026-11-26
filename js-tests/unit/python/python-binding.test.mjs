@@ -1489,6 +1489,13 @@ old_factory = torch.tensor
 import torch
 assert torch is not old_torch
 assert torch.float32 is not old_torch.float32 and torch.float16 is not old_torch.float16
+assert not hasattr(torch, "bfloat16")
+public_symbols = {}
+exec("from torch import *", public_symbols)
+assert {name: value for name, value in public_symbols.items() if isinstance(value, torch.dtype)} == {
+    "float32": torch.float32, "float16": torch.float16,
+}
+del public_symbols
 class ForeignDType:
     def __hash__(self):
         raise AssertionError("dtype must not be hashed")

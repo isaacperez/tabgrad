@@ -1,6 +1,5 @@
 /** The matched CPU artifact profile; a session may choose a smaller maximum. */
 export const CPU_MEMORY_PROFILE = Object.freeze({
-  moduleVersion: 9,
   initialPages: 32,
   maximumPages: 4096,
   alignment: 16,

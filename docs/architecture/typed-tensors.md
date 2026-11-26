@@ -265,5 +265,6 @@ equivalence bound. The compatibility record defines public support.
 Migrate one owner at a time, retaining explicit registrations as a rollback
 option. Compare current float32 and float16 semantics, copies, resources and
 affected execution phases for each increment. Qualify an extension from the
-exact installed archive. Reconsider the finite executable vocabulary when an
+exact installed archive using the [compact dtype procedure](../reference/package-qualification.md#qualify-an-added-compact-floating-dtype).
+Reconsider the finite executable vocabulary when an
 actual signature cannot fit its shared type and operation families.
