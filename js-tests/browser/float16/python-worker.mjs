@@ -13,7 +13,7 @@ addEventListener('message', async ({ data }) => {
     const beforeClose = binding.diagnostics();
     await binding.close();
     postMessage({ ok: true, pyodide: interpreter.version, worker: true, jspiAvailable: false,
-      cases: { construction: data.reference.construction.words.length, pointwise: data.reference.pointwise.left.length, broadcasts: 8, channelCompositions: 1 },
+      cases: { construction: data.reference.construction.words.length, pointwise: data.reference.pointwise.left.length, broadcasts: 10, oddDense: 2, channelCompositions: 1 },
       beforeClose, final: binding.diagnostics() });
   } catch (error) { postMessage({ ok: false, error: String(error) }); }
   finally { await binding?.close(); }

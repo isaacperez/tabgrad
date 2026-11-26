@@ -64,5 +64,3 @@ ${entry.signature}
 }
 `;
 }
-
-export const WEBGPU_ADDITION_SOURCE = createAdditionSource();

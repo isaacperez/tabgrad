@@ -15,5 +15,3 @@ ${entry.signature}
 }
 `;
 }
-
-export const WEBGPU_EXPANSION_SOURCE = createExpansionSource();

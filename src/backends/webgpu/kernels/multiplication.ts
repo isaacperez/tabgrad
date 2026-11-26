@@ -85,5 +85,3 @@ ${entry.signature}
 }
 `;
 }
-
-export const WEBGPU_MULTIPLICATION_SOURCE = createMultiplicationSource();

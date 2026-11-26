@@ -20,11 +20,11 @@ function word(value: number): number {
   return value;
 }
 
-export function pointwiseParameters(geometry: BroadcastGeometry, limits: BroadcastDispatchLimits): Uint32Array {
+export function pointwiseParameters(geometry: BroadcastGeometry, limits: BroadcastDispatchLimits, fixedWidth?: number): Uint32Array {
   const { dimensions, strides } = geometry.execution;
   storageBytes((3 + dimensions.length * 3) * 4, limits);
   const inner = dimensions.at(-1) ?? 1;
-  const width = inner % 4 === 0 && strides.every(operand => (operand.at(-1) ?? 0) <= 1) ? 4 : 1;
+  const width = fixedWidth ?? (inner % 4 === 0 && strides.every(operand => (operand.at(-1) ?? 0) <= 1) ? 4 : 1);
   const result = new Uint32Array(3 + dimensions.length * 3);
   result.set([dimensions.length, word(geometry.elements), width]);
   dimensions.forEach((dimension, axis) => result.set([word(dimension), word(strides[0]![axis]!), word(strides[1]![axis]!)], 3 + axis * 3));

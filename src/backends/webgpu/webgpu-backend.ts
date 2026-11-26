@@ -1,5 +1,6 @@
 import { planKernelDispatch, requestedPipelines, selectPipeline, pipelineSource, type PipelineKey, type PipelineSelection,
-  type KernelDispatchPlan, type WebGpuComputation, type WebGpuComputationKind } from "./kernel-dispatch.js";
+  type KernelDispatchPlan } from "./kernel-dispatch.js";
+import { webGpuComputations, webGpuKernel } from "./kernel-catalogue.js";
 import { gpuTensorCapacityBytes } from "./webgpu-capacity.js";
 import type { BackendCapabilities, ExecutionBackend, ProgramBinding, ResidentAllocation } from "../../execution/backend.js";
 import { assertTensorPayload, hostTensorPayload, type HostTensorPayload } from "../../execution/tensor-payload.js";
@@ -10,7 +11,6 @@ import type { ExecutableProgram, LoweredComputation, ProgramSlot } from "../../e
 import { tensorElementCount } from "../../runtime/tensor-shape.js";
 import { WEBGPU_COEFFICIENT_UNIFORM_BYTES } from "./kernels/coefficient-addition.js";
 import { WEBGPU_MATRIX_UNIFORM_BYTES } from "./kernels/matrix-product.js";
-import { WEBGPU_SUM_WORKGROUP_BYTES, WEBGPU_SUM_WORKGROUP_SIZE } from "./kernels/sum.js";
 import { ExecutionTicket } from "../../execution/execution-ticket.js";
 import { WEBGPU_RECEIVING_UNIFORM_BYTES } from "./kernels/receiving.js";
 
@@ -98,23 +98,7 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
     this.#limits = Object.freeze({ maxBufferSize: device.limits.maxBufferSize,
       maxStorageBufferBindingSize: device.limits.maxStorageBufferBindingSize,
       maxComputeWorkgroupsPerDimension: device.limits.maxComputeWorkgroupsPerDimension });
-    const sumSupported = device.limits.maxBufferSize >= 16
-      && device.limits.maxComputeWorkgroupStorageSize >= WEBGPU_SUM_WORKGROUP_BYTES
-      && device.limits.maxComputeWorkgroupSizeX >= WEBGPU_SUM_WORKGROUP_SIZE
-      && device.limits.maxComputeInvocationsPerWorkgroup >= WEBGPU_SUM_WORKGROUP_SIZE;
-    const computations: WebGpuComputationKind[] = ["add-f32"];
-    if (device.limits.maxBufferSize >= WEBGPU_COEFFICIENT_UNIFORM_BYTES) computations.push("add-alpha-f32");
-    if (device.limits.maxBufferSize >= WEBGPU_MATRIX_UNIFORM_BYTES) computations.push("matmul-f32");
-    computations.push("mul-f32");
-    if (device.limits.maxStorageBuffersPerShaderStage >= 4 && device.limits.maxBufferSize >= 12
-      && device.limits.maxStorageBufferBindingSize >= 12) {
-      computations.push("add-f16", "mul-f16");
-    }
-    if (sumSupported) computations.push("sum-f32");
-    if (sumSupported && device.limits.maxBufferSize >= WEBGPU_RECEIVING_UNIFORM_BYTES
-      && device.limits.maxStorageBuffersPerShaderStage >= 3) computations.push("reduce-f32");
-    computations.push("expand-f32");
-    this.capabilities = Object.freeze({ device: "webgpu", computations: Object.freeze(computations),
+    this.capabilities = Object.freeze({ device: "webgpu", computations: webGpuComputations(device.limits),
       gradients: true, maximumTensorBytes: gpuTensorCapacityBytes(this.#limits) });
     void device.lost.then((info) => {
       if (!this.#closed) this.#retire(new TabgradError("BACKEND_STATUS_ERROR", "The WebGPU device was lost.", {
@@ -144,7 +128,7 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
     this.assertAvailable();
     const requested = new Map<PipelineKey, { pipeline: PipelineSelection; slot: ProgramSlot | undefined }>();
     if (program === undefined) {
-      const pipeline = selectPipeline("add-f32", "linear");
+      const pipeline = selectPipeline(webGpuKernel("add-f32")!.direct, "linear");
       requested.set(pipeline.key, { pipeline, slot: undefined });
     } else {
       const plans = this.#planProgram(program);
@@ -184,10 +168,9 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
     }
     return program.computations.map(computation => {
       try {
-        // Admission above checked this device's advertised subset before narrowing.
-        const plan = planKernelDispatch(computation as WebGpuComputation, program, this.#limits);
-        if (requestedPipelines(plan).some(pipeline => pipeline.kind.startsWith("broadcast-"))
-          && this.#device.limits.maxStorageBuffersPerShaderStage < 4) {
+        const plan = planKernelDispatch(computation, program, this.#limits);
+        if (plan.path === "pointwise"
+          && this.#device.limits.maxStorageBuffersPerShaderStage < plan.pipeline.minimumStorageBindings) {
           throw new TabgradError("BACKEND_CAPABILITY_MISMATCH", "Unsupported WebGPU broadcast bindings.");
         }
         return plan;
@@ -317,7 +300,7 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
       const pipeline = this.#pipelines.get(plan.pipeline.key);
       if (pipeline === undefined) throw new Error("WebGPU computation was not prepared.");
       const entries = [...inputs, output].map((allocation, binding) => ({ binding, resource: { buffer: allocation.buffer } }));
-      if (computation.kind === "add-alpha-f32") {
+      if (plan.uniform === "coefficient") {
         const coefficient = this.#allocate(WEBGPU_COEFFICIENT_UNIFORM_BYTES, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST);
         storage.created.add(coefficient);
         // Each dispatch retains its own packet, including writes before a failed submit.
@@ -325,7 +308,7 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
         this.#device.queue.writeBuffer(coefficient.buffer, 0, new Uint32Array([computation.alphaBits!, 0, 0, 0]));
         entries.push({ binding: 3, resource: { buffer: coefficient.buffer } });
       }
-      if (computation.kind === "matmul-f32") {
+      if (plan.uniform === "matrix") {
         const flags = computation.matrixFlags!;
         const left = program.values[computation.inputs[0]!]!.shape;
         const right = program.values[computation.inputs[1]!]!.shape;

@@ -27,7 +27,7 @@ export async function runFloat16Conformance({ browser, executable, version, lang
           assert.equal(result.ok, true, JSON.stringify(result.error));
           assert.equal(result.language, language); assert.equal(result.device, device);
           assert.equal(result.grid, grid);
-          assert.deepEqual(result.cases, { construction: 992, pointwise: 8976, broadcasts: 8, channelCompositions: 1 });
+          assert.deepEqual(result.cases, { construction: 992, pointwise: 8976, broadcasts: 10, oddDense: 2, channelCompositions: 1 });
           for (const name of ["liveTensorHandles", "liveTensorValues", "liveAllocationBytes", "liveRequestLeases"]) {
             assert.equal(result.final[name], 0, name);
           }

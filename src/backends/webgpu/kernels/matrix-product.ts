@@ -30,5 +30,3 @@ ${entry.signature}
 }
 `;
 }
-
-export const WEBGPU_MATRIX_SOURCE = createMatrixSource();
