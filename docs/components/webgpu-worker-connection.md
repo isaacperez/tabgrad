@@ -105,7 +105,7 @@ the program and invokes the existing backend's preparation and execution
 methods. A chain with many operations can therefore cross this boundary as
 one finite program rather than many semantic remote calls.
 
-The numerical payload domain is contiguous float32 and float16. Host bindings carry
+The numerical payload domain is contiguous float32, float16 and bfloat16. Host bindings carry
 an explicit dtype, encoding, element count and bounded byte view. The connected
 backend copies only that span before transferring its new buffer, so sending
 it cannot detach storage still owned by the semantic runtime or include unrelated

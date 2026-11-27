@@ -83,16 +83,22 @@ async function checkCompactMatrices(session, options, cases, decode) {
   const before = session.diagnostics();
   const a = session.tensor([2, 3], { ...options, shape: [2, 1] });
   const b = session.tensor([1, 2, -1], { ...options, shape: [1, 3] });
-  const product = a.matmul(b), scalar = product.sum();
-  a.close(); b.close(); product.close();
+  const bias = session.tensor([1, 0, 2], options);
+  const product = a.matmul(b), shifted = product.add(bias), scalar = shifted.sum();
+  a.close(); b.close(); bias.close(); product.close(); shifted.close();
   try {
-    sameValues(await scalar.toArray(), [10], 'resident matmul/sum');
-    const after = session.diagnostics();
-    const readback = device === 'cpu' ? after.wasmToHostBytes - before.wasmToHostBytes
-      : after.webgpu.readbackBytes - before.webgpu.readbackBytes;
-    if (readback !== 2) throw Error('Unexpected resident matrix readback bytes: ' + readback);
+    sameValues(await scalar.toArray(), [16], 'resident matmul/add/sum');
+    checkResidentMatrixTransfers(device, before, session.diagnostics());
   } finally { scalar.close(); }
   return cases.length;
+}
+
+export function checkResidentMatrixTransfers(device, before, after) {
+  const upload = device === 'cpu' ? after.hostToWasmBytes - before.hostToWasmBytes
+    : after.webgpu.uploadBytes - before.webgpu.uploadBytes;
+  const readback = device === 'cpu' ? after.wasmToHostBytes - before.wasmToHostBytes
+    : after.webgpu.readbackBytes - before.webgpu.readbackBytes;
+  if (upload !== 16 || readback !== 2) throw Error(`Unexpected resident matrix transfers: ${upload} uploaded, ${readback} read back`);
 }
 
 // 2,181 values span more than 17 groups of 128 and leave an odd tail.
@@ -283,5 +289,18 @@ assert check_half() == (${sumCases.length}, ${matrixCases.length})
 del check_half, _half_value, _half_check, _half_construct, _compact_dtype, _compact_fraction_bits
 gc.collect()
 `;
-  return { source, counts: { totalSums: sumCases.length, matrixProducts: matrixCases.length } };
+  const composition = matrices.length && sums.length ? `
+def check_resident_matrix() -> None:
+    options = dict(dtype=torch.${dtype}, device=${JSON.stringify(device)})
+    left = torch.tensor([[2.], [3.]], **options)
+    right = torch.tensor([[1., 2., -1.]], **options)
+    bias = torch.tensor([1., 0., 2.], **options)
+    result = ((left @ right) + bias).sum()
+    del left, right, bias
+    assert result.dtype is torch.${dtype} and result.tolist() == 16.
+check_resident_matrix()
+del check_resident_matrix
+gc.collect()
+` : undefined;
+  return { source, composition, counts: { totalSums: sumCases.length, matrixProducts: matrixCases.length } };
 }

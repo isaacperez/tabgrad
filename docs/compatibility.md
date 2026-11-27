@@ -99,7 +99,7 @@ qualified environments and release-specific claims.
       "arithmetic": true,
       "source": "docs/reference/tensor-sum.md",
       "fragment": "call-forms-and-result",
-      "limits": "Adds all elements and returns a scalar of the input dtype. Float16 supports forward execution. The call has no axis or dtype option.",
+      "limits": "Adds all elements and returns a scalar of the input dtype. Float16 and bfloat16 support forward execution. The call has no axis or dtype option.",
       "variants": [
         {"inputs": ["float32"], "result": "float32", "cpu": {"status": "supported", "gradients": "first-order"}, "webgpu": {"status": "supported", "gradients": "first-order"}},
         {"inputs": ["float16"], "result": "float16", "cpu": {"status": "supported", "gradients": "none"}, "webgpu": {"status": "supported", "gradients": "none"}},
@@ -114,7 +114,7 @@ qualified environments and release-specific claims.
       "arithmetic": true,
       "source": "docs/reference/tensor-matmul.md",
       "fragment": "calls-and-differentiation",
-      "limits": "Multiplies two dense, contiguous matrices of the same dtype on the same device. Float16 supports forward execution.",
+      "limits": "Multiplies two dense, contiguous matrices of the same dtype on the same device. Float16 and bfloat16 support forward execution.",
       "variants": [
         {"inputs": ["float32", "float32"], "result": "float32", "cpu": {"status": "supported", "gradients": "first-order"}, "webgpu": {"status": "supported", "gradients": "first-order"}},
         {"inputs": ["float16", "float16"], "result": "float16", "cpu": {"status": "supported", "gradients": "none"}, "webgpu": {"status": "supported", "gradients": "none"}},
