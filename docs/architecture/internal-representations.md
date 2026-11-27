@@ -136,15 +136,15 @@ frontend object or later mutable learning-rate lookup crosses this boundary.
 The [SGD decision](cpu-sgd.md#coefficient-conversion-and-capture) owns its exact
 numerical meaning; other computations do not acquire a coefficient attribute.
 
-The matrix family includes `matmul-f32` and `matmul-f16` with required unsigned
+The matrix family includes `matmul-f32`, `matmul-f16` and `matmul-bf16` with required unsigned
 `matrixFlags` in 0–3. Bit 0 changes left indexing and bit 1 changes right indexing. Formation
 preserves the admitted orientation; reconstruction owns shape metadata and
 validates two contiguous operands and a result of the declared matching dtype,
 canonical whole-storage aliases, contraction, distinct output storage and
 selected-device agreement before preparation, including empty work. The
 [float32 matrix decision](float32-matrix-product.md) defines its recurrence and
-derivatives. The [float16 contract](typed-tensors.md#dense-matrix-product)
-defines compact forward arithmetic. Other computations
+derivatives. The [compact contracts](typed-tensors.md#compact-floating-reductions-and-matrix-products)
+define float16 and bfloat16 forward arithmetic. Other computations
 reject matrix attributes rather than interpreting them as defaults.
 
 It deliberately excludes:

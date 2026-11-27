@@ -254,9 +254,10 @@ and call-overhead requirements with simpler total maintenance.
 
 The raw ABI profile gives the general boundary above an exact,
 small instance. The generated JSON manifest has schema version 1 and module
-version 11. It declares ABI version 1, 32-bit addresses, non-shared memory, the
+version 12. It declares ABI version 1, 32-bit addresses, non-shared memory, the
 `add-f32`, `sum-f32`, `mul-f32`, `expand-f32`, `add-alpha-f32`, `matmul-f32`,
-`broadcast-f32`, `reduce-f32`, `pointwise-f16`, `sum-f16` and `matmul-f16` capabilities,
+`broadcast-f32`, `reduce-f32`, `pointwise-f16`, `sum-f16`, `matmul-f16`,
+`pointwise-bf16`, `sum-bf16` and `matmul-bf16` capabilities,
 one `env.memory` import, an initial 32-page memory, a
 maximum 4096-page memory, and 16-byte host-arena alignment. The actual imported
 memory uses the session's independently resolved maximum, 1024 pages by default.
@@ -277,19 +278,21 @@ memory, instantiates the compiled module, and validates these exports:
 | Export | Signature | Meaning |
 | --- | --- | --- |
 | `tabgrad_abi_version` | `() -> u32` | Returns `1` for this ABI profile. |
-| `tabgrad_capabilities` | `() -> u32` | Returns required capability bits: `add-f32` is 1, `sum-f32` is 2, `mul-f32` is 4, `expand-f32` is 8, `add-alpha-f32` is 16, `matmul-f32` is 32, `broadcast-f32` is 64, `reduce-f32` is 128, `pointwise-f16` is 256, `sum-f16` is 512 and `matmul-f16` is 1024. |
+| `tabgrad_capabilities` | `() -> u32` | Returns required capability bits: `add-f32` is 1, `sum-f32` is 2, `mul-f32` is 4, `expand-f32` is 8, `add-alpha-f32` is 16, `matmul-f32` is 32, `broadcast-f32` is 64, `reduce-f32` is 128, `pointwise-f16` is 256, `sum-f16` is 512, `matmul-f16` is 1024, `pointwise-bf16` is 2048, `sum-bf16` is 4096 and `matmul-bf16` is 8192. |
 | `tabgrad_arena_base` | `() -> u32` | Returns the first byte available to the host allocator. |
 | `tabgrad_add_f32` | `(left_offset, right_offset, output_offset, length) -> u32` | Adds two contiguous `float32` input ranges into a distinct output range. |
-| `tabgrad_sum_f32` / `tabgrad_sum_f16` | `(input_offset, output_offset, input_length) -> u32` | Reduces the contiguous input to a distinct scalar of its dtype. |
+| `tabgrad_sum_f32` / `tabgrad_sum_f16` / `tabgrad_sum_bf16` | `(input_offset, output_offset, input_length) -> u32` | Reduces the contiguous input to a distinct scalar of its dtype. |
 | `tabgrad_mul_f32` | `(left_offset, right_offset, output_offset, length) -> u32` | Multiplies two contiguous `float32` input ranges into a distinct output range. |
 | `tabgrad_expand_f32` | `(input_offset, output_offset, output_length) -> u32` | Repeats one stored scalar into a distinct contiguous output range. |
 | `tabgrad_add_alpha_f32` | `(parameter_offset, gradient_offset, output_offset, length, alpha_bits) -> u32` | Writes coefficient-bearing float32 addition into a distinct output range. The coefficient is captured float32 bits, not a memory address. |
-| `tabgrad_matmul_f32` / `tabgrad_matmul_f16` | `(left_offset, right_offset, output_offset, M, K, N, flags) -> u32` | Computes a matrix product with sequential binary32 accumulation and one terminal rounding to its result dtype. Flags 0–3 transpose the effective left (bit 0) or right (bit 1) indexing without copying storage. |
+| `tabgrad_matmul_f32` / `tabgrad_matmul_f16` / `tabgrad_matmul_bf16` | `(left_offset, right_offset, output_offset, M, K, N, flags) -> u32` | Computes a matrix product with sequential binary32 accumulation and one terminal rounding to its result dtype. Flags 0–3 transpose the effective left (bit 0) or right (bit 1) indexing without copying storage. |
 | `tabgrad_broadcast_add_f32` | `(left_offset, right_offset, output_offset, packet_offset, packet_words) -> u32` | Adds projected float32 pairs using a validated private geometry packet. |
 | `tabgrad_broadcast_mul_f32` | `(left_offset, right_offset, output_offset, packet_offset, packet_words) -> u32` | Multiplies projected float32 pairs using the same traversal and packet format. |
 | `tabgrad_receive_f32` | `(input_offset, output_offset, packet_offset, packet_words) -> u32` | Reduces each ordered receiving group with the ordinary CPU float32 sum tree. |
 | `tabgrad_add_f16` / `tabgrad_mul_f16` | `(left_offset, right_offset, output_offset, length) -> u32` | Computes one stored binary16 sum/product per element in disjoint two-byte ranges. |
 | `tabgrad_broadcast_add_f16` / `tabgrad_broadcast_mul_f16` | `(left_offset, right_offset, output_offset, packet_offset, packet_words) -> u32` | Uses the shared checked geometry and typed ranges for the float16 pointwise domain. |
+| `tabgrad_add_bf16` / `tabgrad_mul_bf16` | `(left_offset, right_offset, output_offset, length) -> u32` | Computes one stored bfloat16 sum/product per element in disjoint two-byte ranges. |
+| `tabgrad_broadcast_add_bf16` / `tabgrad_broadcast_mul_bf16` | `(left_offset, right_offset, output_offset, packet_offset, packet_words) -> u32` | Uses the same checked traversal and two-byte ranges for bfloat16. |
 
 Both `kernels-scalar.wasm` and `kernels-simd128.wasm` implement the complete
 module capability profile. The module version identifies that profile; the
@@ -312,7 +315,7 @@ scalar expansion belongs to the [functional gradient reference](../reference/fun
 
 All offsets and lengths are WebAssembly `i32` values interpreted as unsigned
 32-bit integers. Each kernel checks its payload alignment (four bytes for
-float32 and two for float16), four-byte packet alignment, and the byte ranges
+float32 and two for float16 or bfloat16), four-byte packet alignment, and the byte ranges
 defined by its signature within the imported memory, and non-overlap between
 the output and nonempty inputs. Input-to-input aliasing is legal. Status 0 means success; status 1 means
 misalignment, status 2 means an out-of-bounds range, and status 3 means output
@@ -528,8 +531,7 @@ The following invariants protect that path:
 
 These properties make efficient transformer inference and training possible;
 they do not establish complete large-language-model throughput, production
-memory scaling, a supported parameter count, quantization, 16-bit floating
-point (`float16`) and brain floating point (`bfloat16`) data types, fused
+memory scaling, a supported parameter count, quantization, fused
 attention, automatic
 differentiation at scale, complete Safari coverage, or production threading.
 Those claims require representative measurements under

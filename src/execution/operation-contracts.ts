@@ -18,6 +18,7 @@ function signature<Name extends string, Family extends OperationFamily>(operatio
 }
 
 const BINARY_FLOAT16 = fixedTensorTypePolicy(["float16", "float16"], "float16");
+const BINARY_BFLOAT16 = fixedTensorTypePolicy(["bfloat16", "bfloat16"], "bfloat16");
 
 /** Finite numerical identities. Their spelling carries no shape or parameter semantics. */
 export const COMPUTATION_SIGNATURES = Object.freeze({
@@ -31,6 +32,10 @@ export const COMPUTATION_SIGNATURES = Object.freeze({
   "expand-f32": signature("expand", UNARY_PRODUCED, UNARY_FLOAT32),
   "matmul-f32": signature("matmul", MATRIX, BINARY_FLOAT32),
   "matmul-f16": signature("matmul", MATRIX, BINARY_FLOAT16),
+  "add-bf16": signature("add", POINTWISE, BINARY_BFLOAT16),
+  "mul-bf16": signature("mul", POINTWISE, BINARY_BFLOAT16),
+  "sum-bf16": signature("sum", SCALAR, fixedTensorTypePolicy(["bfloat16"], "bfloat16")),
+  "matmul-bf16": signature("matmul", MATRIX, BINARY_BFLOAT16),
   "reduce-f32": signature("reduce", RECEIVING, UNARY_FLOAT32),
 });
 

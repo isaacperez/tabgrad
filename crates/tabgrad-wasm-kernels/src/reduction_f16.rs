@@ -1,7 +1,4 @@
-use crate::abi::{
-    STATUS_OK, STATUS_OUT_OF_BOUNDS, STATUS_OUTPUT_OVERLAP, STATUS_UNALIGNED, checked_typed_range,
-    overlaps,
-};
+use crate::abi::{STATUS_OK, validate_reduction_ranges};
 
 const HALF_WIDTH: u32 = size_of::<u16>() as u32;
 const POSITIVE_INFINITY: u16 = 0x7c00;
@@ -12,19 +9,9 @@ const FRACTION: u16 = 0x03ff;
 
 #[unsafe(no_mangle)]
 pub extern "C" fn tabgrad_sum_f16(input_offset: u32, output_offset: u32, length: u32) -> u32 {
-    if !input_offset.is_multiple_of(HALF_WIDTH) || !output_offset.is_multiple_of(HALF_WIDTH) {
-        return STATUS_UNALIGNED;
-    }
-    let memory_bytes = (core::arch::wasm32::memory_size(0) as u64) * 65_536;
-    let Some(input_range) = checked_typed_range(input_offset, length, HALF_WIDTH, memory_bytes)
-    else {
-        return STATUS_OUT_OF_BOUNDS;
-    };
-    let Some(output_range) = checked_typed_range(output_offset, 1, HALF_WIDTH, memory_bytes) else {
-        return STATUS_OUT_OF_BOUNDS;
-    };
-    if length != 0 && overlaps(output_range, input_range) {
-        return STATUS_OUTPUT_OVERLAP;
+    let status = validate_reduction_ranges(input_offset, output_offset, length, HALF_WIDTH);
+    if status != STATUS_OK {
+        return status;
     }
     // SAFETY: both ranges are aligned and in the arena, and the output is distinct.
     // An empty input can end exactly at the memory boundary without a read.

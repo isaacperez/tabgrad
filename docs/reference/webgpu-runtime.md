@@ -56,8 +56,9 @@ session-owned `webgpu` device **in addition to CPU**. Omitting `device` still
 means `cpu`; there are no indexed device names, implicit migrations or silent
 fallbacks. Handles from different sessions cannot be mixed.
 
-GPU tensors have contiguous `float32` or explicitly selected `float16` storage.
-[Float16 tensors](float16.md) support same-type add/mul, total sum, 2D matrix products and views, with their own
+GPU tensors use contiguous `float32`, `float16` or `bfloat16` storage.
+[Float16](float16.md) and [bfloat16](python-tensors.md#bfloat16-tensors)
+support same-type add/mul, total sum, 2D matrix products and views with their own
 rounding, packed-storage and inference-only boundaries. Creation accepts the common
 scalar, multidimensional and empty shapes. It copies input into owned host
 storage; upload is deferred until observation. GPU observation uploads even
@@ -73,7 +74,7 @@ For float32, its precise rounding and exceptional-value contract is the
 including a separately rounded result for every logical addition. It does not
 promise native WGSL floating-point behavior or NaN payload preservation.
 
-GPU `sum()` reduces a whole contiguous `float32` or `float16` tensor to a distinct scalar, including
+GPU `sum()` reduces a whole contiguous tensor of any supported dtype to a distinct scalar, including
 an empty input's positive-zero write. Its exact-total accumulation and logical
 rounding boundaries are specified by the [sum reference](tensor-sum.md).
 Admission requires the acquired device's sum workgroup and parameter-buffer
@@ -81,14 +82,14 @@ limits before recording work. Kernels use input geometry, not the output's
 single element.
 
 GPU [`matmul`](tensor-matmul.md) contracts two same-device 2D matrices of the
-same supported dtype, including empty geometry. The float16 kernel keeps
+same supported dtype, including empty geometry. The float16 and bfloat16 kernels keep
 inputs and outputs packed. Both float32 derivatives use the same integer sequential-FMA kernel
 with captured internal orientation; there is no host transpose or fallback.
 Output capacity is checked independently of inputs and each dispatch owns its
 immutable 16-byte geometry packet until physical completion.
 
 GPU `mul` accepts the same broadcast-compatible operands and composes with
-addition and views. A `float32` product can also feed a total sum.
+addition, views and total sum.
 The [multiplication reference](tensor-multiplication.md)
 owns its call forms, exact stored-binary32 product rounding and exclusions.
 

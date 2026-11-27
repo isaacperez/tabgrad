@@ -1,3 +1,4 @@
+import { bfloat16ObservationBits, encodeBfloat16 } from "./bfloat16.js";
 import { binary16ObservationBits, encodeBinary16 } from "./binary16.js";
 import { TabgradError } from "./errors.js";
 
@@ -61,6 +62,14 @@ function observeBinary16(bytes: Uint8Array<ArrayBuffer>, elements: number): Floa
   return numeric;
 }
 
+function observeBfloat16(bytes: Uint8Array<ArrayBuffer>, elements: number): Float32Array<ArrayBuffer> {
+  const words = new Uint16Array(bytes.buffer, bytes.byteOffset, elements);
+  const numeric = new Float32Array(elements);
+  const observed = new Uint32Array(numeric.buffer);
+  for (let index = 0; index < elements; index++) observed[index] = bfloat16ObservationBits(words[index]!);
+  return numeric;
+}
+
 /** Logical tensor formats; protocol words and backend scratch storage are separate. */
 export const TENSOR_DTYPES = Object.freeze({
   float32: Object.freeze({
@@ -73,6 +82,11 @@ export const TENSOR_DTYPES = Object.freeze({
     name: "float16", encoding: "ieee754-binary16-native", bytesPerElement: 2,
     capture: (data: NumericSource) => Uint16Array.from(data as ArrayLike<number>, requireBinary16),
     observe: observeBinary16, pythonInput: pythonInputs.f64, properties: realFloatingPoint,
+  } as const),
+  bfloat16: Object.freeze({
+    name: "bfloat16", encoding: "ieee754-bfloat16-native", bytesPerElement: 2,
+    capture: (data: NumericSource) => Uint16Array.from(data as ArrayLike<number>, value => encodeBfloat16(requireNumber(value))),
+    observe: observeBfloat16, pythonInput: pythonInputs.f32, properties: realFloatingPoint,
   } as const),
 } satisfies Readonly<Record<string, DTypeDefinition>>);
 

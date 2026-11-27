@@ -15,6 +15,11 @@ established by the corresponding verified release record.
 - Multiply two float16 matrices on CPU or GPU in JavaScript and Python,
   with ordered float32 accumulation and compact float16 operands and results
   ([#511](https://github.com/isaacperez/tabgrad/issues/511)).
+- Use bfloat16 tensors on CPU and GPU in JavaScript and Python. Forward
+  operations include views, broadcast add and multiply, exact total sum and
+  2D matrix multiplication. Values use two logical bytes and matrix products
+  round the multiply and add separately in float32
+  ([#512](https://github.com/isaacperez/tabgrad/issues/512)).
 
 ## 0.5.0 - 2026-11-18
 

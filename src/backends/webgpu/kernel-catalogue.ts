@@ -4,6 +4,9 @@ import { WEBGPU_ADDITION_ARITHMETIC_SOURCE, WEBGPU_ADDITION_WORKGROUP_SIZE, crea
 import { WEBGPU_MULTIPLICATION_ARITHMETIC_SOURCE, WEBGPU_MULTIPLICATION_WORKGROUP_SIZE, createMultiplicationSource } from "./kernels/multiplication.js";
 import { WEBGPU_COEFFICIENT_UNIFORM_BYTES, WEBGPU_COEFFICIENT_ADDITION_WORKGROUP_SIZE, createCoefficientAdditionSource } from "./kernels/coefficient-addition.js";
 import { WEBGPU_MATRIX_UNIFORM_BYTES, WEBGPU_MATRIX_WORKGROUP_SIZE, createMatrixSource } from "./kernels/matrix-product.js";
+import { BFLOAT16_ADDITION_SOURCE, BFLOAT16_MULTIPLICATION_SOURCE } from "./kernels/bfloat16.js";
+import { createBfloatMatrixSource } from "./kernels/matrix-product-bf16.js";
+import { createBfloatSumSource } from "./kernels/sum-bf16.js";
 import { createHalfMatrixSource } from "./kernels/matrix-product-f16.js";
 import { WEBGPU_EXPANSION_WORKGROUP_SIZE, createExpansionSource } from "./kernels/expansion.js";
 import { WEBGPU_SUM_GROUP_ELEMENTS, WEBGPU_SUM_PARTIAL_BYTES, WEBGPU_SUM_WORKGROUP_BYTES, WEBGPU_SUM_WORKGROUP_SIZE, createSumSource } from "./kernels/sum.js";
@@ -161,6 +164,10 @@ const factories: KernelFactories = Object.freeze({
   "sum-f16": sumKernel(WEBGPU_HALF_SUM_WORKGROUP_SIZE, WEBGPU_HALF_SUM_GROUP_ELEMENTS, WEBGPU_HALF_SUM_PARTIAL_BYTES,
     createHalfSumSource),
   "matmul-f16": matrixKernel(PACKED16_VALUES_PER_WORD, createHalfMatrixSource),
+  "add-bf16": packed16Pointwise(BFLOAT16_ADDITION_SOURCE, "add_bfloat16"),
+  "mul-bf16": packed16Pointwise(BFLOAT16_MULTIPLICATION_SOURCE, "multiply_bfloat16"),
+  "sum-bf16": sumKernel(WEBGPU_SUM_WORKGROUP_SIZE, WEBGPU_SUM_GROUP_ELEMENTS, WEBGPU_SUM_PARTIAL_BYTES, createBfloatSumSource),
+  "matmul-bf16": matrixKernel(PACKED16_VALUES_PER_WORD, createBfloatMatrixSource),
 } satisfies KernelFactories);
 
 const kinds = Object.keys(factories) as ComputationKind[];

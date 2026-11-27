@@ -1,16 +1,21 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { runBrowserPage, startBrowserServer } from "./browser-harness.mjs";
-import { halfSumCases } from "../js-tests/browser/helpers/float16-sum-cases.mjs";
+import { compactArithmeticCases } from "../js-tests/browser/helpers/compact-float-cases.mjs";
 
 const page = "dtype/conformance.html";
 const assets = ["dtype/conformance.mjs", "dtype/python-worker.mjs", "dtype/gpu-device.mjs", "dtype/restrict-gpu.mjs",
   "helpers/compact-float-cases.mjs", "helpers/compact-float-oracle.json", "helpers/cpu-profile.mjs", "helpers/gpu-dispatch-cases.mjs",
-  "helpers/float16-values.mjs", "helpers/float16-sum-cases.mjs", "helpers/float16-matrix-oracle.mjs",
+  "helpers/bfloat16-cases.mjs", "helpers/float16-values.mjs", "helpers/float16-sum-cases.mjs", "helpers/float16-matrix-oracle.mjs",
   "helpers/float32-addition-oracle.mjs", "helpers/float32-multiplication-oracle.mjs", "helpers/float32-coefficient-oracle.mjs", "helpers/float32-matrix-oracle.mjs"];
 
 const binary16 = Object.freeze({ dtype: "float16", fractionBits: 10 });
-const binary16Oracle = new URL("../js-tests/fixtures/float16-oracle.json", import.meta.url);
+const bfloat16 = Object.freeze({ dtype: "bfloat16", fractionBits: 7 });
+const runtimeProfiles = Object.freeze([binary16, bfloat16]);
+
+export async function runPublicDTypeConformance(options) {
+  for (const profile of runtimeProfiles) await runDTypeConformance({ ...options, profile });
+}
 
 export function validateCompactFloatOracle(profile, oracle) {
   assert.match(profile.dtype, /^[a-z][a-z0-9_]*$/);
@@ -32,6 +37,7 @@ export function validateCompactFloatOracle(profile, oracle) {
     "Oracle arrays must contain matching 16-bit words.");
   }
   if (profile === binary16) assert.deepEqual([count, pairs], [992, 8976]);
+  if (profile === bfloat16) assert.deepEqual([count, pairs], [20, 836]);
   return oracle;
 }
 
@@ -41,12 +47,12 @@ export async function runDTypeConformance({ browser, executable, version, langua
   assert.ok(device === "cpu" || device === "webgpu");
   assert.ok(language === "javascript" || language === "python");
   assert.ok(variant === undefined || (device === "cpu" && ["scalar", "simd128"].includes(variant)));
-  const oracle = validateCompactFloatOracle(profile,
-    profile === binary16 ? JSON.parse(await readFile(binary16Oracle, "utf8")) : profile.oracle);
-  const bytes = Buffer.from(JSON.stringify(oracle));
   const { dtype, fractionBits } = profile;
-  const totalSums = dtype === "float16" ? halfSumCases().length : 0;
-  const matrixProducts = dtype === "float16" ? 12 : 0;
+  const arithmetic = runtimeProfiles.includes(profile) ? dtype : "";
+  const oracle = validateCompactFloatOracle(profile, arithmetic
+    ? JSON.parse(await readFile(new URL(`../js-tests/fixtures/${dtype}-oracle.json`, import.meta.url), "utf8")) : profile.oracle);
+  const bytes = Buffer.from(JSON.stringify(oracle));
+  const { sums, matrices } = compactArithmeticCases(arithmetic);
   const reads = [];
   const server = await startBrowserServer([page], { assets, crossOriginIsolation: device === "webgpu",
     ...(distributionDirectory === undefined ? {} : { distributionDirectory }),
@@ -58,14 +64,14 @@ export async function runDTypeConformance({ browser, executable, version, langua
   const observations = [];
   try {
     for (const grid of device === "webgpu" ? [false, true] : [false]) {
-      await runBrowserPage({ server, browser, executable, version, page, parameters: { language, device, dtype, fractionBits: String(fractionBits), grid: String(grid),
+      await runBrowserPage({ server, browser, executable, version, page, parameters: { language, device, dtype, fractionBits: String(fractionBits), grid: String(grid), arithmetic,
         ...(variant === undefined ? {} : { variant }) }, reportNote,
         validateResult(result) {
           assert.equal(result.ok, true, JSON.stringify(result.error));
           assert.equal(result.language, language); assert.equal(result.device, device);
           assert.equal(result.grid, grid); assert.equal(result.dtype, dtype);
           assert.deepEqual(result.cases, { construction: oracle.construction.words.length, pointwise: oracle.pointwise.left.length,
-            broadcasts: 10, oddDense: 2, channelCompositions: 1, totalSums, matrixProducts });
+            broadcasts: 10, oddDense: 2, channelCompositions: 1, totalSums: sums.length, matrixProducts: matrices.length });
           for (const name of ["liveTensorHandles", "liveTensorValues", "liveAllocationBytes", "liveRequestLeases"]) {
             assert.equal(result.final[name], 0, name);
           }

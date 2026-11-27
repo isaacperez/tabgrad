@@ -134,6 +134,7 @@ _dtype_facts = {id(_dtypes_by_name[facts["name"]]): facts for facts in _definiti
 _float32_facts = _dtype_facts[id(_dtypes_by_name["float32"])]
 # Runtime names come from the bridge; retain static types for the public API.
 if TYPE_CHECKING:
+    bfloat16: dtype
     float16: dtype
     float32: dtype
 else:
@@ -727,6 +728,6 @@ __all__ = [
     "tensor",
 ]
 if TYPE_CHECKING:
-    __all__ += ["float16", "float32"]
+    __all__ += ["bfloat16", "float16", "float32"]
 else:
     __all__[:] = sorted([*__all__, *_dtypes_by_name])

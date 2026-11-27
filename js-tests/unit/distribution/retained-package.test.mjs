@@ -308,7 +308,10 @@ test("retained qualification needs no verifier dist, build or matching checkout 
       .map(name => `js-tests/fixtures/${name}.mjs`),
     "js-tests/browser/distribution/candidate.html", "js-tests/browser/distribution/candidate.mjs",
     "js-tests/browser/distribution/python-worker.mjs", "js-tests/browser/helpers/float16-sum-cases.mjs",
-    "js-tests/browser/helpers/float16-values.mjs"];
+    "js-tests/browser/helpers/compact-float-cases.mjs", "js-tests/browser/helpers/bfloat16-cases.mjs",
+    "js-tests/browser/helpers/float16-values.mjs", "js-tests/browser/helpers/float16-matrix-oracle.mjs",
+    "js-tests/browser/helpers/float32-matrix-oracle.mjs", "js-tests/browser/helpers/float32-coefficient-oracle.mjs",
+    "js-tests/browser/helpers/float32-addition-oracle.mjs", "js-tests/browser/helpers/float32-multiplication-oracle.mjs"];
   for (const path of inputs) {
     await mkdir(dirname(join(verifier, path)), { recursive: true });
     await cp(join(repository, path), join(verifier, path));

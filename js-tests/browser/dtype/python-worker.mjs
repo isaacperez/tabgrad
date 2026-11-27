@@ -13,7 +13,7 @@ addEventListener('message', async ({ data }) => {
       selectCpuProfile(data.variant);
     }
     binding = await attachPython(interpreter, data.webgpu ? { webgpu: data.webgpu } : {});
-    const { source, counts } = compactPythonSource(data.reference, data.device, data.dtype, data.fractionBits);
+    const { source, counts } = compactPythonSource(data.reference, data.device, data.dtype, data.fractionBits, data.arithmetic);
     await binding.runPythonAsync(source);
     const beforeClose = binding.diagnostics();
     await binding.close();

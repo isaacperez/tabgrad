@@ -34,7 +34,7 @@ also accepts no arguments and returns a `Tensor`; its shape is `[]`, and
 callers close their input and result handles under the ordinary session
 lifetime contract.
 
-CPU and WebGPU accept contiguous `float32` and `float16` inputs,
+CPU and WebGPU accept contiguous `float32`, `float16` and `bfloat16` inputs,
 including scalar, singleton, multidimensional and empty shapes and whole-contiguous views. The
 result preserves dtype and device and owns a distinct scalar value. Empty
 input produces positive zero, not an empty tensor. A scalar input also creates
@@ -52,7 +52,7 @@ The derivative expands the incoming scalar to the input shape, including empty
 dimensions; an interior sum does not assume that incoming scalar equals one.
 [Backward accumulation](backward-gradients.md) uses this same derivative on both devices.
 Device selection is explicit; a GPU sum does not fall back to CPU.
-The `float16` operation supports forward execution.
+The `float16` and `bfloat16` operations support forward execution.
 
 ## Admission, observation and ownership
 
@@ -104,6 +104,19 @@ CPU reads the packed input directly and writes one two-byte scalar. GPU reads
 two half values per packed word and writes the scalar in a four-byte word.
 Nonfinal GPU stages write private 16-byte integer partials. The input and result
 retain their binary16 encoding throughout a resident calculation.
+
+### Bfloat16 on CPU and WebGPU
+
+Both backends add the stored finite values exactly and round once to bfloat16,
+to nearest with ties to even. The zero and nonfinite rules above also apply.
+For example, summing `[1.0, 2 ** -8, 2 ** -133]` returns `1.0078125`.
+The last term tips the result above a bfloat16 midpoint. Rounding first to
+float32 would lose that term and return `1.0` after the second rounding.
+
+CPU uses a fixed 254-bin accumulator over the two-byte inputs. WebGPU reads
+two values per packed word and uses 44-byte private partials between stages.
+Each device writes a compact scalar. See the [bfloat16 decision](../architecture/typed-tensors.md#bfloat16-range-and-rounding)
+for the rounding and comparison boundaries.
 
 ### Float32 on CPU and WebGPU
 
@@ -178,7 +191,7 @@ change memory ownership or trigger another backend.
 
 ## CPU internal kernel and cost contract
 
-The private raw exports `tabgrad_sum_f32` and `tabgrad_sum_f16` both take
+The private raw exports `tabgrad_sum_f32`, `tabgrad_sum_f16` and `tabgrad_sum_bf16` take
 `(input_offset, output_offset, input_length) -> status`.
 Offsets and length are unsigned 32-bit values across the WebAssembly interface.
 They validate the input range, alignment of four or two bytes for the selected
@@ -190,7 +203,8 @@ must still be writable. Status codes and error transport follow the
 
 Kernel work is linear in input elements. It creates no per-element runtime
 nodes and no input-sized scratch tensor. For float16, fixed-width blocks combine
-their partial totals in a constant amount of private state. For float32, balanced subdivision uses at most 26
+their partial totals in a constant amount of private state. Bfloat16 uses
+fixed-size exponent bins and a wide integer accumulator. Float32 balanced subdivision uses at most 26
 recursive subdivision levels for an unsigned 32-bit length, plus bounded leaf
 state in the module's private stack. Actual accepted lengths remain constrained
 by the backend memory limit. Output storage uses the element width, with the

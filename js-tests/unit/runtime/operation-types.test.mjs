@@ -5,7 +5,7 @@ import { ExecutableProgram } from "../../../dist/execution/executable-program.js
 import { WebAssemblyCpuBackend } from "../../../dist/backends/cpu/cpu-backend.js";
 import { CpuArtifactLoader } from "../../../dist/backends/cpu/artifact-loader.js";
 import { assertBackendProgram, supportsBackendComputation } from "../../../dist/execution/backend.js";
-import { computationSignature } from "../../../dist/execution/operation-contracts.js";
+import { COMPUTATION_SIGNATURES, computationSignature } from "../../../dist/execution/operation-contracts.js";
 import { fixedTensorTypePolicy, resolveTensorType,
   GRADIENT_STATE_TYPES, DEFAULT_GRADIENT_ASSIGNMENT_TYPES, PERSISTENT_COPY_TYPES } from "../../../dist/execution/operation-types.js";
 
@@ -54,8 +54,9 @@ test("family bindings share actual type rules while coefficient and state domain
 });
 
 function capturedProgram(kind) {
-  const dtype = kind === "sum-f16" || kind === "matmul-f16" ? "float16" : "float32";
-  const shapes = kind === "sum-f32" || kind === "sum-f16" ? [[3], []]
+  const { family, types } = computationSignature(kind) ?? computationSignature("add-f32");
+  const dtype = types.result;
+  const shapes = family.geometry === "scalar" ? [[3], []]
     : kind === "expand-f32" ? [[], [3]]
       : kind === "reduce-f32" ? [[2, 3], [1, 3]]
         : [[2, 2], [2, 2], [2, 2]];
@@ -66,12 +67,12 @@ function capturedProgram(kind) {
       source: slot === output ? "computed" : "binding", provenance })),
     computations: [{ kind, inputs: shapes.slice(0, -1).map((_, slot) => slot), output, provenance,
       ...(kind === "add-alpha-f32" ? { alphaBits: 0x3f800000 } : {}),
-      ...(kind === "matmul-f32" || kind === "matmul-f16" ? { matrixFlags: 0 } : {}) }],
+      ...(family.geometry === "matrix" ? { matrixFlags: 0 } : {}) }],
     result: output,
   };
 }
 
-for (const kind of ["add-f32", "add-alpha-f32", "mul-f32", "sum-f32", "sum-f16", "expand-f32", "matmul-f32", "matmul-f16", "reduce-f32"]) {
+for (const kind of Object.keys(COMPUTATION_SIGNATURES)) {
   test(`${kind} reconstruction rejects every invalid input/result type before publication`, () => {
     const original = capturedProgram(kind);
     const valid = new ExecutableProgram(original.values, original.computations, original.result);
@@ -86,7 +87,7 @@ for (const kind of ["add-f32", "add-alpha-f32", "mul-f32", "sum-f32", "sum-f16",
 }
 
 test("total sum reconstruction requires a distinct computed rank-zero tensor", () => {
-  for (const kind of ["sum-f32", "sum-f16"]) {
+  for (const kind of ["sum-f32", "sum-f16", "sum-bf16"]) {
     const original = capturedProgram(kind);
     for (const patch of [{ shape: [1] }, { source: "binding" }]) {
       const { values, computations, result } = structuredClone(original);
@@ -103,7 +104,7 @@ test("total sum reconstruction requires a distinct computed rank-zero tensor", (
 test("binding-only reconstruction validates canonical dtype and complete alias metadata", () => {
   const value = { slot: 0, storageSlot: 0, shape: [0], dtype: "float32", device: "cpu",
     layout: "contiguous", source: "binding", provenance };
-  for (const dtype of ["bfloat16", "toString", undefined]) {
+  for (const dtype of ["float64", "toString", undefined]) {
     assert.throws(() => new ExecutableProgram([{ ...value, dtype }], [], 0), TypeError);
   }
   assert.equal(new ExecutableProgram([{ ...value, dtype: "float16" }], [], 0).values[0].dtype, "float16");

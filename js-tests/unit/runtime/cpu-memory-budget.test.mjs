@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
+import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { RuntimeFixtureServer } from "../../fixtures/runtime-fixture-server.mjs";
 import { createTestRuntimeSession, getTestRuntimeOwnership } from "../../../dist/testing.js";
@@ -11,6 +12,13 @@ const fixtures = new RuntimeFixtureServer(fileURLToPath(new URL("../../../dist/"
 let manifestUrl;
 before(async () => { manifestUrl = new URL("manifest.json", await fixtures.start()); });
 after(async () => { await fixtures.close(); });
+
+async function moduleArenaBase(variant) {
+  const wasm = await readFile(new URL(`../../../dist/wasm/kernels-${variant}.wasm`, import.meta.url));
+  const memory = new WebAssembly.Memory({ initial: 32, maximum: 4096 });
+  const { instance } = await WebAssembly.instantiate(wasm, { env: { memory } });
+  return instance.exports.tabgrad_arena_base();
+}
 
 test("the public CPU maximum is inclusive without preallocating 256 MiB", async () => {
   const session = createRuntimeSession({ manifestUrl,
@@ -25,7 +33,9 @@ test("the public CPU maximum is inclusive without preallocating 256 MiB", async 
     assert.equal(ready.wasmMemoryBytes, 2 * MiB);
     assert.equal(capacity.artifactMaximumBytes, 256 * MiB);
     assert.equal(capacity.linearMemoryLimitBytes, 256 * MiB);
-    assert.equal(capacity.arenaCapacityBytes, 255 * MiB);
+    const arenaBase = await moduleArenaBase(ready.selectedVariant);
+    assert.equal(capacity.arenaBaseBytes, arenaBase);
+    assert.equal(capacity.arenaCapacityBytes, 256 * MiB - arenaBase);
   } finally { await session.close(); }
   assert.equal(session.diagnostics().cpuMemoryCapacity, null);
   assert.equal(capacity.linearMemoryLimitBytes, 256 * MiB);
@@ -44,8 +54,9 @@ for (const forceVariant of ["scalar", "simd128"]) {
       assert.ok(Object.isFrozen(retained));
       assert.equal(retained.artifactMaximumBytes, 256 * MiB);
       assert.equal(retained.linearMemoryLimitBytes, 128 * MiB);
-      assert.equal(retained.arenaBaseBytes, MiB);
-      assert.equal(retained.arenaCapacityBytes, 127 * MiB);
+      const arenaBase = await moduleArenaBase(forceVariant);
+      assert.equal(retained.arenaBaseBytes, arenaBase);
+      assert.equal(retained.arenaCapacityBytes, 128 * MiB - arenaBase);
       assert.equal(ready.wasmMemoryBytes, 2 * MiB, "a maximum does not preallocate the arena");
       assert.equal(ready.liveAllocationBytes, 0);
       assert.equal(ready.kernelCalls, 0);

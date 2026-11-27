@@ -25,8 +25,6 @@ function extensionSource() {
   const source = fileURLToPath(new URL("../../../crates/tabgrad-wasm-kernels/src/", import.meta.url));
   return `
 #[path = ${JSON.stringify(join(source, "abi.rs"))}] mod abi;
-#[path = ${JSON.stringify(join(source, "binary16.rs"))}] mod binary16;
-#[path = ${JSON.stringify(join(source, "half.rs"))}] mod half;
 #[path = ${JSON.stringify(join(source, "pointwise.rs"))}] mod pointwise;
 struct ProductPlus;
 impl pointwise::Float32Pointwise<3> for ProductPlus {

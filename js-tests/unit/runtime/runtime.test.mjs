@@ -1016,11 +1016,12 @@ test("records float32 addition lazily and materializes it on observation", async
 
   assert.deepEqual(Array.from(await result.toArray()), [5, 7, 9]);
   const afterObservation = session.diagnostics();
-  const { timings, ...afterCounters } = afterObservation;
+  const { timings, cpuMemoryCapacity, ...afterCounters } = afterObservation;
+  assert.equal(cpuMemoryCapacity.artifactMaximumBytes, 268_435_456);
+  assert.equal(cpuMemoryCapacity.linearMemoryLimitBytes, 67_108_864);
+  assert.equal(cpuMemoryCapacity.arenaCapacityBytes, 67_108_864 - cpuMemoryCapacity.arenaBaseBytes);
   assert.deepEqual(afterCounters, {
     memoryLimits: { cpuLinearMemoryBytes: 67_108_864, updateBackingBytes: 67_108_864 },
-    cpuMemoryCapacity: { artifactMaximumBytes: 268_435_456, linearMemoryLimitBytes: 67_108_864,
-      arenaBaseBytes: 1_048_576, arenaCapacityBytes: 66_060_288 },
     webgpu: null,
     backendLoads: 1,
     hostToWasmBytes: 24,
@@ -2467,6 +2468,9 @@ for (const failureCase of [
   { name: "missing half sum capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: CPU_CAPABILITY_MASK & ~512 } },
   { name: "missing half matrix export", code: "BACKEND_ABI_MISMATCH", moduleOptions: { omitExports: ["tabgrad_matmul_f16"] } },
   { name: "missing half matrix capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: CPU_CAPABILITY_MASK & ~1024 } },
+  { name: "missing bfloat16 matrix export", code: "BACKEND_ABI_MISMATCH", moduleOptions: { omitExports: ["tabgrad_matmul_bf16"] } },
+  { name: "missing bfloat16 sum capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: CPU_CAPABILITY_MASK & ~4096 } },
+  { name: "stale pre-bfloat16 module profile", code: "BACKEND_MANIFEST_INVALID", manifestTransform: manifest => ({ ...manifest, moduleVersion: 11 }) },
   { name: "stale pre-half-matrix module profile", code: "BACKEND_MANIFEST_INVALID", manifestTransform: manifest => ({ ...manifest, moduleVersion: 10 }) },
   { name: "stale half-pointwise-only module profile", code: "BACKEND_MANIFEST_INVALID", manifestTransform: manifest => ({ ...manifest, moduleVersion: 9 }) },
   { name: "stale pre-half module profile", code: "BACKEND_MANIFEST_INVALID", manifestTransform: manifest => ({ ...manifest, moduleVersion: 8 }) },

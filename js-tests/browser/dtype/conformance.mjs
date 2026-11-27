@@ -5,6 +5,7 @@ const language = parameters.get('language') ?? 'javascript', device = parameters
 const grid = parameters.get('grid') === 'true';
 const dtype = parameters.get('dtype');
 const fractionBits = Number(parameters.get('fractionBits'));
+const arithmetic = parameters.get('arithmetic');
 const variant = parameters.get('variant');
 async function send(endpoint, result) {
   const response = await fetch(`${endpoint}?token=${encodeURIComponent(token)}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(result) });
@@ -25,7 +26,7 @@ try {
     result = await new Promise((resolve, reject) => {
       worker.addEventListener('error', event => reject(Error(event.message)), { once: true });
       worker.addEventListener('message', ({ data }) => data.ok ? resolve(data) : reject(Error(data.error)), { once: true });
-      worker.postMessage({ reference, dtype, fractionBits, device, variant, ...(controller ? { webgpu: controller.connection } : {}) }, controller?.transferables ?? []);
+      worker.postMessage({ reference, dtype, fractionBits, device, variant, arithmetic, ...(controller ? { webgpu: controller.connection } : {}) }, controller?.transferables ?? []);
     });
   } else {
     if (grid) {
@@ -37,7 +38,7 @@ try {
       selectCpuProfile(variant);
     }
     session = device === 'webgpu' ? await createWebGpuRuntimeSession() : createRuntimeSession();
-    const cases = await compactJavaScriptCases(session, reference, device, dtype, fractionBits);
+    const cases = await compactJavaScriptCases(session, reference, device, dtype, fractionBits, arithmetic);
     const beforeClose = session.diagnostics();
     await session.close();
     result = { ok: true, cases, beforeClose, final: session.diagnostics() };
