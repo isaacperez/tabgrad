@@ -1,6 +1,5 @@
 import { attachPython } from '/python.js';
 import { compactPythonSource } from '/helpers/compact-float-cases.mjs';
-import { halfSumCases } from '/helpers/float16-sum-cases.mjs';
 addEventListener('message', async ({ data }) => {
   let binding;
   try {
@@ -14,13 +13,13 @@ addEventListener('message', async ({ data }) => {
       selectCpuProfile(data.variant);
     }
     binding = await attachPython(interpreter, data.webgpu ? { webgpu: data.webgpu } : {});
-    await binding.runPythonAsync(compactPythonSource(data.reference, data.device, data.dtype, data.fractionBits));
-    const totalSums = data.dtype === 'float16' ? halfSumCases().length : 0;
+    const { source, counts } = compactPythonSource(data.reference, data.device, data.dtype, data.fractionBits);
+    await binding.runPythonAsync(source);
     const beforeClose = binding.diagnostics();
     await binding.close();
     postMessage({ ok: true, pyodide: interpreter.version, worker: true, jspiAvailable: false,
       cases: { construction: data.reference.construction.words.length, pointwise: data.reference.pointwise.left.length,
-        broadcasts: 10, oddDense: 2, channelCompositions: 1, totalSums },
+        broadcasts: 10, oddDense: 2, channelCompositions: 1, ...counts },
       beforeClose, final: binding.diagnostics() });
   } catch (error) { postMessage({ ok: false, error: String(error) }); }
   finally { await binding?.close(); }

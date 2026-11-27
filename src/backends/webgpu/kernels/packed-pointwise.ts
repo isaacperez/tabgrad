@@ -1,8 +1,7 @@
 import { invocationEntry, type LinearDispatchLayout } from "../linear-dispatch.js";
+import { PACKED16_LANE_SOURCE, PACKED16_VALUES_PER_WORD } from "./packed-words.js";
 
 export const PACKED16_WORKGROUP_SIZE = 64;
-
-export const PACKED16_VALUES_PER_WORD = 2;
 
 /** Each invocation owns a complete word. Odd tails never load a missing lane. */
 export function packed16PointwiseSource(arithmetic: string, calculate: string, broadcast: boolean, layout: LinearDispatchLayout): string {
@@ -16,7 +15,7 @@ export function packed16PointwiseSource(arithmetic: string, calculate: string, b
         remaining /= geometry[base];
         indices += coordinate * vec2<u32>(geometry[base + 1u], geometry[base + 2u]);
       }` : "let indices = vec2<u32>(index);";
-  return `${arithmetic}
+  return `${arithmetic}${PACKED16_LANE_SOURCE}
 @group(0) @binding(0) var<storage, read> left: array<u32>;
 @group(0) @binding(1) var<storage, read> right: array<u32>;
 @group(0) @binding(2) var<storage, read_write> output: array<u32>;
@@ -31,8 +30,8 @@ ${entry.signature}
     let index = first + lane;
     if index < geometry[1] {
       ${indices}
-      let a = (left[indices.x / ${PACKED16_VALUES_PER_WORD}u] >> ((indices.x % ${PACKED16_VALUES_PER_WORD}u) * 16u)) & 65535u;
-      let b = (right[indices.y / ${PACKED16_VALUES_PER_WORD}u] >> ((indices.y % ${PACKED16_VALUES_PER_WORD}u) * 16u)) & 65535u;
+      let a = packed16_lane(left[indices.x / ${PACKED16_VALUES_PER_WORD}u], indices.x);
+      let b = packed16_lane(right[indices.y / ${PACKED16_VALUES_PER_WORD}u], indices.y);
       packed |= ${calculate}(a, b) << (lane * 16u);
     }
   }

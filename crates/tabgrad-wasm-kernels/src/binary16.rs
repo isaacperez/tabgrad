@@ -15,6 +15,29 @@ pub(crate) fn decode(bits: u16) -> f32 {
     f32::from_bits(sign | magnitude)
 }
 
+#[cfg(target_feature = "simd128")]
+#[inline]
+pub(crate) fn decode_four(low_words: core::arch::wasm32::v128) -> core::arch::wasm32::v128 {
+    use core::arch::wasm32::*;
+    let bits = u32x4_extend_low_u16x8(low_words);
+    let sign = u32x4_shl(v128_and(bits, u32x4_splat(0x8000)), 16);
+    let exponent = v128_and(u32x4_shr(bits, 10), u32x4_splat(31));
+    let fraction = v128_and(bits, u32x4_splat(1023));
+    let fraction_bits = u32x4_shl(fraction, 13);
+    let normals = v128_or(
+        u32x4_shl(i32x4_add(exponent, u32x4_splat(112)), 23),
+        fraction_bits,
+    );
+    let specials = v128_or(u32x4_splat(0x7f80_0000), fraction_bits);
+    let subnormals = f32x4_mul(
+        f32x4_convert_u32x4(fraction),
+        f32x4_splat(1.0 / 16_777_216.0),
+    );
+    let magnitude = v128_bitselect(specials, normals, i32x4_eq(exponent, u32x4_splat(31)));
+    let magnitude = v128_bitselect(subnormals, magnitude, i32x4_eq(exponent, u32x4_splat(0)));
+    v128_or(sign, magnitude)
+}
+
 fn rounded_shift(value: u32, distance: u32) -> u32 {
     if distance >= 32 {
         return 0;

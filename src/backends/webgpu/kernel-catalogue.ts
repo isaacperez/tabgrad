@@ -4,13 +4,15 @@ import { WEBGPU_ADDITION_ARITHMETIC_SOURCE, WEBGPU_ADDITION_WORKGROUP_SIZE, crea
 import { WEBGPU_MULTIPLICATION_ARITHMETIC_SOURCE, WEBGPU_MULTIPLICATION_WORKGROUP_SIZE, createMultiplicationSource } from "./kernels/multiplication.js";
 import { WEBGPU_COEFFICIENT_UNIFORM_BYTES, WEBGPU_COEFFICIENT_ADDITION_WORKGROUP_SIZE, createCoefficientAdditionSource } from "./kernels/coefficient-addition.js";
 import { WEBGPU_MATRIX_UNIFORM_BYTES, WEBGPU_MATRIX_WORKGROUP_SIZE, createMatrixSource } from "./kernels/matrix-product.js";
+import { createHalfMatrixSource } from "./kernels/matrix-product-f16.js";
 import { WEBGPU_EXPANSION_WORKGROUP_SIZE, createExpansionSource } from "./kernels/expansion.js";
 import { WEBGPU_SUM_GROUP_ELEMENTS, WEBGPU_SUM_PARTIAL_BYTES, WEBGPU_SUM_WORKGROUP_BYTES, WEBGPU_SUM_WORKGROUP_SIZE, createSumSource } from "./kernels/sum.js";
 import { WEBGPU_HALF_SUM_GROUP_ELEMENTS, WEBGPU_HALF_SUM_PARTIAL_BYTES, WEBGPU_HALF_SUM_WORKGROUP_SIZE, createHalfSumSource } from "./kernels/sum-f16.js";
 import { WEBGPU_POINTWISE_WORKGROUP_SIZE, pointwiseSource } from "./kernels/broadcast.js";
 import { createReceivingSource, WEBGPU_RECEIVING_UNIFORM_BYTES } from "./kernels/receiving.js";
 import { BINARY16_ARITHMETIC } from "./kernels/half.js";
-import { PACKED16_VALUES_PER_WORD, PACKED16_WORKGROUP_SIZE, packed16PointwiseSource } from "./kernels/packed-pointwise.js";
+import { PACKED16_WORKGROUP_SIZE, packed16PointwiseSource } from "./kernels/packed-pointwise.js";
+import { PACKED16_VALUES_PER_WORD } from "./kernels/packed-words.js";
 
 export type KernelKind = ComputationKind | `broadcast-${ComputationKind}`;
 type ShaderSource = (layout: LinearDispatchLayout) => string;
@@ -127,6 +129,13 @@ function receivingSupported(limits: GPUSupportedLimits): boolean {
     && limits.maxStorageBuffersPerShaderStage >= 3;
 }
 
+function matrixKernel(elementsPerInvocation: number, source: ShaderSource): (kind: ComputationKind) => Registration {
+  return kind => Object.freeze({
+    strategy: "dense", direct: invocation(kind, WEBGPU_MATRIX_WORKGROUP_SIZE, elementsPerInvocation, source),
+    uniform: "matrix", supported: (limits: GPUSupportedLimits) => limits.maxBufferSize >= WEBGPU_MATRIX_UNIFORM_BYTES,
+  });
+}
+
 // The declaration order is also the order of the worker capability advertisement.
 type KernelFactories = { readonly [Kind in ComputationKind]?: (kind: Kind) => Registration };
 const factories: KernelFactories = Object.freeze({
@@ -136,10 +145,7 @@ const factories: KernelFactories = Object.freeze({
     strategy: "dense", direct: invocation(kind, WEBGPU_COEFFICIENT_ADDITION_WORKGROUP_SIZE, 1, createCoefficientAdditionSource),
     uniform: "coefficient", supported: (limits: GPUSupportedLimits) => limits.maxBufferSize >= WEBGPU_COEFFICIENT_UNIFORM_BYTES,
   }),
-  "matmul-f32": kind => Object.freeze({
-    strategy: "dense", direct: invocation(kind, WEBGPU_MATRIX_WORKGROUP_SIZE, 1, createMatrixSource),
-    uniform: "matrix", supported: (limits: GPUSupportedLimits) => limits.maxBufferSize >= WEBGPU_MATRIX_UNIFORM_BYTES,
-  }),
+  "matmul-f32": matrixKernel(1, createMatrixSource),
   "mul-f32": vectorizedPointwise(WEBGPU_MULTIPLICATION_WORKGROUP_SIZE, createMultiplicationSource,
     WEBGPU_MULTIPLICATION_ARITHMETIC_SOURCE, "multiply_binary32"),
   "add-f16": packed16Pointwise(BINARY16_ARITHMETIC, "add_binary16"),
@@ -154,6 +160,7 @@ const factories: KernelFactories = Object.freeze({
   }),
   "sum-f16": sumKernel(WEBGPU_HALF_SUM_WORKGROUP_SIZE, WEBGPU_HALF_SUM_GROUP_ELEMENTS, WEBGPU_HALF_SUM_PARTIAL_BYTES,
     createHalfSumSource),
+  "matmul-f16": matrixKernel(PACKED16_VALUES_PER_WORD, createHalfMatrixSource),
 } satisfies KernelFactories);
 
 const kinds = Object.keys(factories) as ComputationKind[];

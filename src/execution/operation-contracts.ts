@@ -30,6 +30,7 @@ export const COMPUTATION_SIGNATURES = Object.freeze({
   "sum-f16": signature("sum", SCALAR, fixedTensorTypePolicy(["float16"], "float16")),
   "expand-f32": signature("expand", UNARY_PRODUCED, UNARY_FLOAT32),
   "matmul-f32": signature("matmul", MATRIX, BINARY_FLOAT32),
+  "matmul-f16": signature("matmul", MATRIX, BINARY_FLOAT16),
   "reduce-f32": signature("reduce", RECEIVING, UNARY_FLOAT32),
 });
 

@@ -1,7 +1,7 @@
 import type { ComputationKind } from "../../execution/operation-contracts.js";
 
 export const CPU_ABI_VERSION = 1;
-export const CPU_MODULE_VERSION = 10;
+export const CPU_MODULE_VERSION = 11;
 
 interface Capability {
   readonly name: string;
@@ -54,6 +54,7 @@ const declarations = Object.freeze({
   "add-f16": pointwise("tabgrad_add_f16", POINTWISE_FLOAT16, "tabgrad_broadcast_add_f16", POINTWISE_FLOAT16),
   "mul-f16": pointwise("tabgrad_mul_f16", POINTWISE_FLOAT16, "tabgrad_broadcast_mul_f16", POINTWISE_FLOAT16),
   "sum-f16": kernel("inputLength", "tabgrad_sum_f16", capability("sum-f16", 512)),
+  "matmul-f16": kernel("matrix", "tabgrad_matmul_f16", capability("matmul-f16", 1024)),
 } satisfies Partial<Record<ComputationKind, CpuKernelDeclaration>>);
 
 export const CPU_COMPUTATIONS: readonly (keyof typeof declarations)[] = Object.freeze(

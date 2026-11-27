@@ -57,7 +57,7 @@ means `cpu`; there are no indexed device names, implicit migrations or silent
 fallbacks. Handles from different sessions cannot be mixed.
 
 GPU tensors have contiguous `float32` or explicitly selected `float16` storage.
-[Float16 tensors](float16.md) support same-type add/mul, total sum and views, with their own
+[Float16 tensors](float16.md) support same-type add/mul, total sum, 2D matrix products and views, with their own
 rounding, packed-storage and inference-only boundaries. Creation accepts the common
 scalar, multidimensional and empty shapes. It copies input into owned host
 storage; upload is deferred until observation. GPU observation uploads even
@@ -80,8 +80,9 @@ Admission requires the acquired device's sum workgroup and parameter-buffer
 limits before recording work. Kernels use input geometry, not the output's
 single element.
 
-GPU [`matmul`](tensor-matmul.md) contracts two same-device 2D `float32` matrices, including
-empty geometry. Both derivatives use the same integer sequential-FMA kernel
+GPU [`matmul`](tensor-matmul.md) contracts two same-device 2D matrices of the
+same supported dtype, including empty geometry. The float16 kernel keeps
+inputs and outputs packed. Both float32 derivatives use the same integer sequential-FMA kernel
 with captured internal orientation; there is no host transpose or fallback.
 Output capacity is checked independently of inputs and each dispatch owns its
 immutable 16-byte geometry packet until physical completion.
