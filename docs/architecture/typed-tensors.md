@@ -209,8 +209,8 @@ u32 ranges and nonoverlapping stage slices before execution.
 
 ### Dense matrix product
 
-For each output element start at positive zero and visit contraction indices
-in ascending order. Compute each exact product plus accumulator with one
+For each binary16 matrix output, start at positive zero and visit contraction
+indices in ascending order. Compute each exact product plus accumulator with one
 nearest-even binary32 rounding. Preserve the exceptional-value and signed-zero
 behavior of the [float32 matrix contract](float32-matrix-product.md). Round
 the final value once to nearest binary16, ties to even, retaining the sign of
