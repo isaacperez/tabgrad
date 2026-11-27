@@ -20,7 +20,7 @@ of the same dtype on the same device.
 | --- | --- | --- |
 | [`add`](reference/python-tensors.md#admit-addition) | `float32`, `float16` | `float32`, `float16` |
 | [`mul`](reference/tensor-multiplication.md#call-forms-and-result) | `float32`, `float16` | `float32`, `float16` |
-| [`sum`](reference/tensor-sum.md#call-forms-and-result) | `float32` | `float32` |
+| [`sum`](reference/tensor-sum.md#call-forms-and-result) | `float32`, `float16` | `float32`, `float16` |
 | [`matmul`](reference/tensor-matmul.md#calls-and-differentiation) | `float32` | `float32` |
 
 ### Storage and state
@@ -96,9 +96,10 @@ qualified environments and release-specific claims.
       "arithmetic": true,
       "source": "docs/reference/tensor-sum.md",
       "fragment": "call-forms-and-result",
-      "limits": "Adds all elements and returns a scalar. The current call has no axis or dtype option.",
+      "limits": "Adds all elements and returns a scalar of the input dtype. Float16 supports forward execution. The call has no axis or dtype option.",
       "variants": [
-        {"inputs": ["float32"], "result": "float32", "cpu": {"status": "supported", "gradients": "first-order"}, "webgpu": {"status": "supported", "gradients": "first-order"}}
+        {"inputs": ["float32"], "result": "float32", "cpu": {"status": "supported", "gradients": "first-order"}, "webgpu": {"status": "supported", "gradients": "first-order"}},
+        {"inputs": ["float16"], "result": "float16", "cpu": {"status": "supported", "gradients": "none"}, "webgpu": {"status": "supported", "gradients": "none"}}
       ]
     },
     {

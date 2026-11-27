@@ -1,7 +1,7 @@
 # Float16 tensors
 
 `float16` stores each logical value as IEEE binary16. It supports explicitly
-typed creation, whole-storage shape views, and tensor addition and multiplication
+typed creation, whole-storage shape views, tensor addition and multiplication, and [total sum](tensor-sum.md)
 on CPU and an explicitly enabled GPU. Both Python and JavaScript use the same
 runtime and numerical domain. A release's own compatibility record determines
 whether that release includes this domain.
@@ -49,16 +49,21 @@ overflow threshold can otherwise produce a different result.
 
 Each operation rounds and stores its own binary16 result. Multiplication followed
 by addition has two storage-rounding boundaries; it is not fused arithmetic.
-Subnormal values and signed zeros are preserved. Finite overflow produces the
+Pointwise arithmetic supports subnormals and signed zeros. Finite overflow produces the
 corresponding infinity; NaN and infinity classifications follow IEEE arithmetic.
 NaN payload and sign identity are excluded.
 
-CPU execution uses owned half words and native float32 arithmetic followed by
+For addition and multiplication, CPU uses owned half words and native float32 arithmetic followed by
 one half conversion. Half products have at most 22 significant bits; a half-add
 rounding boundary is exactly representable in float32, while larger exponent
 gaps cannot cross that midpoint. GPU execution uses bounded integer significands
 and a single output-word writer. It needs neither `shader-f16` nor relaxed
 floating-point packing builtins.
+
+Total sum uses exact integer accumulation with a single binary16 rounding on
+both backends. Its [numerical rules](tensor-sum.md#float16-on-cpu-and-webgpu)
+cover signed zero, nonfinite values and the distinction from native PyTorch
+under cancellation.
 
 The pinned PyTorch 2.14 CPU corpus records construction midpoints, exceptional
 classes and separate stored operations. Actual browser CPU, direct GPU and
@@ -74,8 +79,8 @@ final word; only that final partial word needs a host copy. Readback transfers
 the aligned extent but exposes exactly `2n` bytes to the codec. Padding is never
 a public tensor value.
 
-The GPU kernel writes both halves of an output word in one invocation. Each
-broadcast lane projects its own input indices, including when an odd inner
+GPU pointwise kernels write both halves of an output word in one invocation.
+Each broadcast lane projects its own input indices, including when an odd inner
 axis crosses a word boundary. An absent final lane is not read.
 
 Numeric observation allocates `4n` float32 bytes. Staging, alignment, allocator
@@ -90,7 +95,7 @@ are unchanged.
 This domain rejects tracking, functional or persistent backward, non-null
 gradient assignment, SGD, and mutation/copy before their history or state
 changes. Clearing a null gradient does not create a gradient payload.
-Reductions, matrix products, numeric-operand overloads, mixed promotion,
+Axis reductions, matrix products, numeric-operand overloads, mixed promotion,
 inferred dtype, `.to`, dtype-reinterpreting views and custom gradient dtypes
 are outside this contract. These are Tabgrad boundaries; native PyTorch has a
 broader float16 interface. Existing float32 operation and training contracts

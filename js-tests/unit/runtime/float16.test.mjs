@@ -145,6 +145,27 @@ test("float16 construction and separate stored CPU operations match the pinned n
   }
 });
 
+test("float16 CPU total sum keeps a distinct scalar resident across operations", async () => {
+  const server = new RuntimeFixtureServer(fileURLToPath(new URL("../../../dist/", import.meta.url)));
+  const session = createRuntimeSession({ manifestUrl: new URL("manifest.json", await server.start()) });
+  try {
+    const source = session.tensor([1, 2, 3], { dtype: "float16", shape: [1, 3] });
+    const doubled = source.add(source);
+    const sum = doubled.sum();
+    assert.equal(sum.dtype, "float16");
+    assert.deepEqual(sum.shape, []);
+    assert.equal(sum.requiresGrad, false);
+    const product = sum.mul(sum);
+    source.close(); doubled.close(); sum.close();
+    assert.deepEqual([...(await product.toArray())], [144]);
+    const diagnostics = session.diagnostics();
+    assert.equal(diagnostics.hostToWasmBytes, 6);
+    assert.equal(diagnostics.wasmToHostBytes, 2);
+    product.close();
+    assert.equal(session.diagnostics().liveTensorHandles, 0);
+  } finally { await session.close(); await server.close(); }
+});
+
 test("unsupported half gradients and mutation preserve owners, versions and existing float32 associations", async () => {
   const session = createRuntimeSession();
   const half = session.tensor([1], { dtype: "float16" });
@@ -167,7 +188,6 @@ test("unsupported half gradients and mutation preserve owners, versions and exis
       [() => half.copy_(normal), "UNSUPPORTED_DTYPE"],
       [() => half.add(normal), "UNSUPPORTED_DTYPE"],
       [() => half.mul(normal), "UNSUPPORTED_DTYPE"],
-      [() => half.sum(), "UNSUPPORTED_DTYPE"],
       [() => half.matmul(half), "UNSUPPORTED_DTYPE"],
     ]) {
       assert.throws(operation, { code });

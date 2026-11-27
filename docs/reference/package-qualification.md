@@ -57,9 +57,9 @@ separation between a storage format, a computation signature and a kernel.
   and codec. Define the concrete input and result types in the
   [semantic catalogue](../../src/execution/operation-contracts.ts) and check
   that the operation admits that signature. The pointwise binary operations
-  index their declared operand pairs. Total sum currently binds one float32
-  signature, so extending it also requires changing its admission policy
-  and qualifying the reduction.
+  index their declared operand pairs. Total sum indexes the declared input dtype
+  and shares scalar output validation across signatures. Qualify the
+  numerical and backend behavior of each added signature.
 - **Add a compact floating dtype.** Define the canonical name, encoding,
   width, capture and observation codec, and Python buffer format in the
   [shared dtype registry](../../src/shared/tensor-dtype.ts). Keep format-specific

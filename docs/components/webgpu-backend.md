@@ -145,9 +145,10 @@ that actually started, whether a logical result succeeded or failed.
 
 ### Total-sum geometry and private storage
 
-The [sum kernel](../../src/backends/webgpu/kernels/sum.ts) owns groups of 128
-input elements, processed by 64 invocations. Each nonfinal stage writes 44-byte
-integer partials and the next stage reduces those partials. Dispatches establish
+The [float32](../../src/backends/webgpu/kernels/sum.ts) and
+[float16](../../src/backends/webgpu/kernels/sum-f16.ts) sum kernels process
+128 elements per group with 64 invocations. Nonfinal stages write 44-byte
+partials for float32 or 16-byte partials for float16. Dispatches establish
 the dependency between stages; no device-wide barrier is assumed within a
 dispatch. The final stage writes four scalar bytes. Even empty input dispatches
 one guarded group to write positive zero rather than reuse stale scalar data.
@@ -157,15 +158,17 @@ belong to the invocation's physical owner, not semantic tensor slots, and are
 released only after drain. A queued uniform write creates this obligation even
 when all inputs are resident or empty and command encoding later fails.
 
-The acquired workgroup limits must permit 64 invocations and 2,816 bytes of
-workgroup storage; the buffer limit must permit a uniform. The existing tensor
+The acquired workgroup limits must permit 64 invocations and the specialization's
+workgroup storage: 2,816 bytes for float32 or 1,024 bytes for float16. The buffer
+limit must permit a uniform. The existing tensor
 extent bound limits the unsigned input count; stage planning separately checks
 each dispatch and its padded indices. Each stage selects its own original or
 grid pipeline, so a large first stage does not change later partitions.
-For nonfinal stages, `44 * ceil(N/128) <= 4*N` for `N >= 129`, so private storage
-bindings fit the already admitted input extent. Later stages only shrink.
-The [sum decision](../architecture/webgpu-float32-sum.md) gives the integer-width
-proof and analytical storage/traffic bounds. These do not measure physical VRAM.
+For `N >= 129`, each first partial buffer fits its admitted input extent:
+`44 * ceil(N/128) <= 4*N` for float32 and `16 * ceil(N/128) <= 2*N` for float16.
+Later stages shrink further. See the [float32](../architecture/webgpu-float32-sum.md)
+and [float16](../architecture/typed-tensors.md#total-sum) decisions for the
+integer-width proofs. These storage bounds describe buffers owned by Tabgrad.
 
 ## Loss, release and extension boundaries
 

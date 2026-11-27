@@ -1,7 +1,7 @@
 import type { ComputationKind } from "../../execution/operation-contracts.js";
 
 export const CPU_ABI_VERSION = 1;
-export const CPU_MODULE_VERSION = 9;
+export const CPU_MODULE_VERSION = 10;
 
 interface Capability {
   readonly name: string;
@@ -53,6 +53,7 @@ const declarations = Object.freeze({
   "reduce-f32": kernel("receiving", "tabgrad_receive_f32", capability("reduce-f32", 128)),
   "add-f16": pointwise("tabgrad_add_f16", POINTWISE_FLOAT16, "tabgrad_broadcast_add_f16", POINTWISE_FLOAT16),
   "mul-f16": pointwise("tabgrad_mul_f16", POINTWISE_FLOAT16, "tabgrad_broadcast_mul_f16", POINTWISE_FLOAT16),
+  "sum-f16": kernel("inputLength", "tabgrad_sum_f16", capability("sum-f16", 512)),
 } satisfies Partial<Record<ComputationKind, CpuKernelDeclaration>>);
 
 export const CPU_COMPUTATIONS: readonly (keyof typeof declarations)[] = Object.freeze(
@@ -71,7 +72,7 @@ for (const declaration of Object.values(declarations)) {
   if (declaration.layout === "pointwise") kernelSymbols.push(declaration.dense, declaration.broadcast);
   else kernelSymbols.push(declaration.symbol);
 }
-// Capability bits already define the stable order of the v9 profile.
+// Capability bits define a stable order across module profiles.
 kernelSymbols.sort((left, right) => left.capability.bit - right.capability.bit || left.arity - right.arity);
 
 const capabilityBits = new Map<string, number>();

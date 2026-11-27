@@ -34,7 +34,7 @@ also accepts no arguments and returns a `Tensor`; its shape is `[]`, and
 callers close their input and result handles under the ordinary session
 lifetime contract.
 
-This reference describes the supported contiguous CPU and WebGPU `float32` domain,
+CPU and WebGPU accept contiguous `float32` and `float16` inputs,
 including scalar, singleton, multidimensional and empty shapes and whole-contiguous views. The
 result preserves dtype and device and owns a distinct scalar value. Empty
 input produces positive zero, not an empty tensor. A scalar input also creates
@@ -46,12 +46,13 @@ supported call domain. Even apparently redundant options
 such as `dtype=None`,
 `dim=None`, `keepdim=False` or `out=None` are rejected, not silently ignored.
 
-Tracked CPU and WebGPU inputs participate in
+Tracked `float32` inputs on CPU and WebGPU participate in
 [functional gradients](functional-gradients.md).
 The derivative expands the incoming scalar to the input shape, including empty
 dimensions; an interior sum does not assume that incoming scalar equals one.
 [Backward accumulation](backward-gradients.md) uses this same derivative on both devices.
 Device selection is explicit; a GPU sum does not fall back to CPU.
+The `float16` operation supports forward execution.
 
 ## Admission, observation and ownership
 
@@ -85,6 +86,26 @@ executing it. Repeated observation reuses a computed value. Python uses ordinary
 `tolist()` inside managed entry, without a new asynchronous method or JSPI.
 
 ## Backend numerical contracts
+
+### Float16 on CPU and WebGPU
+
+Both backends add the stored finite values exactly and round once to binary16,
+to nearest with ties to even. An exact zero is positive, including empty input
+and a tensor of negative zeros. Any NaN or opposite infinity signs produce NaN.
+A single infinity sign dominates finite values. A finite total can overflow at
+the final rounding. A result can contain a binary16 subnormal.
+
+For example, summing `[65504.0, 2 ** -24, -65504.0]` preserves `2 ** -24`.
+The pinned PyTorch CPU comparison returned zero for those three values.
+The [binary16 decision](../architecture/typed-tensors.md#total-sum) defines
+this rounding rule and the accumulator bounds.
+
+CPU reads the packed input directly and writes one two-byte scalar. GPU reads
+two half values per packed word and writes the scalar in a four-byte word.
+Nonfinal GPU stages write private 16-byte integer partials. The input and result
+retain their binary16 encoding throughout a resident calculation.
+
+### Float32 on CPU and WebGPU
 
 The public float32 dtype does not prescribe one accumulator for every backend.
 On WebGPU, the [total-sum decision](../architecture/webgpu-float32-sum.md) requires
@@ -157,20 +178,22 @@ change memory ownership or trigger another backend.
 
 ## CPU internal kernel and cost contract
 
-The private raw export is
-`tabgrad_sum_f32(input_offset, output_offset, input_length) -> status`.
+The private raw exports `tabgrad_sum_f32` and `tabgrad_sum_f16` both take
+`(input_offset, output_offset, input_length) -> status`.
 Offsets and length are unsigned 32-bit values across the WebAssembly interface.
-It validates four-byte alignment, the input range and a distinct four-byte
-output range. The output cannot overlap a nonempty input. A zero-length input
+They validate the input range, alignment of four or two bytes for the selected
+dtype, and a distinct scalar output of that width. The output cannot overlap
+a nonempty input. A zero-length input
 may point at the end of memory because no input read occurs; the scalar output
 must still be writable. Status codes and error transport follow the
 [CPU ABI contract](../architecture/webassembly-cpu-backend.md#version-1-raw-abi-and-module-capabilities).
 
 Kernel work is linear in input elements. It creates no per-element runtime
-nodes and no input-sized scratch tensor. Balanced subdivision uses at most 26
+nodes and no input-sized scratch tensor. For float16, fixed-width blocks combine
+their partial totals in a constant amount of private state. For float32, balanced subdivision uses at most 26
 recursive subdivision levels for an unsigned 32-bit length, plus bounded leaf
 state in the module's private stack. Actual accepted lengths remain constrained
-by the backend memory limit. Output storage is four payload bytes, with the
+by the backend memory limit. Output storage uses the element width, with the
 allocator's ordinary alignment reservation counted separately.
 
 Admission depends on compact metadata, not payload size. Selected graph

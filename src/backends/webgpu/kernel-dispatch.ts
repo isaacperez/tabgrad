@@ -75,7 +75,8 @@ export function planKernelDispatch(computation: LoweredComputation, program: Exe
     }
     case "sum": {
       const count = tensorElementCount(program.values[computation.inputs[0]!]!.shape);
-      const stages = reductionStages(count, 1, limits).map(stage => {
+      const { elementsPerWorkgroup } = registration.direct.indexSpace;
+      const stages = reductionStages(count, 1, elementsPerWorkgroup, registration.partialBytes, limits).map(stage => {
         const dispatch = planLinearDispatch(Math.max(1, stage.count), registration.direct.indexSpace, axis);
         return { ...stage, dispatch, pipeline: selectPipeline(registration.direct, dispatch.layout) };
       });

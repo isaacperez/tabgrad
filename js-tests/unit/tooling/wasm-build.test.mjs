@@ -80,7 +80,7 @@ for (const redirected of [false, "absolute", "relative"]) {
       assert.deepEqual(manifest.variants.map(item => item.requiredFeatures), [[], ["simd128"]]);
       assert.equal(manifest.abiVersion, 1);
       assert.deepEqual(manifest.capabilities, ["add-f32", "sum-f32", "mul-f32", "expand-f32", "add-alpha-f32",
-        "matmul-f32", "broadcast-f32", "reduce-f32", "pointwise-f16"], "v9 profile must stay compatible with matched assets");
+        "matmul-f32", "broadcast-f32", "reduce-f32", "pointwise-f16", "sum-f16"], "module profile must match its assets");
     });
   }
 }

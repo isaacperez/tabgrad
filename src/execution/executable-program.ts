@@ -88,12 +88,13 @@ function assertMatrixComputation(family: Extract<OperationFamily, { geometry: "m
   }
 }
 
-function assertShapedComputation(family: Extract<OperationFamily, { geometry: "pointwise" | "receiving" }>,
+function assertShapedComputation(family: Extract<OperationFamily, { geometry: "pointwise" | "receiving" | "scalar" }>,
   values: readonly ProgramValue[], computation: LoweredComputation): void {
   const reduction = family.geometry === "receiving";
   const inputs = computation.inputs.map(slot => values[slot]!);
   const output = values[computation.output]!;
-  const expected = reduction ? inputs[0]!.shape : family.plan(inputs.map(value => value.shape)).shape;
+  const expected = family.geometry === "scalar" ? family.shape
+    : reduction ? inputs[0]!.shape : family.plan(inputs.map(value => value.shape)).shape;
   if (output.source !== "computed" || output.storageSlot !== output.slot
     || inputs.some(input => input.storageSlot === output.storageSlot) || output.shape.length !== expected.length
     || (!reduction && output.shape.some((dimension, axis) => dimension !== expected[axis]))) {

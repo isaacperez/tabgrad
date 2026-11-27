@@ -5,11 +5,12 @@ import { BINARY_FLOAT32, fixedTensorTypePolicy, UNARY_FLOAT32, type TensorTypePo
 const POINTWISE = Object.freeze({ arity: 2, parameters: "none", geometry: "pointwise", plan: pointwiseGeometry } as const);
 const MATRIX = Object.freeze({ arity: 2, parameters: "orientation", geometry: "matrix", plan: matrixGeometry } as const);
 const RECEIVING = Object.freeze({ arity: 1, parameters: "none", geometry: "receiving", plan: pointwiseGeometry } as const);
+const SCALAR = Object.freeze({ arity: 1, parameters: "none", geometry: "scalar", shape: Object.freeze([]) } as const);
 // For these records the producer owns the output shape in format v8.
 const UNARY_PRODUCED = Object.freeze({ arity: 1, parameters: "none", geometry: "produced" } as const);
 const COEFFICIENT_ADD = Object.freeze({ arity: 2, parameters: "coefficient", geometry: "produced" } as const);
 
-export type OperationFamily = typeof POINTWISE | typeof MATRIX | typeof RECEIVING | typeof UNARY_PRODUCED | typeof COEFFICIENT_ADD;
+export type OperationFamily = typeof POINTWISE | typeof MATRIX | typeof RECEIVING | typeof SCALAR | typeof UNARY_PRODUCED | typeof COEFFICIENT_ADD;
 
 function signature<Name extends string, Family extends OperationFamily>(operation: Name, family: Family, types: TensorTypePolicy) {
   if (types.inputs.length !== family.arity) throw new TypeError("Operation signature does not match its family arity.");
@@ -25,7 +26,8 @@ export const COMPUTATION_SIGNATURES = Object.freeze({
   "mul-f32": signature("mul", POINTWISE, BINARY_FLOAT32),
   "add-f16": signature("add", POINTWISE, BINARY_FLOAT16),
   "mul-f16": signature("mul", POINTWISE, BINARY_FLOAT16),
-  "sum-f32": signature("sum", UNARY_PRODUCED, UNARY_FLOAT32),
+  "sum-f32": signature("sum", SCALAR, UNARY_FLOAT32),
+  "sum-f16": signature("sum", SCALAR, fixedTensorTypePolicy(["float16"], "float16")),
   "expand-f32": signature("expand", UNARY_PRODUCED, UNARY_FLOAT32),
   "matmul-f32": signature("matmul", MATRIX, BINARY_FLOAT32),
   "reduce-f32": signature("reduce", RECEIVING, UNARY_FLOAT32),
