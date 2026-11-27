@@ -15,7 +15,8 @@ gradients and asynchronous observation through this same API.
 Its operation domain and physical limits are separate from CPU support.
 
 Explicit [`float16` tensors](reference/float16.md) support creation, whole-storage
-views, same-type add/mul with broadcasting and total sum on both backends. This compact
+views, same-type add/mul with broadcasting, total sum and two-dimensional
+matrix products on both backends. This compact
 domain has its own numerical rules and excludes differentiation and mutation.
 
 `session.sgd(parameters, options?)` provides [basic SGD](reference/sgd.md) on CPU

@@ -12,6 +12,9 @@ established by the corresponding verified release record.
 - Sum a whole float16 tensor on CPU or GPU in JavaScript and Python. Both
   backends round the exact total once to a float16 scalar
   ([#510](https://github.com/isaacperez/tabgrad/issues/510)).
+- Multiply two float16 matrices on CPU or GPU in JavaScript and Python,
+  with ordered float32 accumulation and compact float16 operands and results
+  ([#511](https://github.com/isaacperez/tabgrad/issues/511)).
 
 ## 0.5.0 - 2026-11-18
 

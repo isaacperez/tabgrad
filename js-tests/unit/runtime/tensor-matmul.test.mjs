@@ -72,9 +72,9 @@ for (const variant of ["scalar", "simd128"]) {
 test("matrix output capacity rejects unsafe products of valid empty inputs", async () => {
   const session = createRuntimeSession();
   try {
-    for (const dimension of [0x10000, Number.MAX_SAFE_INTEGER]) {
-      const a = session.tensor([], { shape: [dimension, 0] });
-      const b = session.tensor([], { shape: [0, dimension === Number.MAX_SAFE_INTEGER ? 2 : dimension] });
+    for (const [dtype, dimension] of [["float32", 0x10000], ["float16", 0x10000], ["float32", Number.MAX_SAFE_INTEGER]]) {
+      const a = session.tensor([], { dtype, shape: [dimension, 0] });
+      const b = session.tensor([], { dtype, shape: [0, dimension === Number.MAX_SAFE_INTEGER ? 2 : dimension] });
       const before = session.diagnostics();
       assert.throws(() => a.matmul(b), { code: "RESOURCE_EXHAUSTED" });
       assert.deepEqual(session.diagnostics(), before, "capacity rejection must not publish or capture work");

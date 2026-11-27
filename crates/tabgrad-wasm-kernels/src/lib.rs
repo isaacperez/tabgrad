@@ -10,6 +10,7 @@ mod expansion;
 mod fused_multiply_add;
 mod half;
 mod matrix_product;
+mod matrix_product_f16;
 mod multiplication;
 mod pointwise;
 mod receiving;

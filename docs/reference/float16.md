@@ -1,7 +1,8 @@
 # Float16 tensors
 
 `float16` stores each logical value as IEEE binary16. It supports explicitly
-typed creation, whole-storage shape views, tensor addition and multiplication, and [total sum](tensor-sum.md)
+typed creation, whole-storage shape views, tensor addition and multiplication,
+[total sum](tensor-sum.md) and [two-dimensional matrix products](tensor-matmul.md)
 on CPU and an explicitly enabled GPU. Both Python and JavaScript use the same
 runtime and numerical domain. A release's own compatibility record determines
 whether that release includes this domain.
@@ -65,6 +66,10 @@ both backends. Its [numerical rules](tensor-sum.md#float16-on-cpu-and-webgpu)
 cover signed zero, nonfinite values and the distinction from native PyTorch
 under cancellation.
 
+Two-dimensional matrix products multiply the stored half operands exactly and
+accumulate in binary32 in contraction order. The [matrix reference](tensor-matmul.md)
+explains the final binary16 rounding and how the kernels preserve compact storage.
+
 The pinned PyTorch 2.14 CPU corpus records construction midpoints, exceptional
 classes and separate stored operations. Actual browser CPU, direct GPU and
 managed Python/GPU checks compare complete outputs. This evidence qualifies its
@@ -95,7 +100,7 @@ are unchanged.
 This domain rejects tracking, functional or persistent backward, non-null
 gradient assignment, SGD, and mutation/copy before their history or state
 changes. Clearing a null gradient does not create a gradient payload.
-Axis reductions, matrix products, numeric-operand overloads, mixed promotion,
+Axis reductions, batched matrix products, numeric-operand overloads, mixed promotion,
 inferred dtype, `.to`, dtype-reinterpreting views and custom gradient dtypes
 are outside this contract. These are Tabgrad boundaries; native PyTorch has a
 broader float16 interface. Existing float32 operation and training contracts

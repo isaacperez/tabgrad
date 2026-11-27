@@ -1,9 +1,9 @@
 # Two-dimensional tensor matrix products
 
 This reference is for Python and JavaScript users multiplying dense contiguous
-float32 matrices on CPU or an explicitly enabled WebGPU device. For inputs
+`float32` or `float16` matrices on CPU or an explicitly enabled WebGPU device. For inputs
 `A[M,K]` and `B[K,N]`, the distinct result has shape `[M,N]` and the same device
-and dtype. Both inputs belong to one session. Zero dimensions, whole-storage
+and dtype. Both inputs use the same dtype and belong to one session. Zero dimensions, whole-storage
 views and repeated operands are included.
 
 ## Calls and differentiation
@@ -31,10 +31,10 @@ positionally or by `other`. `@`, its reflected form, and direct `__matmul__`
 and `__rmatmul__` calls use the same numerical admission. `@=` rebinds the Python
 variable to a new result; it does not update the original tensor or aliases.
 JavaScript uses `left.matmul(right)` with exactly one tensor argument and
-observes its independent flat float32 result with `await result.toArray()`.
+observes its independent values as a flat `Float32Array` with `await result.toArray()`.
 JavaScript handles, optimizers and their session have explicit close lifetimes.
 
-Both [functional gradients](functional-gradients.md) and
+For `float32`, both [functional gradients](functional-gradients.md) and
 [backward accumulation](backward-gradients.md) use `G @ Bᵀ` and `Aᵀ @ G`, with
 internal orientation metadata and no public transposed payload. Each actual
 differentiable edge saves its opposite operand. Repeated operands contribute
@@ -43,17 +43,28 @@ no-grad views, per-node partial progress, result identities and reset retain
 their existing contracts. A small resident training step can use
 `loss=(inputs @ weights); loss=(loss*loss).sum(); loss.backward(); optimizer.step()`
 with [basic SGD](sgd.md); reset gradients between steps as required.
+The `float16` product supports forward execution.
 
 ## Numerical and resource boundaries
 
 Each output starts at positive float32 zero and visits contraction indices in
 ascending order. Every term rounds the exact accumulator plus product once to
-nearest binary32, ties to even. CPU scalar/SIMD and GPU use this same
-[sequential-FMA contract](../architecture/float32-matrix-product.md).
+nearest binary32, ties to even. CPU scalar/SIMD and GPU use this order with
+both dtypes. A float32 result stores the final accumulator under the
+[float32 contract](../architecture/float32-matrix-product.md). A float16 result
+[rounds that accumulator once to binary16](../architecture/typed-tensors.md#dense-matrix-product),
+including ties to even and negative results rounded to negative zero.
 Subnormals, signed zero, infinities and NaN classification participate in every
 term; NaN payload and sign are unspecified. A nonempty `K=0` result contains
 positive zeros. An empty output still validates arguments and metadata, and
-can have nonempty derivative contributions.
+can have nonempty derivative contributions when using float32.
+
+A finite binary16 product is exactly representable in binary32. The CPU
+kernel decodes active elements into registers for arithmetic. The GPU kernel
+computes the exact product with integer significands and uses the binary32
+adder for each rounding step. One GPU invocation owns a full output word
+and computes the second element only when it exists. Operand and result
+storage stay compact, including when a packed word crosses a row boundary.
 
 The accepted association can differ from PyTorch's matrix implementations,
 including cancellation, signed zero and overflow/NaN classifications. The
@@ -66,8 +77,8 @@ Admission checks output capacity independently of input capacity: small
 their own sizes. Captured shape and orientation are immutable. Demand, resident
 reuse, abandoned pure work, provenance and physical drain follow the ordinary
 program and backend owners. GPU intermediates stay resident; each dispatch
-owns a separate 16-byte geometry packet through completion. CPU module profile
-6 provides the seven-argument raw export documented in
+owns a separate 16-byte geometry packet through completion. The CPU module
+provides a seven-argument raw export for each dtype as documented in
 [the CPU ABI](../architecture/webassembly-cpu-backend.md#version-1-raw-abi-and-module-capabilities).
 
 ## Errors and exclusions
@@ -81,7 +92,7 @@ structured runtime errors through `JsException`. Incorrect JavaScript arity
 raises `TypeError`; rank, contraction, ownership and capacity failures use the
 existing structured codes. Rejection creates no operation or numerical work.
 
-Vectors, batched products, broadcasting, other dtypes, noncontiguous layouts,
+Vectors, batched products, broadcasting, mixed promotion, other dtypes, noncontiguous layouts,
 public transpose, `mm` aliases, non-None output mutation, retained or higher-order
 gradients and implicit device transfers are outside this contract. Some are
 valid PyTorch calls; their rejection is a subset boundary. Qualification belongs

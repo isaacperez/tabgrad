@@ -1,5 +1,16 @@
+/** Round an unsigned significand by a positive right-shift distance. */
+export const BINARY16_ROUND_SHIFT_SOURCE = `
+fn half_round_shift(value: u32, distance: u32) -> u32 {
+  if distance >= 32u { return 0u; }
+  let truncated = value >> distance;
+  let remainder = value & ((1u << distance) - 1u);
+  let midpoint = 1u << (distance - 1u);
+  return truncated + select(0u, 1u, remainder > midpoint || (remainder == midpoint && (truncated & 1u) != 0u));
+}
+`;
+
 /** Binary16 arithmetic in bounded u32 significands; no optional or relaxed float operations. */
-export const BINARY16_ARITHMETIC = `
+export const BINARY16_ARITHMETIC = `${BINARY16_ROUND_SHIFT_SOURCE}
 fn half_shift_jam(value: u32, distance: u32) -> u32 {
   if distance == 0u { return value; }
   if distance >= 32u { return select(0u, 1u, value != 0u); }
@@ -39,14 +50,6 @@ fn add_binary16(left: u32, right: u32) -> u32 {
   if rounded < 1024u { exponent = 0u; }
   return sign | (exponent << 10u) | (rounded & 1023u);
 }
-fn half_round_product(value: u32, distance: u32) -> u32 {
-  // The product has at most22 bits. Larger distances are strictly below half.
-  if distance >= 32u { return 0u; }
-  let truncated = value >> distance;
-  let remainder = value & ((1u << distance) - 1u);
-  let midpoint = 1u << (distance - 1u);
-  return truncated + select(0u, 1u, remainder > midpoint || (remainder == midpoint && (truncated & 1u) != 0u));
-}
 fn multiply_binary16(left: u32, right: u32) -> u32 {
   let a = left & 0x7fffu;
   let b = right & 0x7fffu;
@@ -73,7 +76,7 @@ fn multiply_binary16(left: u32, right: u32) -> u32 {
   let extra = select(0u, 1u, product >= 2097152u);
   var exponent = ae + be - 15 + i32(extra);
   let distance = 10u + extra + u32(max(0, 1 - exponent));
-  var rounded = half_round_product(product, distance);
+  var rounded = half_round_shift(product, distance);
   if exponent <= 0 { exponent = select(0, 1, rounded >= 1024u); }
   if rounded >= 2048u { rounded >>= 1u; exponent += 1; }
   if exponent >= 31 { return sign | 0x7c00u; }

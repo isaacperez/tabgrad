@@ -1,4 +1,5 @@
 import { cooperativeEntry, type LinearDispatchLayout } from "../linear-dispatch.js";
+import { PACKED16_LANE_SOURCE, PACKED16_VALUES_PER_WORD } from "./packed-words.js";
 
 export const WEBGPU_HALF_SUM_WORKGROUP_SIZE = 64;
 export const WEBGPU_HALF_SUM_PARTIAL_BYTES = 16;
@@ -6,7 +7,7 @@ export const WEBGPU_HALF_SUM_GROUP_ELEMENTS = 2 * WEBGPU_HALF_SUM_WORKGROUP_SIZE
 
 export function createHalfSumSource(layout: LinearDispatchLayout): string {
   const entry = cooperativeEntry(layout, WEBGPU_HALF_SUM_GROUP_ELEMENTS, "parameters.count");
-  return `
+  return `${PACKED16_LANE_SOURCE}
 struct Parameters { count: u32, final_stage: u32, partial_input: u32, padding: u32 }
 @group(0) @binding(0) var<storage, read> input: array<u32>;
 @group(0) @binding(1) var<storage, read_write> output: array<u32>;
@@ -71,8 +72,7 @@ fn rounded(total: vec4u) -> u32 {
 fn load_partial(index: u32) -> vec4u {
   if index >= parameters.count { return vec4u(0u); }
   if parameters.partial_input == 0u {
-    let packed = input[index >> 1u];
-    return decode((packed >> ((index & 1u) * 16u)) & 0xffffu);
+    return decode(packed16_lane(input[index / ${PACKED16_VALUES_PER_WORD}u], index));
   }
   let word = index * 4u;
   return vec4u(input[word], input[word + 1u], input[word + 2u], input[word + 3u]);

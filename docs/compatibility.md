@@ -21,7 +21,7 @@ of the same dtype on the same device.
 | [`add`](reference/python-tensors.md#admit-addition) | `float32`, `float16` | `float32`, `float16` |
 | [`mul`](reference/tensor-multiplication.md#call-forms-and-result) | `float32`, `float16` | `float32`, `float16` |
 | [`sum`](reference/tensor-sum.md#call-forms-and-result) | `float32`, `float16` | `float32`, `float16` |
-| [`matmul`](reference/tensor-matmul.md#calls-and-differentiation) | `float32` | `float32` |
+| [`matmul`](reference/tensor-matmul.md#calls-and-differentiation) | `float32`, `float16` | `float32`, `float16` |
 
 ### Storage and state
 
@@ -110,9 +110,10 @@ qualified environments and release-specific claims.
       "arithmetic": true,
       "source": "docs/reference/tensor-matmul.md",
       "fragment": "calls-and-differentiation",
-      "limits": "Multiplies two dense, contiguous matrices of the same dtype on the same device.",
+      "limits": "Multiplies two dense, contiguous matrices of the same dtype on the same device. Float16 supports forward execution.",
       "variants": [
-        {"inputs": ["float32", "float32"], "result": "float32", "cpu": {"status": "supported", "gradients": "first-order"}, "webgpu": {"status": "supported", "gradients": "first-order"}}
+        {"inputs": ["float32", "float32"], "result": "float32", "cpu": {"status": "supported", "gradients": "first-order"}, "webgpu": {"status": "supported", "gradients": "first-order"}},
+        {"inputs": ["float16", "float16"], "result": "float16", "cpu": {"status": "supported", "gradients": "none"}, "webgpu": {"status": "supported", "gradients": "none"}}
       ]
     },
     {

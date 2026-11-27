@@ -54,6 +54,7 @@ test("family bindings share actual type rules while coefficient and state domain
 });
 
 function capturedProgram(kind) {
+  const dtype = kind === "sum-f16" || kind === "matmul-f16" ? "float16" : "float32";
   const shapes = kind === "sum-f32" || kind === "sum-f16" ? [[3], []]
     : kind === "expand-f32" ? [[], [3]]
       : kind === "reduce-f32" ? [[2, 3], [1, 3]]
@@ -61,20 +62,20 @@ function capturedProgram(kind) {
   const output = shapes.length - 1;
   return {
     values: shapes.map((shape, slot) => ({ slot, storageSlot: slot, shape,
-      dtype: kind === "sum-f16" ? "float16" : "float32", device: "cpu", layout: "contiguous",
+      dtype, device: "cpu", layout: "contiguous",
       source: slot === output ? "computed" : "binding", provenance })),
     computations: [{ kind, inputs: shapes.slice(0, -1).map((_, slot) => slot), output, provenance,
       ...(kind === "add-alpha-f32" ? { alphaBits: 0x3f800000 } : {}),
-      ...(kind === "matmul-f32" ? { matrixFlags: 0 } : {}) }],
+      ...(kind === "matmul-f32" || kind === "matmul-f16" ? { matrixFlags: 0 } : {}) }],
     result: output,
   };
 }
 
-for (const kind of ["add-f32", "add-alpha-f32", "mul-f32", "sum-f32", "sum-f16", "expand-f32", "matmul-f32", "reduce-f32"]) {
+for (const kind of ["add-f32", "add-alpha-f32", "mul-f32", "sum-f32", "sum-f16", "expand-f32", "matmul-f32", "matmul-f16", "reduce-f32"]) {
   test(`${kind} reconstruction rejects every invalid input/result type before publication`, () => {
     const original = capturedProgram(kind);
     const valid = new ExecutableProgram(original.values, original.computations, original.result);
-    const dtype = kind === "sum-f16" ? "float16" : "float32";
+    const dtype = original.values[0].dtype;
     assert.equal(valid.values[valid.result].dtype, dtype);
     for (let slot = 0; slot < original.values.length; slot++) {
       const captured = structuredClone(original);
