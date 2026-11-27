@@ -127,21 +127,24 @@ but before a backend chooses kernels or physical memory. The named record gives
 both backends a stable, testable meaning to consume without requiring every
 backend to understand the full public API.
 
-Executable-program format 7 includes the private `add-alpha-f32` computation
-with immutable `alphaBits`. The ordinary operation record validates this
+The [executable vocabulary](../../src/execution/operation-contracts.ts) includes
+the private `add-alpha-f32` computation with immutable `alphaBits`. The ordinary operation record validates this
 unsigned 32-bit coefficient attribute, formation carries it into the frozen
-program, and CPU dispatch passes it through module profile 6. No payload,
+program, and CPU dispatch passes it through the
+[raw ABI](webassembly-cpu-backend.md#version-1-raw-abi-and-module-capabilities). No payload,
 frontend object or later mutable learning-rate lookup crosses this boundary.
 The [SGD decision](cpu-sgd.md#coefficient-conversion-and-capture) owns its exact
 numerical meaning; other computations do not acquire a coefficient attribute.
 
-The same format includes `matmul-f32` with required unsigned `matrixFlags`
-in 0–3. Bit 0 changes left indexing and bit 1 changes right indexing. Formation
+The matrix family includes `matmul-f32` and `matmul-f16` with required unsigned
+`matrixFlags` in 0–3. Bit 0 changes left indexing and bit 1 changes right indexing. Formation
 preserves the admitted orientation; reconstruction owns shape metadata and
-validates two float32 contiguous operands, canonical whole-storage aliases,
-contraction, distinct output storage and selected-device agreement before
-preparation, including empty work. The [matrix decision](float32-matrix-product.md)
-owns its numerical recurrence and derivative meaning. Other computations
+validates two contiguous operands and a result of the declared matching dtype,
+canonical whole-storage aliases, contraction, distinct output storage and
+selected-device agreement before preparation, including empty work. The
+[float32 matrix decision](float32-matrix-product.md) defines its recurrence and
+derivatives. The [float16 contract](typed-tensors.md#dense-matrix-product)
+defines compact forward arithmetic. Other computations
 reject matrix attributes rather than interpreting them as defaults.
 
 It deliberately excludes:
