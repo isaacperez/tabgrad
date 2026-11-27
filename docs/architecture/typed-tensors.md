@@ -177,12 +177,14 @@ integration, qualification and approval requirements.
 
 ## Compact floating reductions and matrix products
 
-The [binary16 arithmetic decision](https://github.com/isaacperez/tabgrad/issues/509)
-defines the forward numerical contract for total sum and dense two-dimensional
+The [binary16](https://github.com/isaacperez/tabgrad/issues/509) and
+[bfloat16](https://github.com/isaacperez/tabgrad/issues/521#issuecomment-7220653831)
+decisions define forward arithmetic for total sum and dense two-dimensional
 matrix products. The operation references and each release's compatibility
 record identify the implementations and environments that are qualified.
 
-Both forms retain contiguous, same-device operands and a binary16 result.
+Both forms retain contiguous, same-device operands and a result of their
+declared compact dtype. Matrix operands use the same dtype.
 Total sum accepts an input of any admitted rank, including a scalar, and
 produces a distinct scalar. Dense matrix multiplication uses the existing
 two-dimensional shape and contraction rules. A zero output dimension produces
@@ -243,7 +245,56 @@ avoids adding a separate exact-dot contract. The experimental record in
 [#509](https://github.com/isaacperez/tabgrad/issues/509) establishes numerical
 feasibility. Timing and stage scratch costs require representative evidence
 from the actual kernels. A material cost or a failed qualification warrants
-review of the design. Other compact formats require their own range evidence.
+review of the design.
+
+### Bfloat16 range and rounding
+
+The [bfloat16 arithmetic decision](https://github.com/isaacperez/tabgrad/issues/521#issuecomment-7220545574)
+uses the same compact storage and forward-only scope. Numeric construction
+stages through binary32 before rounding to bfloat16, as observed in the pinned
+PyTorch constructor. Every stored bfloat16 value can be decoded into binary32
+without losing information about its numerical value or sign of zero.
+
+Total sum accumulates the stored finite values exactly and rounds the total
+once, to nearest bfloat16 with ties to even. The exact-zero and nonfinite
+rules are the same as for binary16 sum. At the bfloat16 scale of 2⁻¹³³, a
+finite coefficient has magnitude below 2²⁶¹. A u32 element count bounds every
+partial and the total below 2²⁹³, so five 64-bit limbs suffice. The existing
+GPU exact reducer uses units of 2⁻¹⁴⁹, for which the corresponding bound is
+below 2³⁰⁹. It can consume the compact format by embedding each value in
+binary32 as it is read. Round directly from the exact accumulator to bfloat16.
+An intermediate rounded binary32 sum can discard bits that decide the final
+bfloat16 rounding. Exponent bins and stage partials are backend-private.
+
+Each matrix output starts at positive zero and visits the contraction in
+ascending order. Round each product to binary32 with ties to even. Add the
+rounded product with a separate nearest-even binary32 rounding. Round the
+final accumulator to bfloat16 with ties to even and retain the sign of a
+negative value rounded to zero. Binary32 exceptional values and signed zeros
+apply at each step. NaN payload and sign are outside the contract. Bfloat16
+products can underflow or overflow before addition, so fusing the two steps
+can change the result. The ordinary empty-axis and zero-contraction rules
+still apply. Use packed operands and outputs with private arithmetic state.
+
+In the pinned CPU comparison, separately rounded matrix arithmetic matched
+the native subnormal-midpoint and opposite-overflow witnesses. Fused arithmetic
+changed the output from one to two subnormal units in the first case and from
+NaN to positive infinity in the second. The separate scalar Wasm prototype
+was faster in its largest measured shape. The physical GPU timing ranges
+overlapped. Exact whole-dot accumulation preserves cancellation across a
+wider range at the cost of wider arithmetic per result and changes both
+ordered and native outcomes.
+
+The selected exact sum preserves a small term between opposite maximum finite
+inputs. Ordered binary32 and the observed native reduction lost it. Ordered
+binary32 uses less accumulator state, while native association can vary with
+shape. For matrix operands with zero padding around an order-sensitive term,
+the native path retained a value that both ordered binary32 matrix alternatives
+lost. The [independent challenge](https://github.com/isaacperez/tabgrad/issues/521#issuecomment-7220544852)
+records those witnesses and the limits of the prototypes. Test ordered rounding
+with independent references and ordinary supported calls against the pinned
+native environment. Reconsider the design if representative kernel measurements
+show a material cost or if the compatibility contract changes.
 
 ## Preserve derivative and protocol domains
 
