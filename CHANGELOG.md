@@ -7,6 +7,8 @@ established by the corresponding verified release record.
 
 ## Unreleased
 
+## 0.6.0 - 2026-11-27
+
 ### Added
 
 - Sum a whole float16 tensor on CPU or GPU in JavaScript and Python. Both
@@ -20,6 +22,12 @@ established by the corresponding verified release record.
   2D matrix multiplication. Values use two logical bytes and matrix products
   round the multiply and add separately in float32
   ([#512](https://github.com/isaacperez/tabgrad/issues/512)).
+
+### Changed
+
+- Browse PyTorch compatibility by module and operation, with dtype filters
+  and CPU and GPU support for the selected documentation version
+  ([#514](https://github.com/isaacperez/tabgrad/issues/514)).
 
 ## 0.5.0 - 2026-11-18
 

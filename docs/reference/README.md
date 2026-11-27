@@ -67,6 +67,9 @@ recording, alias versions, derivative guards and deferred failure.
 Use [Gradient recording scopes](gradient-recording.md) for Python `no_grad`,
 JavaScript callbacks, shared mode restoration and special-view tracking.
 
+Use the [0.6.0 source and support record](release-0.6.0.md) for float16
+and bfloat16 reductions and matrix products, and the compatibility matrix.
+
 Use the [0.5.0 source and support record](release-0.5.0.md) for float16,
 CPU capacity, GPU dispatch and their release-specific limits.
 

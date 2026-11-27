@@ -1015,6 +1015,12 @@ try {
         assert(/float16 gradients, training, mutation, reductions and matrix products are unavailable/i.test(description('Float16 scope')),
           '0.5.0 explains the separate float16 operation limits');
       }
+      if (expectedSupport.version === '0.6.0') {
+        const compactLimit = description('Compact dtype scope');
+        assert(/float16 and bfloat16 support forward execution/i.test(compactLimit), '0.6.0 explains compact forward coverage');
+        assert(/gradients, tensor mutation and SGD require float32/i.test(compactLimit), '0.6.0 keeps compact and gradient coverage distinct');
+        assert(doc.querySelector('main a[href="/docs/0.6.0/compatibility/"]'), '0.6.0 links the version-owned operation compatibility page');
+      }
     }
     if (['/', '/start/', '/docs/', '/playground/', '/versions/', '/about/', '/contact/'].includes(path)) {
       assert(frame.contentDocument.querySelector('[data-illustration], .integration-map'), `primary and project pages include contextual original artwork: ${path}`);

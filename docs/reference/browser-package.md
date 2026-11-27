@@ -18,7 +18,7 @@ localhost during development:
 
   try {
     const { createRuntimeSession } = await import(
-      "https://cdn.jsdelivr.net/npm/@tabgrad/tabgrad@0.5.0/dist/index.js"
+      "https://cdn.jsdelivr.net/npm/@tabgrad/tabgrad@0.6.0/dist/index.js"
     );
     session = createRuntimeSession();
     const x = session.tensor([1, 2, 3]);
@@ -89,7 +89,7 @@ exact version rather than relying on a moving channel. The reference installatio
 uses the same version as the HTML example:
 
 ```console
-npm install @tabgrad/tabgrad@0.5.0 --ignore-scripts --no-audit --no-fund
+npm install @tabgrad/tabgrad@0.6.0 --ignore-scripts --no-audit --no-fund
 ```
 
 This command describes the named installation path; source metadata and local
