@@ -1,5 +1,5 @@
 import { attachPython } from '/python.js';
-import { compactPythonSource } from '/helpers/compact-float-cases.mjs';
+import { checkResidentMatrixTransfers, compactPythonSource } from '/helpers/compact-float-cases.mjs';
 addEventListener('message', async ({ data }) => {
   let binding;
   try {
@@ -13,8 +13,13 @@ addEventListener('message', async ({ data }) => {
       selectCpuProfile(data.variant);
     }
     binding = await attachPython(interpreter, data.webgpu ? { webgpu: data.webgpu } : {});
-    const { source, counts } = compactPythonSource(data.reference, data.device, data.dtype, data.fractionBits);
+    const { source, composition, counts } = compactPythonSource(data.reference, data.device, data.dtype, data.fractionBits, data.arithmetic);
     await binding.runPythonAsync(source);
+    if (composition) {
+      const before = binding.diagnostics();
+      await binding.runPythonAsync(composition);
+      checkResidentMatrixTransfers(data.device, before, binding.diagnostics());
+    }
     const beforeClose = binding.diagnostics();
     await binding.close();
     postMessage({ ok: true, pyodide: interpreter.version, worker: true, jspiAvailable: false,

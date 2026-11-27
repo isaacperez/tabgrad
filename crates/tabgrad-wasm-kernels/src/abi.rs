@@ -11,8 +11,12 @@ const CAPABILITY_ADD_ALPHA_F32: u32 = 16;
 const CAPABILITY_MATMUL_F32: u32 = 32;
 const CAPABILITY_BROADCAST_F32: u32 = 64;
 const CAPABILITY_REDUCE_F32: u32 = 128;
+const CAPABILITY_POINTWISE_F16: u32 = 256;
 const CAPABILITY_SUM_F16: u32 = 512;
 const CAPABILITY_MATMUL_F16: u32 = 1024;
+const CAPABILITY_POINTWISE_BF16: u32 = 2048;
+const CAPABILITY_SUM_BF16: u32 = 4096;
+const CAPABILITY_MATMUL_BF16: u32 = 8192;
 pub(crate) const STATUS_INVALID_GEOMETRY: u32 = 4;
 pub(crate) const FLOAT_ALIGNMENT: u32 = align_of::<f32>() as u32;
 
@@ -63,9 +67,12 @@ pub extern "C" fn tabgrad_capabilities() -> u32 {
         | CAPABILITY_MATMUL_F32
         | CAPABILITY_BROADCAST_F32
         | CAPABILITY_REDUCE_F32
-        | crate::half::POINTWISE_CAPABILITIES
+        | CAPABILITY_POINTWISE_F16
         | CAPABILITY_SUM_F16
         | CAPABILITY_MATMUL_F16
+        | CAPABILITY_POINTWISE_BF16
+        | CAPABILITY_SUM_BF16
+        | CAPABILITY_MATMUL_BF16
 }
 
 #[unsafe(no_mangle)]
@@ -113,6 +120,28 @@ pub(crate) fn validate_typed_binary_ranges(
         return STATUS_OUT_OF_BOUNDS;
     };
     if overlaps(output_range, left_range) || overlaps(output_range, right_range) {
+        return STATUS_OUTPUT_OVERLAP;
+    }
+    STATUS_OK
+}
+
+pub(crate) fn validate_reduction_ranges(
+    input_offset: u32,
+    output_offset: u32,
+    length: u32,
+    width: u32,
+) -> u32 {
+    if !input_offset.is_multiple_of(width) || !output_offset.is_multiple_of(width) {
+        return STATUS_UNALIGNED;
+    }
+    let memory_bytes = (core::arch::wasm32::memory_size(0) as u64) * 65_536;
+    let Some(input_range) = checked_typed_range(input_offset, length, width, memory_bytes) else {
+        return STATUS_OUT_OF_BOUNDS;
+    };
+    let Some(output_range) = checked_typed_range(output_offset, 1, width, memory_bytes) else {
+        return STATUS_OUT_OF_BOUNDS;
+    };
+    if length != 0 && overlaps(output_range, input_range) {
         return STATUS_OUTPUT_OVERLAP;
     }
     STATUS_OK

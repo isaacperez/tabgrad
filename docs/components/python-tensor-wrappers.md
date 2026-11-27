@@ -132,7 +132,7 @@ earlier. The properties cannot be assigned through the Python tensor API.
 
 The resulting objects are Python presentations: `Size` is an immutable integer
 tuple with its own representation and shape-preserving tuple operations;
-`float32` and `float16` are the exposed `dtype` constants; and `device` is an immutable
+`float32`, `float16` and `bfloat16` are the exposed `dtype` constants. `device` is an immutable
 descriptor for the supported unindexed device names. CPU remains the default;
 `webgpu` selects the explicitly attached backend and is a Tabgrad extension,
 not an upstream PyTorch device. The exact domain is in the

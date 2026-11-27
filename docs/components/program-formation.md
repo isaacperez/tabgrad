@@ -107,9 +107,8 @@ allocation. The connected worker still reconstructs the immutable program at
 its transport boundary. These checks do not move computation, acquire another
 backend or change submission and drain ownership.
 
-Numerical kinds explicitly identify float32 signatures and the bounded float16
-add/mul signatures. Their names identify the
-numerical signature; GPU preparation adds the dispatch layout, while each
+Numerical kinds identify the dtype-specific signatures for float32 and
+compact forward arithmetic. GPU preparation adds the dispatch layout, while each
 backend instance owns its device generation and feature domain. Tensor shape
 remains invocation geometry and cannot grow the pipeline cache. A new numerical
 specialization requires its own admitted kind and physical implementation;

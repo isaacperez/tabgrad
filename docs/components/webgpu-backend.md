@@ -145,12 +145,14 @@ that actually started, whether a logical result succeeded or failed.
 
 ### Total-sum geometry and private storage
 
-The [float32](../../src/backends/webgpu/kernels/sum.ts) and
-[float16](../../src/backends/webgpu/kernels/sum-f16.ts) sum kernels process
+The [float32](../../src/backends/webgpu/kernels/sum.ts),
+[float16](../../src/backends/webgpu/kernels/sum-f16.ts) and
+[bfloat16](../../src/backends/webgpu/kernels/sum-bf16.ts) sum kernels process
 128 elements per group with 64 invocations. Nonfinal stages write 44-byte
-partials for float32 or 16-byte partials for float16. Dispatches establish
+partials for float32 and bfloat16, and 16-byte partials for float16. Dispatches establish
 the dependency between stages; no device-wide barrier is assumed within a
-dispatch. The final stage writes four scalar bytes. Even empty input dispatches
+dispatch. The final stage writes a four-byte word, holding a float32 scalar or
+one compact scalar in its low lane. Even empty input dispatches
 one guarded group to write positive zero rather than reuse stale scalar data.
 
 Each stage has a distinct 16-byte uniform. Partial and parameter allocations
@@ -159,15 +161,16 @@ released only after drain. A queued uniform write creates this obligation even
 when all inputs are resident or empty and command encoding later fails.
 
 The acquired workgroup limits must permit 64 invocations and the specialization's
-workgroup storage: 2,816 bytes for float32 or 1,024 bytes for float16. The buffer
+workgroup storage: 2,816 bytes for float32 and bfloat16, or 1,024 bytes for float16. The buffer
 limit must permit a uniform. The existing tensor
 extent bound limits the unsigned input count; stage planning separately checks
 each dispatch and its padded indices. Each stage selects its own original or
 grid pipeline, so a large first stage does not change later partitions.
 For `N >= 129`, each first partial buffer fits its admitted input extent:
-`44 * ceil(N/128) <= 4*N` for float32 and `16 * ceil(N/128) <= 2*N` for float16.
-Later stages shrink further. See the [float32](../architecture/webgpu-float32-sum.md)
-and [float16](../architecture/typed-tensors.md#total-sum) decisions for the
+`44 * ceil(N/128) <= 4*N` for float32, `44 * ceil(N/128) <= 2*N` for bfloat16,
+and `16 * ceil(N/128) <= 2*N` for float16. Later stages shrink further.
+See the [float32](../architecture/webgpu-float32-sum.md) and
+[compact](../architecture/typed-tensors.md#compact-floating-reductions-and-matrix-products) decisions for the
 integer-width proofs. These storage bounds describe buffers owned by Tabgrad.
 
 ## Loss, release and extension boundaries

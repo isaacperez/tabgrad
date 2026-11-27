@@ -36,8 +36,9 @@ result has the broadcast output shape and its inputs' dtype and device; `await r
 returns the ordinary independent flat `Float32Array`. Close JavaScript handles
 and their session under the existing explicit lifetime contract.
 
-Multiplication accepts two broadcast-compatible contiguous `float32` tensors
-or two [`float16` tensors](float16.md) in one session on the same device.
+Multiplication accepts two broadcast-compatible contiguous tensors of the
+same dtype and device in one session. Supported dtypes are `float32`,
+[`float16`](float16.md) and [`bfloat16`](python-tensors.md#bfloat16-tensors).
 The result keeps their dtype. WebGPU requires a ready backend that supports
 multiplication for the selected dtype. This domain
 includes scalar tensors, every supported contiguous rank,
@@ -49,9 +50,8 @@ can multiply any supported tensor; a tensor
 and a Python or JavaScript number do not. The result owns distinct logical
 storage and never mutates either input or a live alias.
 
-The float32 numerical and derivative contract below remains separate from the
-inference-only [float16 domain](float16.md), which defines compact storage,
-conversion, stored rounding and its explicit exclusions.
+The compact dtype references define the forward-only arithmetic rules.
+The numerical and derivative contract below applies to float32.
 
 Host-number operands, promotion, unsupported dtypes or device mixing,
 non-contiguous layouts, in-place multiplication, output-buffer

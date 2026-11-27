@@ -1,7 +1,7 @@
 # Two-dimensional tensor matrix products
 
 This reference is for Python and JavaScript users multiplying dense contiguous
-`float32` or `float16` matrices on CPU or an explicitly enabled WebGPU device. For inputs
+`float32`, `float16` or `bfloat16` matrices on CPU or an explicitly enabled WebGPU device. For inputs
 `A[M,K]` and `B[K,N]`, the distinct result has shape `[M,N]` and the same device
 and dtype. Both inputs use the same dtype and belong to one session. Zero dimensions, whole-storage
 views and repeated operands are included.
@@ -43,14 +43,14 @@ no-grad views, per-node partial progress, result identities and reset retain
 their existing contracts. A small resident training step can use
 `loss=(inputs @ weights); loss=(loss*loss).sum(); loss.backward(); optimizer.step()`
 with [basic SGD](sgd.md); reset gradients between steps as required.
-The `float16` product supports forward execution.
+The `float16` and `bfloat16` products support forward execution.
 
 ## Numerical and resource boundaries
 
 Each output starts at positive float32 zero and visits contraction indices in
-ascending order. Every term rounds the exact accumulator plus product once to
-nearest binary32, ties to even. CPU scalar/SIMD and GPU use this order with
-both dtypes. A float32 result stores the final accumulator under the
+ascending order. For float32 and float16, every term rounds the exact
+accumulator plus product once to nearest binary32, ties to even. CPU
+scalar/SIMD and GPU use the same order. A float32 result stores the final accumulator under the
 [float32 contract](../architecture/float32-matrix-product.md). A float16 result
 [rounds that accumulator once to binary16](../architecture/typed-tensors.md#dense-matrix-product),
 including ties to even and negative results rounded to negative zero.
@@ -59,10 +59,16 @@ term; NaN payload and sign are unspecified. A nonempty `K=0` result contains
 positive zeros. An empty output still validates arguments and metadata, and
 can have nonempty derivative contributions when using float32.
 
+Bfloat16 uses two separate binary32 rounding steps per term: first the
+product and then the sum with the accumulator. An intermediate product can
+underflow or overflow before addition. The result rounds once from the last
+accumulator to bfloat16, with ties to even. See the
+[bfloat16 arithmetic decision](../architecture/typed-tensors.md#bfloat16-range-and-rounding).
+
 A finite binary16 product is exactly representable in binary32. The CPU
 kernel decodes active elements into registers for arithmetic. The GPU kernel
-computes the exact product with integer significands and uses the binary32
-adder for each rounding step. One GPU invocation owns a full output word
+computes the exact binary16 product with integer significands. For bfloat16
+it uses the separately rounded binary32 multiplication and addition kernels. One GPU invocation owns a full output word
 and computes the second element only when it exists. Operand and result
 storage stay compact, including when a packed word crosses a row boundary.
 

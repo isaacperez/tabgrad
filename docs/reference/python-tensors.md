@@ -55,8 +55,9 @@ Pass the dtype explicitly.
   structure of built-in lists/tuples containing those types. A numeric scalar
   produces shape `()`. Empty input produces shape `(0,)`; `[[], []]` produces
   `(2, 0)`. Nesting cannot imply dimensions after an empty sequence.
-- Select the canonical `torch.float32` or `torch.float16` object, not its string
-  name. The [float16 reference](float16.md) lists its supported operations.
+- Select the canonical `torch.float32`, `torch.float16` or `torch.bfloat16`
+  object. The [dtype table](../compatibility.md#tensor-dtypes-by-operation)
+  lists the supported operations.
 - The device may be the string `'cpu'` or `'webgpu'`, or the corresponding
   `torch.device` descriptor. CPU is the default even with GPU attached.
   `webgpu` is a Tabgrad extension, not an upstream PyTorch device name.
@@ -75,6 +76,22 @@ Pass the dtype explicitly.
 Use `torch.tensor`, not `torch.Tensor(...)`. The latter constructor is rejected;
 an opaque handle cannot be manufactured by a public constructor.
 
+## Bfloat16 tensors
+
+Use `torch.bfloat16` when you need the exponent range of float32 with a
+two-byte tensor format. Values are converted through float32 and then rounded
+to bfloat16, with ties to even. For example, `torch.tensor([1.0, 2.0], dtype=torch.bfloat16)`
+creates a CPU tensor and `tensor.tolist()` returns the stored values as Python numbers.
+In JavaScript, the corresponding option is `{ dtype: "bfloat16" }`; numeric
+observation returns decoded values in a `Float32Array`.
+
+CPU and WebGPU support whole-storage views, same-dtype addition and
+multiplication with broadcasting, [total sum](tensor-sum.md#bfloat16-on-cpu-and-webgpu)
+and [2D matrix products](tensor-matmul.md#numerical-and-resource-boundaries).
+Pointwise operations round to float32 before storing each bfloat16 result.
+Bfloat16 supports forward operations. Gradients, in-place mutation and
+optimizers require float32.
+
 ## Read metadata
 
 `tensor.shape`, `tensor.dtype`, `tensor.device` and `tensor.requires_grad` are read-only properties.
@@ -84,7 +101,7 @@ serve cached metadata.
 | Property | Python presentation | Bounded behavior |
 | --- | --- | --- |
 | `shape` | `torch.Size`, an immutable integer tuple | Iteration, indexing, tuple equality/hash, representation, slicing, concatenation, repetition and `numel()` |
-| `dtype` | The selected `torch.float32` or `torch.float16` constant of type `torch.dtype` | Identity, representation, read-only `is_floating_point=True`, `is_complex=False`, `is_signed=True` |
+| `dtype` | The selected `torch.float32`, `torch.float16` or `torch.bfloat16` constant of type `torch.dtype` | Identity, representation, read-only `is_floating_point=True`, `is_complex=False`, `is_signed=True` |
 | `device` | A `torch.device` object for the runtime's device | Equality with the same device name, hashing, representation, string form, read-only `type` and `index=None`; supported names are `cpu` and `webgpu` |
 | `requires_grad` | Python `bool` | Advertised tracking; propagation follows the [recording mode and view rules](gradient-recording.md), and functional gradients return untracked tensors |
 
@@ -107,8 +124,8 @@ operator = left + right
 
 `torch.add(input, other, *, alpha=1, out=None)` and
 `Tensor.add(other, *, alpha=1)` require two broadcast-compatible tensors in
-one session on the same device. Use two `torch.float32` tensors or two
-[`torch.float16` tensors](float16.md). The result keeps that dtype.
+one session on the same device. Both operands must use the same dtype: `float32`,
+[`float16`](float16.md) or [`bfloat16`](#bfloat16-tensors). The result keeps that dtype.
 GPU admission also requires an attached, ready backend that supports the
 selected dtype for addition.
 Align dimensions from the right: each pair must be equal or include a

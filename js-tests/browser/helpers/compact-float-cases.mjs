@@ -1,6 +1,6 @@
 import { halfSumCases } from './float16-sum-cases.mjs';
 import { halfMatrixCases } from './float16-matrix-oracle.mjs';
-import { halfValue } from './float16-values.mjs';
+import { bfloatMatrixCases, bfloatSumCases } from './bfloat16-cases.mjs';
 
 /** Decode the independent 16-bit oracle words for numeric comparisons. */
 function compactValue(bits, fractionBits) {
@@ -13,6 +13,12 @@ function compactValue(bits, fractionBits) {
   if (exponent === exponentMask) return fraction ? NaN : sign * Infinity;
   return exponent === 0 ? sign * fraction * 2 ** (1 - bias - fractionBits)
     : sign * (unit + fraction) * 2 ** (exponent - bias - fractionBits);
+}
+
+export function compactArithmeticCases(format) {
+  if (format === 'bfloat16') return { sums: bfloatSumCases(), matrices: bfloatMatrixCases() };
+  if (format === 'float16') return { sums: halfSumCases(), matrices: halfMatrixCases().filter(({ flags }) => flags === 0) };
+  return { sums: [], matrices: [] };
 }
 
 function inputValue(value) {
@@ -31,20 +37,19 @@ function compactTensor(session, owned, device, dtype, values, shape) {
   return result;
 }
 
-async function checkHalfSums(session, device) {
-  const options = { dtype: 'float16', device };
-  const cases = halfSumCases();
-  for (const { name, values, expected } of cases) {
-    const data = values();
+async function checkCompactSums(session, options, cases, decode) {
+  const { device, dtype } = options;
+  for (const { name, words, expectedWord } of cases) {
+    const data = Float32Array.from(words, decode);
     const shape = data.length === 1 ? [] : [1, data.length];
     const input = session.tensor(data, { ...options, shape });
     const output = input.sum();
     input.close();
     try {
-      if (output.dtype !== options.dtype || output.device !== device || output.shape.length !== 0 || output.requiresGrad) {
+      if (output.dtype !== dtype || output.device !== device || output.shape.length !== 0 || output.requiresGrad) {
         throw Error(name + ': incorrect sum metadata');
       }
-      sameValues(await output.toArray(), [expected], name);
+      sameValues(await output.toArray(), [decode(expectedWord)], name);
     } finally { output.close(); }
   }
   const before = session.diagnostics();
@@ -61,41 +66,47 @@ async function checkHalfSums(session, device) {
   return cases.length;
 }
 
-async function checkHalfMatrices(session, device) {
-  const options = { dtype: 'float16', device };
-  const cases = halfMatrixCases().filter(({ flags }) => flags === 0);
+async function checkCompactMatrices(session, options, cases, decode) {
+  const { device, dtype } = options;
   for (const { name, shape: [m, k, n], left, right, expected } of cases) {
-    const a = session.tensor(Float32Array.from(left, halfValue), { ...options, shape: [m, k] });
-    const b = session.tensor(Float32Array.from(right, halfValue), { ...options, shape: [k, n] });
+    const a = session.tensor(Float32Array.from(left, decode), { ...options, shape: [m, k] });
+    const b = session.tensor(Float32Array.from(right, decode), { ...options, shape: [k, n] });
     const output = a.matmul(b);
     a.close(); b.close();
     try {
-      if (output.dtype !== options.dtype || output.device !== device || output.shape[0] !== m || output.shape[1] !== n || output.requiresGrad) {
+      if (output.dtype !== dtype || output.device !== device || output.shape[0] !== m || output.shape[1] !== n || output.requiresGrad) {
         throw Error(name + ': incorrect matrix metadata');
       }
-      sameValues(await output.toArray(), Array.from(expected, halfValue), name);
+      sameValues(await output.toArray(), Array.from(expected, decode), name);
     } finally { output.close(); }
   }
   const before = session.diagnostics();
   const a = session.tensor([2, 3], { ...options, shape: [2, 1] });
   const b = session.tensor([1, 2, -1], { ...options, shape: [1, 3] });
-  const product = a.matmul(b), scalar = product.sum();
-  a.close(); b.close(); product.close();
+  const bias = session.tensor([1, 0, 2], options);
+  const product = a.matmul(b), shifted = product.add(bias), scalar = shifted.sum();
+  a.close(); b.close(); bias.close(); product.close(); shifted.close();
   try {
-    sameValues(await scalar.toArray(), [10], 'resident matmul/sum');
-    const after = session.diagnostics();
-    const readback = device === 'cpu' ? after.wasmToHostBytes - before.wasmToHostBytes
-      : after.webgpu.readbackBytes - before.webgpu.readbackBytes;
-    if (readback !== 2) throw Error('Unexpected resident matrix readback bytes: ' + readback);
+    sameValues(await scalar.toArray(), [16], 'resident matmul/add/sum');
+    checkResidentMatrixTransfers(device, before, session.diagnostics());
   } finally { scalar.close(); }
   return cases.length;
+}
+
+export function checkResidentMatrixTransfers(device, before, after) {
+  const upload = device === 'cpu' ? after.hostToWasmBytes - before.hostToWasmBytes
+    : after.webgpu.uploadBytes - before.webgpu.uploadBytes;
+  const readback = device === 'cpu' ? after.wasmToHostBytes - before.wasmToHostBytes
+    : after.webgpu.readbackBytes - before.webgpu.readbackBytes;
+  if (upload !== 16 || readback !== 2) throw Error(`Unexpected resident matrix transfers: ${upload} uploaded, ${readback} read back`);
 }
 
 // 2,181 values span more than 17 groups of 128 and leave an odd tail.
 const PACKED_ROWS = 727;
 const PACKED_COLUMNS = [2, -3, 5];
 
-export async function compactJavaScriptCases(session, oracle, device, dtype, fractionBits) {
+export async function compactJavaScriptCases(session, oracle, device, dtype, fractionBits, arithmetic) {
+  const { sums, matrices } = compactArithmeticCases(arithmetic);
   const decode = word => compactValue(word, fractionBits);
   const owned = [], options = { dtype, device };
   try {
@@ -139,11 +150,12 @@ export async function compactJavaScriptCases(session, oracle, device, dtype, fra
     const view = created.view([2, created.shape[0] / 2]); owned.push(view);
     created.close();
     sameValues(await view.toArray(), oracle.construction.words.map(decode), 'alias');
-    const totalSums = dtype === 'float16' ? await checkHalfSums(session, device) : 0;
-    const matrixProducts = dtype === 'float16' ? await checkHalfMatrices(session, device) : 0;
+    const totalSums = sums.length ? await checkCompactSums(session, options, sums, decode) : 0;
+    const matrixProducts = matrices.length ? await checkCompactMatrices(session, options, matrices, decode) : 0;
     const f32 = session.tensor([1], { device }); owned.push(f32);
     const before = session.diagnostics();
-    for (const operation of [...(dtype === 'float16' ? [] : [() => left.sum(), () => left.matmul(right)]), () => left.copy_(left),
+    for (const operation of [...(sums.length ? [] : [() => left.sum()]),
+      ...(matrices.length ? [] : [() => left.matmul(right)]), () => left.copy_(left),
       () => left.add(f32), () => left.matmul(f32), () => session.tensor([1], { ...options, requiresGrad: true })]) {
       let error;
       try { operation(); } catch (value) { error = value; }
@@ -161,11 +173,11 @@ export async function compactJavaScriptCases(session, oracle, device, dtype, fra
 }
 
 /** The same public calls run inside Pyodide; no raw half API is exposed. */
-export function compactPythonSource(oracle, device, dtype, fractionBits) {
-  const sumCases = dtype === 'float16' ? halfSumCases().map(({ name, words, expectedWord }) =>
-    [name, [...words], expectedWord]) : [];
-  const matrixCases = dtype === 'float16' ? halfMatrixCases().filter(({ flags }) => flags === 0)
-    .map(({ name, shape, left, right, expected }) => [name, shape, [...left], [...right], [...expected]]) : [];
+export function compactPythonSource(oracle, device, dtype, fractionBits, arithmetic) {
+  const { sums, matrices } = compactArithmeticCases(arithmetic);
+  const sumCases = sums.map(({ name, words, expectedWord }) => [name, [...words], expectedWord]);
+  const matrixCases = matrices.map(({ name, shape, left, right, expected }) =>
+    [name, shape, [...left], [...right], [...expected]]);
   const source = `
 import torch, math, json, gc
 
@@ -244,7 +256,7 @@ def check_half() -> tuple[int, int]:
         _half_check([summed.tolist()], [expected])
         del summed
         total_sums += 1
-    if _compact_dtype is torch.float16:
+    if total_sums:
         source = _half_construct([[1., 2., 3.]])
         reduced = (source + source).sum()
         composed_sum = reduced * reduced
@@ -277,5 +289,18 @@ assert check_half() == (${sumCases.length}, ${matrixCases.length})
 del check_half, _half_value, _half_check, _half_construct, _compact_dtype, _compact_fraction_bits
 gc.collect()
 `;
-  return { source, counts: { totalSums: sumCases.length, matrixProducts: matrixCases.length } };
+  const composition = matrices.length && sums.length ? `
+def check_resident_matrix() -> None:
+    options = dict(dtype=torch.${dtype}, device=${JSON.stringify(device)})
+    left = torch.tensor([[2.], [3.]], **options)
+    right = torch.tensor([[1., 2., -1.]], **options)
+    bias = torch.tensor([1., 0., 2.], **options)
+    result = ((left @ right) + bias).sum()
+    del left, right, bias
+    assert result.dtype is torch.${dtype} and result.tolist() == 16.
+check_resident_matrix()
+del check_resident_matrix
+gc.collect()
+` : undefined;
+  return { source, composition, counts: { totalSums: sumCases.length, matrixProducts: matrixCases.length } };
 }

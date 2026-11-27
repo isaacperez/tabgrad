@@ -1,4 +1,4 @@
-import { runDTypeConformance } from "./dtype-conformance.mjs";
+import { runPublicDTypeConformance } from "./dtype-conformance.mjs";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
@@ -66,8 +66,8 @@ try {
     const executable = await resolveBrowser(browser);
     const version = browserVersion(executable);
     for (const language of ["javascript", "python"]) {
-      await runDTypeConformance({ browser, executable, version, language, device: "cpu" });
-      process.stdout.write(`PASS ${browser.name} float16 ${language} CPU\n`);
+      await runPublicDTypeConformance({ browser, executable, version, language, device: "cpu" });
+      process.stdout.write(`PASS ${browser.name} compact floats ${language} CPU\n`);
     }
     process.stdout.write(`${browser.name}: ${version}\n`);
     for (const variant of ["auto", "scalar", "simd128"]) {

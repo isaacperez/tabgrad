@@ -9,27 +9,27 @@ progress or a product roadmap.
 
 The tables summarize the finite set of PyTorch call forms Tabgrad supports.
 The linked references describe exact signatures, shapes and gradients.
-Python requires an explicit `torch.float32` or `torch.float16` when creating a
-tensor. The [JavaScript API](javascript-api.md) defaults to `"float32"` and
-accepts an explicit `"float16"`. Binary arithmetic requires two operands
+Python requires an explicit `torch.float32`, `torch.float16` or `torch.bfloat16`
+when creating a tensor. The [JavaScript API](javascript-api.md) accepts all
+three names and defaults to `"float32"`. Binary arithmetic requires two operands
 of the same dtype on the same device.
 
 ### Arithmetic
 
 | Operation | CPU | WebGPU |
 | --- | --- | --- |
-| [`add`](reference/python-tensors.md#admit-addition) | `float32`, `float16` | `float32`, `float16` |
-| [`mul`](reference/tensor-multiplication.md#call-forms-and-result) | `float32`, `float16` | `float32`, `float16` |
-| [`sum`](reference/tensor-sum.md#call-forms-and-result) | `float32`, `float16` | `float32`, `float16` |
-| [`matmul`](reference/tensor-matmul.md#calls-and-differentiation) | `float32`, `float16` | `float32`, `float16` |
+| [`add`](reference/python-tensors.md#admit-addition) | `float32`, `float16`, `bfloat16` | `float32`, `float16`, `bfloat16` |
+| [`mul`](reference/tensor-multiplication.md#call-forms-and-result) | `float32`, `float16`, `bfloat16` | `float32`, `float16`, `bfloat16` |
+| [`sum`](reference/tensor-sum.md#call-forms-and-result) | `float32`, `float16`, `bfloat16` | `float32`, `float16`, `bfloat16` |
+| [`matmul`](reference/tensor-matmul.md#calls-and-differentiation) | `float32`, `float16`, `bfloat16` | `float32`, `float16`, `bfloat16` |
 
 ### Storage and state
 
 | Operation | CPU | WebGPU |
 | --- | --- | --- |
-| [`torch.tensor`](reference/python-tensors.md#create-a-tensor) | `float32`, `float16` | `float32`, `float16` |
-| [`Tensor.tolist`](reference/python-tensors.md#observe-numerical-values) | `float32`, `float16` | `float32`, `float16` |
-| [`Tensor.view`](reference/tensor-view.md#call-forms-and-shape-rules) | `float32`, `float16` | `float32`, `float16` |
+| [`torch.tensor`](reference/python-tensors.md#create-a-tensor) | `float32`, `float16`, `bfloat16` | `float32`, `float16`, `bfloat16` |
+| [`Tensor.tolist`](reference/python-tensors.md#observe-numerical-values) | `float32`, `float16`, `bfloat16` | `float32`, `float16`, `bfloat16` |
+| [`Tensor.view`](reference/tensor-view.md#call-forms-and-shape-rules) | `float32`, `float16`, `bfloat16` | `float32`, `float16`, `bfloat16` |
 | [`Tensor.copy_`](reference/tensor-copy.md#calling-forms-and-values) | `float32` | `float32` |
 | [`Tensor.backward`](reference/backward-gradients.md#python-calls) | `float32` | `float32` |
 | [`torch.no_grad`](reference/gradient-recording.md#python-context) | Supported | Supported |
@@ -37,7 +37,7 @@ of the same dtype on the same device.
 | [`torch.optim.SGD`](reference/sgd.md#python-calls) | `float32` | `float32` |
 
 WebGPU arithmetic also depends on the [acquired device's limits](reference/webgpu-runtime.md#device-and-operation-domain).
-A device can admit `float16` storage while its limits exclude those
+A device can admit compact tensor storage while its limits exclude some
 arithmetic kernels. The individual references define shapes, gradient
 coverage and numerical behavior. Use the named release's support record for
 qualified environments and release-specific claims.
@@ -57,7 +57,8 @@ qualified environments and release-specific claims.
       "limits": "Creates a contiguous tensor with the dtype specified by the caller.",
       "variants": [
         {"inputs": [], "result": "float32", "cpu": {"status": "supported", "gradients": "first-order"}, "webgpu": {"status": "supported", "gradients": "first-order"}},
-        {"inputs": [], "result": "float16", "cpu": {"status": "supported", "gradients": "none"}, "webgpu": {"status": "supported", "gradients": "none"}}
+        {"inputs": [], "result": "float16", "cpu": {"status": "supported", "gradients": "none"}, "webgpu": {"status": "supported", "gradients": "none"}},
+        {"inputs": [], "result": "bfloat16", "cpu": {"status": "supported", "gradients": "none"}, "webgpu": {"status": "supported", "gradients": "none"}}
       ]
     },
     {
@@ -71,7 +72,8 @@ qualified environments and release-specific claims.
       "limits": "Elementwise addition with broadcasting for tensors of the same dtype. The public coefficient is one.",
       "variants": [
         {"inputs": ["float32", "float32"], "result": "float32", "cpu": {"status": "supported", "gradients": "first-order"}, "webgpu": {"status": "supported", "gradients": "first-order"}},
-        {"inputs": ["float16", "float16"], "result": "float16", "cpu": {"status": "supported", "gradients": "none"}, "webgpu": {"status": "supported", "gradients": "none"}}
+        {"inputs": ["float16", "float16"], "result": "float16", "cpu": {"status": "supported", "gradients": "none"}, "webgpu": {"status": "supported", "gradients": "none"}},
+        {"inputs": ["bfloat16", "bfloat16"], "result": "bfloat16", "cpu": {"status": "supported", "gradients": "none"}, "webgpu": {"status": "supported", "gradients": "none"}}
       ]
     },
     {
@@ -85,7 +87,8 @@ qualified environments and release-specific claims.
       "limits": "Elementwise multiplication with broadcasting for tensors of the same dtype.",
       "variants": [
         {"inputs": ["float32", "float32"], "result": "float32", "cpu": {"status": "supported", "gradients": "first-order"}, "webgpu": {"status": "supported", "gradients": "first-order"}},
-        {"inputs": ["float16", "float16"], "result": "float16", "cpu": {"status": "supported", "gradients": "none"}, "webgpu": {"status": "supported", "gradients": "none"}}
+        {"inputs": ["float16", "float16"], "result": "float16", "cpu": {"status": "supported", "gradients": "none"}, "webgpu": {"status": "supported", "gradients": "none"}},
+        {"inputs": ["bfloat16", "bfloat16"], "result": "bfloat16", "cpu": {"status": "supported", "gradients": "none"}, "webgpu": {"status": "supported", "gradients": "none"}}
       ]
     },
     {
@@ -96,10 +99,11 @@ qualified environments and release-specific claims.
       "arithmetic": true,
       "source": "docs/reference/tensor-sum.md",
       "fragment": "call-forms-and-result",
-      "limits": "Adds all elements and returns a scalar of the input dtype. Float16 supports forward execution. The call has no axis or dtype option.",
+      "limits": "Adds all elements and returns a scalar of the input dtype. Float16 and bfloat16 support forward execution. The call has no axis or dtype option.",
       "variants": [
         {"inputs": ["float32"], "result": "float32", "cpu": {"status": "supported", "gradients": "first-order"}, "webgpu": {"status": "supported", "gradients": "first-order"}},
-        {"inputs": ["float16"], "result": "float16", "cpu": {"status": "supported", "gradients": "none"}, "webgpu": {"status": "supported", "gradients": "none"}}
+        {"inputs": ["float16"], "result": "float16", "cpu": {"status": "supported", "gradients": "none"}, "webgpu": {"status": "supported", "gradients": "none"}},
+        {"inputs": ["bfloat16"], "result": "bfloat16", "cpu": {"status": "supported", "gradients": "none"}, "webgpu": {"status": "supported", "gradients": "none"}}
       ]
     },
     {
@@ -110,10 +114,11 @@ qualified environments and release-specific claims.
       "arithmetic": true,
       "source": "docs/reference/tensor-matmul.md",
       "fragment": "calls-and-differentiation",
-      "limits": "Multiplies two dense, contiguous matrices of the same dtype on the same device. Float16 supports forward execution.",
+      "limits": "Multiplies two dense, contiguous matrices of the same dtype on the same device. Float16 and bfloat16 support forward execution.",
       "variants": [
         {"inputs": ["float32", "float32"], "result": "float32", "cpu": {"status": "supported", "gradients": "first-order"}, "webgpu": {"status": "supported", "gradients": "first-order"}},
-        {"inputs": ["float16", "float16"], "result": "float16", "cpu": {"status": "supported", "gradients": "none"}, "webgpu": {"status": "supported", "gradients": "none"}}
+        {"inputs": ["float16", "float16"], "result": "float16", "cpu": {"status": "supported", "gradients": "none"}, "webgpu": {"status": "supported", "gradients": "none"}},
+        {"inputs": ["bfloat16", "bfloat16"], "result": "bfloat16", "cpu": {"status": "supported", "gradients": "none"}, "webgpu": {"status": "supported", "gradients": "none"}}
       ]
     },
     {
@@ -127,7 +132,8 @@ qualified environments and release-specific claims.
       "limits": "Reads the values as ordinary Python numbers or lists matching the tensor shape.",
       "variants": [
         {"inputs": ["float32"], "result": null, "cpu": {"status": "supported", "gradients": "not-applicable"}, "webgpu": {"status": "supported", "gradients": "not-applicable"}},
-        {"inputs": ["float16"], "result": null, "cpu": {"status": "supported", "gradients": "not-applicable"}, "webgpu": {"status": "supported", "gradients": "not-applicable"}}
+        {"inputs": ["float16"], "result": null, "cpu": {"status": "supported", "gradients": "not-applicable"}, "webgpu": {"status": "supported", "gradients": "not-applicable"}},
+        {"inputs": ["bfloat16"], "result": null, "cpu": {"status": "supported", "gradients": "not-applicable"}, "webgpu": {"status": "supported", "gradients": "not-applicable"}}
       ]
     },
     {
@@ -141,7 +147,8 @@ qualified environments and release-specific claims.
       "limits": "Creates a shape-only view over the whole contiguous storage.",
       "variants": [
         {"inputs": ["float32"], "result": "float32", "cpu": {"status": "supported", "gradients": "first-order"}, "webgpu": {"status": "supported", "gradients": "first-order"}},
-        {"inputs": ["float16"], "result": "float16", "cpu": {"status": "supported", "gradients": "none"}, "webgpu": {"status": "supported", "gradients": "none"}}
+        {"inputs": ["float16"], "result": "float16", "cpu": {"status": "supported", "gradients": "none"}, "webgpu": {"status": "supported", "gradients": "none"}},
+        {"inputs": ["bfloat16"], "result": "bfloat16", "cpu": {"status": "supported", "gradients": "none"}, "webgpu": {"status": "supported", "gradients": "none"}}
       ]
     },
     {

@@ -9,7 +9,8 @@ test("dtype facts have one immutable identity and no inherited or unimplemented 
   assert(Object.isFrozen(TENSOR_DTYPES));
   assert(Object.isFrozen(tensorDType("float32")));
   assert.equal(tensorDType("float16"), TENSOR_DTYPES.float16);
-  for (const dtype of ["bfloat16", "toString", "__proto__", undefined]) assert.throws(() => tensorDType(dtype), TypeError);
+  assert.equal(tensorDType("bfloat16"), TENSOR_DTYPES.bfloat16);
+  for (const dtype of ["float64", "toString", "__proto__", undefined]) assert.throws(() => tensorDType(dtype), TypeError);
 });
 
 test("dtype admission never coerces a name or touches input before rejection", async () => {
@@ -32,7 +33,7 @@ test("dtype admission never coerces a name or touches input before rejection", a
 });
 
 for (const [dtype, storage, width, observationCopies] of [
-  ["float32", Float32Array, 4, 1], ["float16", Uint16Array, 2, 0],
+  ["float32", Float32Array, 4, 1], ["float16", Uint16Array, 2, 0], ["bfloat16", Uint16Array, 2, 0],
 ]) {
   test(`${dtype} captures one bounded owned array and selects the required observation path`, context => {
     const from = context.mock.method(storage, "from");

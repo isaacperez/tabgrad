@@ -94,9 +94,23 @@ fn rounded(value: Accumulator) -> u32 {
 
 `;
 
+interface SumArithmetic {
+  readonly source: string;
+  readonly decodeInput: string;
+  readonly roundOutput: string;
+}
+
 export function createSumSource(layout: LinearDispatchLayout = "linear"): string {
+  return createWideSumSource(layout, {
+    source: WEBGPU_EXACT_SUM_ARITHMETIC_SOURCE,
+    decodeInput: "decode(input[index])",
+    roundOutput: "rounded",
+  });
+}
+
+export function createWideSumSource(layout: LinearDispatchLayout, arithmetic: SumArithmetic): string {
   const entry = cooperativeEntry(layout, WEBGPU_SUM_GROUP_ELEMENTS, "parameters.count");
-  return `${WEBGPU_EXACT_SUM_ARITHMETIC_SOURCE}
+  return `${arithmetic.source}
 struct Parameters { count: u32, final_stage: u32, partial_input: u32, padding: u32 }
 @group(0) @binding(0) var<storage, read> input: array<u32>;
 @group(0) @binding(1) var<storage, read_write> output: array<u32>;
@@ -106,7 +120,7 @@ var<workgroup> partials: array<Accumulator, ${WEBGPU_SUM_WORKGROUP_SIZE}>;
 fn load_partial(index: u32) -> Accumulator {
   var result: Accumulator;
   if index >= parameters.count { return result; }
-  if parameters.partial_input == 0u { return decode(input[index]); }
+  if parameters.partial_input == 0u { return ${arithmetic.decodeInput}; }
   for (var word = 0u; word < 10u; word++) { result.words[word] = input[index * 11u + word]; }
   result.flags = input[index * 11u + 10u];
   return result;
@@ -121,7 +135,7 @@ ${entry.signature}${entry.guard}
     if lane < stride { partials[lane] = merge(partials[lane], partials[lane + stride]); }
   }
   if lane == 0u {
-    if parameters.final_stage != 0u { output[${entry.index}] = rounded(partials[0]); }
+    if parameters.final_stage != 0u { output[${entry.index}] = ${arithmetic.roundOutput}(partials[0]); }
     else {
       for (var word = 0u; word < 10u; word++) { output[${entry.index} * 11u + word] = partials[0].words[word]; }
       output[${entry.index} * 11u + 10u] = partials[0].flags;

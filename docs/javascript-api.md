@@ -14,7 +14,8 @@ creation, addition, multiplication, 2D matrix products, total sum, views, functi
 gradients and asynchronous observation through this same API.
 Its operation domain and physical limits are separate from CPU support.
 
-Explicit [`float16` tensors](reference/float16.md) support creation, whole-storage
+[`float16`](reference/float16.md) and [`bfloat16`](reference/python-tensors.md#bfloat16-tensors)
+are explicit choices for creation, whole-storage
 views, same-type add/mul with broadcasting, total sum and two-dimensional
 matrix products on both backends. This compact
 domain has its own numerical rules and excludes differentiation and mutation.
@@ -120,7 +121,7 @@ into owned encoded storage. Its default and supported metadata are:
 | Property | Supported value |
 | --- | --- |
 | Shape | Defaults to `[data.length]`; explicit scalar or multidimensional shape with the same element count |
-| Data type | `float32` by default; explicit `float16` for [its supported operations](reference/float16.md) |
+| Data type | `float32` by default. Also accepts explicit `float16` or `bfloat16` within the [operation support table](compatibility.md#tensor-dtypes-by-operation). |
 | Device | `cpu` by default; explicit `webgpu` in a GPU-enabled session |
 | Layout | `contiguous` |
 | Gradient tracking | `requiresGrad` defaults to `false`; `true` enables float32 gradients on the selected supported device |
@@ -147,8 +148,8 @@ and contiguous storage.
 `left.add(right)` validates both operands synchronously and returns a new
 tensor handle. It does not prepare or submit numerical backend work.
 The operands must be open, belong to the same session and device, and have
-broadcast-compatible shapes. Use two `float32` tensors or two `float16`
-tensors. The result keeps that dtype. See
+broadcast-compatible shapes. Both tensors must use the same dtype
+(`float32`, `float16`, or `bfloat16`). The result keeps that dtype. See
 [tensor dtypes by operation](compatibility.md#tensor-dtypes-by-operation) for
 the other operations. Align dimensions from the right. Each pair must
 be equal or include a singleton, and missing leading axes act as singletons.
