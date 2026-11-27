@@ -124,7 +124,7 @@ test("packed pipelines stay bounded across distinct dense and broadcast shapes",
   const backend = new WebGpuBackend(device);
   try {
     assert.deepEqual(backend.capabilities.computations, [
-      "add-f32", "add-alpha-f32", "matmul-f32", "mul-f32", "add-f16", "mul-f16", "sum-f32", "reduce-f32", "expand-f32",
+      "add-f32", "add-alpha-f32", "matmul-f32", "mul-f32", "add-f16", "mul-f16", "sum-f32", "reduce-f32", "expand-f32", "sum-f16",
     ]);
     for (const rows of [729, 3, 727, 1, 727]) {
       for (const shapes of [[[rows, 3], [rows, 3], [rows, 3]], [[rows, 1], [1, 3], [rows, 3]]]) {

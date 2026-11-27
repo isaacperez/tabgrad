@@ -15,7 +15,7 @@ gradients and asynchronous observation through this same API.
 Its operation domain and physical limits are separate from CPU support.
 
 Explicit [`float16` tensors](reference/float16.md) support creation, whole-storage
-views and same-type add/mul with broadcasting on both backends. This compact
+views, same-type add/mul with broadcasting and total sum on both backends. This compact
 domain has its own numerical rules and excludes differentiation and mutation.
 
 `session.sgd(parameters, options?)` provides [basic SGD](reference/sgd.md) on CPU
@@ -119,7 +119,7 @@ into owned encoded storage. Its default and supported metadata are:
 | Property | Supported value |
 | --- | --- |
 | Shape | Defaults to `[data.length]`; explicit scalar or multidimensional shape with the same element count |
-| Data type | `float32` by default; explicit `float16` for its bounded pointwise domain |
+| Data type | `float32` by default; explicit `float16` for [its supported operations](reference/float16.md) |
 | Device | `cpu` by default; explicit `webgpu` in a GPU-enabled session |
 | Layout | `contiguous` |
 | Gradient tracking | `requiresGrad` defaults to `false`; `true` enables float32 gradients on the selected supported device |

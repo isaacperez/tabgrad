@@ -1,3 +1,5 @@
+import { halfSumCases } from './float16-sum-cases.mjs';
+
 /** Decode the independent 16-bit oracle words for numeric comparisons. */
 function compactValue(bits, fractionBits) {
   const sign = bits & 0x8000 ? -1 : 1;
@@ -25,6 +27,36 @@ function compactTensor(session, owned, device, dtype, values, shape) {
   const result = session.tensor(values, { dtype, device, ...(shape === undefined ? {} : { shape }) });
   owned.push(result);
   return result;
+}
+
+async function checkHalfSums(session, device) {
+  const options = { dtype: 'float16', device };
+  const cases = halfSumCases();
+  for (const { name, values, expected } of cases) {
+    const data = values();
+    const shape = data.length === 1 ? [] : [1, data.length];
+    const input = session.tensor(data, { ...options, shape });
+    const output = input.sum();
+    input.close();
+    try {
+      if (output.dtype !== options.dtype || output.device !== device || output.shape.length !== 0 || output.requiresGrad) {
+        throw Error(name + ': incorrect sum metadata');
+      }
+      sameValues(await output.toArray(), [expected], name);
+    } finally { output.close(); }
+  }
+  const before = session.diagnostics();
+  const input = session.tensor([1, 2, 3], options);
+  const doubled = input.add(input), sum = doubled.sum(), result = sum.mul(sum);
+  input.close(); doubled.close(); sum.close();
+  try {
+    sameValues(await result.toArray(), [144], 'resident add/sum/mul');
+    const after = session.diagnostics();
+    const readback = device === 'cpu' ? after.wasmToHostBytes - before.wasmToHostBytes
+      : after.webgpu.readbackBytes - before.webgpu.readbackBytes;
+    if (readback !== 2) throw Error('Unexpected resident sum readback bytes: ' + readback);
+  } finally { result.close(); }
+  return cases.length;
 }
 
 // 2,181 values span more than 17 groups of 128 and leave an odd tail.
@@ -75,9 +107,10 @@ export async function compactJavaScriptCases(session, oracle, device, dtype, fra
     const view = created.view([2, created.shape[0] / 2]); owned.push(view);
     created.close();
     sameValues(await view.toArray(), oracle.construction.words.map(decode), 'alias');
+    const totalSums = dtype === 'float16' ? await checkHalfSums(session, device) : 0;
     const f32 = session.tensor([1], { device }); owned.push(f32);
     const before = session.diagnostics();
-    for (const operation of [() => left.sum(), () => left.matmul(right), () => left.copy_(left),
+    for (const operation of [...(dtype === 'float16' ? [] : [() => left.sum()]), () => left.matmul(right), () => left.copy_(left),
       () => left.add(f32), () => session.tensor([1], { ...options, requiresGrad: true })]) {
       let error;
       try { operation(); } catch (value) { error = value; }
@@ -87,12 +120,17 @@ export async function compactJavaScriptCases(session, oracle, device, dtype, fra
     for (const key of ['liveTensorHandles', 'liveDerivativeNodes', 'hostToWasmCopies', 'kernelCalls']) {
       if (after[key] !== before[key]) throw Error(`Rejected request changed ${key}`);
     }
-    return { construction: oracle.construction.words.length, pointwise: p.left.length, broadcasts: 10, oddDense: 2, channelCompositions: 1 };
+    let dimensionalSumRejected = false;
+    try { left.sum(0); } catch (error) { dimensionalSumRejected = error instanceof TypeError; }
+    if (!dimensionalSumRejected) throw Error('A dimensional sum was admitted');
+    return { construction: oracle.construction.words.length, pointwise: p.left.length, broadcasts: 10, oddDense: 2, channelCompositions: 1, totalSums };
   } finally { for (const value of owned) value.close(); }
 }
 
 /** The same public calls run inside Pyodide; no raw half API is exposed. */
 export function compactPythonSource(oracle, device, dtype, fractionBits) {
+  const sumCases = dtype === 'float16' ? halfSumCases().map(({ name, words, expectedWord }) =>
+    [name, [...words], expectedWord]) : [];
   return `
 import torch, math, json, gc
 
@@ -119,7 +157,7 @@ def _half_check(actual: list[float], expected: list[int]) -> None:
 def _half_construct(data: object) -> torch.Tensor:
     return torch.tensor(data, dtype=_compact_dtype, device=${JSON.stringify(device)})
 
-def check_half() -> None:
+def check_half() -> int:
     reference = json.loads(${JSON.stringify(JSON.stringify(oracle))})
     raw = reference['construction']['inputs']
     data = [float(v) if isinstance(v, str) else v for v in raw]
@@ -161,11 +199,36 @@ def check_half() -> None:
     scaled = channels * scale
     biased = scaled + bias
     assert biased.tolist() == [[.5,2.5,5.],[3.,-1.5,1.],[1.,1.,-9.]]
+    total_sums = 0
+    for index, (name, words, expected) in enumerate(${JSON.stringify(sumCases)}):
+        data = [_half_value(word) for word in words]
+        source = _half_construct(data[0] if len(data) == 1 else [data])
+        summed = (source.sum, lambda: torch.sum(source), lambda: torch.sum(input=source))[index % 3]()
+        del source
+        assert summed.dtype is _compact_dtype and tuple(summed.shape) == () and not summed.requires_grad, name
+        _half_check([summed.tolist()], [expected])
+        del summed
+        total_sums += 1
+    if _compact_dtype is torch.float16:
+        source = _half_construct([[1., 2., 3.]])
+        reduced = (source + source).sum()
+        composed_sum = reduced * reduced
+        del source, reduced
+        assert composed_sum.tolist() == 144.
+        for rejected in (lambda: left.sum(0), lambda: torch.sum(left, dtype=_compact_dtype)):
+            try:
+                rejected()
+            except TypeError:
+                pass
+            else:
+                raise AssertionError("A sum overload was admitted")
+        del composed_sum, rejected
     del channels, scale, bias, scaled, biased
     del view, left, right, product, total, composed, result
     gc.collect()
+    return total_sums
 
-check_half()
+assert check_half() == ${sumCases.length}
 del check_half, _half_value, _half_check, _half_construct, _compact_dtype, _compact_fraction_bits
 gc.collect()
 `;

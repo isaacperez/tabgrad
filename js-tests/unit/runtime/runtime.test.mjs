@@ -18,6 +18,7 @@ import {
   getTestTensorAncestry,
 } from "../../../dist/testing.js";
 import { ExecutableProgram } from "../../../dist/execution/executable-program.js";
+import { CPU_CAPABILITY_MASK } from "../../../dist/backends/cpu/kernel-catalogue.js";
 import { observeTensorSynchronously, prepareRuntimeSession } from "../../../dist/runtime/runtime.js";
 
 const distributionRoot = normalize(fileURLToPath(new URL("../../../dist", import.meta.url)));
@@ -2461,7 +2462,10 @@ for (const failureCase of [
     moduleOptions: { incompatibleAddResult: true } },
   { name: "reordered manifest capabilities", code: "BACKEND_MANIFEST_INVALID",
     manifestTransform: manifest => ({ ...manifest, capabilities: manifest.capabilities.toReversed() }) },
-  { name: "missing half capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: 511 & ~256 } },
+  { name: "missing half capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: CPU_CAPABILITY_MASK & ~256 } },
+  { name: "missing half sum export", code: "BACKEND_ABI_MISMATCH", moduleOptions: { omitExports: ["tabgrad_sum_f16"] } },
+  { name: "missing half sum capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: CPU_CAPABILITY_MASK & ~512 } },
+  { name: "stale half-pointwise-only module profile", code: "BACKEND_MANIFEST_INVALID", manifestTransform: manifest => ({ ...manifest, moduleVersion: 9 }) },
   { name: "stale pre-half module profile", code: "BACKEND_MANIFEST_INVALID", manifestTransform: manifest => ({ ...manifest, moduleVersion: 8 }) },
   { name: "missing expansion export", code: "BACKEND_ABI_MISMATCH", moduleOptions: { omitExports: ["tabgrad_expand_f32"] } },
   { name: "missing coefficient addition export", code: "BACKEND_ABI_MISMATCH", moduleOptions: { omitExports: ["tabgrad_add_alpha_f32"] } },
@@ -2469,17 +2473,17 @@ for (const failureCase of [
   { name: "missing broadcast addition export", code: "BACKEND_ABI_MISMATCH", moduleOptions: { omitExports: ["tabgrad_broadcast_add_f32"] } },
   { name: "missing broadcast multiplication export", code: "BACKEND_ABI_MISMATCH", moduleOptions: { omitExports: ["tabgrad_broadcast_mul_f32"] } },
   { name: "missing receiving export", code: "BACKEND_ABI_MISMATCH", moduleOptions: { omitExports: ["tabgrad_receive_f32"] } },
-  { name: "missing broadcast capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: 511 & ~64 } },
-  { name: "missing receiving capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: 511 & ~128 } },
+  { name: "missing broadcast capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: CPU_CAPABILITY_MASK & ~64 } },
+  { name: "missing receiving capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: CPU_CAPABILITY_MASK & ~128 } },
   { name: "stale pre-broadcast module profile", code: "BACKEND_MANIFEST_INVALID", manifestTransform: manifest => ({ ...manifest, moduleVersion: 6 }) },
-  { name: "missing matrix capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: 511 & ~32 } },
+  { name: "missing matrix capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: CPU_CAPABILITY_MASK & ~32 } },
   { name: "stale pre-matrix module profile", code: "BACKEND_MANIFEST_INVALID", manifestTransform: manifest => ({ ...manifest, moduleVersion: 5 }) },
-  { name: "missing coefficient addition capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: 511 & ~16 } },
-  { name: "missing expansion capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: 511 & ~8 } },
+  { name: "missing coefficient addition capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: CPU_CAPABILITY_MASK & ~16 } },
+  { name: "missing expansion capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: CPU_CAPABILITY_MASK & ~8 } },
   { name: "missing mul export", code: "BACKEND_ABI_MISMATCH", moduleOptions: { omitExports: ["tabgrad_mul_f32"] } },
-  { name: "missing mul capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: 511 & ~4 } },
+  { name: "missing mul capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: CPU_CAPABILITY_MASK & ~4 } },
   { name: "missing sum export", code: "BACKEND_ABI_MISMATCH", moduleOptions: { omitExports: ["tabgrad_sum_f32"] } },
-  { name: "missing sum capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: 511 & ~2 } },
+  { name: "missing sum capability", code: "BACKEND_CAPABILITY_MISMATCH", moduleOptions: { capabilities: CPU_CAPABILITY_MASK & ~2 } },
   {
     name: "incompatible ABI version",
     code: "BACKEND_ABI_MISMATCH",

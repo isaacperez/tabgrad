@@ -54,14 +54,14 @@ test("family bindings share actual type rules while coefficient and state domain
 });
 
 function capturedProgram(kind) {
-  const shapes = kind === "sum-f32" ? [[3], []]
+  const shapes = kind === "sum-f32" || kind === "sum-f16" ? [[3], []]
     : kind === "expand-f32" ? [[], [3]]
       : kind === "reduce-f32" ? [[2, 3], [1, 3]]
         : [[2, 2], [2, 2], [2, 2]];
   const output = shapes.length - 1;
   return {
     values: shapes.map((shape, slot) => ({ slot, storageSlot: slot, shape,
-      dtype: "float32", device: "cpu", layout: "contiguous",
+      dtype: kind === "sum-f16" ? "float16" : "float32", device: "cpu", layout: "contiguous",
       source: slot === output ? "computed" : "binding", provenance })),
     computations: [{ kind, inputs: shapes.slice(0, -1).map((_, slot) => slot), output, provenance,
       ...(kind === "add-alpha-f32" ? { alphaBits: 0x3f800000 } : {}),
@@ -70,18 +70,34 @@ function capturedProgram(kind) {
   };
 }
 
-for (const kind of ["add-f32", "add-alpha-f32", "mul-f32", "sum-f32", "expand-f32", "matmul-f32", "reduce-f32"]) {
+for (const kind of ["add-f32", "add-alpha-f32", "mul-f32", "sum-f32", "sum-f16", "expand-f32", "matmul-f32", "reduce-f32"]) {
   test(`${kind} reconstruction rejects every invalid input/result type before publication`, () => {
     const original = capturedProgram(kind);
     const valid = new ExecutableProgram(original.values, original.computations, original.result);
-    assert.equal(valid.values[valid.result].dtype, "float32");
+    const dtype = kind === "sum-f16" ? "float16" : "float32";
+    assert.equal(valid.values[valid.result].dtype, dtype);
     for (let slot = 0; slot < original.values.length; slot++) {
       const captured = structuredClone(original);
-      captured.values[slot].dtype = "float16";
+      captured.values[slot].dtype = dtype === "float16" ? "float32" : "float16";
       assert.throws(() => new ExecutableProgram(captured.values, captured.computations, captured.result), TypeError);
     }
   });
 }
+
+test("total sum reconstruction requires a distinct computed rank-zero tensor", () => {
+  for (const kind of ["sum-f32", "sum-f16"]) {
+    const original = capturedProgram(kind);
+    for (const patch of [{ shape: [1] }, { source: "binding" }]) {
+      const { values, computations, result } = structuredClone(original);
+      Object.assign(values[result], patch);
+      assert.throws(() => new ExecutableProgram(values, computations, result), /Shaped output/);
+    }
+    const { values, computations, result } = structuredClone(original);
+    values[0].shape = [];
+    Object.assign(values[result], { source: "alias", storageSlot: 0 });
+    assert.throws(() => new ExecutableProgram(values, computations, result), /Shaped output/);
+  }
+});
 
 test("binding-only reconstruction validates canonical dtype and complete alias metadata", () => {
   const value = { slot: 0, storageSlot: 0, shape: [0], dtype: "float32", device: "cpu",

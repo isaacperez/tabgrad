@@ -57,7 +57,7 @@ means `cpu`; there are no indexed device names, implicit migrations or silent
 fallbacks. Handles from different sessions cannot be mixed.
 
 GPU tensors have contiguous `float32` or explicitly selected `float16` storage.
-[Float16 tensors](float16.md) support same-type add/mul and views, with their own
+[Float16 tensors](float16.md) support same-type add/mul, total sum and views, with their own
 rounding, packed-storage and inference-only boundaries. Creation accepts the common
 scalar, multidimensional and empty shapes. It copies input into owned host
 storage; upload is deferred until observation. GPU observation uploads even
@@ -73,7 +73,7 @@ For float32, its precise rounding and exceptional-value contract is the
 including a separately rounded result for every logical addition. It does not
 promise native WGSL floating-point behavior or NaN payload preservation.
 
-GPU `sum()` reduces a whole contiguous `float32` tensor to a distinct scalar, including
+GPU `sum()` reduces a whole contiguous `float32` or `float16` tensor to a distinct scalar, including
 an empty input's positive-zero write. Its exact-total accumulation and logical
 rounding boundaries are specified by the [sum reference](tensor-sum.md).
 Admission requires the acquired device's sum workgroup and parameter-buffer

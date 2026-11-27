@@ -56,7 +56,7 @@ Pass the dtype explicitly.
   produces shape `()`. Empty input produces shape `(0,)`; `[[], []]` produces
   `(2, 0)`. Nesting cannot imply dimensions after an empty sequence.
 - Select the canonical `torch.float32` or `torch.float16` object, not its string
-  name. [Float16 tensors](float16.md) have a bounded pointwise domain.
+  name. The [float16 reference](float16.md) lists its supported operations.
 - The device may be the string `'cpu'` or `'webgpu'`, or the corresponding
   `torch.device` descriptor. CPU is the default even with GPU attached.
   `webgpu` is a Tabgrad extension, not an upstream PyTorch device name.

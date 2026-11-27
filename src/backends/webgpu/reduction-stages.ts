@@ -1,6 +1,5 @@
 import { TabgradError } from "../../shared/errors.js";
 import { gpuStorageCapacityBytes } from "./webgpu-capacity.js";
-import { WEBGPU_SUM_GROUP_ELEMENTS, WEBGPU_SUM_PARTIAL_BYTES } from "./kernels/sum.js";
 
 export interface ReductionStage {
   readonly count: number;
@@ -11,16 +10,18 @@ export interface ReductionStage {
   readonly final: boolean;
 }
 
-/** Exact-sum partial layout is shared; receiver projection and launch stay separate. */
+/** Receiver projection and dispatch are independent of the partial representation. */
 export function reductionStages(count: number, groups: number,
+  elementsPerGroup: number, partialBytes: number,
   limits: { readonly maxBufferSize: number; readonly maxStorageBufferBindingSize: number }): readonly ReductionStage[] {
   const stages: ReductionStage[] = [];
   let partial = false;
   do {
-    const chunks = Math.max(1, Math.ceil(count / WEBGPU_SUM_GROUP_ELEMENTS));
+    const chunks = Math.max(1, Math.ceil(count / elementsPerGroup));
     const workgroups = groups * chunks;
     const final = chunks === 1;
-    const bytes = workgroups * (final ? 4 : WEBGPU_SUM_PARTIAL_BYTES);
+    // Both scalar storage formats occupy one physical GPU word.
+    const bytes = workgroups * (final ? 4 : partialBytes);
     if (!Number.isSafeInteger(count) || count < 0 || count > 0xffff_ffff
       || !Number.isSafeInteger(workgroups) || workgroups < 0 || workgroups > 0xffff_ffff
       || !Number.isSafeInteger(bytes) || Math.max(4, bytes) > gpuStorageCapacityBytes(limits)) {

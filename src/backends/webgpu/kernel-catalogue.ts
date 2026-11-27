@@ -5,7 +5,8 @@ import { WEBGPU_MULTIPLICATION_ARITHMETIC_SOURCE, WEBGPU_MULTIPLICATION_WORKGROU
 import { WEBGPU_COEFFICIENT_UNIFORM_BYTES, WEBGPU_COEFFICIENT_ADDITION_WORKGROUP_SIZE, createCoefficientAdditionSource } from "./kernels/coefficient-addition.js";
 import { WEBGPU_MATRIX_UNIFORM_BYTES, WEBGPU_MATRIX_WORKGROUP_SIZE, createMatrixSource } from "./kernels/matrix-product.js";
 import { WEBGPU_EXPANSION_WORKGROUP_SIZE, createExpansionSource } from "./kernels/expansion.js";
-import { WEBGPU_SUM_GROUP_ELEMENTS, WEBGPU_SUM_WORKGROUP_BYTES, WEBGPU_SUM_WORKGROUP_SIZE, createSumSource } from "./kernels/sum.js";
+import { WEBGPU_SUM_GROUP_ELEMENTS, WEBGPU_SUM_PARTIAL_BYTES, WEBGPU_SUM_WORKGROUP_BYTES, WEBGPU_SUM_WORKGROUP_SIZE, createSumSource } from "./kernels/sum.js";
+import { WEBGPU_HALF_SUM_GROUP_ELEMENTS, WEBGPU_HALF_SUM_PARTIAL_BYTES, WEBGPU_HALF_SUM_WORKGROUP_SIZE, createHalfSumSource } from "./kernels/sum-f16.js";
 import { WEBGPU_POINTWISE_WORKGROUP_SIZE, pointwiseSource } from "./kernels/broadcast.js";
 import { createReceivingSource, WEBGPU_RECEIVING_UNIFORM_BYTES } from "./kernels/receiving.js";
 import { BINARY16_ARITHMETIC } from "./kernels/half.js";
@@ -46,7 +47,7 @@ interface PointwiseRegistration {
 type Registration = (
   | PointwiseRegistration
   | { readonly strategy: "dense"; readonly direct: PhysicalKernel<InvocationIndexSpace>; readonly uniform?: UniformParameters }
-  | { readonly strategy: "sum"; readonly direct: PhysicalKernel<CooperativeIndexSpace> }
+  | { readonly strategy: "sum"; readonly direct: PhysicalKernel<CooperativeIndexSpace>; readonly partialBytes: number }
   | { readonly strategy: "receiving"; readonly direct: PhysicalKernel<{ readonly kind: "window" }> }
 ) & { readonly supported?: (limits: GPUSupportedLimits) => boolean };
 
@@ -100,15 +101,29 @@ function packed16Pointwise(arithmetic: string, calculate: string): (kind: Pointw
   });
 }
 
-function sumSupported(limits: GPUSupportedLimits): boolean {
+function sumSupported(limits: GPUSupportedLimits, workgroupSize: number, workgroupBytes: number): boolean {
   return limits.maxBufferSize >= 16
-    && limits.maxComputeWorkgroupStorageSize >= WEBGPU_SUM_WORKGROUP_BYTES
-    && limits.maxComputeWorkgroupSizeX >= WEBGPU_SUM_WORKGROUP_SIZE
-    && limits.maxComputeInvocationsPerWorkgroup >= WEBGPU_SUM_WORKGROUP_SIZE;
+    && limits.maxComputeWorkgroupStorageSize >= workgroupBytes
+    && limits.maxComputeWorkgroupSizeX >= workgroupSize
+    && limits.maxComputeInvocationsPerWorkgroup >= workgroupSize;
+}
+
+function sumKernel(workgroupSize: number, elementsPerWorkgroup: number, partialBytes: number,
+  source: ShaderSource): (kind: ComputationKind) => Registration {
+  if (!Number.isSafeInteger(elementsPerWorkgroup) || elementsPerWorkgroup < 2) {
+    throw new TypeError("A sum kernel must shrink the input between stages.");
+  }
+  return kind => Object.freeze({
+    strategy: "sum", direct: physicalKernel<CooperativeIndexSpace>(kind, { kind: "workgroup",
+      workgroupSize, elementsPerWorkgroup }, source),
+    partialBytes,
+    supported: (limits: GPUSupportedLimits) => sumSupported(limits, workgroupSize, workgroupSize * partialBytes),
+  });
 }
 
 function receivingSupported(limits: GPUSupportedLimits): boolean {
-  return sumSupported(limits) && limits.maxBufferSize >= WEBGPU_RECEIVING_UNIFORM_BYTES
+  return sumSupported(limits, WEBGPU_SUM_WORKGROUP_SIZE, WEBGPU_SUM_WORKGROUP_BYTES)
+    && limits.maxBufferSize >= WEBGPU_RECEIVING_UNIFORM_BYTES
     && limits.maxStorageBuffersPerShaderStage >= 3;
 }
 
@@ -129,11 +144,7 @@ const factories: KernelFactories = Object.freeze({
     WEBGPU_MULTIPLICATION_ARITHMETIC_SOURCE, "multiply_binary32"),
   "add-f16": packed16Pointwise(BINARY16_ARITHMETIC, "add_binary16"),
   "mul-f16": packed16Pointwise(BINARY16_ARITHMETIC, "multiply_binary16"),
-  "sum-f32": kind => Object.freeze({
-    strategy: "sum", direct: physicalKernel<CooperativeIndexSpace>(kind, { kind: "workgroup",
-      workgroupSize: WEBGPU_SUM_WORKGROUP_SIZE, elementsPerWorkgroup: WEBGPU_SUM_GROUP_ELEMENTS }, createSumSource),
-    supported: sumSupported,
-  }),
+  "sum-f32": sumKernel(WEBGPU_SUM_WORKGROUP_SIZE, WEBGPU_SUM_GROUP_ELEMENTS, WEBGPU_SUM_PARTIAL_BYTES, createSumSource),
   "reduce-f32": kind => Object.freeze({
     strategy: "receiving", direct: physicalKernel(kind, { kind: "window" as const }, createReceivingSource),
     supported: receivingSupported,
@@ -141,6 +152,8 @@ const factories: KernelFactories = Object.freeze({
   "expand-f32": kind => Object.freeze({
     strategy: "dense", direct: invocation(kind, WEBGPU_EXPANSION_WORKGROUP_SIZE, 1, createExpansionSource),
   }),
+  "sum-f16": sumKernel(WEBGPU_HALF_SUM_WORKGROUP_SIZE, WEBGPU_HALF_SUM_GROUP_ELEMENTS, WEBGPU_HALF_SUM_PARTIAL_BYTES,
+    createHalfSumSource),
 } satisfies KernelFactories);
 
 const kinds = Object.keys(factories) as ComputationKind[];

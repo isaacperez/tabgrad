@@ -2,8 +2,36 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import { assertSumFixture, float32FromBits } from "../../fixtures/sum-oracle.mjs";
+import { halfSumCases } from "../../browser/helpers/float16-sum-cases.mjs";
 
 for (const variant of ["scalar", "simd128"]) {
+  test(`raw ${variant} binary16 sum rounds exact stored values once and writes two bytes`, async () => {
+    const bytes = await readFile(new URL(`../../../dist/wasm/kernels-${variant}.wasm`, import.meta.url));
+    const memory = new WebAssembly.Memory({ initial: 32, maximum: 1024 });
+    const { instance } = await WebAssembly.instantiate(bytes, { env: { memory } });
+    const { tabgrad_sum_f16: sum, tabgrad_arena_base: arena } = instance.exports;
+    assert.equal(typeof sum, "function");
+    const input = arena() + 2;
+    const output = input + 65536;
+    const values = new Uint16Array(memory.buffer);
+    values[output / 2 + 1] = 0xbeef;
+    for (const { name, words, expectedWord } of halfSumCases()) {
+      values.set(words, input / 2);
+      assert.equal(sum(input, output, words.length), 0, name);
+      assert.equal(values[output / 2], expectedWord, name);
+      assert.equal(values[output / 2 + 1], 0xbeef, name);
+    }
+    assert.equal(sum(memory.buffer.byteLength, output, 0), 0);
+    assert.equal(values[output / 2], 0);
+    assert.equal(sum(input + 1, output, 1), 1);
+    assert.equal(sum(input, output + 1, 1), 1);
+    assert.equal(sum(arena() - 2, output, 1), 2);
+    assert.equal(sum(input, memory.buffer.byteLength, 0), 2);
+    assert.equal(sum(input, output, 0xffff_ffff), 2);
+    assert.equal(sum(input, input + 2, 2), 3);
+    assert.equal(sum(input + 2, input, 1), 0);
+    assert.equal(sum(input, input, 0), 0);
+  });
   test(`raw ${variant} sum satisfies the recorded numerical comparison`, async () => {
     const oracle = JSON.parse(await readFile(new URL("../../fixtures/python-tensor-oracle.json", import.meta.url), "utf8"));
     const memory = new WebAssembly.Memory({ initial: 32, maximum: 1024 });

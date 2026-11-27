@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { runBrowserPage, startBrowserServer } from "./browser-harness.mjs";
+import { halfSumCases } from "../js-tests/browser/helpers/float16-sum-cases.mjs";
 
 const page = "dtype/conformance.html";
 const assets = ["dtype/conformance.mjs", "dtype/python-worker.mjs", "dtype/gpu-device.mjs", "dtype/restrict-gpu.mjs",
-  "helpers/compact-float-cases.mjs", "helpers/compact-float-oracle.json", "helpers/cpu-profile.mjs", "helpers/gpu-dispatch-cases.mjs",
+  "helpers/compact-float-cases.mjs", "helpers/compact-float-oracle.json", "helpers/float16-sum-cases.mjs", "helpers/cpu-profile.mjs", "helpers/gpu-dispatch-cases.mjs",
   "helpers/float32-addition-oracle.mjs", "helpers/float32-multiplication-oracle.mjs", "helpers/float32-coefficient-oracle.mjs"];
 
 const binary16 = Object.freeze({ dtype: "float16", fractionBits: 10 });
@@ -43,6 +44,7 @@ export async function runDTypeConformance({ browser, executable, version, langua
     profile === binary16 ? JSON.parse(await readFile(binary16Oracle, "utf8")) : profile.oracle);
   const bytes = Buffer.from(JSON.stringify(oracle));
   const { dtype, fractionBits } = profile;
+  const totalSums = dtype === "float16" ? halfSumCases().length : 0;
   const reads = [];
   const server = await startBrowserServer([page], { assets, crossOriginIsolation: device === "webgpu",
     ...(distributionDirectory === undefined ? {} : { distributionDirectory }),
@@ -60,7 +62,8 @@ export async function runDTypeConformance({ browser, executable, version, langua
           assert.equal(result.ok, true, JSON.stringify(result.error));
           assert.equal(result.language, language); assert.equal(result.device, device);
           assert.equal(result.grid, grid); assert.equal(result.dtype, dtype);
-          assert.deepEqual(result.cases, { construction: oracle.construction.words.length, pointwise: oracle.pointwise.left.length, broadcasts: 10, oddDense: 2, channelCompositions: 1 });
+          assert.deepEqual(result.cases, { construction: oracle.construction.words.length, pointwise: oracle.pointwise.left.length,
+            broadcasts: 10, oddDense: 2, channelCompositions: 1, totalSums });
           for (const name of ["liveTensorHandles", "liveTensorValues", "liveAllocationBytes", "liveRequestLeases"]) {
             assert.equal(result.final[name], 0, name);
           }

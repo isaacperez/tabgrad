@@ -2,6 +2,7 @@ import type { BroadcastGeometry, ReceivingGeometry } from "../../execution/broad
 import { TabgradError } from "../../shared/errors.js";
 import { reductionStages, type ReductionStage } from "./reduction-stages.js";
 import { gpuStorageCapacityBytes } from "./webgpu-capacity.js";
+import { WEBGPU_SUM_GROUP_ELEMENTS, WEBGPU_SUM_PARTIAL_BYTES } from "./kernels/sum.js";
 
 export interface BroadcastDispatchLimits {
   readonly maxBufferSize: number;
@@ -51,5 +52,5 @@ export function receivingStages(projection: ReceivingGeometry, limits: Broadcast
   if (!Number.isSafeInteger(limits.maxComputeWorkgroupsPerDimension) || limits.maxComputeWorkgroupsPerDimension < 1) {
     throw new TabgradError("RESOURCE_EXHAUSTED", "Receiving reduction requires a GPU workgroup window.");
   }
-  return reductionStages(projection.terms, projection.groups, limits);
+  return reductionStages(projection.terms, projection.groups, WEBGPU_SUM_GROUP_ELEMENTS, WEBGPU_SUM_PARTIAL_BYTES, limits);
 }

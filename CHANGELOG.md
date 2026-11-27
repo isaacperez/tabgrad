@@ -7,6 +7,12 @@ established by the corresponding verified release record.
 
 ## Unreleased
 
+### Added
+
+- Sum a whole float16 tensor on CPU or GPU in JavaScript and Python. Both
+  backends round the exact total once to a float16 scalar
+  ([#510](https://github.com/isaacperez/tabgrad/issues/510)).
+
 ## 0.5.0 - 2026-11-18
 
 ### Added

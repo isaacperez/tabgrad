@@ -14,6 +14,7 @@ mod multiplication;
 mod pointwise;
 mod receiving;
 mod reduction;
+mod reduction_f16;
 
 #[panic_handler]
 fn panic(_information: &PanicInfo<'_>) -> ! {

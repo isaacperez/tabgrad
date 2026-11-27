@@ -725,31 +725,43 @@ for (const kind of Object.keys(COMPUTATION_SIGNATURES) as ComputationKind[]) {
 }
 
 class SumOperationDefinition implements NumericalOperationDefinition {
-  readonly derivative = SUM_DERIVATIVE;
   readonly name = "sum";
   readonly provenanceSource = "Tensor.sum";
-  readonly loweredKind = "sum-f32";
   readonly pure = true;
-  readonly typePolicy = COMPUTATION_SIGNATURES[this.loweredKind].types;
+  readonly shape: readonly number[];
+  readonly outputDtype: TensorDType;
 
-  admit(source: TensorState): AdmittedOperation {
-    assertTensorOpen(source);
-    const value = source.value;
-    const inputs = [value];
-    const dtype = resolveTensorType(this.typePolicy, inputs);
-    if (dtype === undefined) throw new TabgradError("UNSUPPORTED_DTYPE", "Sum requires its declared tensor type.");
-    // Backend support is checked by the session before recording this result.
+  constructor(
+    readonly loweredKind: ComputationKind,
+    readonly derivative: DerivativeRecipe | undefined,
+  ) {
+    const { operation, family, types } = COMPUTATION_SIGNATURES[loweredKind];
+    if (operation !== "sum" || family.geometry !== "scalar") {
+      throw new TypeError("Total sum requires a matching scalar signature.");
+    }
+    this.shape = family.shape;
+    this.outputDtype = types.result;
+  }
+
+  admit(value: TensorValue): AdmittedOperation {
     return Object.freeze({
-      record: new OperationRecord(this, inputs),
+      record: new OperationRecord(this, [value]),
       outputMetadata: Object.freeze({
-        shape: Object.freeze([]), dtype,
+        shape: this.shape, dtype: this.outputDtype,
         device: value.device, layout: value.layout,
       }),
     });
   }
 }
 
-const SUM_OPERATION = Object.freeze(new SumOperationDefinition());
+const sumSpecializations = new Map<TensorDType, SumOperationDefinition>();
+for (const kind of Object.keys(COMPUTATION_SIGNATURES) as ComputationKind[]) {
+  const { operation, types } = COMPUTATION_SIGNATURES[kind];
+  if (operation !== "sum") continue;
+  const dtype = types.inputs[0]!;
+  if (sumSpecializations.has(dtype)) throw new TypeError("Ambiguous total sum signature.");
+  sumSpecializations.set(dtype, Object.freeze(new SumOperationDefinition(kind, kind === "sum-f32" ? SUM_DERIVATIVE : undefined)));
+}
 
 const EXPAND_OPERATION: NumericalOperationDefinition = Object.freeze({
   name: "expand", provenanceSource: "DerivativeHistory.sum", loweredKind: "expand-f32", pure: true,
@@ -2001,11 +2013,13 @@ export class RuntimeSession {
 
   #sum(source: TensorState): Tensor {
     assertTensorOpen(source);
-    this.#requireBackendComputation(source.value, SUM_OPERATION);
-    const admitted = SUM_OPERATION.admit(source);
+    const definition = sumSpecializations.get(source.value.dtype);
+    if (definition === undefined) throw new TabgradError("UNSUPPORTED_DTYPE", "Sum requires its declared tensor type.");
+    this.#requireBackendComputation(source.value, definition);
+    const admitted = definition.admit(source.value);
     this.#checkCapturedAdmission(admitted.record.inputs, admitted.outputMetadata.shape);
-    const history = !this.#recording || !source.requiresGrad ? null
-      : this.#history.record(admitted.outputMetadata.shape, SUM_OPERATION.derivative, [source.history], admitted.record.inputs);
+    const history = !this.#recording || !source.requiresGrad || definition.derivative === undefined ? null
+      : this.#history.record(admitted.outputMetadata.shape, definition.derivative, [source.history], admitted.record.inputs);
     return this.#recordOperation(admitted, history);
   }
 
