@@ -394,7 +394,8 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
   }
 
   async #validateIndexStatus(staging: GPUBuffer, program: ExecutableProgram): Promise<void> {
-    await staging.mapAsync(GPUMapMode.READ);
+    await this.#awaitLive(staging.mapAsync(GPUMapMode.READ));
+    this.assertAvailable();
     try {
       const ordinal = new DataView(staging.getMappedRange()).getUint32(0, true);
       if (ordinal === INDEX_SELECTION_VALID) return;

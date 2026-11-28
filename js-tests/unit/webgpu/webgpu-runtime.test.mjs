@@ -340,6 +340,36 @@ test("scoped failure preserves pending mapping even after queue completion", asy
   assert.equal(session.diagnostics().liveRequestLeases, 0);
 });
 
+test("device loss retires an index selection with an unsettled validation map", async (context) => {
+  const map = deferred(), started = deferred();
+  const acquired = executionDevice({ mapping() {
+    started.resolve();
+    return map.promise;
+  } });
+  installGpu(context, { requestAdapter: async () => ({ requestDevice: async () => acquired }) });
+  const session = await tabgrad.createWebGpuRuntimeSession();
+  const source = session.tensor([1, 2], { device: "webgpu" });
+  const indices = session.tensor([1], { device: "webgpu", dtype: "int32" });
+  const selected = source.indexSelect(0, indices);
+  const rejected = assert.rejects(selected.toArray(), (error) =>
+    error.code === "BACKEND_STATUS_ERROR" && error.details.phase === "device-loss");
+  await started.promise;
+  acquired.lose();
+  await rejected;
+  let retired = false;
+  const closing = session.close().then(() => { retired = true; });
+  try {
+    await flushContinuations();
+    assert.equal(retired, true, "device loss must not leave the status map holding its invocation");
+    assert.equal(session.diagnostics().liveRequestLeases, 0);
+    assert.equal(session.diagnostics().liveMaterializationRecords, 0);
+    assert.ok(acquired.buffers.every(buffer => buffer.destroyed));
+  } finally {
+    map.resolve();
+    await closing;
+  }
+});
+
 test("rejected physical drain accounts loss without accepting a late map", async (context) => {
   const map = deferred(), drain = deferred();
   const acquired = executionDevice({ mapping: () => map.promise,

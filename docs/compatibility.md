@@ -177,7 +177,7 @@ qualified environments and release-specific claims.
       "arithmetic": true,
       "source": "docs/reference/python-tensors.md",
       "fragment": "select-values-along-an-axis",
-      "limits": "Selects slices in index order, including duplicates. Indices are int32 or int64. Bounds errors are deferred to execution. Tracked input requires no_grad.",
+      "limits": "Selects slices in index order, including duplicates. Indices are int32 or int64. Payload bounds errors are deferred to execution. Tracked input requires no_grad.",
       "variants": [
         {"inputs": ["float32", "int32"], "result": "float32", "cpu": {"status": "supported", "gradients": "none"}, "webgpu": {"status": "supported", "gradients": "none"}},
         {"inputs": ["float32", "int64"], "result": "float32", "cpu": {"status": "supported", "gradients": "none"}, "webgpu": {"status": "supported", "gradients": "none"}},

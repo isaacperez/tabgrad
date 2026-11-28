@@ -35,6 +35,8 @@ for (const forceVariant of ["scalar", "simd128"]) {
       const picked = wide.indexSelect(0, max);
       assert.deepEqual(picked.shape, [1]);
       assert.deepEqual(await picked.toArray(typed), BigInt64Array.of(2n ** 63n - 1n));
+      const fromNarrow = narrow.indexSelect(0, wide.indexSelect(0, one).argmax());
+      assert.deepEqual(await fromNarrow.toArray(typed), Int32Array.of(-2147483648, 3));
       const zero = session.tensor([0], { dtype: "int32" });
       const scalar = wide.view([3]).indexSelect(0, one).view([]);
       const rankZero = scalar.indexSelect(-1, zero);

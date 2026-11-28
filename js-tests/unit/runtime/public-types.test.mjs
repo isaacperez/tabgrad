@@ -76,6 +76,7 @@ test("the JavaScript package entry point exposes only the supported runtime surf
         "dtype",
         "grad",
         "gt",
+        "indexSelect",
         "matmul",
         "mul",
         "requiresGrad",
@@ -109,6 +110,7 @@ test("the public declarations do not expose runtime-to-backend plumbing", async 
   assert.match(declarations, /get shape\(\): readonly number\[\]/);
   assert.match(declarations, /view\(shape: readonly number\[\]\): Tensor/);
   assert.match(declarations, /sum\(\): Tensor/);
+  assert.match(declarations, /indexSelect\(dim: number, index: Tensor\): Tensor/);
   assert.match(declarations, /mul\(right: Tensor\): Tensor/);
   assert.match(declarations, /matmul\(right: Tensor\): Tensor/);
   assert.match(declarations, /get requiresGrad\(\): boolean/);
