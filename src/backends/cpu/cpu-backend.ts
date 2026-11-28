@@ -169,7 +169,7 @@ export class WebAssemblyCpuBackend implements ExecutionBackend {
           parameters = receivingPacket(receivingGeometry(pointwiseGeometry([
             program.values[computation.inputs[0]!]!.shape, value.shape,
           ]), 1), context.maximumBytes);
-        } else if (kernel.layout === "pointwise" && cpuPointwiseNeedsPacket(program.values, computation.inputs, length)) {
+        } else if ("dense" in kernel && cpuPointwiseNeedsPacket(program.values, computation.inputs, length)) {
           const family = pointwiseFamily(computation.kind)!;
           parameters = pointwisePacket(family.plan(computation.inputs.map(slot => program.values[slot]!.shape)), context.maximumBytes);
         }
@@ -189,6 +189,12 @@ export class WebAssemblyCpuBackend implements ExecutionBackend {
               status = packet === undefined
                 ? context.exports[kernel.dense.name](inputs[0]!.offset, inputs[1]!.offset, output.offset, length)
                 : context.exports[kernel.broadcast.name](inputs[0]!.offset, inputs[1]!.offset, output.offset, packet.offset, parameters!.length);
+              break;
+            case "ternaryPointwise":
+              status = packet === undefined
+                ? context.exports[kernel.dense.name](inputs[0]!.offset, inputs[1]!.offset, inputs[2]!.offset, output.offset, length)
+                : context.exports[kernel.broadcast.name](inputs[0]!.offset, inputs[1]!.offset, inputs[2]!.offset, output.offset,
+                  packet.offset, parameters!.length);
               break;
             case "receiving":
               status = context.exports[kernel.symbol.name](inputs[0]!.offset, output.offset, packet!.offset, parameters!.length);

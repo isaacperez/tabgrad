@@ -18,6 +18,7 @@ const CAPABILITY_POINTWISE_BF16: u32 = 2048;
 const CAPABILITY_SUM_BF16: u32 = 4096;
 const CAPABILITY_MATMUL_BF16: u32 = 8192;
 const CAPABILITY_GT_F32: u32 = 16384;
+const CAPABILITY_WHERE_F32: u32 = 32768;
 pub(crate) const STATUS_INVALID_GEOMETRY: u32 = 4;
 pub(crate) const FLOAT_ALIGNMENT: u32 = align_of::<f32>() as u32;
 
@@ -75,6 +76,7 @@ pub extern "C" fn tabgrad_capabilities() -> u32 {
         | CAPABILITY_SUM_BF16
         | CAPABILITY_MATMUL_BF16
         | CAPABILITY_GT_F32
+        | CAPABILITY_WHERE_F32
 }
 
 #[unsafe(no_mangle)]
@@ -122,27 +124,43 @@ pub(crate) fn validate_binary_spans(
     input_width: u32,
     output_width: u32,
 ) -> u32 {
-    if !left_offset.is_multiple_of(input_width)
-        || !right_offset.is_multiple_of(input_width)
-        || !output_offset.is_multiple_of(output_width)
+    validate_pointwise_spans(
+        [left_offset, right_offset],
+        [input_width; 2],
+        output_offset,
+        output_width,
+        length,
+    )
+}
+
+pub(crate) fn validate_pointwise_spans<const N: usize>(
+    inputs: [u32; N],
+    widths: [u32; N],
+    output: u32,
+    output_width: u32,
+    length: u32,
+) -> u32 {
+    if !output.is_multiple_of(output_width)
+        || inputs
+            .iter()
+            .zip(widths)
+            .any(|(offset, width)| !offset.is_multiple_of(width))
     {
         return STATUS_UNALIGNED;
     }
 
     let memory_bytes = (core::arch::wasm32::memory_size(0) as u64) * 65_536;
-    let Some(left_range) = checked_typed_range(left_offset, length, input_width, memory_bytes)
-    else {
+    let Some(output_range) = checked_typed_range(output, length, output_width, memory_bytes) else {
         return STATUS_OUT_OF_BOUNDS;
     };
-    let Some(right_range) = checked_typed_range(right_offset, length, input_width, memory_bytes)
-    else {
-        return STATUS_OUT_OF_BOUNDS;
-    };
-    let Some(output_range) = checked_typed_range(output_offset, length, output_width, memory_bytes)
-    else {
-        return STATUS_OUT_OF_BOUNDS;
-    };
-    if overlaps(output_range, left_range) || overlaps(output_range, right_range) {
+    let mut overlapping = false;
+    for (offset, width) in inputs.into_iter().zip(widths) {
+        let Some(range) = checked_typed_range(offset, length, width, memory_bytes) else {
+            return STATUS_OUT_OF_BOUNDS;
+        };
+        overlapping |= overlaps(output_range, range);
+    }
+    if overlapping {
         return STATUS_OUTPUT_OVERLAP;
     }
     STATUS_OK

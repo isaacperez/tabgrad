@@ -23,6 +23,7 @@ admitted operand and result types for each device.
 | [`sum`](reference/tensor-sum.md#call-forms-and-result) | `float32`, `float16`, `bfloat16` | `float32`, `float16`, `bfloat16` |
 | [`matmul`](reference/tensor-matmul.md#calls-and-differentiation) | `float32`, `float16`, `bfloat16` | `float32`, `float16`, `bfloat16` |
 | [`gt`](reference/python-tensors.md#greater-than-comparison) | `float32`, `bool` | `float32`, `bool` |
+| [`where`](reference/python-tensors.md#select-with-a-boolean-mask) | `bool`, `float32` | `bool`, `float32` |
 
 ### Storage and state
 
@@ -134,6 +135,19 @@ qualified environments and release-specific claims.
       "limits": "Compares float32 tensors elementwise with broadcasting. Returns a boolean mask without gradient history.",
       "variants": [
         {"inputs": ["float32", "float32"], "result": "bool", "cpu": {"status": "supported", "gradients": "not-applicable"}, "webgpu": {"status": "supported", "gradients": "not-applicable"}}
+      ]
+    },
+    {
+      "id": "where",
+      "name": "torch.where",
+      "module": "torch",
+      "aliases": [],
+      "arithmetic": true,
+      "source": "docs/reference/python-tensors.md",
+      "fragment": "select-with-a-boolean-mask",
+      "limits": "Selects from two float32 tensors using a bool condition. Broadcasts all three inputs. First-order gradients apply to the float32 branches.",
+      "variants": [
+        {"inputs": ["bool", "float32", "float32"], "result": "float32", "cpu": {"status": "supported", "gradients": "first-order"}, "webgpu": {"status": "supported", "gradients": "first-order"}}
       ]
     },
     {

@@ -1,6 +1,6 @@
 import { invocationEntry, type LinearDispatchLayout } from "../linear-dispatch.js";
 import { PACKED16_LANE_SOURCE, PACKED16_VALUES_PER_WORD } from "./packed-words.js";
-import { packedBinaryIndices } from "./broadcast.js";
+import { pointwiseElementIndices } from "./broadcast.js";
 
 export const PACKED16_WORKGROUP_SIZE = 64;
 
@@ -21,7 +21,7 @@ ${entry.signature}
   for (var lane = 0u; lane < ${PACKED16_VALUES_PER_WORD}u; lane++) {
     let index = first + lane;
     if index < geometry[1] {
-      ${packedBinaryIndices(broadcast)}
+      ${pointwiseElementIndices(broadcast)}
       let a = packed16_lane(left[indices.x / ${PACKED16_VALUES_PER_WORD}u], indices.x);
       let b = packed16_lane(right[indices.y / ${PACKED16_VALUES_PER_WORD}u], indices.y);
       packed |= ${calculate}(a, b) << (lane * 16u);

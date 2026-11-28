@@ -133,6 +133,40 @@ JavaScript exposes the same signature as `scores.gt(thresholds)`.
 Compare against another tensor, using shape `[]` for a scalar tensor if
 needed. The result keeps the usual asynchronous observation path.
 
+## Select with a boolean mask
+
+```python
+import torch
+
+scores = torch.tensor([[1.0], [4.0]])
+thresholds = torch.tensor([0.0, 2.0, 5.0])
+mask = torch.gt(scores, thresholds)
+values = torch.where(mask, scores, torch.tensor(0.0))
+print(values.tolist())  # [[1.0, 0.0, 0.0], [4.0, 4.0, 0.0]]
+```
+
+`torch.where(condition, input, other)` broadcasts the three shapes together.
+A true condition selects from `input` and a false condition selects from
+`other`. The condition is a contiguous bool tensor and both alternatives
+are contiguous float32 tensors. All three belong to the same session and
+device. The new float32 tensor can have scalar shape or empty axes. The
+selected value preserves the sign of zero, subnormals and infinities.
+A selected NaN remains NaN.
+This form takes three tensor arguments and creates its own output.
+
+With gradient recording enabled, each selected seed contributes to its
+float32 branch and each unselected position contributes positive zero.
+The mask has no gradient. Broadcasted branches receive a sum over their
+expanded axes using the existing receiving reduction for that device.
+This arithmetic can differ across CPU, WebGPU and native PyTorch under
+cancellation or overflow. For example, the expanded seed
+`[1e20, 1, -1e20, 1]` in a fully selected scalar branch reduces to `0` on
+CPU and `2` on WebGPU. See the
+[boolean selection contract](../architecture/typed-tensors.md#boolean-masks-and-selection).
+
+Use `session.where(mask, input, other)` in JavaScript. A mask made by
+`gt` can feed selection directly on either device before observation.
+
 ## Read metadata
 
 `tensor.shape`, `tensor.dtype`, `tensor.device` and `tensor.requires_grad` are read-only properties.

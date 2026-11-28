@@ -46,6 +46,10 @@ export class PythonRuntimeBridge {
   /** One projection of the shared definitions for the attached Python module. */
   dtypeDefinitions(): string { return dtypeDefinitions; }
 
+  where(condition: Tensor, input: Tensor, other: Tensor): Tensor {
+    return this.session.where(condition, input, other);
+  }
+
   registerSGD(groups: readonly (readonly Tensor[])[]): OptimizerLease {
     return registerOptimizerLease(this.session, groups);
   }

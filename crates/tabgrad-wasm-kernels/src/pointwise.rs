@@ -1,6 +1,7 @@
 use crate::abi::{
     FLOAT_ALIGNMENT, STATUS_INVALID_GEOMETRY, STATUS_OK, STATUS_OUT_OF_BOUNDS,
     STATUS_OUTPUT_OVERLAP, STATUS_UNALIGNED, checked_range, checked_typed_range, overlaps,
+    validate_pointwise_spans,
 };
 
 /// Arithmetic is statically selected; traversal has no operation-name dispatch.
@@ -32,6 +33,26 @@ impl<P: Float32Pointwise<N>, const N: usize> Pointwise<N> for P {
             );
         }
     }
+}
+
+pub(crate) fn typed_dense<P: Pointwise<N>, const N: usize>(
+    inputs: [u32; N],
+    output: u32,
+    length: u32,
+) -> u32 {
+    let status = validate_pointwise_spans(inputs, P::INPUT_WIDTHS, output, P::OUTPUT_WIDTH, length);
+    if status == STATUS_OK {
+        // SAFETY: all complete typed spans are valid and the output is disjoint.
+        unsafe {
+            P::run(
+                inputs.map(|offset| offset as *const u8),
+                [1; N],
+                output as *mut u8,
+                length as usize,
+            );
+        }
+    }
+    status
 }
 
 /// Retained binary dense schedule, with arithmetic selected statically.

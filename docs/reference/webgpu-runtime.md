@@ -79,6 +79,11 @@ boolean tensor from two broadcast-compatible float32 tensors. Each invocation
 owns a full word with up to four masks. The independent typed observation
 exposes only the logical bytes.
 
+GPU [selection](python-tensors.md#select-with-a-boolean-mask) consumes that
+packed condition in place. It reads the original branch buffers through the
+checked broadcast geometry. Its first-order gradients select the incoming seed
+on-device and use the usual receiving reduction for expanded branches.
+
 GPU `sum()` reduces a whole contiguous floating tensor to a distinct scalar, including
 an empty input's positive-zero write. Its exact-total accumulation and logical
 rounding boundaries are specified by the [sum reference](tensor-sum.md).

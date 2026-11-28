@@ -19,6 +19,7 @@ mod receiving;
 mod reduction;
 mod reduction_bf16;
 mod reduction_f16;
+mod selection;
 
 #[panic_handler]
 fn panic(_information: &PanicInfo<'_>) -> ! {

@@ -698,6 +698,24 @@ def gt(input: object, other: object) -> Tensor:
     return input.gt(other)
 
 
+def where(condition: object, input: object, other: object) -> Tensor:
+    """Select elements from two float32 tensors using a boolean tensor."""
+    if (
+        not isinstance(condition, Tensor)
+        or not isinstance(input, Tensor)
+        or not isinstance(other, Tensor)
+    ):
+        raise TypeError("Tabgrad selection requires three tensors.")
+    try:
+        return Tensor._from_handle(_bridge.where(condition._handle, input._handle, other._handle))  # pyright: ignore[reportPrivateUsage]
+    except JsException as error:
+        _raise_view_history_failure(error)
+        failure = cast("_bridge.RuntimeException", error)
+        if failure.js_error.code in ("SHAPE_MISMATCH", "UNSUPPORTED_DTYPE", "UNSUPPORTED_DEVICE"):
+            raise RuntimeError(str(error)) from error
+        raise
+
+
 def mul(input: object, other: object, *, out: object = None) -> Tensor:
     """Multiply broadcast-compatible tensors out of place; only out=None is supported."""
     left = _require_mul_input(input)
@@ -781,6 +799,7 @@ __all__ = [
     "optim",
     "sum",
     "tensor",
+    "where",
 ]
 if TYPE_CHECKING:
     __all__ += ["bfloat16", "bool", "float16", "float32"]

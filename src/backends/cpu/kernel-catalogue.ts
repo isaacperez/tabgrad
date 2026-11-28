@@ -1,7 +1,7 @@
 import type { ComputationKind } from "../../execution/operation-contracts.js";
 
 export const CPU_ABI_VERSION = 1;
-export const CPU_MODULE_VERSION = 13;
+export const CPU_MODULE_VERSION = 14;
 
 interface Capability {
   readonly name: string;
@@ -14,12 +14,13 @@ interface KernelSymbol<Name extends string = string, Arity extends number = numb
   readonly capability: Capability;
 }
 
-const ABI_ARITY = Object.freeze({ pointwise: 4, broadcast: 5, inputLength: 3, outputLength: 3,
+const ABI_ARITY = Object.freeze({ pointwise: 4, broadcast: 5, ternaryPointwise: 5, ternaryBroadcast: 6, inputLength: 3, outputLength: 3,
   coefficient: 5, matrix: 7, receiving: 4 } as const);
-type SingleLayout = Exclude<keyof typeof ABI_ARITY, "pointwise" | "broadcast">;
+type PointwiseLayout = "pointwise" | "ternaryPointwise";
+type SingleLayout = Exclude<keyof typeof ABI_ARITY, PointwiseLayout | "broadcast" | "ternaryBroadcast">;
 
 export type CpuKernelDeclaration =
-  | { readonly layout: "pointwise"; readonly dense: KernelSymbol; readonly broadcast: KernelSymbol }
+  | { readonly layout: PointwiseLayout; readonly dense: KernelSymbol; readonly broadcast: KernelSymbol }
   | { readonly layout: SingleLayout; readonly symbol: KernelSymbol };
 
 function capability(name: string, bit: number): Capability { return Object.freeze({ name, bit }); }
@@ -43,6 +44,7 @@ const BROADCAST_FLOAT32 = capability("broadcast-f32", 64);
 const POINTWISE_FLOAT16 = capability("pointwise-f16", 256);
 const POINTWISE_BFLOAT16 = capability("pointwise-bf16", 2048);
 const POINTWISE_GT = capability("gt-f32", 16384);
+const POINTWISE_WHERE = capability("where-f32", 32768);
 
 // Every CPU specialization declares its external symbols and calling layout here.
 const declarations = Object.freeze({
@@ -60,6 +62,12 @@ const declarations = Object.freeze({
   "add-bf16": pointwise("tabgrad_add_bf16", POINTWISE_BFLOAT16, "tabgrad_broadcast_add_bf16", POINTWISE_BFLOAT16),
   "mul-bf16": pointwise("tabgrad_mul_bf16", POINTWISE_BFLOAT16, "tabgrad_broadcast_mul_bf16", POINTWISE_BFLOAT16),
   "gt-f32": pointwise("tabgrad_gt_f32", POINTWISE_GT, "tabgrad_broadcast_gt_f32", POINTWISE_GT),
+  "where-f32": Object.freeze({ layout: "ternaryPointwise", dense: symbol("tabgrad_where_f32", "ternaryPointwise", POINTWISE_WHERE),
+    broadcast: symbol("tabgrad_broadcast_where_f32", "ternaryBroadcast", POINTWISE_WHERE) }),
+  "where-then-gradient-f32": pointwise("tabgrad_where_then_gradient_f32", POINTWISE_WHERE,
+    "tabgrad_broadcast_where_then_gradient_f32", POINTWISE_WHERE),
+  "where-else-gradient-f32": pointwise("tabgrad_where_else_gradient_f32", POINTWISE_WHERE,
+    "tabgrad_broadcast_where_else_gradient_f32", POINTWISE_WHERE),
   "sum-bf16": kernel("inputLength", "tabgrad_sum_bf16", capability("sum-bf16", 4096)),
   "matmul-bf16": kernel("matrix", "tabgrad_matmul_bf16", capability("matmul-bf16", 8192)),
 } satisfies Partial<Record<ComputationKind, CpuKernelDeclaration>>);
@@ -77,7 +85,7 @@ export function cpuKernel(kind: ComputationKind): RegisteredKernel | undefined {
 
 const kernelSymbols: KernelSymbol[] = [];
 for (const declaration of Object.values(declarations)) {
-  if (declaration.layout === "pointwise") kernelSymbols.push(declaration.dense, declaration.broadcast);
+  if ("dense" in declaration) kernelSymbols.push(declaration.dense, declaration.broadcast);
   else kernelSymbols.push(declaration.symbol);
 }
 // Capability bits define a stable order across module profiles.
