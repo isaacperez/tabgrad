@@ -1,29 +1,33 @@
 import { bfloat16ObservationBits, encodeBfloat16 } from "./bfloat16.js";
 import { binary16ObservationBits, encodeBinary16 } from "./binary16.js";
 import { TabgradError } from "./errors.js";
+import { captureInt32, captureInt64, observeInt32, observeInt64 } from "./signed-integer.js";
 
-export type TensorData = Iterable<number | boolean> | ArrayLike<number | boolean>;
-export type TensorObservation = Float32Array<ArrayBuffer> | Uint8Array<ArrayBuffer>;
+export type TensorData<Element = number | boolean | bigint> = Iterable<Element> | ArrayLike<Element>;
+export type TensorObservation = Float32Array<ArrayBuffer> | Uint8Array<ArrayBuffer> | Int32Array<ArrayBuffer> | BigInt64Array<ArrayBuffer>;
 export type ObservationFormat = "numeric" | "typed";
-type EncodedStorage = Float32Array<ArrayBuffer> | Uint16Array<ArrayBuffer> | Uint8Array<ArrayBuffer>;
+type EncodedStorage = TensorObservation | Uint16Array<ArrayBuffer>;
 
 /** Pyodide borrow request and Python array format for original numeric input. */
 const pythonInputs = Object.freeze({
   f32: Object.freeze({ request: "f32", typecode: "f", itemsize: 4, array: Float32Array } as const),
   f64: Object.freeze({ request: "f64", typecode: "d", itemsize: 8, array: Float64Array } as const),
   u8: Object.freeze({ request: "u8", typecode: "B", itemsize: 1, array: Uint8Array } as const),
+  i32: Object.freeze({ request: "i32", typecode: "i", itemsize: 4, array: Int32Array } as const),
+  i64: Object.freeze({ request: "i64", typecode: "q", itemsize: 8, array: BigInt64Array } as const),
 });
 
 export type PythonNumericInput = typeof pythonInputs[keyof typeof pythonInputs];
 
 const realFloatingPoint = Object.freeze({ is_floating_point: true, is_complex: false, is_signed: true });
+const signedInteger = Object.freeze({ is_floating_point: false, is_complex: false, is_signed: true });
 
 interface DTypeDefinition {
   readonly name: string;
   readonly encoding: string;
   readonly bytesPerElement: number;
   readonly capture: (data: TensorData) => EncodedStorage;
-  readonly observe: (bytes: Uint8Array<ArrayBuffer>, elements: number, copy: boolean) => Float32Array<ArrayBuffer>;
+  readonly observe?: (bytes: Uint8Array<ArrayBuffer>, elements: number, copy: boolean) => Float32Array<ArrayBuffer>;
   readonly observeTyped?: (bytes: Uint8Array<ArrayBuffer>, elements: number, copy: boolean) => TensorObservation;
   readonly pythonInput: PythonNumericInput;
   readonly properties: Readonly<{ is_floating_point: boolean; is_complex: boolean; is_signed: boolean }>;
@@ -105,6 +109,14 @@ export const TENSOR_DTYPES = Object.freeze({
     observeTyped: (bytes: Uint8Array<ArrayBuffer>, _elements: number, copy: boolean) => copy ? bytes.slice() : bytes,
     pythonInput: pythonInputs.u8, properties: Object.freeze({ is_floating_point: false, is_complex: false, is_signed: false }),
   } as const),
+  int32: Object.freeze({
+    name: "int32", encoding: "int32-le", bytesPerElement: 4,
+    capture: captureInt32, observeTyped: observeInt32, pythonInput: pythonInputs.i32, properties: signedInteger,
+  } as const),
+  int64: Object.freeze({
+    name: "int64", encoding: "int64-le", bytesPerElement: 8,
+    capture: captureInt64, observeTyped: observeInt64, pythonInput: pythonInputs.i64, properties: signedInteger,
+  } as const),
 } satisfies Readonly<Record<string, DTypeDefinition>>);
 
 export type TensorDType = keyof typeof TENSOR_DTYPES;
@@ -123,6 +135,12 @@ export function isTensorDType(dtype: unknown): dtype is TensorDType {
 export function tensorDType(dtype: TensorDType): TensorDTypeDescriptor {
   if (!isTensorDType(dtype)) throw new TypeError("Unsupported tensor dtype.");
   return TENSOR_DTYPES[dtype];
+}
+
+export function assertTensorObservationFormat(dtype: TensorDType, format: ObservationFormat): void {
+  if (format === "numeric" && !("observe" in tensorDType(dtype))) {
+    throw new TabgradError("UNSUPPORTED_DTYPE", "Observe integer tensors with { format: \"typed\" }.");
+  }
 }
 
 /** Checked arithmetic without allocating an intermediate span descriptor. */

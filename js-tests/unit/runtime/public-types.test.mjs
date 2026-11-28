@@ -67,6 +67,7 @@ test("the JavaScript package entry point exposes only the supported runtime surf
       optimizerPrototype: ["close", "constructor", "step", "zeroGrad"],
       tensorPrototype: [
         "add",
+        "argmax",
         "backward",
         "close",
         "constructor",

@@ -306,8 +306,8 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
     program: ExecutableProgram,
     inputs: readonly GpuAllocation[], output: GpuAllocation, storage: GpuInvocationStorage, plan: KernelDispatchPlan): void {
     try {
-      if (plan.path === "sum") {
-        this.#encodeSum(encoder, inputs[0]!, output, storage, plan);
+      if (plan.path === "sum" || plan.path === "argmax") {
+        this.#encodeReduction(encoder, inputs[0]!, output, storage, plan);
         return;
       }
       if (plan.path === "receiving") {
@@ -354,19 +354,19 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
     }
   }
 
-  #encodeSum(encoder: GPUCommandEncoder, input: GpuAllocation, output: GpuAllocation, storage: GpuInvocationStorage,
-    plan: Extract<KernelDispatchPlan, { path: "sum" }>): void {
+  #encodeReduction(encoder: GPUCommandEncoder, input: GpuAllocation, output: GpuAllocation, storage: GpuInvocationStorage,
+    plan: Extract<KernelDispatchPlan, { path: "sum" | "argmax" }>): void {
     const pass = encoder.beginComputePass();
     let current = input;
     for (const stage of plan.stages) {
       const pipeline = this.#pipelines.get(stage.pipeline.key);
-      if (pipeline === undefined) throw new Error("WebGPU sum was not prepared.");
+      if (pipeline === undefined) throw new Error("WebGPU reduction was not prepared.");
       pass.setPipeline(pipeline);
       const target = stage.final ? output : this.#allocate(stage.bytes, GPUBufferUsage.STORAGE);
       if (!stage.final) storage.created.add(target);
-      const parameters = this.#uploadParameters(new Uint32Array([
-        stage.count, Number(stage.final), Number(stage.partial), 0,
-      ]), GPUBufferUsage.UNIFORM, storage);
+      const words = plan.path === "sum" ? [stage.count, Number(stage.final), Number(stage.partial), 0]
+        : [stage.count, plan.inner, stage.chunks, stage.workgroups, Number(stage.partial), Number(stage.final), 0, 0];
+      const parameters = this.#uploadParameters(new Uint32Array(words), GPUBufferUsage.UNIFORM, storage);
       const bindGroup = this.#device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [
         { binding: 0, resource: { buffer: current.buffer } },
         { binding: 1, resource: { buffer: target.buffer } },

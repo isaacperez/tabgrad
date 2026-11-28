@@ -395,10 +395,10 @@ bytecode settings, and cleanup restricted to exact owned modules, registrations,
 files, paths and finders. Host replacements survive; retained old modules stay
 tied to their old closed session.
 
-The private bridge uses protocol 7 with matching builder, loader and
+The private bridge uses protocol 8 with matching builder, loader and
 documentation; schema 1 and Pyodide 314.0.6 remain independent compatibility
-dimensions. Protocol 6 and 7
-artifacts must reject each other before Python executes. Migration and rollback
+dimensions. Artifacts with different bridge protocols reject one another
+before Python executes. Migration and rollback
 operate on matching distributions, without a mixed-protocol fallback.
 The package-source map stays fixed. At import, `torch` reads dtype names,
 properties and input formats from the bridge and constructs its canonical

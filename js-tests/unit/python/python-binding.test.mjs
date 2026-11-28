@@ -1491,10 +1491,12 @@ assert torch is not old_torch
 assert torch.float32 is not old_torch.float32 and torch.float16 is not old_torch.float16
 assert torch.bfloat16 is not old_torch.bfloat16
 assert torch.bool is not old_torch.bool
+assert torch.int32 is not old_torch.int32 and torch.int64 is not old_torch.int64
 public_symbols = {}
 exec("from torch import *", public_symbols)
 assert {name: value for name, value in public_symbols.items() if isinstance(value, torch.dtype)} == {
     "float32": torch.float32, "float16": torch.float16, "bfloat16": torch.bfloat16, "bool": torch.bool,
+    "int32": torch.int32, "int64": torch.int64, "int": torch.int32, "long": torch.int64,
 }
 del public_symbols
 class ForeignDType:
@@ -1506,7 +1508,10 @@ for invalid_dtype in (old_torch.float32, object.__new__(torch.dtype), ForeignDTy
     try:
         torch.tensor([1], dtype=invalid_dtype)
     except RuntimeError as error:
-        assert str(error) == "Tabgrad requires explicit dtype=torch.float32 or torch.float16 or torch.bfloat16 or torch.bool."
+        assert str(error) == (
+            "Tabgrad requires explicit dtype=torch.float32 or torch.float16 or torch.bfloat16 or torch.bool"
+            " or torch.int32 or torch.int64."
+        )
     else:
         raise AssertionError("noncanonical dtype accepted")
 del ForeignDType, invalid_dtype

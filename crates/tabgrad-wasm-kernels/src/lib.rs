@@ -4,6 +4,7 @@ use core::panic::PanicInfo;
 
 mod abi;
 mod addition;
+mod argmax;
 mod binary16;
 mod coefficient_addition;
 mod comparison;

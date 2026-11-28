@@ -6,6 +6,8 @@ import { pointwiseParameters, receivingParameters, receivingStages, type Broadca
 import { planLinearDispatch, type LinearDispatch, type LinearDispatchLayout } from "./linear-dispatch.js";
 import { reductionStages, type ReductionStage } from "./reduction-stages.js";
 import { webGpuKernel, type PhysicalKernel, type PipelineSelection, type UniformParameters } from "./kernel-catalogue.js";
+import { axisReductionGeometry } from "../../execution/axis-geometry.js";
+import { ARGMAX_GROUP_TERMS, ARGMAX_PARTIAL_BYTES } from "./kernels/argmax.js";
 
 export type { PipelineKey, PipelineSelection } from "./kernel-catalogue.js";
 
@@ -31,6 +33,7 @@ export type KernelDispatchPlan =
       readonly uniform: UniformParameters | undefined }
   | { readonly path: "pointwise"; readonly dispatch: LinearDispatch; readonly pipeline: PipelineSelection; readonly words: Uint32Array }
   | { readonly path: "sum"; readonly stages: readonly SumStage[] }
+  | { readonly path: "argmax"; readonly stages: readonly SumStage[]; readonly inner: number }
   | { readonly path: "receiving"; readonly stages: readonly ReceivingStage[]; readonly words: Uint32Array;
       readonly terms: number; readonly groups: number; readonly pipeline: PipelineSelection };
 
@@ -82,6 +85,15 @@ export function planKernelDispatch(computation: LoweredComputation, program: Exe
       });
       return { path: "sum", stages };
     }
+    case "argmax": {
+      const { terms, inner, groups } = axisReductionGeometry(program.values[computation.inputs[0]!]!.shape, computation.reduction!);
+      if (groups === 0) return { path: "argmax", stages: [], inner };
+      const stages = reductionStages(terms, groups, ARGMAX_GROUP_TERMS, ARGMAX_PARTIAL_BYTES, limits, 8).map(stage => {
+        const dispatch = planLinearDispatch(stage.workgroups, registration.direct.indexSpace, axis);
+        return { ...stage, dispatch, pipeline: selectPipeline(registration.direct, dispatch.layout) };
+      });
+      return { path: "argmax", stages, inner };
+    }
     case "receiving": {
       const projection = receivingGeometry(pointwiseGeometry([program.values[computation.inputs[0]!]!.shape, output.shape]), 1);
       return { path: "receiving", stages: receivingStages(projection, limits), words: receivingParameters(projection, limits),
@@ -91,5 +103,5 @@ export function planKernelDispatch(computation: LoweredComputation, program: Exe
 }
 
 export function requestedPipelines(plan: KernelDispatchPlan): readonly PipelineSelection[] {
-  return plan.path === "sum" ? plan.stages.map(stage => stage.pipeline) : [plan.pipeline];
+  return plan.path === "sum" || plan.path === "argmax" ? plan.stages.map(stage => stage.pipeline) : [plan.pipeline];
 }

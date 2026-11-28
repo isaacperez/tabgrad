@@ -24,14 +24,15 @@ admitted operand and result types for each device.
 | [`matmul`](reference/tensor-matmul.md#calls-and-differentiation) | `float32`, `float16`, `bfloat16` | `float32`, `float16`, `bfloat16` |
 | [`gt`](reference/python-tensors.md#greater-than-comparison) | `float32`, `bool` | `float32`, `bool` |
 | [`where`](reference/python-tensors.md#select-with-a-boolean-mask) | `bool`, `float32` | `bool`, `float32` |
+| [`argmax`](reference/python-tensors.md#find-the-index-of-a-maximum) | `float32`, `int64`, `int32` | `float32`, `int64`, `int32` |
 
 ### Storage and state
 
 | Operation | CPU | WebGPU |
 | --- | --- | --- |
-| [`torch.tensor`](reference/python-tensors.md#create-a-tensor) | `float32`, `float16`, `bfloat16`, `bool` | `float32`, `float16`, `bfloat16`, `bool` |
-| [`Tensor.tolist`](reference/python-tensors.md#observe-numerical-values) | `float32`, `float16`, `bfloat16`, `bool` | `float32`, `float16`, `bfloat16`, `bool` |
-| [`Tensor.view`](reference/tensor-view.md#call-forms-and-shape-rules) | `float32`, `float16`, `bfloat16`, `bool` | `float32`, `float16`, `bfloat16`, `bool` |
+| [`torch.tensor`](reference/python-tensors.md#create-a-tensor) | `float32`, `float16`, `bfloat16`, `bool`, `int32`, `int64` | `float32`, `float16`, `bfloat16`, `bool`, `int32`, `int64` |
+| [`Tensor.tolist`](reference/python-tensors.md#observe-numerical-values) | `float32`, `float16`, `bfloat16`, `bool`, `int32`, `int64` | `float32`, `float16`, `bfloat16`, `bool`, `int32`, `int64` |
+| [`Tensor.view`](reference/tensor-view.md#call-forms-and-shape-rules) | `float32`, `float16`, `bfloat16`, `bool`, `int32`, `int64` | `float32`, `float16`, `bfloat16`, `bool`, `int32`, `int64` |
 | [`Tensor.copy_`](reference/tensor-copy.md#calling-forms-and-values) | `float32` | `float32` |
 | [`Tensor.backward`](reference/backward-gradients.md#python-calls) | `float32` | `float32` |
 | [`torch.no_grad`](reference/gradient-recording.md#python-context) | Supported | Supported |
@@ -61,7 +62,9 @@ qualified environments and release-specific claims.
         {"inputs": [], "result": "float32", "cpu": {"status": "supported", "gradients": "first-order"}, "webgpu": {"status": "supported", "gradients": "first-order"}},
         {"inputs": [], "result": "float16", "cpu": {"status": "supported", "gradients": "none"}, "webgpu": {"status": "supported", "gradients": "none"}},
         {"inputs": [], "result": "bfloat16", "cpu": {"status": "supported", "gradients": "none"}, "webgpu": {"status": "supported", "gradients": "none"}},
-        {"inputs": [], "result": "bool", "cpu": {"status": "supported", "gradients": "none"}, "webgpu": {"status": "supported", "gradients": "none"}}
+        {"inputs": [], "result": "bool", "cpu": {"status": "supported", "gradients": "none"}, "webgpu": {"status": "supported", "gradients": "none"}},
+        {"inputs": [], "result": "int32", "cpu": {"status": "supported", "gradients": "none"}, "webgpu": {"status": "supported", "gradients": "none"}},
+        {"inputs": [], "result": "int64", "cpu": {"status": "supported", "gradients": "none"}, "webgpu": {"status": "supported", "gradients": "none"}}
       ]
     },
     {
@@ -151,6 +154,21 @@ qualified environments and release-specific claims.
       ]
     },
     {
+      "id": "argmax",
+      "name": "torch.argmax",
+      "module": "torch",
+      "aliases": ["Tensor.argmax"],
+      "arithmetic": true,
+      "source": "docs/reference/python-tensors.md",
+      "fragment": "find-the-index-of-a-maximum",
+      "limits": "Finds the first maximum on a specified axis or over one contiguous tensor. Always returns int64.",
+      "variants": [
+        {"inputs": ["float32"], "result": "int64", "cpu": {"status": "supported", "gradients": "not-applicable"}, "webgpu": {"status": "supported", "gradients": "not-applicable"}},
+        {"inputs": ["int32"], "result": "int64", "cpu": {"status": "supported", "gradients": "not-applicable"}, "webgpu": {"status": "supported", "gradients": "not-applicable"}},
+        {"inputs": ["int64"], "result": "int64", "cpu": {"status": "supported", "gradients": "not-applicable"}, "webgpu": {"status": "supported", "gradients": "not-applicable"}}
+      ]
+    },
+    {
       "id": "tolist",
       "name": "Tensor.tolist",
       "module": "torch.Tensor",
@@ -158,12 +176,14 @@ qualified environments and release-specific claims.
       "arithmetic": false,
       "source": "docs/reference/python-tensors.md",
       "fragment": "observe-numerical-values",
-      "limits": "Reads Python floats or booleans, in lists for non-scalar shapes.",
+      "limits": "Reads Python floats, integers or booleans, in lists for non-scalar shapes.",
       "variants": [
         {"inputs": ["float32"], "result": null, "cpu": {"status": "supported", "gradients": "not-applicable"}, "webgpu": {"status": "supported", "gradients": "not-applicable"}},
         {"inputs": ["float16"], "result": null, "cpu": {"status": "supported", "gradients": "not-applicable"}, "webgpu": {"status": "supported", "gradients": "not-applicable"}},
         {"inputs": ["bfloat16"], "result": null, "cpu": {"status": "supported", "gradients": "not-applicable"}, "webgpu": {"status": "supported", "gradients": "not-applicable"}},
-        {"inputs": ["bool"], "result": null, "cpu": {"status": "supported", "gradients": "not-applicable"}, "webgpu": {"status": "supported", "gradients": "not-applicable"}}
+        {"inputs": ["bool"], "result": null, "cpu": {"status": "supported", "gradients": "not-applicable"}, "webgpu": {"status": "supported", "gradients": "not-applicable"}},
+        {"inputs": ["int32"], "result": null, "cpu": {"status": "supported", "gradients": "not-applicable"}, "webgpu": {"status": "supported", "gradients": "not-applicable"}},
+        {"inputs": ["int64"], "result": null, "cpu": {"status": "supported", "gradients": "not-applicable"}, "webgpu": {"status": "supported", "gradients": "not-applicable"}}
       ]
     },
     {
@@ -179,7 +199,9 @@ qualified environments and release-specific claims.
         {"inputs": ["float32"], "result": "float32", "cpu": {"status": "supported", "gradients": "first-order"}, "webgpu": {"status": "supported", "gradients": "first-order"}},
         {"inputs": ["float16"], "result": "float16", "cpu": {"status": "supported", "gradients": "none"}, "webgpu": {"status": "supported", "gradients": "none"}},
         {"inputs": ["bfloat16"], "result": "bfloat16", "cpu": {"status": "supported", "gradients": "none"}, "webgpu": {"status": "supported", "gradients": "none"}},
-        {"inputs": ["bool"], "result": "bool", "cpu": {"status": "supported", "gradients": "none"}, "webgpu": {"status": "supported", "gradients": "none"}}
+        {"inputs": ["bool"], "result": "bool", "cpu": {"status": "supported", "gradients": "none"}, "webgpu": {"status": "supported", "gradients": "none"}},
+        {"inputs": ["int32"], "result": "int32", "cpu": {"status": "supported", "gradients": "none"}, "webgpu": {"status": "supported", "gradients": "none"}},
+        {"inputs": ["int64"], "result": "int64", "cpu": {"status": "supported", "gradients": "none"}, "webgpu": {"status": "supported", "gradients": "none"}}
       ]
     },
     {

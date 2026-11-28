@@ -56,7 +56,8 @@ session-owned `webgpu` device **in addition to CPU**. Omitting `device` still
 means `cpu`; there are no indexed device names, implicit migrations or silent
 fallbacks. Handles from different sessions cannot be mixed.
 
-GPU tensors use contiguous `float32`, `float16`, `bfloat16` or `bool` storage.
+GPU tensors use contiguous `float32`, `float16`, `bfloat16`, `bool`, `int32` or
+`int64` storage.
 [Float16](float16.md) and [bfloat16](python-tensors.md#bfloat16-tensors)
 support same-type add/mul, total sum, 2D matrix products and views with their own
 rounding, packed-storage and inference-only boundaries. Creation accepts the common

@@ -1,7 +1,7 @@
 import type { ComputationKind } from "../../execution/operation-contracts.js";
 
 export const CPU_ABI_VERSION = 1;
-export const CPU_MODULE_VERSION = 14;
+export const CPU_MODULE_VERSION = 15;
 
 interface Capability {
   readonly name: string;
@@ -15,7 +15,7 @@ interface KernelSymbol<Name extends string = string, Arity extends number = numb
 }
 
 const ABI_ARITY = Object.freeze({ pointwise: 4, broadcast: 5, ternaryPointwise: 5, ternaryBroadcast: 6, inputLength: 3, outputLength: 3,
-  coefficient: 5, matrix: 7, receiving: 4 } as const);
+  coefficient: 5, matrix: 7, receiving: 4, axisReduction: 5 } as const);
 type PointwiseLayout = "pointwise" | "ternaryPointwise";
 type SingleLayout = Exclude<keyof typeof ABI_ARITY, PointwiseLayout | "broadcast" | "ternaryBroadcast">;
 
@@ -45,6 +45,7 @@ const POINTWISE_FLOAT16 = capability("pointwise-f16", 256);
 const POINTWISE_BFLOAT16 = capability("pointwise-bf16", 2048);
 const POINTWISE_GT = capability("gt-f32", 16384);
 const POINTWISE_WHERE = capability("where-f32", 32768);
+const ARGMAX = capability("argmax", 65536);
 
 // Every CPU specialization declares its external symbols and calling layout here.
 const declarations = Object.freeze({
@@ -70,6 +71,9 @@ const declarations = Object.freeze({
     "tabgrad_broadcast_where_else_gradient_f32", POINTWISE_WHERE),
   "sum-bf16": kernel("inputLength", "tabgrad_sum_bf16", capability("sum-bf16", 4096)),
   "matmul-bf16": kernel("matrix", "tabgrad_matmul_bf16", capability("matmul-bf16", 8192)),
+  "argmax-f32": kernel("axisReduction", "tabgrad_argmax_f32", ARGMAX),
+  "argmax-i32": kernel("axisReduction", "tabgrad_argmax_i32", ARGMAX),
+  "argmax-i64": kernel("axisReduction", "tabgrad_argmax_i64", ARGMAX),
 } satisfies Partial<Record<ComputationKind, CpuKernelDeclaration>>);
 
 export const CPU_COMPUTATIONS: readonly (keyof typeof declarations)[] = Object.freeze(

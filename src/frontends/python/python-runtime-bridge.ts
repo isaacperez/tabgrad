@@ -23,7 +23,8 @@ interface PythonBufferView {
   release(): void;
 }
 
-function boundedNumericView(view: PythonBufferView, format: PythonNumericInput): Float32Array | Float64Array | Uint8Array {
+function boundedNumericView(view: PythonBufferView, format: PythonNumericInput):
+  Float32Array | Float64Array | Uint8Array | Int32Array | BigInt64Array {
   const length = view.shape[0];
   const data = view.data;
   if (!(data instanceof format.array) || view.format !== format.typecode || view.itemsize !== format.itemsize
@@ -150,7 +151,10 @@ export class PythonRuntimeBridge {
     try {
       // Runtime import performs the owned copy synchronously. Neither this view
       // nor the argument proxy may escape into deferred numerical execution.
-      return this.session.tensor(boundedNumericView(view, format), { ...(shape === undefined ? {} : { shape }), requiresGrad, device, dtype });
+      const data = boundedNumericView(view, format);
+      const options = { ...(shape === undefined ? {} : { shape }), requiresGrad, device };
+      if (data instanceof BigInt64Array) return this.session.tensor(data, { ...options, dtype: "int64" });
+      return this.session.tensor(data, { ...options, dtype });
     } finally {
       view.release();
     }

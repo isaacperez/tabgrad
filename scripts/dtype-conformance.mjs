@@ -7,6 +7,7 @@ const page = "dtype/conformance.html";
 const assets = ["dtype/conformance.mjs", "dtype/python-worker.mjs", "dtype/gpu-device.mjs", "dtype/restrict-gpu.mjs",
   "helpers/compact-float-cases.mjs", "helpers/compact-float-oracle.json", "helpers/cpu-profile.mjs", "helpers/gpu-dispatch-cases.mjs",
   "helpers/boolean-mask-cases.mjs",
+  "helpers/integer-argmax-cases.mjs",
   "helpers/bfloat16-cases.mjs", "helpers/float16-values.mjs", "helpers/float16-sum-cases.mjs", "helpers/float16-matrix-oracle.mjs",
   "helpers/float32-addition-oracle.mjs", "helpers/float32-multiplication-oracle.mjs", "helpers/float32-coefficient-oracle.mjs", "helpers/float32-matrix-oracle.mjs"];
 
@@ -17,7 +18,7 @@ const runtimeProfiles = Object.freeze([binary16, bfloat16]);
 export async function runPublicDTypeConformance(options) {
   for (const [index, profile] of runtimeProfiles.entries()) {
     // Share an existing browser/interpreter setup across the two coverage families.
-    await runDTypeConformance({ ...options, profile, booleanMask: index === 0 });
+    await runDTypeConformance({ ...options, profile, booleanMask: index === 0, integerArgmax: index === 0 });
   }
 }
 
@@ -47,7 +48,7 @@ export function validateCompactFloatOracle(profile, oracle) {
 
 /** Source and installed consumers share full-output and resource assertions. */
 export async function runDTypeConformance({ browser, executable, version, language, device,
-  distributionDirectory, reportNote, profile = binary16, variant, booleanMask = false }) {
+  distributionDirectory, reportNote, profile = binary16, variant, booleanMask = false, integerArgmax = false }) {
   assert.ok(device === "cpu" || device === "webgpu");
   assert.ok(language === "javascript" || language === "python");
   assert.ok(variant === undefined || (device === "cpu" && ["scalar", "simd128"].includes(variant)));
@@ -68,13 +69,14 @@ export async function runDTypeConformance({ browser, executable, version, langua
   const observations = [];
   try {
     for (const grid of device === "webgpu" ? [false, true] : [false]) {
-      await runBrowserPage({ server, browser, executable, version, page, parameters: { language, device, dtype, fractionBits: String(fractionBits), grid: String(grid), arithmetic, booleanMask: String(booleanMask),
+      await runBrowserPage({ server, browser, executable, version, page, parameters: { language, device, dtype, fractionBits: String(fractionBits), grid: String(grid), arithmetic, booleanMask: String(booleanMask), integerArgmax: String(integerArgmax),
         ...(variant === undefined ? {} : { variant }) }, reportNote,
         validateResult(result) {
           assert.equal(result.ok, true, JSON.stringify(result.error));
           assert.equal(result.language, language); assert.equal(result.device, device);
           assert.equal(result.grid, grid); assert.equal(result.dtype, dtype);
           assert.equal(result.booleanMask, booleanMask);
+          assert.equal(result.integerArgmax, integerArgmax);
           assert.deepEqual(result.cases, { construction: oracle.construction.words.length, pointwise: oracle.pointwise.left.length,
             broadcasts: 10, oddDense: 2, channelCompositions: 1, totalSums: sums.length, matrixProducts: matrices.length });
           for (const name of ["liveTensorHandles", "liveTensorValues", "liveAllocationBytes", "liveRequestLeases"]) {

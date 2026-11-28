@@ -13,15 +13,15 @@ export interface ReductionStage {
 /** Receiver projection and dispatch are independent of the partial representation. */
 export function reductionStages(count: number, groups: number,
   elementsPerGroup: number, partialBytes: number,
-  limits: { readonly maxBufferSize: number; readonly maxStorageBufferBindingSize: number }): readonly ReductionStage[] {
+  limits: { readonly maxBufferSize: number; readonly maxStorageBufferBindingSize: number },
+  resultBytes = 4): readonly ReductionStage[] {
   const stages: ReductionStage[] = [];
   let partial = false;
   do {
     const chunks = Math.max(1, Math.ceil(count / elementsPerGroup));
     const workgroups = groups * chunks;
     const final = chunks === 1;
-    // Both scalar storage formats occupy one physical GPU word.
-    const bytes = workgroups * (final ? 4 : partialBytes);
+    const bytes = workgroups * (final ? resultBytes : partialBytes);
     if (!Number.isSafeInteger(count) || count < 0 || count > 0xffff_ffff
       || !Number.isSafeInteger(workgroups) || workgroups < 0 || workgroups > 0xffff_ffff
       || !Number.isSafeInteger(bytes) || Math.max(4, bytes) > gpuStorageCapacityBytes(limits)) {

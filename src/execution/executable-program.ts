@@ -2,6 +2,7 @@ import type { TensorDevice } from "./backend.js";
 import { tensorDType, type TensorDType } from "../shared/tensor-dtype.js";
 import { assertComputationParameters, requireComputationSignature, type ComputationKind, type OperationFamily } from "./operation-contracts.js";
 import { resolveTensorType } from "./operation-types.js";
+import { normalizeAxis, type AxisReduction } from "./axis-geometry.js";
 
 export type ProgramSlot = number;
 
@@ -28,6 +29,7 @@ export interface LoweredComputation {
   readonly alphaBits?: number;
   /** Captured orientation, when required by the family. */
   readonly matrixFlags?: number;
+  readonly reduction?: AxisReduction;
   /** Ordered operand occurrences, including repeats; arity belongs to the operation. */
   readonly inputs: readonly ProgramSlot[];
   readonly output: ProgramSlot;
@@ -106,8 +108,21 @@ function assertShapedComputation(family: Extract<OperationFamily, { geometry: "p
   }
 }
 
+function assertAxisReduction(family: Extract<OperationFamily, { geometry: "axis-reduction" }>,
+  values: readonly ProgramValue[], computation: LoweredComputation): void {
+  const input = values[computation.inputs[0]!]!;
+  const output = values[computation.output]!;
+  const reduction = computation.reduction!;
+  if (reduction.axis !== null) normalizeAxis(reduction.axis, input.shape.length);
+  const { shape } = family.plan(input.shape, reduction);
+  if (output.source !== "computed" || output.storageSlot !== output.slot || output.storageSlot === input.storageSlot
+    || output.shape.length !== shape.length || output.shape.some((dimension, axis) => dimension !== shape[axis])) {
+    throw new TypeError("Axis reduction output must own distinct storage with its captured shape and device.");
+  }
+}
+
 export class ExecutableProgram {
-  readonly formatVersion = 8;
+  readonly formatVersion = 9;
   readonly domain: "webassembly-cpu" | "webgpu";
   readonly values: readonly ProgramValue[];
   readonly computations: readonly LoweredComputation[];
@@ -137,7 +152,10 @@ export class ExecutableProgram {
       computations.map((computation) => {
         const captured = { ...computation };
         const { family, types } = requireComputationSignature(captured.kind);
-        assertComputationParameters(family, captured.alphaBits, captured.matrixFlags);
+        assertComputationParameters(family, captured.alphaBits, captured.matrixFlags, captured.reduction);
+        if (captured.reduction !== undefined) {
+          captured.reduction = Object.freeze({ axis: captured.reduction.axis, keepDim: captured.reduction.keepDim });
+        }
         captured.inputs = Object.freeze([...captured.inputs]);
         captured.provenance = Object.freeze({ ...captured.provenance });
         const dtype = resolveTensorType(types, this.values, captured.inputs);
@@ -152,6 +170,8 @@ export class ExecutableProgram {
         }
         if (family.geometry === "matrix") {
           assertMatrixComputation(family, this.values, captured);
+        } else if (family.geometry === "axis-reduction") {
+          assertAxisReduction(family, this.values, captured);
         } else if (family.geometry !== "produced") {
           assertShapedComputation(family, this.values, captured);
         }

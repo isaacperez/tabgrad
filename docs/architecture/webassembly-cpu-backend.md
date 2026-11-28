@@ -278,8 +278,9 @@ memory, instantiates the compiled module, and validates these exports:
 | Export | Signature | Meaning |
 | --- | --- | --- |
 | `tabgrad_abi_version` | `() -> u32` | Returns `1` for this ABI profile. |
-| `tabgrad_capabilities` | `() -> u32` | Returns required capability bits: `add-f32` is 1, `sum-f32` is 2, `mul-f32` is 4, `expand-f32` is 8, `add-alpha-f32` is 16, `matmul-f32` is 32, `broadcast-f32` is 64, `reduce-f32` is 128, `pointwise-f16` is 256, `sum-f16` is 512, `matmul-f16` is 1024, `pointwise-bf16` is 2048, `sum-bf16` is 4096, `matmul-bf16` is 8192, `gt-f32` is 16384 and `where-f32` is 32768. |
+| `tabgrad_capabilities` | `() -> u32` | Returns required capability bits: `add-f32` is 1, `sum-f32` is 2, `mul-f32` is 4, `expand-f32` is 8, `add-alpha-f32` is 16, `matmul-f32` is 32, `broadcast-f32` is 64, `reduce-f32` is 128, `pointwise-f16` is 256, `sum-f16` is 512, `matmul-f16` is 1024, `pointwise-bf16` is 2048, `sum-bf16` is 4096, `matmul-bf16` is 8192, `gt-f32` is 16384, `where-f32` is 32768 and `argmax` is 65536. |
 | `tabgrad_arena_base` | `() -> u32` | Returns the first byte available to the host allocator. |
+| `tabgrad_argmax_f32` / `tabgrad_argmax_i32` / `tabgrad_argmax_i64` | `(input_offset, output_offset, groups, terms, inner) -> u32` | Reduces contiguous or strided groups within a whole contiguous span. Writes the first maximum's original index as signed int64 for each group. |
 | `tabgrad_add_f32` | `(left_offset, right_offset, output_offset, length) -> u32` | Adds two contiguous `float32` input ranges into a distinct output range. |
 | `tabgrad_sum_f32` / `tabgrad_sum_f16` / `tabgrad_sum_bf16` | `(input_offset, output_offset, input_length) -> u32` | Reduces the contiguous input to a distinct scalar of its dtype. |
 | `tabgrad_mul_f32` | `(left_offset, right_offset, output_offset, length) -> u32` | Multiplies two contiguous `float32` input ranges into a distinct output range. |

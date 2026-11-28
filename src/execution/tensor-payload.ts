@@ -86,5 +86,6 @@ export function decodeTensorPayload(payload: HostTensorPayload, dtype: TensorDTy
   if (format === "typed" && "observeTyped" in descriptor) {
     return descriptor.observeTyped(payload.bytes, elements, result === "copy");
   }
-  return descriptor.observe(payload.bytes, elements, result === "copy");
+  if ("observe" in descriptor) return descriptor.observe(payload.bytes, elements, result === "copy");
+  throw new TabgradError("UNSUPPORTED_DTYPE", "Observe integer tensors with { format: \"typed\" }.");
 }

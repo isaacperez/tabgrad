@@ -28,6 +28,7 @@ export type { TensorDevice } from "../execution/backend.js";
 import { DerivativeHistory, type DerivativeNode, type DerivativePlan, type DerivativeRecipe } from "./autograd/derivative-history.js";
 import { COPY_DERIVATIVE, COPY_SLICES_DERIVATIVE, REBASED_VIEW_DERIVATIVE, IDENTITY_DERIVATIVE, POINTWISE_PASS_DERIVATIVE, MUL_DERIVATIVE, MATMUL_DERIVATIVE, SUM_DERIVATIVE, WHERE_DERIVATIVE, hasCanonicalDerivativeControls } from "./autograd/derivative-recipes.js";
 import { MatrixShapeError } from "../execution/matrix-geometry.js";
+import { axisReductionGeometry, normalizeAxis } from "../execution/axis-geometry.js";
 import { BroadcastCapacityError, type BroadcastGeometry, type ReceivingGeometry } from "../execution/broadcast-geometry.js";
 import { pointwiseDerivative, hasCanonicalPointwiseControls } from "./autograd/pointwise-derivative.js";
 import { planDerivativeResources } from "./autograd/derivative-resource-plan.js";
@@ -44,7 +45,7 @@ import {
   type Materialization,
 } from "./program-formation.js";
 
-import { isTensorDType, tensorByteLength, tensorDType, type ObservationFormat, type TensorData, type TensorDType, type TensorObservation } from "../shared/tensor-dtype.js";
+import { assertTensorObservationFormat, isTensorDType, tensorByteLength, tensorDType, type ObservationFormat, type TensorData, type TensorDType, type TensorObservation } from "../shared/tensor-dtype.js";
 import { captureTensorData, decodeTensorPayload, hostTensorPayload, type HostTensorPayload } from "../execution/tensor-payload.js";
 export type { TensorDType } from "../shared/tensor-dtype.js";
 export type TensorLayout = "contiguous";
@@ -282,6 +283,7 @@ interface RuntimeSessionAccess {
   readonly semanticOwnership: () => RuntimeSemanticOwnership;
   readonly copy: (destination: TensorState, source: unknown) => void;
   readonly sum: (source: TensorState) => Tensor;
+  readonly argmax: (source: TensorState, dim: number | null, keepDim: boolean) => Tensor;
   readonly view: (source: TensorState, shape: unknown) => Tensor;
   readonly observe: (state: TensorState, format: ObservationFormat) => Promise<TensorObservation>;
   readonly assertOpen: () => void;
@@ -521,6 +523,12 @@ export class Tensor {
     return runtimeSessionAccess(state.session).binary(GT_OPERATION, state, right);
   }
 
+  argmax(dim: number | null = null, keepDim = false): Tensor {
+    const state = requireTensorState(this);
+    if (arguments.length > 2 || typeof keepDim !== "boolean") throw new TypeError("Invalid argmax dimension or keepDim argument.");
+    return runtimeSessionAccess(state.session).argmax(state, dim, keepDim);
+  }
+
   toArray(): Promise<Float32Array<ArrayBuffer>>;
   toArray(options: { readonly format: "typed" }): Promise<TensorObservation>;
   toArray(options?: { readonly format: "typed" }): Promise<TensorObservation> {
@@ -529,7 +537,9 @@ export class Tensor {
     if (arguments.length > 1 || (arguments.length === 1 && options?.format !== "typed")) {
       throw new TypeError('Tensor.toArray() accepts no arguments or { format: "typed" }.');
     }
-    return runtimeSessionAccess(state.session).observe(state, options === undefined ? "numeric" : "typed");
+    const format = options === undefined ? "numeric" : "typed";
+    assertTensorObservationFormat(state.value.dtype, format);
+    return runtimeSessionAccess(state.session).observe(state, format);
   }
 
   close(): void {
@@ -782,6 +792,17 @@ const EXPAND_OPERATION: NumericalOperationDefinition = Object.freeze({
   name: "expand", provenanceSource: "DerivativeHistory.sum", loweredKind: "expand-f32", pure: true,
 });
 
+const argmaxSpecializations = new Map<TensorDType, NumericalOperationDefinition>();
+for (const kind of Object.keys(COMPUTATION_SIGNATURES) as ComputationKind[]) {
+  const { operation, types } = COMPUTATION_SIGNATURES[kind];
+  if (operation !== "argmax") continue;
+  const dtype = types.inputs[0]!;
+  if (argmaxSpecializations.has(dtype)) throw new TypeError("Ambiguous argmax signature.");
+  argmaxSpecializations.set(dtype, Object.freeze({
+    name: "argmax", provenanceSource: "Tensor.argmax", loweredKind: kind, pure: true,
+  }));
+}
+
 const RECEIVE_OPERATION: NumericalOperationDefinition = Object.freeze({
   name: "reduce", provenanceSource: "DerivativeHistory.receive", loweredKind: "reduce-f32", pure: true,
 });
@@ -929,6 +950,7 @@ export class RuntimeSession {
       semanticOwnership: () => this.#semanticOwnership(),
       copy: (destination: TensorState, source: unknown) => this.#copy(destination, source),
       sum: (source: TensorState) => this.#sum(source),
+      argmax: (source: TensorState, dim: number | null, keepDim: boolean) => this.#argmax(source, dim, keepDim),
       view: (source: TensorState, shape: unknown) => this.#view(source, shape),
       observe: (state: TensorState, format: ObservationFormat) => this.#observe(state, format),
       assertOpen: () => this.#assertOpen(),
@@ -1258,7 +1280,8 @@ export class RuntimeSession {
   }
 
   tensor(data: Iterable<number> | ArrayLike<number>, options?: TensorOptions): Tensor;
-  tensor(data: TensorData, options: TensorOptions & { readonly dtype: "bool" }): Tensor;
+  tensor(data: TensorData<number | boolean>, options: TensorOptions & { readonly dtype: "bool" }): Tensor;
+  tensor(data: TensorData<number | bigint>, options: TensorOptions & { readonly dtype: "int32" | "int64" }): Tensor;
   tensor(data: TensorData, options: TensorOptions = {}): Tensor {
     this.#assertOpen();
     if (options.requiresGrad !== undefined && typeof options.requiresGrad !== "boolean") {
@@ -2072,6 +2095,22 @@ export class RuntimeSession {
     const history = !this.#recording || !source.requiresGrad || definition.derivative === undefined ? null
       : this.#history.record(admitted.outputMetadata.shape, definition.derivative, [source.history], admitted.record.inputs);
     return this.#recordOperation(admitted, history);
+  }
+
+  #argmax(source: TensorState, dim: number | null, keepDim: boolean): Tensor {
+    this.#assertOpen();
+    assertTensorOpen(source);
+    const value = source.value;
+    const definition = argmaxSpecializations.get(value.dtype);
+    if (definition === undefined) throw new TabgradError("UNSUPPORTED_DTYPE", "Argmax requires float32, int32 or int64.");
+    const reduction = { axis: dim === null ? null : normalizeAxis(dim, value.shape.length), keepDim };
+    const { shape } = axisReductionGeometry(value.shape, reduction);
+    const inputs = [value];
+    const dtype = this.#requireComputation(inputs, definition);
+    const outputMetadata = { shape, dtype, device: value.device, layout: value.layout };
+    this.#checkOutputCapacity(definition, outputMetadata);
+    this.#checkCapturedAdmission(inputs, shape);
+    return this.#recordOperation({ record: new OperationRecord(definition, inputs, undefined, undefined, reduction), outputMetadata });
   }
 
   #expandIncoming(source: Tensor, shape: readonly number[]): Tensor {
