@@ -2,6 +2,7 @@ import { createRuntimeSession, createWebGpuRuntimeSession } from '/index.js';
 import { compactJavaScriptCases } from '/helpers/compact-float-cases.mjs';
 import { checkJavaScriptBooleanMask } from '/helpers/boolean-mask-cases.mjs';
 import { checkJavaScriptArgmax } from '/helpers/integer-argmax-cases.mjs';
+import { checkJavaScriptIndexSelection } from "/helpers/index-selection-cases.mjs";
 const parameters = new URLSearchParams(location.search), token = parameters.get('token');
 const language = parameters.get('language') ?? 'javascript', device = parameters.get('device') ?? 'cpu';
 const grid = parameters.get('grid') === 'true';
@@ -10,6 +11,7 @@ const fractionBits = Number(parameters.get('fractionBits'));
 const arithmetic = parameters.get('arithmetic');
 const booleanMask = parameters.get('booleanMask') === 'true';
 const integerArgmax = parameters.get('integerArgmax') === 'true';
+const indexSelection = parameters.get('indexSelection') === 'true';
 const variant = parameters.get('variant');
 async function send(endpoint, result) {
   const response = await fetch(`${endpoint}?token=${encodeURIComponent(token)}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(result) });
@@ -30,7 +32,7 @@ try {
     result = await new Promise((resolve, reject) => {
       worker.addEventListener('error', event => reject(Error(event.message)), { once: true });
       worker.addEventListener('message', ({ data }) => data.ok ? resolve(data) : reject(Error(data.error)), { once: true });
-      worker.postMessage({ reference, dtype, fractionBits, device, variant, arithmetic, grid, booleanMask, integerArgmax, ...(controller ? { webgpu: controller.connection } : {}) }, controller?.transferables ?? []);
+      worker.postMessage({ reference, dtype, fractionBits, device, variant, arithmetic, grid, booleanMask, integerArgmax, indexSelection, ...(controller ? { webgpu: controller.connection } : {}) }, controller?.transferables ?? []);
     });
   } else {
     if (grid) {
@@ -45,6 +47,7 @@ try {
     const cases = await compactJavaScriptCases(session, reference, device, dtype, fractionBits, arithmetic);
     if (booleanMask) await checkJavaScriptBooleanMask(session, device, grid);
     if (integerArgmax) await checkJavaScriptArgmax(session, device);
+    if (indexSelection) await checkJavaScriptIndexSelection(session, device);
     const beforeClose = session.diagnostics();
     await session.close();
     result = { ok: true, cases, beforeClose, final: session.diagnostics(), booleanMask };
@@ -52,7 +55,7 @@ try {
   if (controller) { await controller.close(); result.controller = controller.diagnostics(); }
   worker?.terminate(); worker = undefined;
   await send('/__phase', { phase: 'runtime-finished' });
-  await send('/__result', { ...result, language, device, dtype, grid, integerArgmax });
+  await send('/__result', { ...result, language, device, dtype, grid, integerArgmax, indexSelection });
 } catch (error) {
   await send('/__result', { ok: false, language, device, error: { message: String(error), stack: error.stack } });
 } finally { worker?.terminate(); await session?.close(); await controller?.close(); }

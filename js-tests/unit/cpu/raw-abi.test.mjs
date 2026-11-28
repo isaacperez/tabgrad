@@ -70,7 +70,7 @@ test("SIMD inspection distinguishes code prefixes from constants and custom-sect
 for (const variant of ["scalar", "simd128"]) {
   test(`the matched CPU import permits smaller session limits and rejects a larger maximum (${variant})`, async () => {
     const manifest = JSON.parse(await readFile(join(distributionRoot, "manifest.json"), "utf8"));
-    assert.equal(manifest.moduleVersion, 15);
+    assert.equal(manifest.moduleVersion, 16);
     assert.deepEqual(manifest.memory, { initialPages: 32, maximumPages: 4096, alignment: 16 });
     const module = await WebAssembly.compile(await readFile(join(distributionRoot, `wasm/kernels-${variant}.wasm`)));
     for (const maximum of [32, 2048, 4096]) {
@@ -85,5 +85,32 @@ for (const variant of ["scalar", "simd128"]) {
     await assert.rejects(WebAssembly.instantiate(module, {
       env: { memory: new WebAssembly.Memory({ initial: 31, maximum: 4096 }) },
     }), WebAssembly.LinkError);
+  });
+}
+
+for (const variant of ["scalar", "simd128"]) {
+  test(`raw index selection validates all indices before writing payload (${variant})`, async () => {
+    const bytes = await readFile(join(distributionRoot, `wasm/kernels-${variant}.wasm`));
+    const memory = new WebAssembly.Memory({ initial: 32, maximum: 1024 });
+    const { instance } = await WebAssembly.instantiate(bytes, { env: { memory } });
+    const api = instance.exports, source = api.tabgrad_arena_base(), indices = source + 32, out = indices + 32;
+    const select = api.tabgrad_index_select_u64_i64;
+    const stored = new BigInt64Array(memory.buffer, source, 4);
+    const requested = new BigInt64Array(memory.buffer, indices, 2);
+    const output = new BigInt64Array(memory.buffer, out, 4);
+    stored.set([-(2n ** 63n), 4294967297n, 2n ** 53n + 1n, 2n ** 63n - 1n]);
+    requested.set([1n, 4294967297n]);
+    output.fill(-1n);
+    assert.equal(select(source, indices, out, 2, 0, 2, 2, 4) >>> 0, 0x8000_0001);
+    assert.equal(select(source, indices, source, 2, 0, 2, 2, 4), 3);
+    assert.equal(select(source, indices, indices, 2, 0, 2, 2, 4), 3);
+    assert.equal(select(memory.buffer.byteLength - 8, indices, out, 2, 0, 2, 2, 4), 2);
+    assert.equal(select(source, indices, out, 2, 1, 2, 2, 4), 4);
+    assert.equal(select(source, indices, out, 2, 0, 2, 2, 3), 4);
+    assert.deepEqual(output, BigInt64Array.of(-1n, -1n, -1n, -1n));
+    assert.equal(select(source, indices, out, 2, 1, 2, 0, 0), 0);
+    requested[1] = 0n;
+    assert.equal(select(source, indices, out, 2, 0, 2, 2, 4), 0);
+    assert.deepEqual(output, BigInt64Array.of(...stored.subarray(2), ...stored.subarray(0, 2)));
   });
 }

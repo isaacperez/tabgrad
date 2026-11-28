@@ -177,10 +177,10 @@ checks in the same change as a registered generated path.
 `scripts/build-python.mjs` copies maintained Python source byte for byte into
 `dist/python/` and writes its separate `manifest.json`. That manifest records
 the source paths, byte lengths, SHA-256 hashes, bootstrap/bridge protocol version
-and selected Pyodide version. The private bridge uses protocol 8, with the
+and selected Pyodide version. The private bridge uses protocol 9, with the
 same package-source map and a dtype metadata projection at import.
 Schema 1 and Pyodide 314.0.6 are independent of the bridge protocol.
-Mixed protocol 7/8 distributions reject before Python execution. Serving
+Mixed protocol 8/9 distributions reject before Python execution. Serving
 the distribution must preserve these relative paths, or the host must supply
 the Python manifest's location explicitly. The
 [installation component](components/python-package-installation.md) explains

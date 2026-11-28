@@ -188,6 +188,36 @@ Equal maxima use the first index, as do multiple NaN values. A NaN takes
 precedence over a numerical value. The free function also accepts `out=None`.
 Declare an integer axis as a Python `int`.
 
+## Select values along an axis
+
+```python
+rows = torch.tensor([[10, 11], [20, 21]], dtype=torch.float32)
+positions = torch.tensor([1, 0, 1], dtype=torch.int64)
+print(torch.index_select(rows, 0, positions).tolist())
+# [[20.0, 21.0], [10.0, 11.0], [20.0, 21.0]]
+```
+
+Use `torch.index_select(input, dim, index)` or `input.index_select(dim, index)`.
+The source can be contiguous float32, int32 or int64. The index is a contiguous
+int32 or int64 scalar or vector in the same session and on the same device.
+The result has its own storage and retains the source dtype. Along the selected
+axis, it contains one position per index, in the order supplied. Repeated indices
+repeat the corresponding slices. A scalar source accepts one zero index and
+returns a scalar. The free function accepts `out=None`.
+
+You can use a negative dimension. Every index value must be nonnegative and
+less than the length of the selected axis. Bad arguments and impossible shapes
+fail at the call. Index values are checked when an observation or an effect such
+as `copy_` needs the result. For example, `invalid.tolist()` can raise after a
+successful `index_select` call. This also applies when a different axis makes
+the output empty. The pinned PyTorch CPU exceptions determine whether an
+out-of-range value raises `IndexError` or `RuntimeError`.
+
+The operation supports forward computation. If the input tracks gradients,
+use `torch.no_grad()` to select from it. An int64 result from
+[`argmax`](#find-the-index-of-a-maximum) can feed selection on the same device
+without reading the indices into the host.
+
 ## Create and read signed integer tensors
 
 Use `dtype=torch.int32` or `dtype=torch.int64` for exact signed integers.

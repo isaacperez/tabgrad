@@ -12,6 +12,7 @@ import { CpuAllocation, LinearMemoryAllocator, MAXIMUM_ADDRESS } from "./linear-
 import { pointwiseGeometry, receivingGeometry } from "../../execution/broadcast-geometry.js";
 import { pointwiseFamily } from "../../execution/operation-contracts.js";
 import { cpuPointwiseNeedsPacket, pointwisePacket, receivingPacket } from "./broadcast-packet.js";
+import { indexSelectionBoundsError, indexSelectionGeometry } from "../../execution/index-selection.js";
 import { axisReductionGeometry } from "../../execution/axis-geometry.js";
 import { DEFAULT_CPU_LINEAR_MEMORY_BYTES, WEBASSEMBLY_PAGE_BYTES, type CpuMemoryCapacity } from "./memory-capacity.js";
 
@@ -165,6 +166,9 @@ export class WebAssemblyCpuBackend implements ExecutionBackend {
         const output = context.allocator.allocate(checkedElementBytes(length, format.bytesPerElement), format);
         allocations.set(computation.output, output);
         const kernel = cpuKernel(computation.kind)!;
+        const selection = kernel.layout === "indexSelection" ? indexSelectionGeometry(
+          program.values[computation.inputs[0]!]!.shape, program.values[computation.inputs[1]!]!.shape, computation.selectionAxis!,
+        ) : undefined;
         let parameters: Uint32Array | undefined;
         if (kernel.layout === "receiving") {
           parameters = receivingPacket(receivingGeometry(pointwiseGeometry([
@@ -184,7 +188,8 @@ export class WebAssemblyCpuBackend implements ExecutionBackend {
         }
         let status: number;
         try {
-          if (length !== 0 || (kernel.layout !== "matrix" && kernel.layout !== "axisReduction")) this.#kernelCalls += 1;
+          if (selection === undefined ? length !== 0 || (kernel.layout !== "matrix" && kernel.layout !== "axisReduction")
+            : selection.count !== 0) this.#kernelCalls += 1;
           switch (kernel.layout) {
             case "pointwise":
               status = packet === undefined
@@ -207,6 +212,13 @@ export class WebAssemblyCpuBackend implements ExecutionBackend {
               }
               const { groups, terms, inner } = axisReductionGeometry(program.values[computation.inputs[0]!]!.shape, computation.reduction!);
               status = context.exports[kernel.symbol.name](inputs[0]!.offset, output.offset, groups, terms, inner);
+              break;
+            }
+            case "indexSelection": {
+              const { boundLow, boundHigh, count, inner } = selection!;
+              status = count === 0 ? 0 : context.exports[kernel.symbol.name](
+                inputs[0]!.offset, inputs[1]!.offset, output.offset, boundLow, boundHigh, count, inner, length,
+              );
               break;
             }
             case "matrix": {
@@ -249,6 +261,11 @@ export class WebAssemblyCpuBackend implements ExecutionBackend {
             error,
           );
         } finally { if (packet !== undefined) context.allocator.release(packet); }
+        if (selection !== undefined && (status >>> 31) !== 0) {
+          throw indexSelectionBoundsError(program.values[computation.inputs[0]!]!.shape, computation.selectionAxis!, {
+            backend: "webassembly-cpu", phase: "execution", programValueSlot: computation.output,
+          }, status & 0x7fff_ffff);
+        }
         if (status !== 0) {
           throw new TabgradError(
             "BACKEND_STATUS_ERROR",

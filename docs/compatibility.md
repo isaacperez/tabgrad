@@ -25,6 +25,7 @@ admitted operand and result types for each device.
 | [`gt`](reference/python-tensors.md#greater-than-comparison) | `float32`, `bool` | `float32`, `bool` |
 | [`where`](reference/python-tensors.md#select-with-a-boolean-mask) | `bool`, `float32` | `bool`, `float32` |
 | [`argmax`](reference/python-tensors.md#find-the-index-of-a-maximum) | `float32`, `int64`, `int32` | `float32`, `int64`, `int32` |
+| [`index_select`](reference/python-tensors.md#select-values-along-an-axis) | `float32`, `int32`, `int64` | `float32`, `int32`, `int64` |
 
 ### Storage and state
 
@@ -166,6 +167,24 @@ qualified environments and release-specific claims.
         {"inputs": ["float32"], "result": "int64", "cpu": {"status": "supported", "gradients": "not-applicable"}, "webgpu": {"status": "supported", "gradients": "not-applicable"}},
         {"inputs": ["int32"], "result": "int64", "cpu": {"status": "supported", "gradients": "not-applicable"}, "webgpu": {"status": "supported", "gradients": "not-applicable"}},
         {"inputs": ["int64"], "result": "int64", "cpu": {"status": "supported", "gradients": "not-applicable"}, "webgpu": {"status": "supported", "gradients": "not-applicable"}}
+      ]
+    },
+    {
+      "id": "index_select",
+      "name": "torch.index_select",
+      "module": "torch",
+      "aliases": ["Tensor.index_select"],
+      "arithmetic": true,
+      "source": "docs/reference/python-tensors.md",
+      "fragment": "select-values-along-an-axis",
+      "limits": "Selects slices in index order, including duplicates. Indices are int32 or int64. Bounds errors are deferred to execution. Tracked input requires no_grad.",
+      "variants": [
+        {"inputs": ["float32", "int32"], "result": "float32", "cpu": {"status": "supported", "gradients": "none"}, "webgpu": {"status": "supported", "gradients": "none"}},
+        {"inputs": ["float32", "int64"], "result": "float32", "cpu": {"status": "supported", "gradients": "none"}, "webgpu": {"status": "supported", "gradients": "none"}},
+        {"inputs": ["int32", "int32"], "result": "int32", "cpu": {"status": "supported", "gradients": "none"}, "webgpu": {"status": "supported", "gradients": "none"}},
+        {"inputs": ["int32", "int64"], "result": "int32", "cpu": {"status": "supported", "gradients": "none"}, "webgpu": {"status": "supported", "gradients": "none"}},
+        {"inputs": ["int64", "int32"], "result": "int64", "cpu": {"status": "supported", "gradients": "none"}, "webgpu": {"status": "supported", "gradients": "none"}},
+        {"inputs": ["int64", "int64"], "result": "int64", "cpu": {"status": "supported", "gradients": "none"}, "webgpu": {"status": "supported", "gradients": "none"}}
       ]
     },
     {

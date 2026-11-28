@@ -1,6 +1,7 @@
 import { pointwiseGeometry } from "./broadcast-geometry.js";
 import { assertMatrixOrientation, matrixGeometry } from "./matrix-geometry.js";
 import { axisReductionGeometry, type AxisReduction } from "./axis-geometry.js";
+import { indexSelectionGeometry } from "./index-selection.js";
 import { BINARY_FLOAT32, fixedTensorTypePolicy, UNARY_FLOAT32, type TensorTypePolicy } from "./operation-types.js";
 
 const POINTWISE = Object.freeze({ arity: 2, parameters: "none", geometry: "pointwise", plan: pointwiseGeometry } as const);
@@ -9,13 +10,14 @@ const MATRIX = Object.freeze({ arity: 2, parameters: "orientation", geometry: "m
 const RECEIVING = Object.freeze({ arity: 1, parameters: "none", geometry: "receiving", plan: pointwiseGeometry } as const);
 const SCALAR = Object.freeze({ arity: 1, parameters: "none", geometry: "scalar", shape: Object.freeze([]) } as const);
 const AXIS_REDUCTION = Object.freeze({ arity: 1, parameters: "axis-reduction", geometry: "axis-reduction", plan: axisReductionGeometry } as const);
+const INDEX_SELECTION = Object.freeze({ arity: 2, parameters: "selection-axis", geometry: "index-selection", plan: indexSelectionGeometry } as const);
 // For these records the producer owns the output shape.
 const UNARY_PRODUCED = Object.freeze({ arity: 1, parameters: "none", geometry: "produced" } as const);
 const COEFFICIENT_ADD = Object.freeze({ arity: 2, parameters: "coefficient", geometry: "produced" } as const);
 
 type PointwiseFamily = typeof POINTWISE | typeof TERNARY_POINTWISE;
 export type OperationFamily = PointwiseFamily | typeof MATRIX | typeof RECEIVING | typeof SCALAR
-  | typeof AXIS_REDUCTION | typeof UNARY_PRODUCED | typeof COEFFICIENT_ADD;
+  | typeof AXIS_REDUCTION | typeof INDEX_SELECTION | typeof UNARY_PRODUCED | typeof COEFFICIENT_ADD;
 
 function signature<Name extends string, Family extends OperationFamily>(operation: Name, family: Family, types: TensorTypePolicy) {
   if (types.inputs.length !== family.arity) throw new TypeError("Operation signature does not match its family arity.");
@@ -50,6 +52,12 @@ export const COMPUTATION_SIGNATURES = Object.freeze({
   "argmax-f32": signature("argmax", AXIS_REDUCTION, fixedTensorTypePolicy(["float32"], "int64")),
   "argmax-i32": signature("argmax", AXIS_REDUCTION, fixedTensorTypePolicy(["int32"], "int64")),
   "argmax-i64": signature("argmax", AXIS_REDUCTION, fixedTensorTypePolicy(["int64"], "int64")),
+  "index-select-f32-i32": signature("index_select", INDEX_SELECTION, fixedTensorTypePolicy(["float32", "int32"], "float32")),
+  "index-select-f32-i64": signature("index_select", INDEX_SELECTION, fixedTensorTypePolicy(["float32", "int64"], "float32")),
+  "index-select-i32-i32": signature("index_select", INDEX_SELECTION, fixedTensorTypePolicy(["int32", "int32"], "int32")),
+  "index-select-i32-i64": signature("index_select", INDEX_SELECTION, fixedTensorTypePolicy(["int32", "int64"], "int32")),
+  "index-select-i64-i32": signature("index_select", INDEX_SELECTION, fixedTensorTypePolicy(["int64", "int32"], "int64")),
+  "index-select-i64-i64": signature("index_select", INDEX_SELECTION, fixedTensorTypePolicy(["int64", "int64"], "int64")),
 });
 
 export type ComputationKind = keyof typeof COMPUTATION_SIGNATURES;
@@ -72,7 +80,7 @@ export function pointwiseFamily(kind: ComputationKind): PointwiseFamily | undefi
 }
 
 export function assertComputationParameters(family: OperationFamily, alphaBits?: number, matrixFlags?: number,
-  reduction?: AxisReduction): void {
+  reduction?: AxisReduction, selectionAxis?: number): void {
   if (family.parameters === "coefficient") {
     if (!Number.isInteger(alphaBits) || alphaBits! < 0 || alphaBits! > 0xffff_ffff) {
       throw new TypeError("Coefficient addition requires captured binary32 bits.");
@@ -90,4 +98,10 @@ export function assertComputationParameters(family: OperationFamily, alphaBits?:
       throw new TypeError("Axis reduction requires a normalized axis and dimension-retention flag.");
     }
   } else if (reduction !== undefined) throw new TypeError("This operation has no axis reduction.");
+
+  if (family.parameters === "selection-axis") {
+    if (!Number.isSafeInteger(selectionAxis) || selectionAxis! < 0) {
+      throw new TypeError("Index selection requires a normalized axis.");
+    }
+  } else if (selectionAxis !== undefined) throw new TypeError("This operation has no selection axis.");
 }

@@ -79,10 +79,11 @@ function documentedArithmetic(markdown) {
 }
 
 function isPublicArithmetic(signature) {
+  const method = signature.operation.replace(/_([a-z])/g, (_separator, letter) => letter.toUpperCase());
   // The optimizer's coefficient lowering shares the name "add" with Tensor.add.
   return signature.family.parameters !== "coefficient"
     && [Tensor.prototype, RuntimeSession.prototype].some(
-      prototype => typeof Object.getOwnPropertyDescriptor(prototype, signature.operation)?.value === "function",
+      prototype => typeof Object.getOwnPropertyDescriptor(prototype, method)?.value === "function",
     );
 }
 

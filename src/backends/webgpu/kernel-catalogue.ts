@@ -18,6 +18,7 @@ import { PACKED16_WORKGROUP_SIZE, packed16PointwiseSource } from "./kernels/pack
 import { BOOL_VALUES_PER_WORD, PACKED16_VALUES_PER_WORD } from "./kernels/packed-words.js";
 import { createGreaterSource } from "./kernels/comparison.js";
 import { createMaskGradientSource, createSelectionSource } from "./kernels/selection.js";
+import { INDEX_SELECTION_PARAMETERS_BYTES, INDEX_SELECTION_WORKGROUP_SIZE, indexSelectionSource } from "./kernels/index-selection.js";
 import { ARGMAX_PARAMETERS_BYTES, ARGMAX_PARTIAL_BYTES, ARGMAX_WORKGROUP_SIZE, argmaxSource } from "./kernels/argmax.js";
 
 export type KernelKind = ComputationKind | `broadcast-${ComputationKind}`;
@@ -57,6 +58,7 @@ type Registration = (
   | { readonly strategy: "dense"; readonly direct: PhysicalKernel<InvocationIndexSpace>; readonly uniform?: UniformParameters }
   | { readonly strategy: "sum"; readonly direct: PhysicalKernel<CooperativeIndexSpace>; readonly partialBytes: number }
   | { readonly strategy: "argmax"; readonly direct: PhysicalKernel<CooperativeIndexSpace> }
+  | { readonly strategy: "index-selection"; readonly direct: PhysicalKernel<InvocationIndexSpace> }
   | { readonly strategy: "receiving"; readonly direct: PhysicalKernel<{ readonly kind: "window" }> }
 ) & { readonly supported?: (limits: GPUSupportedLimits) => boolean };
 
@@ -152,6 +154,24 @@ function argmaxKernel(dtype: Parameters<typeof argmaxSource>[0]): (kind: Computa
   });
 }
 
+function indexSelectionKernel(kind: ComputationKind, dataWords: 1 | 2, indexWords: 1 | 2): Registration {
+  return Object.freeze({
+    strategy: "index-selection",
+    direct: invocation(kind, INDEX_SELECTION_WORKGROUP_SIZE, 1,
+      layout => indexSelectionSource(dataWords, indexWords, layout), 4),
+    supported: (limits: GPUSupportedLimits) =>
+      sumSupported(limits, INDEX_SELECTION_WORKGROUP_SIZE, 0)
+      && limits.maxBufferSize >= INDEX_SELECTION_PARAMETERS_BYTES
+      && limits.maxUniformBufferBindingSize >= INDEX_SELECTION_PARAMETERS_BYTES
+      && limits.maxStorageBuffersPerShaderStage >= 4,
+  });
+}
+
+const selectU32I32 = indexSelectionKernel("index-select-f32-i32", 1, 1);
+const selectU32I64 = indexSelectionKernel("index-select-f32-i64", 1, 2);
+const selectU64I32 = indexSelectionKernel("index-select-i64-i32", 2, 1);
+const selectU64I64 = indexSelectionKernel("index-select-i64-i64", 2, 2);
+
 function matrixKernel(elementsPerInvocation: number, source: ShaderSource): (kind: ComputationKind) => Registration {
   return kind => Object.freeze({
     strategy: "dense", direct: invocation(kind, WEBGPU_MATRIX_WORKGROUP_SIZE, elementsPerInvocation, source),
@@ -195,6 +215,12 @@ const factories: KernelFactories = Object.freeze({
   "argmax-f32": argmaxKernel("float32"),
   "argmax-i32": argmaxKernel("int32"),
   "argmax-i64": argmaxKernel("int64"),
+  "index-select-f32-i32": () => selectU32I32,
+  "index-select-f32-i64": () => selectU32I64,
+  "index-select-i32-i32": () => selectU32I32,
+  "index-select-i32-i64": () => selectU32I64,
+  "index-select-i64-i32": () => selectU64I32,
+  "index-select-i64-i64": () => selectU64I64,
 } satisfies KernelFactories);
 
 const kinds = Object.keys(factories) as ComputationKind[];

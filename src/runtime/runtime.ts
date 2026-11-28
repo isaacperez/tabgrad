@@ -29,6 +29,7 @@ import { DerivativeHistory, type DerivativeNode, type DerivativePlan, type Deriv
 import { COPY_DERIVATIVE, COPY_SLICES_DERIVATIVE, REBASED_VIEW_DERIVATIVE, IDENTITY_DERIVATIVE, POINTWISE_PASS_DERIVATIVE, MUL_DERIVATIVE, MATMUL_DERIVATIVE, SUM_DERIVATIVE, WHERE_DERIVATIVE, hasCanonicalDerivativeControls } from "./autograd/derivative-recipes.js";
 import { MatrixShapeError } from "../execution/matrix-geometry.js";
 import { axisReductionGeometry, normalizeAxis } from "../execution/axis-geometry.js";
+import { indexSelectionGeometry } from "../execution/index-selection.js";
 import { BroadcastCapacityError, type BroadcastGeometry, type ReceivingGeometry } from "../execution/broadcast-geometry.js";
 import { pointwiseDerivative, hasCanonicalPointwiseControls } from "./autograd/pointwise-derivative.js";
 import { planDerivativeResources } from "./autograd/derivative-resource-plan.js";
@@ -284,6 +285,7 @@ interface RuntimeSessionAccess {
   readonly copy: (destination: TensorState, source: unknown) => void;
   readonly sum: (source: TensorState) => Tensor;
   readonly argmax: (source: TensorState, dim: number | null, keepDim: boolean) => Tensor;
+  readonly indexSelect: (source: TensorState, dim: number, index: Tensor) => Tensor;
   readonly view: (source: TensorState, shape: unknown) => Tensor;
   readonly observe: (state: TensorState, format: ObservationFormat) => Promise<TensorObservation>;
   readonly assertOpen: () => void;
@@ -527,6 +529,12 @@ export class Tensor {
     const state = requireTensorState(this);
     if (arguments.length > 2 || typeof keepDim !== "boolean") throw new TypeError("Invalid argmax dimension or keepDim argument.");
     return runtimeSessionAccess(state.session).argmax(state, dim, keepDim);
+  }
+
+  indexSelect(dim: number, index: Tensor): Tensor {
+    const state = requireTensorState(this);
+    if (arguments.length !== 2) throw new TypeError("Tensor.indexSelect() requires a dimension and an index tensor.");
+    return runtimeSessionAccess(state.session).indexSelect(state, dim, index);
   }
 
   toArray(): Promise<Float32Array<ArrayBuffer>>;
@@ -803,6 +811,17 @@ for (const kind of Object.keys(COMPUTATION_SIGNATURES) as ComputationKind[]) {
   }));
 }
 
+const indexSelectionSpecializations = new Map<TensorDType, Map<TensorDType, NumericalOperationDefinition>>();
+for (const kind of Object.keys(COMPUTATION_SIGNATURES) as ComputationKind[]) {
+  const { operation, types } = COMPUTATION_SIGNATURES[kind];
+  if (operation !== "index_select") continue;
+  const source = types.inputs[0]!, index = types.inputs[1]!;
+  const byIndex = indexSelectionSpecializations.get(source) ?? new Map<TensorDType, NumericalOperationDefinition>();
+  if (byIndex.has(index)) throw new TypeError("Ambiguous index_select signature.");
+  byIndex.set(index, Object.freeze({ name: operation, provenanceSource: "Tensor.indexSelect", loweredKind: kind, pure: true }));
+  indexSelectionSpecializations.set(source, byIndex);
+}
+
 const RECEIVE_OPERATION: NumericalOperationDefinition = Object.freeze({
   name: "reduce", provenanceSource: "DerivativeHistory.receive", loweredKind: "reduce-f32", pure: true,
 });
@@ -951,6 +970,7 @@ export class RuntimeSession {
       copy: (destination: TensorState, source: unknown) => this.#copy(destination, source),
       sum: (source: TensorState) => this.#sum(source),
       argmax: (source: TensorState, dim: number | null, keepDim: boolean) => this.#argmax(source, dim, keepDim),
+      indexSelect: (source: TensorState, dim: number, index: Tensor) => this.#indexSelect(source, dim, index),
       view: (source: TensorState, shape: unknown) => this.#view(source, shape),
       observe: (state: TensorState, format: ObservationFormat) => this.#observe(state, format),
       assertOpen: () => this.#assertOpen(),
@@ -2076,12 +2096,12 @@ export class RuntimeSession {
     throwCleanupFailures(failures.map((failure) => failure.error), "Runtime effects failed.");
   }
 
-  #checkCapturedAdmission(values: readonly TensorValue[], shape?: readonly number[], extraOwners = 0): void {
+  #checkCapturedAdmission(values: readonly TensorValue[], shape?: readonly number[], extraOwners = 0, dtype: TensorDType = "float32"): void {
     if (this.#writers.references === 0) return;
     const outcomes = captureWriterOutcomes(values.map(value => value.outcomes));
     if (outcomes.length !== 0) {
       this.#checkUpdateCapacity(capturedAdmissionOwners(values.length, extraOwners) * (outcomes.length + 1),
-        shape === undefined ? 0 : tensorElementCount(shape) * 4);
+        shape === undefined ? 0 : tensorByteLength(dtype, tensorElementCount(shape)));
     }
   }
 
@@ -2111,6 +2131,36 @@ export class RuntimeSession {
     this.#checkOutputCapacity(definition, outputMetadata);
     this.#checkCapturedAdmission(inputs, shape);
     return this.#recordOperation({ record: new OperationRecord(definition, inputs, undefined, undefined, reduction), outputMetadata });
+  }
+
+  #indexSelect(source: TensorState, dim: number, index: Tensor): Tensor {
+    this.#assertOpen();
+    assertTensorOpen(source);
+    const indices = requireTensorState(index);
+    assertTensorOpen(indices);
+    if (indices.session !== this) throw new TabgradError("DIFFERENT_SESSION", "index_select tensors must belong to the same session.");
+    const value = source.value;
+    const indicesValue = indices.value;
+    if (indicesValue.device !== value.device) {
+      throw new TabgradError("UNSUPPORTED_DEVICE", "index_select tensors must use the same device.");
+    }
+    const axis = normalizeAxis(dim, value.shape.length);
+    const definition = indexSelectionSpecializations.get(value.dtype)?.get(indicesValue.dtype);
+    if (definition === undefined) {
+      throw new TabgradError("UNSUPPORTED_DTYPE", "index_select requires its declared data and index dtypes.");
+    }
+    const { shape } = indexSelectionGeometry(value.shape, indicesValue.shape, axis);
+    if (this.#recording && source.requiresGrad) {
+      throw new TabgradError("UNSUPPORTED_GRADIENT", "index_select on tracked input requires no_grad.");
+    }
+    const inputs = [value, indicesValue];
+    const dtype = this.#requireComputation(inputs, definition);
+    const outputMetadata = { shape, dtype, device: value.device, layout: value.layout };
+    this.#checkOutputCapacity(definition, outputMetadata);
+    this.#checkCapturedAdmission(inputs, shape, 0, dtype);
+    return this.#recordOperation({
+      record: new OperationRecord(definition, inputs, undefined, undefined, undefined, axis), outputMetadata,
+    });
   }
 
   #expandIncoming(source: Tensor, shape: readonly number[]): Tensor {
