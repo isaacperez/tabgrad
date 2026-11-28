@@ -48,7 +48,7 @@ The check reads upstream type sources from the locked npm-installed Pyodide
 archive; it does not install dependencies or import browser modules into
 native Python. See [the command coverage](development.md#configured-commands).
 
-The dtype check reads the [arithmetic table](compatibility.md#arithmetic) and
+The dtype check reads the [tensor operation table](compatibility.md#tensor-operations) and
 the compiled TypeScript definitions. It runs on documentation-only changes
 without preparing Wasm or a browser. Runtime and physical device qualification
 remain separate checks.

@@ -2,7 +2,7 @@ import { TabgradError, throwCleanupFailures } from "../../shared/errors.js";
 import { getTensorIncomingIdentity, isTensorExposureOpen, acquireGradientExposure, gradientExposureNeedsCompletion, completeGradientExposure, getRecordingMode, enterNoGradScope, restoreRecordingMode, observeTensorSynchronously, completeRuntimeSession, shouldWarnUnretainedGradient, finalizeTensorExposure, registerOptimizerLease, isOptimizableParameter, type RuntimeSession, type Tensor } from "../../runtime/runtime.js";
 import type { OptimizerLease } from "../../runtime/optimizer-lease.js";
 import type { TensorDevice } from "../../execution/backend.js";
-import { TENSOR_DTYPES, tensorDType, type PythonNumericInput, type TensorDType } from "../../shared/tensor-dtype.js";
+import { TENSOR_DTYPES, tensorDType, type PythonNumericInput, type TensorDType, type TensorObservation } from "../../shared/tensor-dtype.js";
 
 const dtypeDefinitions = JSON.stringify(Object.values(TENSOR_DTYPES).map(({ name, pythonInput, properties }) =>
   ({ name, typecode: pythonInput.typecode, ...properties })));
@@ -23,7 +23,7 @@ interface PythonBufferView {
   release(): void;
 }
 
-function boundedNumericView(view: PythonBufferView, format: PythonNumericInput): Float32Array | Float64Array {
+function boundedNumericView(view: PythonBufferView, format: PythonNumericInput): Float32Array | Float64Array | Uint8Array {
   const length = view.shape[0];
   const data = view.data;
   if (!(data instanceof format.array) || view.format !== format.typecode || view.itemsize !== format.itemsize
@@ -86,14 +86,14 @@ export class PythonRuntimeBridge {
     }
   }
 
-  observe(handle: unknown): Float32Array {
+  observe(handle: unknown): TensorObservation {
     if (!this.#managedEntry) {
       throw new TabgradError(
         "PYTHON_SYNC_CONTEXT_REQUIRED",
         "Ordinary Python observation requires an active managed script entry.",
       );
     }
-    return observeTensorSynchronously(this.session, handle);
+    return observeTensorSynchronously(this.session, handle, "typed");
   }
 
   grad(output: Tensor, inputs: readonly Tensor[], gradient: Tensor | null): Tensor[] {

@@ -32,6 +32,26 @@ for (const variant of ["scalar", "simd128"]) {
     }
   });
 
+  test(`raw ${variant} comparison bounds its boolean output independently of the float inputs`, async () => {
+    const memory = new WebAssembly.Memory({ initial: 32, maximum: 1024 });
+    const { instance } = await WebAssembly.instantiate(await readFile(new URL(`../../../dist/wasm/kernels-${variant}.wasm`, import.meta.url)), { env: { memory } });
+    const api = instance.exports, base = api.tabgrad_arena_base(), packet = base + 256;
+    const floats = new Float32Array(memory.buffer), words = new Uint32Array(memory.buffer);
+    const bytes = new Uint8Array(memory.buffer), output = bytes.length - 5;
+    floats.set([2, 3, 4, 5, 6], base / 4);
+    floats.set([3, 3, 3, 3, 3], base / 4 + 16);
+    bytes[output - 1] = 255;
+    assert.equal(api.tabgrad_gt_f32(base, base + 64, output, 5), 0);
+    assert.deepEqual(bytes.slice(output - 1), Uint8Array.of(255, 0, 0, 1, 1, 1));
+    assert.equal(api.tabgrad_gt_f32(base, base + 64, output + 1, 5), 2);
+    assert.equal(api.tabgrad_gt_f32(base + 1, base + 64, output, 5), 1);
+    const geometry = [1, 2, 5, 5, 1, 5, 1, 0, 0];
+    words.set(geometry, packet / 4);
+    assert.equal(api.tabgrad_broadcast_gt_f32(base, base + 64, output, packet, geometry.length), 0);
+    assert.deepEqual(bytes.slice(output - 1), Uint8Array.of(255, 0, 0, 1, 1, 1));
+    assert.equal(api.tabgrad_broadcast_gt_f32(base, base + 64, packet, packet, geometry.length), 3);
+  });
+
   test(`raw ${variant} receiving groups preserve the sum tree and reject malformed packets`, async () => {
     const memory = new WebAssembly.Memory({ initial: 32, maximum: 1024 });
     const { instance } = await WebAssembly.instantiate(await readFile(new URL(`../../../dist/wasm/kernels-${variant}.wasm`, import.meta.url)), { env: { memory } });

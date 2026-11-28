@@ -278,7 +278,7 @@ memory, instantiates the compiled module, and validates these exports:
 | Export | Signature | Meaning |
 | --- | --- | --- |
 | `tabgrad_abi_version` | `() -> u32` | Returns `1` for this ABI profile. |
-| `tabgrad_capabilities` | `() -> u32` | Returns required capability bits: `add-f32` is 1, `sum-f32` is 2, `mul-f32` is 4, `expand-f32` is 8, `add-alpha-f32` is 16, `matmul-f32` is 32, `broadcast-f32` is 64, `reduce-f32` is 128, `pointwise-f16` is 256, `sum-f16` is 512, `matmul-f16` is 1024, `pointwise-bf16` is 2048, `sum-bf16` is 4096 and `matmul-bf16` is 8192. |
+| `tabgrad_capabilities` | `() -> u32` | Returns required capability bits: `add-f32` is 1, `sum-f32` is 2, `mul-f32` is 4, `expand-f32` is 8, `add-alpha-f32` is 16, `matmul-f32` is 32, `broadcast-f32` is 64, `reduce-f32` is 128, `pointwise-f16` is 256, `sum-f16` is 512, `matmul-f16` is 1024, `pointwise-bf16` is 2048, `sum-bf16` is 4096, `matmul-bf16` is 8192 and `gt-f32` is 16384. |
 | `tabgrad_arena_base` | `() -> u32` | Returns the first byte available to the host allocator. |
 | `tabgrad_add_f32` | `(left_offset, right_offset, output_offset, length) -> u32` | Adds two contiguous `float32` input ranges into a distinct output range. |
 | `tabgrad_sum_f32` / `tabgrad_sum_f16` / `tabgrad_sum_bf16` | `(input_offset, output_offset, input_length) -> u32` | Reduces the contiguous input to a distinct scalar of its dtype. |
@@ -288,6 +288,8 @@ memory, instantiates the compiled module, and validates these exports:
 | `tabgrad_matmul_f32` / `tabgrad_matmul_f16` / `tabgrad_matmul_bf16` | `(left_offset, right_offset, output_offset, M, K, N, flags) -> u32` | Computes a matrix product with sequential binary32 accumulation and one terminal rounding to its result dtype. Flags 0–3 transpose the effective left (bit 0) or right (bit 1) indexing without copying storage. |
 | `tabgrad_broadcast_add_f32` | `(left_offset, right_offset, output_offset, packet_offset, packet_words) -> u32` | Adds projected float32 pairs using a validated private geometry packet. |
 | `tabgrad_broadcast_mul_f32` | `(left_offset, right_offset, output_offset, packet_offset, packet_words) -> u32` | Multiplies projected float32 pairs using the same traversal and packet format. |
+| `tabgrad_gt_f32` | `(left_offset, right_offset, output_offset, length) -> u32` | Compares equal-length float32 spans and writes one boolean byte per result. |
+| `tabgrad_broadcast_gt_f32` | `(left_offset, right_offset, output_offset, packet_offset, packet_words) -> u32` | Compares projected float32 pairs and validates the one-byte output extent independently. |
 | `tabgrad_receive_f32` | `(input_offset, output_offset, packet_offset, packet_words) -> u32` | Reduces each ordered receiving group with the ordinary CPU float32 sum tree. |
 | `tabgrad_add_f16` / `tabgrad_mul_f16` | `(left_offset, right_offset, output_offset, length) -> u32` | Computes one stored binary16 sum/product per element in disjoint two-byte ranges. |
 | `tabgrad_broadcast_add_f16` / `tabgrad_broadcast_mul_f16` | `(left_offset, right_offset, output_offset, packet_offset, packet_words) -> u32` | Uses the shared checked geometry and typed ranges for the float16 pointwise domain. |

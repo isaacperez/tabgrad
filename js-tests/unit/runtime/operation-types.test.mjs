@@ -55,15 +55,14 @@ test("family bindings share actual type rules while coefficient and state domain
 
 function capturedProgram(kind) {
   const { family, types } = computationSignature(kind) ?? computationSignature("add-f32");
-  const dtype = types.result;
   const shapes = family.geometry === "scalar" ? [[3], []]
     : kind === "expand-f32" ? [[], [3]]
       : kind === "reduce-f32" ? [[2, 3], [1, 3]]
-        : [[2, 2], [2, 2], [2, 2]];
+        : Array.from({ length: family.arity + 1 }, () => [2, 2]);
   const output = shapes.length - 1;
   return {
     values: shapes.map((shape, slot) => ({ slot, storageSlot: slot, shape,
-      dtype, device: "cpu", layout: "contiguous",
+      dtype: slot === output ? types.result : types.inputs[slot], device: "cpu", layout: "contiguous",
       source: slot === output ? "computed" : "binding", provenance })),
     computations: [{ kind, inputs: shapes.slice(0, -1).map((_, slot) => slot), output, provenance,
       ...(kind === "add-alpha-f32" ? { alphaBits: 0x3f800000 } : {}),
@@ -76,11 +75,10 @@ for (const kind of Object.keys(COMPUTATION_SIGNATURES)) {
   test(`${kind} reconstruction rejects every invalid input/result type before publication`, () => {
     const original = capturedProgram(kind);
     const valid = new ExecutableProgram(original.values, original.computations, original.result);
-    const dtype = original.values[0].dtype;
-    assert.equal(valid.values[valid.result].dtype, dtype);
+    assert.equal(valid.values[valid.result].dtype, original.values[original.result].dtype);
     for (let slot = 0; slot < original.values.length; slot++) {
       const captured = structuredClone(original);
-      captured.values[slot].dtype = dtype === "float16" ? "float32" : "float16";
+      captured.values[slot].dtype = original.values[slot].dtype === "float16" ? "float32" : "float16";
       assert.throws(() => new ExecutableProgram(captured.values, captured.computations, captured.result), TypeError);
     }
   });

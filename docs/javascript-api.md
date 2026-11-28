@@ -121,7 +121,7 @@ into owned encoded storage. Its default and supported metadata are:
 | Property | Supported value |
 | --- | --- |
 | Shape | Defaults to `[data.length]`; explicit scalar or multidimensional shape with the same element count |
-| Data type | `float32` by default. Also accepts explicit `float16` or `bfloat16` within the [operation support table](compatibility.md#tensor-dtypes-by-operation). |
+| Data type | `float32` by default. Also accepts explicit `float16`, `bfloat16` or `bool` within the [operation support table](compatibility.md#tensor-dtypes-by-operation). |
 | Device | `cpu` by default; explicit `webgpu` in a GPU-enabled session |
 | Layout | `contiguous` |
 | Gradient tracking | `requiresGrad` defaults to `false`; `true` enables float32 gradients on the selected supported device |
@@ -182,6 +182,12 @@ numerical kernels. Intermediate results remain resident in WebAssembly memory;
 observing one result does not execute an unrelated pure operation. Explicit
 GPU values use the [GPU observation flow](flows/webgpu-observation.md), with
 device residency and staging readback rather than WebAssembly storage.
+
+`Tensor.gt(other)` compares float32 tensors and returns a bool tensor.
+Observe boolean results as numeric zeros and ones with `toArray()`, or use
+`toArray({ format: "typed" })` for the compact `Uint8Array` result.
+Floating types use `Float32Array` with either form. See
+[boolean tensors and comparison](reference/tensor-masks.md).
 
 Local work with a ready backend may finish during `toArray()` itself, before
 the returned Promise's callbacks run. Those callbacks retain ordinary

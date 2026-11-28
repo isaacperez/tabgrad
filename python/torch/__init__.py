@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from array import array
+from builtins import bool as _bool
 from collections.abc import Iterable, Iterator
 from json import loads
 from math import prod
@@ -27,7 +28,7 @@ from pyodide.ffi import JsException, JsNull, jsnull, to_js
 
 _runtime_session = _bridge.session
 
-TensorList: TypeAlias = float | list["TensorList"]
+TensorList: TypeAlias = float | _bool | list["TensorList"]
 _live_wrappers: WeakValueDictionary[int, Tensor] = WeakValueDictionary()
 
 
@@ -93,10 +94,10 @@ class Size(tuple[int, ...]):
 
 class _DTypeFacts(TypedDict):
     name: str
-    typecode: Literal["f", "d"]
-    is_floating_point: bool
-    is_complex: bool
-    is_signed: bool
+    typecode: Literal["f", "d", "B"]
+    is_floating_point: _bool
+    is_complex: _bool
+    is_signed: _bool
 
 
 class dtype:
@@ -114,15 +115,15 @@ class dtype:
         return _dtype_facts.get(id(self), _float32_facts)
 
     @property
-    def is_floating_point(self) -> bool:
+    def is_floating_point(self) -> _bool:
         return self._facts()["is_floating_point"]
 
     @property
-    def is_complex(self) -> bool:
+    def is_complex(self) -> _bool:
         return self._facts()["is_complex"]
 
     @property
-    def is_signed(self) -> bool:
+    def is_signed(self) -> _bool:
         return self._facts()["is_signed"]
 
 
@@ -135,6 +136,7 @@ _float32_facts = _dtype_facts[id(_dtypes_by_name["float32"])]
 # Runtime names come from the bridge; retain static types for the public API.
 if TYPE_CHECKING:
     bfloat16: dtype
+    bool: dtype
     float16: dtype
     float32: dtype
 else:
@@ -177,7 +179,7 @@ class device:
     def __repr__(self) -> str:
         return f"device(type='{self.type}')"
 
-    def __eq__(self, other: object) -> bool:
+    def __eq__(self, other: object) -> _bool:
         return isinstance(other, device) and self.type == other.type
 
     def __hash__(self) -> int:
@@ -226,7 +228,7 @@ class Tensor:
         raise RuntimeError("Unsupported runtime device.")
 
     @property
-    def requires_grad(self) -> bool:
+    def requires_grad(self) -> _bool:
         return self._handle.requiresGrad
 
     @property
@@ -290,7 +292,7 @@ class Tensor:
     def add(self, other: object, *, alpha: object = 1) -> Tensor:
         if not isinstance(other, Tensor):
             raise TypeError("Tabgrad addition requires two tensors.")
-        if type(alpha) is bool:
+        if type(alpha) is _bool:
             raise RuntimeError("Boolean alpha only supported for Boolean results.")
         if type(alpha) not in (int, float) or alpha != 1:
             raise RuntimeError("Tabgrad addition requires alpha=1.")
@@ -331,6 +333,27 @@ class Tensor:
             return NotImplemented
         return left.mul(other)
 
+    def gt(self, other: object) -> Tensor:
+        """Compare two float32 tensors and return a boolean mask."""
+        if not isinstance(other, Tensor):
+            raise TypeError("Tabgrad comparison requires two tensors.")
+        try:
+            return Tensor._from_handle(self._handle.gt(other._handle))
+        except JsException as error:
+            failure = cast("_bridge.RuntimeException", error)
+            if failure.js_error.code in (
+                "SHAPE_MISMATCH",
+                "UNSUPPORTED_DTYPE",
+                "UNSUPPORTED_DEVICE",
+            ):
+                raise RuntimeError(str(error)) from error
+            raise
+
+    def __gt__(self, other: object) -> Tensor | NotImplementedType:
+        if not isinstance(other, Tensor):
+            return NotImplemented
+        return self.gt(other)
+
     def matmul(self, other: object) -> Tensor:
         """Admit a same-device contiguous 2D float32 matrix product."""
         return _matrix_product(
@@ -364,12 +387,12 @@ class Tensor:
         """
         if not isinstance(self, Tensor) or not hasattr(self, "_handle"):
             raise TypeError("copy_ requires a tensor destination.")
-        numeric = type(other) in (int, float, bool)
+        numeric = type(other) in (int, float, _bool)
         if not numeric and (
             not isinstance(other, Tensor) or not hasattr(other, "_handle")
         ):
             raise TypeError("copy_ requires a tensor source.")
-        if type(non_blocking) is not bool:
+        if type(non_blocking) is not _bool:
             raise TypeError("non_blocking must be bool.")
         if not isinstance(other, Tensor):
             raise RuntimeError(
@@ -411,9 +434,11 @@ class Tensor:
             raise
 
     def tolist(self) -> TensorList:
-        """Observe owned numerical values within the binding's managed script."""
+        """Observe owned tensor values within the binding's managed script."""
         with _bridge.observe(self._handle).to_py() as values:
-            return _nested_values(values, self.shape)
+            return _nested_values(
+                values, self.shape, self.dtype is _dtypes_by_name["bool"]
+            )
 
     @staticmethod
     def _from_handle(handle: _bridge.RuntimeTensor) -> Tensor:
@@ -447,10 +472,10 @@ class Tensor:
             raise
 
 
-def _backward_mode(name: str, value: object, optional: bool = False) -> None:
+def _backward_mode(name: str, value: object, optional: _bool = False) -> None:
     if optional and value is None:
         return
-    if type(value) not in (bool, int):
+    if type(value) not in (_bool, int):
         raise TypeError(f"{name} must be bool")
     if value:
         raise RuntimeError(f"Tabgrad does not support enabled {name}.")
@@ -515,18 +540,30 @@ def _raise_view_history_failure(error: JsException) -> None:
 def _append_numeric_values(items: Iterable[object], buffer: array[float]) -> None:
     """Convert a leaf row without per-element traversal or bridge bookkeeping."""
     for value in items:
-        if not isinstance(value, (int, float)) or type(value) not in (int, float, bool):
+        if not isinstance(value, (int, float)) or type(value) not in (
+            int,
+            float,
+            _bool,
+        ):
             raise TypeError("Tabgrad tensor elements must be built-in real numbers.")
         buffer.append(value)
 
 
+def _append_boolean_values(items: Iterable[object], buffer: array[float]) -> None:
+    for value in items:
+        if type(value) not in (int, float, _bool):
+            raise TypeError("Tabgrad tensor elements must be built-in real numbers.")
+        buffer.append(int(_bool(value)))
+
+
 def _input_buffer(
-    data: object, typecode: Literal["f", "d"] = "f"
+    data: object, typecode: Literal["f", "d", "B"] = "f"
 ) -> tuple[array[float], list[int]]:
     """Normalize rectangular built-in containers without recursive traversal."""
-    buffer = array(typecode)
+    buffer: array[float] = array(typecode)
+    append = _append_boolean_values if typecode == "B" else _append_numeric_values
     if type(data) not in (list, tuple):
-        _append_numeric_values((data,), buffer)
+        append((data,), buffer)
         return buffer, []
     shape: list[int] = []
     frames: list[tuple[Iterator[object], int]] = []
@@ -551,7 +588,7 @@ def _input_buffer(
                 frames.append((children, id(items)))
                 value, depth = next(children), depth + 1
                 continue
-            _append_numeric_values(items, buffer)
+            append(items, buffer)
             leaf_depth = depth + 1
         else:
             raise TypeError("Tensor input must have uniform nesting depth.")
@@ -571,12 +608,20 @@ def _input_buffer(
             return buffer, shape
 
 
-def _nested_values(values: memoryview, shape: Size) -> TensorList:
+def _observed_row(values: memoryview, boolean: _bool) -> list[TensorList]:
+    if boolean:
+        return [_bool(value) for value in values]
+    return cast("list[TensorList]", values.tolist())
+
+
+def _nested_values(
+    values: memoryview, shape: Size, boolean: _bool = False
+) -> TensorList:
     """Build owned Python containers; only the current ancestor path is retained."""
     if not shape:
-        return float(values[0])
+        return _bool(values[0]) if boolean else float(values[0])
     if len(shape) == 1:
-        return cast("list[TensorList]", values.tolist())
+        return _observed_row(values, boolean)
     result: list[TensorList] = []
     frames: list[tuple[list[TensorList], int]] = [(result, 0)]
     offset = 0
@@ -587,9 +632,7 @@ def _nested_values(values: memoryview, shape: Size) -> TensorList:
         elif depth == len(shape) - 2:
             width = shape[depth + 1]
             with values[offset : offset + width] as row:
-                # The bridge exposes float32, although typeshed models integer
-                # memoryview elements. Conversion owns the resulting floats.
-                target.append(cast("list[TensorList]", row.tolist()))
+                target.append(_observed_row(row, boolean))
             offset += width
         else:
             child: list[TensorList] = []
@@ -603,18 +646,22 @@ def tensor(
     *,
     dtype: object = None,
     device: object = "cpu",
-    requires_grad: bool = False,
-    pin_memory: bool = False,
+    requires_grad: _bool = False,
+    pin_memory: _bool = False,
 ) -> Tensor:
     """Copy numeric input into an explicitly typed, owned tensor."""
     facts = _dtype_facts.get(id(dtype))
     if facts is None:
         raise RuntimeError(_explicit_dtype_error)
     selected_device = _device_name(device)
-    if type(requires_grad) is not bool or type(pin_memory) is not bool:
+    if type(requires_grad) is not _bool or type(pin_memory) is not _bool:
         raise TypeError("requires_grad and pin_memory must be bool.")
     if pin_memory:
         raise RuntimeError("Pinned memory is unsupported.")
+    if requires_grad and facts["typecode"] == "B":
+        raise RuntimeError(
+            "Only Tensors of floating point and complex dtype can require gradients"
+        )
     buffer, shape = _input_buffer(data, facts["typecode"])
     # Creation and the sibling autograd frontend transfer owned bridge handles.
     return Tensor._from_handle(  # pyright: ignore[reportPrivateUsage]
@@ -642,6 +689,13 @@ def add(
 def sum(input: object) -> Tensor:
     """Reduce every element of one tensor; reduction options are unsupported."""
     return _require_sum_input(input).sum()
+
+
+def gt(input: object, other: object) -> Tensor:
+    """Return an out-of-place boolean mask from two float32 tensors."""
+    if not isinstance(input, Tensor):
+        raise TypeError("Tabgrad comparison requires two tensors.")
+    return input.gt(other)
 
 
 def mul(input: object, other: object, *, out: object = None) -> Tensor:
@@ -720,6 +774,7 @@ __all__ = [
     "autograd",
     "device",
     "dtype",
+    "gt",
     "matmul",
     "mul",
     "no_grad",
@@ -728,6 +783,6 @@ __all__ = [
     "tensor",
 ]
 if TYPE_CHECKING:
-    __all__ += ["bfloat16", "float16", "float32"]
+    __all__ += ["bfloat16", "bool", "float16", "float32"]
 else:
     __all__[:] = sorted([*__all__, *_dtypes_by_name])

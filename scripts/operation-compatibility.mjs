@@ -99,7 +99,7 @@ export function compatibilitySignature(inputs, result) {
 
 export function admittedOperationDtypes(variants, device) {
   return [...new Set(variants.filter(variant => variant[device].status === "supported")
-    .flatMap(variant => variant.inputs.length ? variant.inputs : variant.result === null ? [] : [variant.result]))];
+    .flatMap(variant => [...variant.inputs, ...(variant.result === null ? [] : [variant.result])]))];
 }
 
 function summaryCell(variants, device) {
@@ -120,11 +120,12 @@ function summaryTable(title, operations) {
 
 /** Rebuild the GitHub-readable summaries from the retained data in the same file. */
 export function withOperationCompatibilityTables(markdown, inventory) {
-  const summaries = /^### Arithmetic\n\n(?:\|[^\n]*\n)+\n### Storage and state\n\n(?:\|[^\n]*\n)+/gm;
+  const summaries = /^### (Tensor operations|Arithmetic)\n\n(?:\|[^\n]*\n)+\n### Storage and state\n\n(?:\|[^\n]*\n)+/gm;
   if ([...markdown.matchAll(summaries)].length !== 1) throw new Error("Missing or repeated operation compatibility summaries");
   const arithmetic = inventory.operations.filter(operation => operation.arithmetic);
   const others = inventory.operations.filter(operation => !operation.arithmetic);
-  return markdown.replace(summaries, () => summaryTable("Arithmetic", arithmetic) + "\n" + summaryTable("Storage and state", others));
+  return markdown.replace(summaries, (_section, title) =>
+    summaryTable(title, arithmetic) + "\n" + summaryTable("Storage and state", others));
 }
 
 /** A missing inventory lets an older Git baseline keep its original page. */

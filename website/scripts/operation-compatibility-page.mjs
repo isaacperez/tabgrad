@@ -68,7 +68,7 @@ export function renderOperationCompatibility(inventory, index) {
     `<a href="#${group.id}" data-operation-link="${group.id}"><code>${moduleLabel(group.name)}</code></a>`).join("")}</nav>`;
   const tables = groups.map(group =>
     `<section class="operation-module" id="${group.id}" aria-labelledby="${group.id}-title" data-operation-module><h3 id="${group.id}-title"><code>${moduleLabel(group.name)}</code></h3><div class="operation-list"><div class="operation-columns" aria-hidden="true"><span>Operation</span><span>CPU dtypes</span><span>GPU dtypes</span></div>${group.rows}</div></section>`).join("");
-  const markup = `<div class="operation-compatibility not-content" data-operation-compatibility><span id="arithmetic"></span><span id="storage-and-state"></span>${inputs}${navigation}<p class="operation-count" data-operation-count aria-live="polite"></p>${tables}</div>`;
+  const markup = `<div class="operation-compatibility not-content" data-operation-compatibility><span id="arithmetic"></span><span id="tensor-operations"></span><span id="storage-and-state"></span>${inputs}${navigation}<p class="operation-count" data-operation-count aria-live="polite"></p>${tables}</div>`;
   return { markup, anchors: [...groups.flatMap(group => [group.id, group.id + "-title"]),
     ...inventory.operations.map(operation => "operation-" + operation.id)] };
 }

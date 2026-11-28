@@ -12,22 +12,24 @@ pub(crate) trait Float32Pointwise<const N: usize> {
 
 /// Storage-specific streaming is selected statically, independently of geometry.
 pub(crate) trait Pointwise<const N: usize> {
-    type Element: Copy;
+    const INPUT_WIDTHS: [u32; N];
+    const OUTPUT_WIDTH: u32;
     /// Callers validate all complete typed spans and projected indices first.
-    unsafe fn run(
-        inputs: [*const Self::Element; N],
-        strides: [usize; N],
-        output: *mut Self::Element,
-        length: usize,
-    );
+    unsafe fn run(inputs: [*const u8; N], strides: [usize; N], output: *mut u8, length: usize);
 }
 
 impl<P: Float32Pointwise<N>, const N: usize> Pointwise<N> for P {
-    type Element = f32;
-    unsafe fn run(inputs: [*const f32; N], strides: [usize; N], output: *mut f32, length: usize) {
+    const INPUT_WIDTHS: [u32; N] = [FLOAT_ALIGNMENT; N];
+    const OUTPUT_WIDTH: u32 = FLOAT_ALIGNMENT;
+    unsafe fn run(inputs: [*const u8; N], strides: [usize; N], output: *mut u8, length: usize) {
         // SAFETY: the trait caller establishes the same spans as the f32 schedule.
         unsafe {
-            run::<P, N>(inputs, strides, output, length);
+            run::<P, N>(
+                inputs.map(|input| input.cast()),
+                strides,
+                output.cast(),
+                length,
+            );
         }
     }
 }
@@ -117,12 +119,12 @@ pub(crate) unsafe fn broadcast<P: Pointwise<N>, const N: usize>(
     packet_offset: u32,
     packet_words: u32,
 ) -> u32 {
-    let width = size_of::<P::Element>() as u32;
     if !packet_offset.is_multiple_of(FLOAT_ALIGNMENT)
+        || !output_offset.is_multiple_of(P::OUTPUT_WIDTH)
         || input_offsets
             .iter()
-            .chain([output_offset].iter())
-            .any(|offset| !offset.is_multiple_of(width))
+            .zip(P::INPUT_WIDTHS)
+            .any(|(offset, width)| !offset.is_multiple_of(width))
     {
         return STATUS_UNALIGNED;
     }
@@ -147,14 +149,16 @@ pub(crate) unsafe fn broadcast<P: Pointwise<N>, const N: usize>(
     let count = unsafe { packet.add(2).read() };
     let lengths: [u32; N] =
         core::array::from_fn(|operand| unsafe { packet.add(3 + operand).read() });
-    let Some(output_range) = checked_typed_range(output_offset, count, width, memory_bytes) else {
+    let Some(output_range) =
+        checked_typed_range(output_offset, count, P::OUTPUT_WIDTH, memory_bytes)
+    else {
         return STATUS_OUT_OF_BOUNDS;
     };
     for operand in 0..N {
         let Some(range) = checked_typed_range(
             input_offsets[operand],
             lengths[operand],
-            width,
+            P::INPUT_WIDTHS[operand],
             memory_bytes,
         ) else {
             return STATUS_OUT_OF_BOUNDS;
@@ -220,13 +224,14 @@ pub(crate) unsafe fn broadcast<P: Pointwise<N>, const N: usize>(
     let mut offsets = [0_usize; N];
     for start in (0..count as usize).step_by(inner) {
         let inputs = core::array::from_fn(|operand| unsafe {
-            (input_offsets[operand] as *const P::Element).add(offsets[operand])
+            (input_offsets[operand] as *const u8)
+                .add(offsets[operand] * P::INPUT_WIDTHS[operand] as usize)
         });
         unsafe {
             P::run(
                 inputs,
                 inner_strides,
-                (output_offset as *mut P::Element).add(start),
+                (output_offset as *mut u8).add(start * P::OUTPUT_WIDTH as usize),
                 inner,
             );
         }

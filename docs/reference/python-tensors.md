@@ -55,7 +55,7 @@ Pass the dtype explicitly.
   structure of built-in lists/tuples containing those types. A numeric scalar
   produces shape `()`. Empty input produces shape `(0,)`; `[[], []]` produces
   `(2, 0)`. Nesting cannot imply dimensions after an empty sequence.
-- Select the canonical `torch.float32`, `torch.float16` or `torch.bfloat16`
+- Select the canonical `torch.float32`, `torch.float16`, `torch.bfloat16` or `torch.bool`
   object. The [dtype table](../compatibility.md#tensor-dtypes-by-operation)
   lists the supported operations.
 - The device may be the string `'cpu'` or `'webgpu'`, or the corresponding
@@ -66,7 +66,9 @@ Pass the dtype explicitly.
   CPU and WebGPU support tracking for [functional gradients](functional-gradients.md)
   and [backward accumulation](backward-gradients.md).
 - Creation converts to the selected dtype and owns a copy. Later input mutations cannot
-  change the tensor. Integer overflow during conversion raises `OverflowError`.
+  change the tensor. Integer overflow during floating conversion raises `OverflowError`.
+  [Boolean creation](tensor-masks.md#create-and-read-boolean-tensors) keeps the
+  original integer's truth value.
 - Ragged inputs, mixed numerical/container depth and cycles are rejected.
   Reusing an acyclic child container is allowed and copies its values at each
   occurrence. No partially admitted tensor survives an invalid input.
@@ -101,7 +103,7 @@ serve cached metadata.
 | Property | Python presentation | Bounded behavior |
 | --- | --- | --- |
 | `shape` | `torch.Size`, an immutable integer tuple | Iteration, indexing, tuple equality/hash, representation, slicing, concatenation, repetition and `numel()` |
-| `dtype` | The selected `torch.float32`, `torch.float16` or `torch.bfloat16` constant of type `torch.dtype` | Identity, representation, read-only `is_floating_point=True`, `is_complex=False`, `is_signed=True` |
+| `dtype` | The selected canonical `torch.dtype` constant | Identity, representation, read-only `is_floating_point`, `is_complex` and `is_signed`. Bool has all three properties false. |
 | `device` | A `torch.device` object for the runtime's device | Equality with the same device name, hashing, representation, string form, read-only `type` and `index=None`; supported names are `cpu` and `webgpu` |
 | `requires_grad` | Python `bool` | Advertised tracking; propagation follows the [recording mode and view rules](gradient-recording.md), and functional gradients return untracked tensors |
 
@@ -150,9 +152,9 @@ support for host-number operands. An unresolved operator raises Python's normal
 
 ## Observe numerical values
 
-`Tensor.tolist()` takes no arguments and returns a Python float for a scalar,
-or independent nested Python lists with floating-point leaves for higher rank.
-Its return annotation is recursive: `float | list[TensorList]`, where
+`Tensor.tolist()` takes no arguments and returns a Python float or bool for a
+scalar, or independent Python lists holding those values for higher rank.
+Its return annotation is recursive: `float | bool | list[TensorList]`, where
 `TensorList` denotes that same union. A vector returns a flat list.
 Empty dimensions preserve the outer structure: `(2, 0)` returns `[[], []]`,
 whereas `(0, 3)` returns `[]`. The tensor's `shape` remains authoritative when

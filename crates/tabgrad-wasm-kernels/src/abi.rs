@@ -17,6 +17,7 @@ const CAPABILITY_MATMUL_F16: u32 = 1024;
 const CAPABILITY_POINTWISE_BF16: u32 = 2048;
 const CAPABILITY_SUM_BF16: u32 = 4096;
 const CAPABILITY_MATMUL_BF16: u32 = 8192;
+const CAPABILITY_GT_F32: u32 = 16384;
 pub(crate) const STATUS_INVALID_GEOMETRY: u32 = 4;
 pub(crate) const FLOAT_ALIGNMENT: u32 = align_of::<f32>() as u32;
 
@@ -73,6 +74,7 @@ pub extern "C" fn tabgrad_capabilities() -> u32 {
         | CAPABILITY_POINTWISE_BF16
         | CAPABILITY_SUM_BF16
         | CAPABILITY_MATMUL_BF16
+        | CAPABILITY_GT_F32
 }
 
 #[unsafe(no_mangle)]
@@ -102,21 +104,42 @@ pub(crate) fn validate_typed_binary_ranges(
     length: u32,
     width: u32,
 ) -> u32 {
-    if !left_offset.is_multiple_of(width)
-        || !right_offset.is_multiple_of(width)
-        || !output_offset.is_multiple_of(width)
+    validate_binary_spans(
+        left_offset,
+        right_offset,
+        output_offset,
+        length,
+        width,
+        width,
+    )
+}
+
+pub(crate) fn validate_binary_spans(
+    left_offset: u32,
+    right_offset: u32,
+    output_offset: u32,
+    length: u32,
+    input_width: u32,
+    output_width: u32,
+) -> u32 {
+    if !left_offset.is_multiple_of(input_width)
+        || !right_offset.is_multiple_of(input_width)
+        || !output_offset.is_multiple_of(output_width)
     {
         return STATUS_UNALIGNED;
     }
 
     let memory_bytes = (core::arch::wasm32::memory_size(0) as u64) * 65_536;
-    let Some(left_range) = checked_typed_range(left_offset, length, width, memory_bytes) else {
+    let Some(left_range) = checked_typed_range(left_offset, length, input_width, memory_bytes)
+    else {
         return STATUS_OUT_OF_BOUNDS;
     };
-    let Some(right_range) = checked_typed_range(right_offset, length, width, memory_bytes) else {
+    let Some(right_range) = checked_typed_range(right_offset, length, input_width, memory_bytes)
+    else {
         return STATUS_OUT_OF_BOUNDS;
     };
-    let Some(output_range) = checked_typed_range(output_offset, length, width, memory_bytes) else {
+    let Some(output_range) = checked_typed_range(output_offset, length, output_width, memory_bytes)
+    else {
         return STATUS_OUT_OF_BOUNDS;
     };
     if overlaps(output_range, left_range) || overlaps(output_range, right_range) {

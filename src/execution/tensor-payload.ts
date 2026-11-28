@@ -1,6 +1,6 @@
 import { TabgradError } from "../shared/errors.js";
 import { isRecord } from "../shared/object-shape.js";
-import { checkedElementBytes, invalidTensorData, tensorDType, type TensorDType, type TensorDTypeDescriptor } from "../shared/tensor-dtype.js";
+import { checkedElementBytes, invalidTensorData, tensorDType, type ObservationFormat, type TensorData, type TensorDType, type TensorDTypeDescriptor, type TensorObservation } from "../shared/tensor-dtype.js";
 
 /** An owned, bounded encoded span. Construction freezes metadata, not the bytes. */
 export interface HostTensorPayload {
@@ -48,7 +48,7 @@ function encodedSpan(descriptor: TensorDTypeDescriptor, elements: number, bytes:
 }
 
 /** Capture one owned span before caller-owned input can change. */
-export function captureTensorData(data: Iterable<number> | ArrayLike<number>, dtype: TensorDType): HostTensorPayload {
+export function captureTensorData(data: TensorData, dtype: TensorDType): HostTensorPayload {
   const descriptor = tensorDType(dtype);
   try {
     if (typeof data !== "object" || data === null) throw invalidTensorData();
@@ -80,8 +80,11 @@ export function copyTensorPayload(payload: HostTensorPayload): HostTensorPayload
 
 /** Numeric host observation is shared by JavaScript and Python, below their syntax. */
 export function decodeTensorPayload(payload: HostTensorPayload, dtype: TensorDType, elements: number,
-  result: "view" | "copy" = "view"): Float32Array<ArrayBuffer> {
+  result: "view" | "copy" = "view", format: ObservationFormat = "numeric"): TensorObservation {
   const descriptor = tensorDType(dtype);
   assertEncodedSpan(payload, descriptor, elements);
+  if (format === "typed" && "observeTyped" in descriptor) {
+    return descriptor.observeTyped(payload.bytes, elements, result === "copy");
+  }
   return descriptor.observe(payload.bytes, elements, result === "copy");
 }

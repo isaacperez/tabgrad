@@ -34,6 +34,7 @@ export const COMPUTATION_SIGNATURES = Object.freeze({
   "matmul-f16": signature("matmul", MATRIX, BINARY_FLOAT16),
   "add-bf16": signature("add", POINTWISE, BINARY_BFLOAT16),
   "mul-bf16": signature("mul", POINTWISE, BINARY_BFLOAT16),
+  "gt-f32": signature("gt", POINTWISE, fixedTensorTypePolicy(["float32", "float32"], "bool")),
   "sum-bf16": signature("sum", SCALAR, fixedTensorTypePolicy(["bfloat16"], "bfloat16")),
   "matmul-bf16": signature("matmul", MATRIX, BINARY_BFLOAT16),
   "reduce-f32": signature("reduce", RECEIVING, UNARY_FLOAT32),

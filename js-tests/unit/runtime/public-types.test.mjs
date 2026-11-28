@@ -73,6 +73,7 @@ test("the JavaScript package entry point exposes only the supported runtime surf
         "device",
         "dtype",
         "grad",
+        "gt",
         "matmul",
         "mul",
         "requiresGrad",

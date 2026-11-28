@@ -6,6 +6,7 @@ mod abi;
 mod addition;
 mod binary16;
 mod coefficient_addition;
+mod comparison;
 mod expansion;
 mod fused_multiply_add;
 mod matrix_product;

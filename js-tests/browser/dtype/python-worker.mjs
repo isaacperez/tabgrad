@@ -1,5 +1,6 @@
 import { attachPython } from '/python.js';
 import { checkResidentMatrixTransfers, compactPythonSource } from '/helpers/compact-float-cases.mjs';
+import { pythonBooleanMaskSource } from '/helpers/boolean-mask-cases.mjs';
 addEventListener('message', async ({ data }) => {
   let binding;
   try {
@@ -20,12 +21,13 @@ addEventListener('message', async ({ data }) => {
       await binding.runPythonAsync(composition);
       checkResidentMatrixTransfers(data.device, before, binding.diagnostics());
     }
+    if (data.booleanMask) await binding.runPythonAsync(pythonBooleanMaskSource(data.device, data.grid));
     const beforeClose = binding.diagnostics();
     await binding.close();
     postMessage({ ok: true, pyodide: interpreter.version, worker: true, jspiAvailable: false,
       cases: { construction: data.reference.construction.words.length, pointwise: data.reference.pointwise.left.length,
         broadcasts: 10, oddDense: 2, channelCompositions: 1, ...counts },
-      beforeClose, final: binding.diagnostics() });
+      beforeClose, final: binding.diagnostics(), booleanMask: data.booleanMask });
   } catch (error) { postMessage({ ok: false, error: String(error) }); }
   finally { await binding?.close(); }
 }, { once: true });
