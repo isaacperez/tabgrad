@@ -56,7 +56,7 @@ session-owned `webgpu` device **in addition to CPU**. Omitting `device` still
 means `cpu`; there are no indexed device names, implicit migrations or silent
 fallbacks. Handles from different sessions cannot be mixed.
 
-GPU tensors use contiguous `float32`, `float16` or `bfloat16` storage.
+GPU tensors use contiguous `float32`, `float16`, `bfloat16` or `bool` storage.
 [Float16](float16.md) and [bfloat16](python-tensors.md#bfloat16-tensors)
 support same-type add/mul, total sum, 2D matrix products and views with their own
 rounding, packed-storage and inference-only boundaries. Creation accepts the common
@@ -74,7 +74,12 @@ For float32, its precise rounding and exceptional-value contract is the
 including a separately rounded result for every logical addition. It does not
 promise native WGSL floating-point behavior or NaN payload preservation.
 
-GPU `sum()` reduces a whole contiguous tensor of any supported dtype to a distinct scalar, including
+GPU [`gt()`](python-tensors.md#greater-than-comparison) produces a packed
+boolean tensor from two broadcast-compatible float32 tensors. Each invocation
+owns a full word with up to four masks. The independent typed observation
+exposes only the logical bytes.
+
+GPU `sum()` reduces a whole contiguous floating tensor to a distinct scalar, including
 an empty input's positive-zero write. Its exact-total accumulation and logical
 rounding boundaries are specified by the [sum reference](tensor-sum.md).
 Admission requires the acquired device's sum workgroup and parameter-buffer
@@ -144,7 +149,9 @@ ownership and indexing separation.
 ## Observation, errors and shutdown
 
 `toArray()` returns the ordinary Promise for an independent host
-`Float32Array`. Kernels and intermediate values remain on GPU; readback copies
+`Float32Array`. Bool observations also accept `toArray({ format: "typed" })`
+for an independent `Uint8Array` of zeros and ones.
+Kernels and intermediate values remain on GPU; readback copies
 only the demanded storage. Repeating an observation reads the resident result
 without rerunning its producer. Closing a handle does not cancel work that
 already owns its value.

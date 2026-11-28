@@ -44,7 +44,7 @@ import {
   type Materialization,
 } from "./program-formation.js";
 
-import { isTensorDType, tensorByteLength, tensorDType, type TensorDType } from "../shared/tensor-dtype.js";
+import { isTensorDType, tensorByteLength, tensorDType, type ObservationFormat, type TensorData, type TensorDType, type TensorObservation } from "../shared/tensor-dtype.js";
 import { captureTensorData, decodeTensorPayload, hostTensorPayload, type HostTensorPayload } from "../execution/tensor-payload.js";
 export type { TensorDType } from "../shared/tensor-dtype.js";
 export type TensorLayout = "contiguous";
@@ -276,14 +276,14 @@ interface RuntimeSessionAccess {
   readonly restoreRecording: (previous: boolean) => void;
   readonly prepare: () => Promise<void>;
   readonly complete: () => Promise<void>;
-  readonly observeSynchronously: (state: TensorState) => Float32Array;
+  readonly observeSynchronously: (state: TensorState, format: ObservationFormat) => TensorObservation;
   readonly binary: (definition: BinaryOperationDefinition, left: TensorState, rightHandle: unknown) => Tensor;
   readonly ownership: () => RuntimeOwnership;
   readonly semanticOwnership: () => RuntimeSemanticOwnership;
   readonly copy: (destination: TensorState, source: unknown) => void;
   readonly sum: (source: TensorState) => Tensor;
   readonly view: (source: TensorState, shape: unknown) => Tensor;
-  readonly observe: (state: TensorState) => Promise<Float32Array>;
+  readonly observe: (state: TensorState, format: ObservationFormat) => Promise<TensorObservation>;
   readonly assertOpen: () => void;
   readonly releaseHandle: (state: TensorState) => void;
   readonly finalizeHandle: (state: TensorState) => void;
@@ -514,10 +514,22 @@ export class Tensor {
     return this;
   }
 
-  toArray(): Promise<Float32Array> {
+  /** Compare stored float32 values and return an untracked boolean mask. */
+  gt(right: Tensor): Tensor {
+    const state = requireTensorState(this);
+    if (arguments.length !== 1) throw new TypeError("Tensor.gt() requires exactly one tensor argument.");
+    return runtimeSessionAccess(state.session).binary(GT_OPERATION, state, right);
+  }
+
+  toArray(): Promise<Float32Array<ArrayBuffer>>;
+  toArray(options: { readonly format: "typed" }): Promise<TensorObservation>;
+  toArray(options?: { readonly format: "typed" }): Promise<TensorObservation> {
     const state = requireTensorState(this);
     assertTensorOpen(state);
-    return runtimeSessionAccess(state.session).observe(state);
+    if (arguments.length > 1 || (arguments.length === 1 && options?.format !== "typed")) {
+      throw new TypeError('Tensor.toArray() accepts no arguments or { format: "typed" }.');
+    }
+    return runtimeSessionAccess(state.session).observe(state, options === undefined ? "numeric" : "typed");
   }
 
   close(): void {
@@ -536,7 +548,7 @@ export interface BackwardOptions {
   readonly createGraph?: boolean;
 }
 
-type BinaryOperationName = "add" | "mul" | "matmul";
+type BinaryOperationName = "add" | "mul" | "matmul" | "gt";
 
 class BinaryOperationDefinition implements NumericalOperationDefinition {
   readonly pure = true;
@@ -545,10 +557,10 @@ class BinaryOperationDefinition implements NumericalOperationDefinition {
 
   constructor(
     readonly name: BinaryOperationName,
-    readonly provenanceSource: "Tensor.add" | "Tensor.mul" | "Tensor.matmul",
+    readonly provenanceSource: `Tensor.${BinaryOperationName}`,
     readonly loweredKind: ComputationKind,
-    readonly description: "addition" | "multiplication" | "matrix multiplication",
-    readonly derivative: DerivativeRecipe | undefined,
+    readonly description: "addition" | "multiplication" | "matrix multiplication" | "comparison",
+    readonly derivative: DerivativeRecipe | null | undefined,
     readonly matrixFlags?: number,
   ) {
     const { operation, family, types } = COMPUTATION_SIGNATURES[loweredKind];
@@ -698,14 +710,17 @@ const MATMUL_RIGHT_TRANSPOSED_OPERATION = Object.freeze(new BinaryOperationDefin
   "matmul", "Tensor.matmul", "matmul-f32", "matrix multiplication", MATMUL_DERIVATIVE, 2,
 ));
 
-const DEFAULT_BINARY_OPERATIONS = Object.freeze({ add: ADD_OPERATION, mul: MUL_OPERATION, matmul: MATMUL_OPERATION });
+const GT_OPERATION = Object.freeze(new BinaryOperationDefinition("gt", "Tensor.gt", "gt-f32", "comparison", null));
+const DEFAULT_BINARY_OPERATIONS = Object.freeze({ add: ADD_OPERATION, mul: MUL_OPERATION, matmul: MATMUL_OPERATION, gt: GT_OPERATION });
 type OperandPairIndex = Map<TensorDType, Map<TensorDType, BinaryOperationDefinition>>;
 
 // Build once from the finite catalogue. Default and derivative bindings stay explicit.
-const binarySpecializations: Record<BinaryOperationName, OperandPairIndex> = { add: new Map(), mul: new Map(), matmul: new Map() };
+const binarySpecializations: Record<BinaryOperationName, OperandPairIndex> = {
+  add: new Map(), mul: new Map(), matmul: new Map(), gt: new Map(),
+};
 for (const kind of Object.keys(COMPUTATION_SIGNATURES) as ComputationKind[]) {
   const { operation, family, types } = COMPUTATION_SIGNATURES[kind];
-  if ((operation === "add" || operation === "mul" || operation === "matmul")
+  if ((operation === "add" || operation === "mul" || operation === "matmul" || operation === "gt")
     && (family.geometry === "pointwise" || family.geometry === "matrix")) {
     const primary = DEFAULT_BINARY_OPERATIONS[operation];
     const left = types.inputs[0]!;
@@ -895,7 +910,7 @@ export class RuntimeSession {
       restoreRecording: (previous: boolean) => { this.#recording = previous; },
       prepare: () => this.#prepare(),
       complete: () => this.#complete(),
-      observeSynchronously: (state: TensorState) => this.#observeSynchronously(state),
+      observeSynchronously: (state: TensorState, format: ObservationFormat) => this.#observeSynchronously(state, format),
       binary: (definition: BinaryOperationDefinition, left: TensorState, rightHandle: unknown) => (
         this.#binary(definition, left, rightHandle)
       ),
@@ -904,7 +919,7 @@ export class RuntimeSession {
       copy: (destination: TensorState, source: unknown) => this.#copy(destination, source),
       sum: (source: TensorState) => this.#sum(source),
       view: (source: TensorState, shape: unknown) => this.#view(source, shape),
-      observe: (state: TensorState) => this.#observe(state),
+      observe: (state: TensorState, format: ObservationFormat) => this.#observe(state, format),
       assertOpen: () => this.#assertOpen(),
       completeGradient: (state: TensorState) => this.#completeGradient(state),
       releaseHandle: (state: TensorState) => this.#releaseHandle(state),
@@ -1212,7 +1227,9 @@ export class RuntimeSession {
     return previous;
   }
 
-  tensor(data: Iterable<number> | ArrayLike<number>, options: TensorOptions = {}): Tensor {
+  tensor(data: Iterable<number> | ArrayLike<number>, options?: TensorOptions): Tensor;
+  tensor(data: TensorData, options: TensorOptions & { readonly dtype: "bool" }): Tensor;
+  tensor(data: TensorData, options: TensorOptions = {}): Tensor {
     this.#assertOpen();
     if (options.requiresGrad !== undefined && typeof options.requiresGrad !== "boolean") {
       throw new TypeError("requiresGrad must be a boolean.");
@@ -2105,7 +2122,7 @@ export class RuntimeSession {
     const right = requireTensorState(rightHandle);
     this.#checkCapturedAdmission(admitted.record.inputs, admitted.outputMetadata.shape);
     let history: DerivativeNode<TensorValue> | null = null;
-    if (this.#recording && (left.requiresGrad || right.requiresGrad)) {
+    if (this.#recording && (left.requiresGrad || right.requiresGrad) && definition.derivative !== null) {
       if (definition.derivative === undefined) throw new TabgradError("UNSUPPORTED_GRADIENT", "This tensor signature has no derivative.");
       history = this.#history.record(admitted.outputMetadata.shape, admitted.broadcast === undefined ? definition.derivative
         : pointwiseDerivative(definition.derivative, admitted.broadcast, definition.derivative === POINTWISE_PASS_DERIVATIVE),
@@ -2167,12 +2184,12 @@ export class RuntimeSession {
     if (preparation !== undefined) yield preparation;
   }
 
-  #observe(state: TensorState): Promise<Float32Array> {
+  #observe(state: TensorState, format: ObservationFormat): Promise<TensorObservation> {
     this.#assertOpen();
     const captured = state.value;
     this.#checkCapturedAdmission([captured]);
     this.#retainValue(captured);
-    return this.#enqueue(this.#observation(captured), () => this.#releaseValue(captured)).asPromise();
+    return this.#enqueue(this.#observation(captured, format), () => this.#releaseValue(captured)).asPromise();
   }
 
   #completeGradient(state: TensorState): void {
@@ -2205,7 +2222,7 @@ export class RuntimeSession {
     throwCleanupFailures(failures, "Gradient dependencies or cleanup failed.");
   }
 
-  #observeSynchronously(state: TensorState): Float32Array {
+  #observeSynchronously(state: TensorState, format: ObservationFormat): TensorObservation {
     this.#assertOpen();
     const host = this.#materializations.get(state.value)?.kind === "host";
     const backend = this.#selectBackend(state.value.device, "observe");
@@ -2230,10 +2247,10 @@ export class RuntimeSession {
     const captured = state.value;
     this.#checkCapturedAdmission([captured]);
     this.#retainValue(captured);
-    return this.#enqueue(this.#observation(captured), () => this.#releaseValue(captured)).read();
+    return this.#enqueue(this.#observation(captured, format), () => this.#releaseValue(captured)).read();
   }
 
-  *#observation(value: TensorValue): Generator<ExecutionStep, Float32Array, unknown> {
+  *#observation(value: TensorValue, format: ObservationFormat): Generator<ExecutionStep, TensorObservation, unknown> {
     const formed = this.#formProgram(value);
     try {
       const writerFailure = failedWriterOutcome(value.outcomes);
@@ -2246,7 +2263,7 @@ export class RuntimeSession {
       if (host?.kind === "host" && value.device === "cpu") {
         try {
           this.#beforeReadback?.();
-          return decodeTensorPayload(host, value.dtype, tensorElementCount(value.shape), "copy");
+          return decodeTensorPayload(host, value.dtype, tensorElementCount(value.shape), "copy", format);
         } catch (error) {
           throw retainProgramFailureContext(error, formed.program, "readback");
         }
@@ -2265,7 +2282,7 @@ export class RuntimeSession {
         this.#beforeReadback?.();
         const elements = tensorElementCount(value.shape);
         const payload = yield* awaitBackendResult(backend.read(materialization.allocation, elements, value.dtype));
-        return decodeTensorPayload(payload, value.dtype, elements);
+        return decodeTensorPayload(payload, value.dtype, elements, "view", format);
       } catch (error) {
         throw retainProgramFailureContext(error, formed.program, "readback");
       }
@@ -2872,13 +2889,14 @@ export function createConnectedRuntimeSession(backend: WebGpuExecutionBackend, m
 }
 
 /** @internal Observe an opaque handle through its owning session's common request path. */
-export function observeTensorSynchronously(session: RuntimeSession, handle: unknown): Float32Array {
+export function observeTensorSynchronously(session: RuntimeSession, handle: unknown,
+  format: ObservationFormat = "numeric"): TensorObservation {
   const state = requireTensorState(handle);
   assertTensorOpen(state);
   if (state.session !== session) {
     throw new TabgradError("DIFFERENT_SESSION", "Observation requires a tensor from this session.");
   }
-  return runtimeSessionAccess(session).observeSynchronously(state);
+  return runtimeSessionAccess(session).observeSynchronously(state, format);
 }
 
 /** @internal */

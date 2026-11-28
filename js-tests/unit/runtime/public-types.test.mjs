@@ -8,9 +8,10 @@ import * as tabgrad from "../../../dist/index.js";
 
 const { RuntimeSession, Tensor, SGD } = tabgrad;
 
-test("capacity options typecheck through public JavaScript and local Python entries", () => {
+test("capacity and boolean types typecheck through public JavaScript and local Python entries", () => {
   const program = ts.createProgram({
-    rootNames: [fileURLToPath(new URL("../../fixtures/memory-capacity-types.ts", import.meta.url))],
+    rootNames: ["memory-capacity-types.ts", "boolean-mask-types.ts"].map(name =>
+      fileURLToPath(new URL(`../../fixtures/${name}`, import.meta.url))),
     options: { strict: true, noEmit: true, skipLibCheck: false, types: [],
       target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.NodeNext,
       moduleResolution: ts.ModuleResolutionKind.NodeNext, lib: ["lib.es2022.d.ts", "lib.dom.d.ts"] },
@@ -73,6 +74,7 @@ test("the JavaScript package entry point exposes only the supported runtime surf
         "device",
         "dtype",
         "grad",
+        "gt",
         "matmul",
         "mul",
         "requiresGrad",

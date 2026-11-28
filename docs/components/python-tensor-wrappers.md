@@ -103,20 +103,21 @@ The bridge checks managed-entry context before admitting work; the runtime
 then validates identity, session and lifetime and owns demand, execution and
 readback. There is no Python-side graph traversal or numerical fallback.
 
-The returned `Float32Array` owns its bytes. Pyodide's `to_py()` converts it to a
-Python memory view. A scalar reads one float; a vector uses bulk `tolist()`;
+The returned `Float32Array` or boolean `Uint8Array` owns its bytes. Pyodide's
+`to_py()` converts it to a Python memory view. A scalar reads one value.
+Floating vectors use bulk `tolist()`; boolean vectors decode each byte;
 higher ranks build the outer containers with an explicit ancestor stack and
 convert contiguous leaf rows in bulk. Memoryview row slicing borrows the same
 buffer and does not perform another runtime readback. Traversal state grows
-with rank, while the returned floats and containers account for the result's
+with rank, while the returned values and containers account for the result's
 actual size, including child lists in empty tensors.
 
 The wrapper releases temporary memory views through context managers and
 returns the owned number or lists to the caller. It does not cache them or
 retain the intermediate buffer. Narrow type casts reflect that
 typeshed describes a general memory view's list as integers, while this checked
-bridge returns float32 elements; real interpreter tests check the element type
-and independent copies.
+bridge returns float32 elements on the floating path. Real interpreter tests
+check the float and bool element types and independent copies.
 
 The [runtime observation owner](runtime-observation.md) explains how this same
 request serves JavaScript promises without requiring a Promise callback to run
@@ -132,7 +133,7 @@ earlier. The properties cannot be assigned through the Python tensor API.
 
 The resulting objects are Python presentations: `Size` is an immutable integer
 tuple with its own representation and shape-preserving tuple operations;
-`float32`, `float16` and `bfloat16` are the exposed `dtype` constants. `device` is an immutable
+`float32`, `float16`, `bfloat16` and `bool` are the exposed `dtype` constants. `device` is an immutable
 descriptor for the supported unindexed device names. CPU remains the default;
 `webgpu` selects the explicitly attached backend and is a Tabgrad extension,
 not an upstream PyTorch device. The exact domain is in the

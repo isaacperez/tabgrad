@@ -1,6 +1,6 @@
 # Contiguous tensor views
 
-`Tensor.view` gives an existing contiguous float32, float16 or bfloat16 value another shape
+`Tensor.view` gives an existing contiguous float32, float16, bfloat16 or bool value another shape
 without copying its numerical data. This reference covers the Python and
 JavaScript shape overloads. Python and direct JavaScript permit views of CPU
 values and explicitly enabled GPU values. Python uses the
@@ -95,7 +95,7 @@ special creation provenance and saved-version failures.
 
 ## Limits and cost
 
-This operation covers shape changes of whole contiguous float32, float16 or bfloat16 storage in
+This operation covers shape changes of whole contiguous float32, float16, bfloat16 or bool storage in
 the frontend/device domains stated above.
 It does not provide dtype reinterpretation, reshape with copy fallback,
 `view_as`, transpose, slicing, offsets, arbitrary strides.

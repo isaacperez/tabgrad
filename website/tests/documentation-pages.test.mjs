@@ -57,6 +57,22 @@ test("the operation matrix is static and version-local without duplicating Markd
     assert.match(body, /GPU: Unavailable/);
     assert.doesNotMatch(body, /### Arithmetic|\| Add \|/);
   }
+  const entry = group.entries.find(entry => entry.source === compatibility);
+  entry.body = entry.body.replace("### Arithmetic", "### Tensor operations");
+  const [original] = group.operationCompatibility.operations;
+  const supported = { status: "supported", gradients: "not-applicable" };
+  group.operationCompatibility.operations.push({
+    ...original, id: "gt", name: "torch.gt", aliases: [">"], limits: "Comparison returns a mask.",
+    variants: [{ inputs: ["float32", "float32"], result: "bool", cpu: supported, webgpu: supported }],
+  });
+  const current = prepareDocumentationPages(value, "0.4.0", "renderer", "");
+  for (const page of current.prepared.filter(page => page.path.endsWith("compatibility/index.md"))) {
+    const body = page.adapted.render();
+    assert.match(body, /id="tensor-operations"/);
+    assert.match(body, /id="operation-gt"[^>]+data-dtypes="bool float32"/);
+    assert.match(body, /float32, float32 → bool/);
+    assert.doesNotMatch(body, /### Tensor operations|\| Add \|/);
+  }
   group.operationCompatibility.operations[0].fragment = "missing";
   assert.throws(() => prepareDocumentationPages(value, "0.4.0", "renderer", ""), /version-local operation compatibility reference/);
 });

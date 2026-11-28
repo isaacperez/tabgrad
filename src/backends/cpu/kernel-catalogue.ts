@@ -1,7 +1,7 @@
 import type { ComputationKind } from "../../execution/operation-contracts.js";
 
 export const CPU_ABI_VERSION = 1;
-export const CPU_MODULE_VERSION = 12;
+export const CPU_MODULE_VERSION = 13;
 
 interface Capability {
   readonly name: string;
@@ -42,6 +42,7 @@ function kernel<Layout extends SingleLayout, Name extends string>(layout: Layout
 const BROADCAST_FLOAT32 = capability("broadcast-f32", 64);
 const POINTWISE_FLOAT16 = capability("pointwise-f16", 256);
 const POINTWISE_BFLOAT16 = capability("pointwise-bf16", 2048);
+const POINTWISE_GT = capability("gt-f32", 16384);
 
 // Every CPU specialization declares its external symbols and calling layout here.
 const declarations = Object.freeze({
@@ -58,6 +59,7 @@ const declarations = Object.freeze({
   "matmul-f16": kernel("matrix", "tabgrad_matmul_f16", capability("matmul-f16", 1024)),
   "add-bf16": pointwise("tabgrad_add_bf16", POINTWISE_BFLOAT16, "tabgrad_broadcast_add_bf16", POINTWISE_BFLOAT16),
   "mul-bf16": pointwise("tabgrad_mul_bf16", POINTWISE_BFLOAT16, "tabgrad_broadcast_mul_bf16", POINTWISE_BFLOAT16),
+  "gt-f32": pointwise("tabgrad_gt_f32", POINTWISE_GT, "tabgrad_broadcast_gt_f32", POINTWISE_GT),
   "sum-bf16": kernel("inputLength", "tabgrad_sum_bf16", capability("sum-bf16", 4096)),
   "matmul-bf16": kernel("matrix", "tabgrad_matmul_bf16", capability("matmul-bf16", 8192)),
 } satisfies Partial<Record<ComputationKind, CpuKernelDeclaration>>);

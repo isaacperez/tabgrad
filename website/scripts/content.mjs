@@ -113,14 +113,17 @@ export function adaptDocument(entry, documents, revision, options = {}) {
   }
   const tree = markdown.parse(entry.body);
   if (options.operationCompatibility !== undefined) {
-    const tableAfter = label => tree.children.findIndex(node => node.type === "heading" && node.depth === 3 && nodeText(node) === label);
-    const arithmetic = tableAfter("Arithmetic"), storage = tableAfter("Storage and state");
-    if (arithmetic < 0 || storage <= arithmetic
-      || tree.children[arithmetic + 1]?.type !== "table" || tree.children[storage + 1]?.type !== "table") {
+    const headings = (...labels) => tree.children.flatMap((node, index) =>
+      node.type === "heading" && node.depth === 3 && labels.includes(nodeText(node)) ? [index] : []);
+    const operationHeadings = headings("Tensor operations", "Arithmetic");
+    const storageHeadings = headings("Storage and state");
+    const [operations] = operationHeadings, [storage] = storageHeadings;
+    if (operationHeadings.length !== 1 || storageHeadings.length !== 1 || storage <= operations
+      || tree.children[operations + 1]?.type !== "table" || tree.children[storage + 1]?.type !== "table") {
       throw new Error("Operation compatibility requires the linked Markdown summaries");
     }
     tree.children.splice(storage, 2);
-    tree.children.splice(arithmetic, 2, { type: "html", value: options.operationCompatibility });
+    tree.children.splice(operations, 2, { type: "html", value: options.operationCompatibility });
   }
   const diagrams = [];
   const diagramNodes = [];

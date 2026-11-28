@@ -2,6 +2,19 @@ import { invocationEntry, type LinearDispatchLayout } from "../linear-dispatch.j
 
 export const WEBGPU_POINTWISE_WORKGROUP_SIZE = 64;
 
+/** Packed writers may cross rows, so project each stored element separately. */
+export function packedBinaryIndices(broadcast: boolean): string {
+  return broadcast ? `
+      var remaining = index;
+      var indices = vec2<u32>(0u);
+      for (var axis = geometry[0]; axis > 0u; axis--) {
+        let base = 3u + (axis - 1u) * 3u;
+        let coordinate = remaining % geometry[base];
+        remaining /= geometry[base];
+        indices += coordinate * vec2<u32>(geometry[base + 1u], geometry[base + 2u]);
+      }` : "let indices = vec2<u32>(index);";
+}
+
 /** Arithmetic is specialized at pipeline creation, never interpreted per value. */
 export function pointwiseSource(arithmetic: string, calculate: string, layout: LinearDispatchLayout = "linear"): string {
   const entry = invocationEntry(layout, WEBGPU_POINTWISE_WORKGROUP_SIZE);

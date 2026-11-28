@@ -21,8 +21,11 @@ impl Arithmetic for Multiply {
 
 struct Packed<F, P>(core::marker::PhantomData<(F, P)>);
 impl<F: PackedFloat, P: Arithmetic> Pointwise<2> for Packed<F, P> {
-    type Element = u16;
-    unsafe fn run(inputs: [*const u16; 2], strides: [usize; 2], output: *mut u16, length: usize) {
+    const INPUT_WIDTHS: [u32; 2] = [2; 2];
+    const OUTPUT_WIDTH: u32 = 2;
+    unsafe fn run(inputs: [*const u8; 2], strides: [usize; 2], output: *mut u8, length: usize) {
+        let inputs = inputs.map(|input| input.cast::<u16>());
+        let output = output.cast::<u16>();
         for index in 0..length {
             // SAFETY: the common dense/broadcast boundary checked typed spans.
             let [left, right] = core::array::from_fn(|operand| unsafe {
@@ -45,9 +48,9 @@ fn dense<F: PackedFloat, P: Arithmetic>(left: u32, right: u32, output: u32, leng
     // SAFETY: complete aligned, disjoint ranges were validated above.
     unsafe {
         Packed::<F, P>::run(
-            [left as *const u16, right as *const u16],
+            [left as *const u8, right as *const u8],
             [1, 1],
-            output as *mut u16,
+            output as *mut u8,
             length as usize,
         );
     }
