@@ -68,9 +68,11 @@ test("the documented tensor operation table must be visible and unique", () => {
   for (const hidden of [`<!--\n${section}-->\n\n`, `~~~markdown\n${section}~~~~\n\n`]) {
     assert.throws(() => verifyDTypeRegistrations(docs.replace(section, hidden)), /one visible tensor operation dtype table/);
   }
-  for (const heading of ["### Tensor operations", "  ### Tensor operations", "### Tensor operations   ", "### Tensor operations ###"]) {
+  for (const heading of ["### Tensor operations", "  ### Tensor operations", "### Tensor operations   ", "### Tensor operations ###",
+    "### tensor operations", "### TENSOR OPERATIONS", "### Arithmetic"]) {
     const conflicting = section.replace("### Tensor operations", heading).replace("`float16`", "`float128`");
-    assert.throws(() => verifyDTypeRegistrations(docs.replace(section, section + conflicting)),
+    assert.throws(() => verifyDTypeRegistrations(docs.replace("\n## Meaning of compatibility",
+      "\n" + conflicting + "## Meaning of compatibility")),
       /one visible tensor operation dtype table/);
   }
   verifyDTypeRegistrations(docs.replace(section, "```html\n<!-- open a comment\n```\n\n" + section));

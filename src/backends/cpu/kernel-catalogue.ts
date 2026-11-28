@@ -1,7 +1,7 @@
 import type { ComputationKind } from "../../execution/operation-contracts.js";
 
 export const CPU_ABI_VERSION = 1;
-export const CPU_MODULE_VERSION = 12;
+export const CPU_MODULE_VERSION = 13;
 
 interface Capability {
   readonly name: string;

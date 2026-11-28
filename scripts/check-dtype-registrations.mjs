@@ -56,9 +56,10 @@ function documentedArithmetic(markdown) {
   const sections = visibleMarkdown(markdown).split(/^## /m)
     .filter(section => section.toLowerCase().startsWith("tensor dtypes by operation\n"));
   assert.equal(sections.length, 1, "Expected one tensor dtype section");
-  const operations = sections[0].split(/^### /m).filter(section => section.startsWith("Tensor operations\n"));
+  const operations = sections[0].split(/^### /m).filter(section =>
+    /^(tensor operations|arithmetic)\n/i.test(section));
   assert.equal(operations.length, 1, "Expected one visible tensor operation dtype table");
-  const [header, separator, ...rows] = operations[0].slice("Tensor operations\n".length).trim().split("\n");
+  const [header, separator, ...rows] = operations[0].slice(operations[0].indexOf("\n") + 1).trim().split("\n");
   assert.equal(header, "| Operation | CPU | WebGPU |");
   assert.equal(separator, "| --- | --- | --- |");
   assert.ok(rows.length > 0, "Empty arithmetic dtype table");

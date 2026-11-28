@@ -1227,6 +1227,8 @@ export class RuntimeSession {
     return previous;
   }
 
+  tensor(data: Iterable<number> | ArrayLike<number>, options?: TensorOptions): Tensor;
+  tensor(data: TensorData, options: TensorOptions & { readonly dtype: "bool" }): Tensor;
   tensor(data: TensorData, options: TensorOptions = {}): Tensor {
     this.#assertOpen();
     if (options.requiresGrad !== undefined && typeof options.requiresGrad !== "boolean") {

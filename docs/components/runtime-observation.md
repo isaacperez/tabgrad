@@ -73,12 +73,16 @@ its shared completion record and copies them out before exposing an independent
 result. Those are distinct ownership boundaries, not a claim of one copy across
 the entire managed GPU path.
 
-Both JavaScript and Python consume this numeric boundary. Python list conversion
+JavaScript's typed mask observation and the Python bridge also expose the
+independent logical byte span as a Uint8Array. Python converts those bytes
+to built-in booleans. JavaScript's default numeric observation decodes them
+to zeros and ones in a Float32Array.
+
+Python list conversion
 still creates its own interpreter-side values; borrowed Python imports still
 copy before releasing their leases. The codec validates dtype, encoding, count,
 offset and extent before memory interpretation. Decode failures retain the
 invocation's readback context and do not release physical pins before drain.
-This internal representation adds no public raw-buffer interface or dtype.
 These copy descriptions concern explicit library data movement. Exposing a
 typed array's buffer can also materialize an engine's inline backing storage;
 views and payload metadata have their own object costs. Library copy counters
