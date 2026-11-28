@@ -81,7 +81,7 @@ workers, the page's `worker-src` must admit the CDN module graph as well as
 
 ```javascript title="python-worker.js"
 import { loadPyodide } from "https://cdn.jsdelivr.net/npm/pyodide@314.0.6/pyodide.mjs";
-import { attachPython } from "https://cdn.jsdelivr.net/npm/@tabgrad/tabgrad@0.6.0/dist/python.js";
+import { attachPython } from "https://cdn.jsdelivr.net/npm/@tabgrad/tabgrad@0.7.0/dist/python.js";
 
 // The pinned loader may leave startup pending after a native Wasm failure.
 // Observe that failure only during startup, before attaching Tabgrad.

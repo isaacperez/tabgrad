@@ -2,8 +2,26 @@
   "schemaVersion": 1,
   "releases": [
     {
-      "version": "0.6.0",
+      "version": "0.7.0",
       "source": "candidate",
+      "documentation": {
+        "directories": ["concepts", "architecture", "components", "flows"],
+        "individual": [
+          "docs/javascript-api.md", "docs/compatibility.md",
+          "docs/reference/browser-package.md", "docs/reference/python-host.md",
+          "docs/reference/python-tensors.md", "docs/reference/float16.md",
+          "docs/reference/webgpu-runtime.md", "docs/reference/memory-capacity.md",
+          "docs/reference/tensor-view.md", "docs/reference/tensor-copy.md",
+          "docs/reference/tensor-sum.md", "docs/reference/tensor-multiplication.md",
+          "docs/reference/tensor-matmul.md", "docs/reference/functional-gradients.md",
+          "docs/reference/backward-gradients.md", "docs/reference/gradient-recording.md",
+          "docs/reference/sgd.md"
+        ]
+      }
+    },
+    {
+      "version": "0.6.0",
+      "source": "9286331e875da65f796e3e05905ff23481dc1c78",
       "documentation": {
         "directories": ["concepts", "architecture", "components", "flows"],
         "individual": [

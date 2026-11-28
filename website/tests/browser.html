@@ -1021,6 +1021,10 @@ try {
         assert(/gradients, tensor mutation and SGD require float32/i.test(compactLimit), '0.6.0 keeps compact and gradient coverage distinct');
         assert(doc.querySelector('main a[href="/docs/0.6.0/compatibility/"]'), '0.6.0 links the version-owned operation compatibility page');
       }
+      if (expectedSupport.version === '0.7.0') {
+        assert(/forward-only/i.test(description('Index selection')), '0.7.0 states the gradient limit for index selection');
+        assert(doc.querySelector('main a[href="/docs/0.7.0/compatibility/"]'), '0.7.0 links its own operation compatibility page');
+      }
     }
     if (['/', '/start/', '/docs/', '/playground/', '/versions/', '/about/', '/contact/'].includes(path)) {
       assert(frame.contentDocument.querySelector('[data-illustration], .integration-map'), `primary and project pages include contextual original artwork: ${path}`);

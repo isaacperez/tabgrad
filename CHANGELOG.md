@@ -7,6 +7,35 @@ established by the corresponding verified release record.
 
 ## Unreleased
 
+## 0.7.0 - 2026-11-28
+
+### Added
+
+- Create, view and read bool tensors on CPU and WebGPU. Compare float32
+  tensors with broadcasting to produce a bool mask. Use that mask in
+  `where` to select values from two float32 tensors with support for
+  first-order branch gradients
+  ([#528](https://github.com/isaacperez/tabgrad/issues/528),
+  [#529](https://github.com/isaacperez/tabgrad/issues/529)).
+- Create and read exact int32 and int64 tensors. `argmax` returns int64
+  indices for float32, int32 and int64 sources. Both CPU and WebGPU preserve
+  the first winning position, including ties
+  ([#531](https://github.com/isaacperez/tabgrad/issues/531)).
+- Select slices with int32 or int64 indices using `index_select` in Python
+  and `indexSelect` in JavaScript. Results retain their dtype and the order
+  of indices, including repeats. This forward operation validates index
+  values when an observation or effect requires the result
+  ([#532](https://github.com/isaacperez/tabgrad/issues/532)).
+
+### Changed
+
+- The versioned compatibility table shows the new input and result types,
+  backend coverage and gradient limits for each operation.
+
+The [0.7.0 source and support record](docs/reference/release-0.7.0.md) explains
+the new operations and their limits. Replace the package, workers, WebAssembly
+and Python assets together when upgrading.
+
 ## 0.6.0 - 2026-11-27
 
 ### Added
