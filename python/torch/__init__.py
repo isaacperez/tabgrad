@@ -707,11 +707,17 @@ def where(condition: object, input: object, other: object) -> Tensor:
     ):
         raise TypeError("Tabgrad selection requires three tensors.")
     try:
-        return Tensor._from_handle(_bridge.where(condition._handle, input._handle, other._handle))  # pyright: ignore[reportPrivateUsage]
+        return Tensor._from_handle(  # pyright: ignore[reportPrivateUsage]
+            _bridge.where(condition._handle, input._handle, other._handle)  # pyright: ignore[reportPrivateUsage]
+        )
     except JsException as error:
         _raise_view_history_failure(error)
         failure = cast("_bridge.RuntimeException", error)
-        if failure.js_error.code in ("SHAPE_MISMATCH", "UNSUPPORTED_DTYPE", "UNSUPPORTED_DEVICE"):
+        if failure.js_error.code in (
+            "SHAPE_MISMATCH",
+            "UNSUPPORTED_DTYPE",
+            "UNSUPPORTED_DEVICE",
+        ):
             raise RuntimeError(str(error)) from error
         raise
 
