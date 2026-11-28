@@ -11,6 +11,8 @@ import type { ExecutableProgram, LoweredComputation, ProgramSlot, ProgramValue }
 import { WEBGPU_COEFFICIENT_UNIFORM_BYTES } from "./kernels/coefficient-addition.js";
 import { WEBGPU_MATRIX_UNIFORM_BYTES } from "./kernels/matrix-product.js";
 import { ExecutionTicket } from "../../execution/execution-ticket.js";
+import { indexSelectionBoundsError } from "../../execution/index-selection.js";
+import { INDEX_SELECTION_VALID } from "./kernels/index-selection.js";
 import { WEBGPU_RECEIVING_UNIFORM_BYTES } from "./kernels/receiving.js";
 
 // WebGPU flag values are fixed by the API. The selected DOM declarations expose
@@ -46,6 +48,8 @@ class GpuAllocation {
 interface GpuInvocationStorage {
   readonly allocations: Map<ProgramSlot, GpuAllocation>;
   readonly created: Set<GpuAllocation>;
+  indexStatus?: GpuAllocation;
+  indexValidation?: Promise<void>;
   drained?: Promise<void>;
   success: boolean;
   queuedWrites: boolean;
@@ -278,9 +282,10 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
         // tensor may use the same physical bytes with a different format.
         output.format = format;
         created.add(output); allocations.set(computation.output, output);
-        if (byteLength !== 0) {
+        const plan = plans[index]!;
+        if (plan.path === "index-selection" ? plan.dispatch.workgroups !== 0 : byteLength !== 0) {
           const inputs = computation.inputs.map((slot) => allocations.get(program.values[slot]!.storageSlot)!);
-          this.#encodeComputation(encoder, computation, program, inputs, output, storage, plans[index]!);
+          this.#encodeComputation(encoder, computation, program, inputs, output, storage, plan, index);
         }
         for (const input of computation.inputs) {
           const slot = program.values[input]!.storageSlot;
@@ -292,9 +297,17 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
           pool.push(retired); spare.set(retired.byteLength, pool);
         }
       }
+      let indexStaging: GpuAllocation | undefined;
+      if (storage.indexStatus !== undefined) {
+        indexStaging = this.#allocate(4, GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST);
+        created.add(indexStaging);
+        encoder.copyBufferToBuffer(storage.indexStatus.buffer, 0, indexStaging.buffer, 0, 4);
+      }
       this.#device.queue.submit([encoder.finish()]);
       storage.drained = this.#drain();
-      return storage.drained;
+      if (indexStaging === undefined) return storage.drained;
+      storage.indexValidation = this.#validateIndexStatus(indexStaging.buffer, program);
+      return Promise.all([storage.drained, storage.indexValidation]).then(() => undefined);
     } finally {
       // Never reuse or destroy submitted buffers merely because an error scope failed.
       // writeBuffer itself enqueues work, even if encoding fails before submit.
@@ -304,10 +317,14 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
 
   #encodeComputation(encoder: GPUCommandEncoder, computation: LoweredComputation,
     program: ExecutableProgram,
-    inputs: readonly GpuAllocation[], output: GpuAllocation, storage: GpuInvocationStorage, plan: KernelDispatchPlan): void {
+    inputs: readonly GpuAllocation[], output: GpuAllocation, storage: GpuInvocationStorage, plan: KernelDispatchPlan, ordinal: number): void {
     try {
       if (plan.path === "sum" || plan.path === "argmax") {
         this.#encodeReduction(encoder, inputs[0]!, output, storage, plan);
+        return;
+      }
+      if (plan.path === "index-selection") {
+        this.#encodeIndexSelection(encoder, inputs, output, storage, plan, ordinal);
         return;
       }
       if (plan.path === "receiving") {
@@ -352,6 +369,46 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
         backend: "webgpu", phase: "execution", programValueSlot: computation.output,
       }, cause);
     }
+  }
+
+  #encodeIndexSelection(encoder: GPUCommandEncoder, inputs: readonly GpuAllocation[], output: GpuAllocation,
+    storage: GpuInvocationStorage, plan: Extract<KernelDispatchPlan, { path: "index-selection" }>, ordinal: number): void {
+    const pipeline = this.#pipelines.get(plan.pipeline.key);
+    if (pipeline === undefined) throw new Error("WebGPU index selection was not prepared.");
+    // One word records the first invalid operation across the entire invocation.
+    const status = storage.indexStatus ??= this.#uploadParameters(Uint32Array.of(INDEX_SELECTION_VALID),
+      GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC, storage);
+    const { boundLow, boundHigh, count, inner, outputElements } = plan.bounds;
+    const parameters = this.#uploadParameters(Uint32Array.of(boundLow, boundHigh, count, inner, outputElements, ordinal, 0, 0),
+      GPUBufferUsage.UNIFORM, storage);
+    const entries = [...inputs, output, status, parameters].map((allocation, binding) => ({
+      binding, resource: { buffer: allocation.buffer },
+    }));
+    const bindGroup = this.#device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries });
+    const pass = encoder.beginComputePass();
+    pass.setPipeline(pipeline);
+    pass.setBindGroup(0, bindGroup);
+    pass.dispatchWorkgroups(plan.dispatch.x, plan.dispatch.y, plan.dispatch.z);
+    pass.end();
+    this.#kernelCalls++;
+  }
+
+  async #validateIndexStatus(staging: GPUBuffer, program: ExecutableProgram): Promise<void> {
+    await this.#awaitLive(staging.mapAsync(GPUMapMode.READ));
+    this.assertAvailable();
+    try {
+      const ordinal = new DataView(staging.getMappedRange()).getUint32(0, true);
+      if (ordinal === INDEX_SELECTION_VALID) return;
+      const computation = program.computations[ordinal];
+      if (computation?.selectionAxis === undefined) {
+        throw new TabgradError("BACKEND_STATUS_ERROR", "WebGPU returned an invalid index selection status.", {
+          backend: "webgpu", phase: "execution",
+        });
+      }
+      throw indexSelectionBoundsError(program.values[computation.inputs[0]!]!.shape, computation.selectionAxis, {
+        backend: "webgpu", device: "webgpu", phase: "execution", programValueSlot: computation.output,
+      });
+    } finally { staging.unmap(); }
   }
 
   #encodeReduction(encoder: GPUCommandEncoder, input: GpuAllocation, output: GpuAllocation, storage: GpuInvocationStorage,
@@ -431,7 +488,7 @@ export class WebGpuBackend implements WebGpuExecutionBackend {
   async #releaseInvocation(result: Promise<unknown>, storage: GpuInvocationStorage): Promise<void> {
     // Failure is delivered by result; drain failure retires the generation and
     // preserves unknown-byte accounting. Neither is interpreted as successful work.
-    await Promise.allSettled([result, storage.drained]);
+    await Promise.allSettled([result, storage.drained, storage.indexValidation]);
     const retained = storage.success ? new Set(storage.allocations.values()) : new Set<GpuAllocation>();
     for (const allocation of storage.created) if (!retained.has(allocation)) this.release(allocation);
   }

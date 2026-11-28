@@ -40,10 +40,10 @@ initializer and captures its session from the private bridge. `torch/autograd.py
 normalizes functional derivative calls through that same bridge. `torch/optim.py`
 normalizes SGD calls and owns Python optimizer wrappers, using private runtime
 leases for semantic registration and updates. The source manifest uses bridge
-protocol 8 and requires all four assets, including bootstrap. During import,
+protocol 9 and requires all four assets, including bootstrap. During import,
 the initializer reads the shared dtype metadata from the bridge to create
 Python's dtype constants and choose each dtype's buffer format.
-Schema 1 and Pyodide 314.0.6 are separate compatibility dimensions. Protocol 7 and 8 assets
+Schema 1 and Pyodide 314.0.6 are separate compatibility dimensions. Protocol 8 and 9 assets
 cannot be mixed: migrate or roll back the matching distribution as a whole.
 Package import does not establish PyTorch operation coverage. That requires the separate
 operation contracts and [compatibility evidence](../compatibility.md).

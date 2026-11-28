@@ -461,9 +461,34 @@ class Tensor:
                 raise RuntimeError(str(error)) from error
             raise
 
+    def index_select(self: object, dim: object, index: object) -> Tensor:
+        """Select values in index order along one axis."""
+        if not isinstance(self, Tensor) or not isinstance(index, Tensor):
+            raise TypeError("index_select requires an input and an index tensor.")
+        axis = _require_axis(dim, len(self.shape))
+        try:
+            return Tensor._from_handle(self._handle.indexSelect(axis, index._handle))
+        except JsException as error:
+            _raise_index_selection_bounds(error)
+            failure = cast("_bridge.RuntimeException", error)
+            if failure.js_error.code in {
+                "INVALID_SHAPE",
+                "UNSUPPORTED_DTYPE",
+                "UNSUPPORTED_GRADIENT",
+                "UNSUPPORTED_DEVICE",
+                "DIFFERENT_SESSION",
+            }:
+                raise RuntimeError(str(error)) from error
+            raise
+
     def tolist(self) -> TensorList:
         """Observe owned tensor values within the binding's managed script."""
-        with _bridge.observe(self._handle).to_py() as values:
+        try:
+            observed = _bridge.observe(self._handle)
+        except JsException as error:
+            _raise_index_selection_bounds(error)
+            raise
+        with observed.to_py() as values:
             selected = self.dtype
             return _nested_values(
                 values, self.shape, _dtype_facts[id(selected)]["typecode"]
@@ -563,6 +588,14 @@ def _raise_view_history_failure(error: JsException) -> None:
     """Translate native view-history guards shared by tensor operations."""
     failure = cast("_bridge.RuntimeException", error)
     if failure.js_error.code == "INPLACE_VIEW":
+        raise RuntimeError(str(error)) from error
+
+
+def _raise_index_selection_bounds(error: JsException) -> None:
+    failure = cast("_bridge.RuntimeException", error)
+    if failure.js_error.code == "INDEX_OUT_OF_BOUNDS":
+        if failure.js_error.details.reason == "index":
+            raise IndexError(str(error)) from error
         raise RuntimeError(str(error)) from error
 
 
@@ -790,6 +823,17 @@ def argmax(
     return input.argmax(dim, keepdim)
 
 
+def index_select(
+    input: object, dim: object, index: object, *, out: object = None
+) -> Tensor:
+    """Select slices with an int32 or int64 tensor of indices."""
+    if not isinstance(input, Tensor) or not isinstance(index, Tensor):
+        raise TypeError("index_select requires an input and an index tensor.")
+    if out is not None:
+        raise RuntimeError("Tabgrad index_select requires out=None.")
+    return input.index_select(dim, index)
+
+
 def where(condition: object, input: object, other: object) -> Tensor:
     """Select elements from two float32 tensors using a boolean tensor."""
     if (
@@ -892,6 +936,7 @@ __all__ = [
     "device",
     "dtype",
     "gt",
+    "index_select",
     "matmul",
     "mul",
     "no_grad",

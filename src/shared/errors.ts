@@ -18,6 +18,7 @@ export type TabgradErrorCode =
   | "DIFFERENT_SESSION"
   | "INVALID_DATA"
   | "INVALID_SHAPE"
+  | "INDEX_OUT_OF_BOUNDS"
   | "MUTATION_FAILED"
   | "INPLACE_VIEW"
   | "OVERLAPPING_COPY"

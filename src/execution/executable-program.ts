@@ -30,6 +30,7 @@ export interface LoweredComputation {
   /** Captured orientation, when required by the family. */
   readonly matrixFlags?: number;
   readonly reduction?: AxisReduction;
+  readonly selectionAxis?: number;
   /** Ordered operand occurrences, including repeats; arity belongs to the operation. */
   readonly inputs: readonly ProgramSlot[];
   readonly output: ProgramSlot;
@@ -121,8 +122,21 @@ function assertAxisReduction(family: Extract<OperationFamily, { geometry: "axis-
   }
 }
 
+function assertIndexSelection(family: Extract<OperationFamily, { geometry: "index-selection" }>,
+  values: readonly ProgramValue[], computation: LoweredComputation): void {
+  const [source, indices] = computation.inputs.map(slot => values[slot]!);
+  const output = values[computation.output]!;
+  const axis = normalizeAxis(computation.selectionAxis!, source!.shape.length);
+  const { shape } = family.plan(source!.shape, indices!.shape, axis);
+  if (output.source !== "computed" || output.storageSlot !== output.slot
+    || output.storageSlot === source!.storageSlot || output.storageSlot === indices!.storageSlot
+    || output.shape.length !== shape.length || output.shape.some((size, dimension) => size !== shape[dimension])) {
+    throw new TypeError("Index selection output must own distinct storage with its captured shape and device.");
+  }
+}
+
 export class ExecutableProgram {
-  readonly formatVersion = 9;
+  readonly formatVersion = 10;
   readonly domain: "webassembly-cpu" | "webgpu";
   readonly values: readonly ProgramValue[];
   readonly computations: readonly LoweredComputation[];
@@ -152,7 +166,7 @@ export class ExecutableProgram {
       computations.map((computation) => {
         const captured = { ...computation };
         const { family, types } = requireComputationSignature(captured.kind);
-        assertComputationParameters(family, captured.alphaBits, captured.matrixFlags, captured.reduction);
+        assertComputationParameters(family, captured.alphaBits, captured.matrixFlags, captured.reduction, captured.selectionAxis);
         if (captured.reduction !== undefined) {
           captured.reduction = Object.freeze({ axis: captured.reduction.axis, keepDim: captured.reduction.keepDim });
         }
@@ -172,6 +186,8 @@ export class ExecutableProgram {
           assertMatrixComputation(family, this.values, captured);
         } else if (family.geometry === "axis-reduction") {
           assertAxisReduction(family, this.values, captured);
+        } else if (family.geometry === "index-selection") {
+          assertIndexSelection(family, this.values, captured);
         } else if (family.geometry !== "produced") {
           assertShapedComputation(family, this.values, captured);
         }

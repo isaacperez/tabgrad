@@ -395,7 +395,7 @@ bytecode settings, and cleanup restricted to exact owned modules, registrations,
 files, paths and finders. Host replacements survive; retained old modules stay
 tied to their old closed session.
 
-The private bridge uses protocol 8 with matching builder, loader and
+The private bridge uses protocol 9 with matching builder, loader and
 documentation; schema 1 and Pyodide 314.0.6 remain independent compatibility
 dimensions. Artifacts with different bridge protocols reject one another
 before Python executes. Migration and rollback

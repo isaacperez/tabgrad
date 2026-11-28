@@ -57,6 +57,7 @@ function capturedProgram(kind) {
   const { family, types } = computationSignature(kind) ?? computationSignature("add-f32");
   const shapes = family.geometry === "scalar" ? [[3], []]
     : family.geometry === "axis-reduction" ? [[2, 2], [2]]
+      : family.geometry === "index-selection" ? [[2, 2], [3], [2, 3]]
       : kind === "expand-f32" ? [[], [3]]
       : kind === "reduce-f32" ? [[2, 3], [1, 3]]
         : Array.from({ length: family.arity + 1 }, () => [2, 2]);
@@ -68,7 +69,8 @@ function capturedProgram(kind) {
     computations: [{ kind, inputs: shapes.slice(0, -1).map((_, slot) => slot), output, provenance,
       ...(kind === "add-alpha-f32" ? { alphaBits: 0x3f800000 } : {}),
       ...(family.geometry === "matrix" ? { matrixFlags: 0 } : {}),
-      ...(family.geometry === "axis-reduction" ? { reduction: { axis: 1, keepDim: false } } : {}) }],
+      ...(family.geometry === "axis-reduction" ? { reduction: { axis: 1, keepDim: false } } : {}),
+      ...(family.geometry === "index-selection" ? { selectionAxis: 1 } : {}) }],
     result: output,
   };
 }
@@ -81,6 +83,23 @@ test("axis reduction reconstructs and owns its parameters and rejects an inconsi
   assert.ok(Object.isFrozen(program.computations[0].reduction));
   computations[0].reduction.keepDim = true;
   assert.throws(() => new ExecutableProgram(values, computations, result), /Axis reduction output/);
+});
+
+test("index selection reconstructs its source, index rank and distinct result shape", () => {
+  const original = capturedProgram("index-select-i64-i32");
+  const reconstruct = ({ values, computations, result }) => new ExecutableProgram(values, computations, result);
+  assert.equal(reconstruct(original).computations[0].selectionAxis, 1);
+  for (const axis of [-1, 2, 1.25, undefined]) {
+    const capture = structuredClone(original);
+    capture.computations[0].selectionAxis = axis;
+    assert.throws(() => reconstruct(capture), /axis|Dimension/);
+  }
+  const shape = structuredClone(original);
+  shape.values[shape.result].shape = [3, 2];
+  assert.throws(() => reconstruct(shape), /Index selection output/);
+  const indices = structuredClone(original);
+  indices.values[1].shape = [1, 3];
+  assert.throws(() => reconstruct(indices), /one-dimensional index/);
 });
 
 for (const kind of Object.keys(COMPUTATION_SIGNATURES)) {

@@ -24,6 +24,7 @@ export interface FormationValue<Value> {
     readonly alphaBits?: number | undefined;
     readonly matrixFlags?: number | undefined;
     readonly reduction?: LoweredComputation["reduction"];
+    readonly selectionAxis?: number | undefined;
   } | null;
 }
 
@@ -120,6 +121,7 @@ export function formExecutableProgram<Value extends FormationValue<Value>>(
         ...(producer.alphaBits === undefined ? {} : { alphaBits: producer.alphaBits }),
         ...(producer.matrixFlags === undefined ? {} : { matrixFlags: producer.matrixFlags }),
         ...(producer.reduction === undefined ? {} : { reduction: producer.reduction }),
+        ...(producer.selectionAxis === undefined ? {} : { selectionAxis: producer.selectionAxis }),
         inputs: producer.inputs.map((input) => slots.get(input)!),
         output: slot,
         provenance: producer.provenance,

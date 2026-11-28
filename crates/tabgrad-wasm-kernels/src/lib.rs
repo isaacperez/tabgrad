@@ -10,6 +10,7 @@ mod coefficient_addition;
 mod comparison;
 mod expansion;
 mod fused_multiply_add;
+mod index_selection;
 mod matrix_product;
 mod matrix_product_packed;
 mod multiplication;

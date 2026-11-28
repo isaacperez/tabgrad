@@ -248,6 +248,14 @@ failure already thrown by an explicit tensor close. Logical ownership ending
 does not prove physical reclamation: unacknowledged GPU cleanup remains a
 failure with unknown physical completion, not a successful close.
 
+Use `input.indexSelect(dim, indices)` to select slices along an axis. It accepts
+contiguous float32, int32 and int64 sources and a scalar or vector of int32 or
+int64 indices. Inputs must share the runtime session and device. The result
+retains the source dtype, order of selection and repeated entries. Read signed
+integer results with `toArray({ format: "typed" })`. Selection is forward-only.
+Payload bounds errors are reported by a dependent observation or effect.
+See the [shape and bounds reference](reference/python-tensors.md#select-values-along-an-axis).
+
 ## Select a manifest location
 
 The [package installation reference](reference/browser-package.md) describes
@@ -305,6 +313,7 @@ invocation's program or provenance.
 | `CLOSED_SESSION`, `CLOSED_TENSOR` | An operation used an explicitly closed lifetime. |
 | `DIFFERENT_SESSION`, `INVALID_TENSOR` | An operation mixed sessions or received something other than a Tabgrad tensor handle. |
 | `INVALID_DATA`, `INVALID_SHAPE` | Input data or its contiguous shape is invalid. |
+| `INDEX_OUT_OF_BOUNDS` | An index value is outside the selected axis. A dependent observation or effect may report the error. |
 | `SHAPE_MISMATCH` | Binary operand shapes or a gradient seed and output shape differ. |
 | `GRADIENT_NOT_TRACKED`, `UNUSED_INPUT`, `INVALID_GRADIENT`, `UNSUPPORTED_GRADIENT`, `CONSUMED_HISTORY` | A functional derivative request violates its [tracking, seed or history contract](reference/functional-gradients.md). |
 | `UNSUPPORTED_DTYPE`, `UNSUPPORTED_DEVICE`, `UNSUPPORTED_LAYOUT` | Metadata is outside the table above. |

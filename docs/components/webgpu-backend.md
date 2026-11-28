@@ -192,3 +192,17 @@ Exact diagnostics and public limits are in the
 [WebGPU runtime reference](../reference/webgpu-runtime.md). Allocation accounting
 and structural bounds do not replace measured latency, memory peaks or
 browser/adapter qualification.
+
+## Validate indexed reads before publication
+
+Index selection uses checked address geometry shared with CPU. A fused dispatch
+validates the full signed index before the load and copies the selected bits
+in their original representation. Empty results with nonempty indices dispatch
+a bounds-only check even when their logical axis length exceeds 32 bits.
+
+All selection dispatches in an invocation share one private four-byte status
+word. The first failing operation is reported after a single staging map.
+The GPU ticket waits for validation before returning any new resident
+allocation. The owner joins mapping and queue completion before retiring
+temporary buffers. In a composition with argmax, only the status is read
+for validation. The intermediate index tensor remains on the device.

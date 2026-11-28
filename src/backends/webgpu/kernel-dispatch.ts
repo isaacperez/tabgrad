@@ -6,6 +6,7 @@ import { pointwiseParameters, receivingParameters, receivingStages, type Broadca
 import { planLinearDispatch, type LinearDispatch, type LinearDispatchLayout } from "./linear-dispatch.js";
 import { reductionStages, type ReductionStage } from "./reduction-stages.js";
 import { webGpuKernel, type PhysicalKernel, type PipelineSelection, type UniformParameters } from "./kernel-catalogue.js";
+import { indexSelectionGeometry } from "../../execution/index-selection.js";
 import { axisReductionGeometry } from "../../execution/axis-geometry.js";
 import { ARGMAX_GROUP_TERMS, ARGMAX_PARTIAL_BYTES } from "./kernels/argmax.js";
 
@@ -33,6 +34,8 @@ export type KernelDispatchPlan =
       readonly uniform: UniformParameters | undefined }
   | { readonly path: "pointwise"; readonly dispatch: LinearDispatch; readonly pipeline: PipelineSelection; readonly words: Uint32Array }
   | { readonly path: "sum"; readonly stages: readonly SumStage[] }
+  | { readonly path: "index-selection"; readonly dispatch: LinearDispatch; readonly pipeline: PipelineSelection;
+      readonly bounds: ReturnType<typeof indexSelectionGeometry> }
   | { readonly path: "argmax"; readonly stages: readonly SumStage[]; readonly inner: number }
   | { readonly path: "receiving"; readonly stages: readonly ReceivingStage[]; readonly words: Uint32Array;
       readonly terms: number; readonly groups: number; readonly pipeline: PipelineSelection };
@@ -94,6 +97,13 @@ export function planKernelDispatch(computation: LoweredComputation, program: Exe
       });
       return { path: "argmax", stages, inner };
     }
+    case "index-selection": {
+      const bounds = indexSelectionGeometry(program.values[computation.inputs[0]!]!.shape,
+        program.values[computation.inputs[1]!]!.shape, computation.selectionAxis!);
+      const kernel = registration.direct;
+      const dispatch = planLinearDispatch(bounds.outputElements || bounds.count, kernel.indexSpace, axis);
+      return { path: "index-selection", dispatch, bounds, pipeline: selectPipeline(kernel, dispatch.layout) };
+    }
     case "receiving": {
       const projection = receivingGeometry(pointwiseGeometry([program.values[computation.inputs[0]!]!.shape, output.shape]), 1);
       return { path: "receiving", stages: receivingStages(projection, limits), words: receivingParameters(projection, limits),
@@ -103,5 +113,6 @@ export function planKernelDispatch(computation: LoweredComputation, program: Exe
 }
 
 export function requestedPipelines(plan: KernelDispatchPlan): readonly PipelineSelection[] {
-  return plan.path === "sum" || plan.path === "argmax" ? plan.stages.map(stage => stage.pipeline) : [plan.pipeline];
+  if (plan.path === "sum" || plan.path === "argmax") return plan.stages.map(stage => stage.pipeline);
+  return plan.path === "index-selection" && plan.dispatch.workgroups === 0 ? [] : [plan.pipeline];
 }

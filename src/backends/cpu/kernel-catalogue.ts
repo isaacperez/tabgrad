@@ -1,7 +1,7 @@
 import type { ComputationKind } from "../../execution/operation-contracts.js";
 
 export const CPU_ABI_VERSION = 1;
-export const CPU_MODULE_VERSION = 15;
+export const CPU_MODULE_VERSION = 16;
 
 interface Capability {
   readonly name: string;
@@ -15,7 +15,7 @@ interface KernelSymbol<Name extends string = string, Arity extends number = numb
 }
 
 const ABI_ARITY = Object.freeze({ pointwise: 4, broadcast: 5, ternaryPointwise: 5, ternaryBroadcast: 6, inputLength: 3, outputLength: 3,
-  coefficient: 5, matrix: 7, receiving: 4, axisReduction: 5 } as const);
+  coefficient: 5, matrix: 7, receiving: 4, axisReduction: 5, indexSelection: 8 } as const);
 type PointwiseLayout = "pointwise" | "ternaryPointwise";
 type SingleLayout = Exclude<keyof typeof ABI_ARITY, PointwiseLayout | "broadcast" | "ternaryBroadcast">;
 
@@ -46,6 +46,11 @@ const POINTWISE_BFLOAT16 = capability("pointwise-bf16", 2048);
 const POINTWISE_GT = capability("gt-f32", 16384);
 const POINTWISE_WHERE = capability("where-f32", 32768);
 const ARGMAX = capability("argmax", 65536);
+const INDEX_SELECTION = capability("index-selection", 131072);
+const selectU32I32 = kernel("indexSelection", "tabgrad_index_select_u32_i32", INDEX_SELECTION);
+const selectU32I64 = kernel("indexSelection", "tabgrad_index_select_u32_i64", INDEX_SELECTION);
+const selectU64I32 = kernel("indexSelection", "tabgrad_index_select_u64_i32", INDEX_SELECTION);
+const selectU64I64 = kernel("indexSelection", "tabgrad_index_select_u64_i64", INDEX_SELECTION);
 
 // Every CPU specialization declares its external symbols and calling layout here.
 const declarations = Object.freeze({
@@ -74,6 +79,12 @@ const declarations = Object.freeze({
   "argmax-f32": kernel("axisReduction", "tabgrad_argmax_f32", ARGMAX),
   "argmax-i32": kernel("axisReduction", "tabgrad_argmax_i32", ARGMAX),
   "argmax-i64": kernel("axisReduction", "tabgrad_argmax_i64", ARGMAX),
+  "index-select-f32-i32": selectU32I32,
+  "index-select-f32-i64": selectU32I64,
+  "index-select-i32-i32": selectU32I32,
+  "index-select-i32-i64": selectU32I64,
+  "index-select-i64-i32": selectU64I32,
+  "index-select-i64-i64": selectU64I64,
 } satisfies Partial<Record<ComputationKind, CpuKernelDeclaration>>);
 
 export const CPU_COMPUTATIONS: readonly (keyof typeof declarations)[] = Object.freeze(
@@ -87,13 +98,15 @@ export function cpuKernel(kind: ComputationKind): RegisteredKernel | undefined {
   return catalogue[kind];
 }
 
-const kernelSymbols: KernelSymbol[] = [];
+const kernelSymbols = new Set<KernelSymbol>();
 for (const declaration of Object.values(declarations)) {
-  if ("dense" in declaration) kernelSymbols.push(declaration.dense, declaration.broadcast);
-  else kernelSymbols.push(declaration.symbol);
+  if ("dense" in declaration) {
+    kernelSymbols.add(declaration.dense);
+    kernelSymbols.add(declaration.broadcast);
+  } else kernelSymbols.add(declaration.symbol);
 }
 // Capability bits define a stable order across module profiles.
-kernelSymbols.sort((left, right) => left.capability.bit - right.capability.bit || left.arity - right.arity);
+const orderedSymbols = [...kernelSymbols].sort((left, right) => left.capability.bit - right.capability.bit || left.arity - right.arity);
 
 const capabilityBits = new Map<string, number>();
 const namesByBit = new Map<number, string>();
@@ -111,7 +124,7 @@ export type KernelExports = WebAssembly.Exports & {
 
 const exportArities = new Map<string, number>(bootstrapExports);
 let requiredMask = 0;
-for (const { name, arity, capability: { name: capabilityName, bit } } of kernelSymbols) {
+for (const { name, arity, capability: { name: capabilityName, bit } } of orderedSymbols) {
   if (exportArities.has(name)) throw new TypeError(`Duplicate CPU kernel export ${name}.`);
   if (!Number.isInteger(bit) || bit < 1 || bit > 0x8000_0000 || (bit & (bit - 1)) !== 0
     || (capabilityBits.has(capabilityName) && capabilityBits.get(capabilityName) !== bit)

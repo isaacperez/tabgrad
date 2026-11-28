@@ -17,9 +17,9 @@ export interface TensorMetadata {
 }
 
 export interface NumericalOperationDefinition {
-  readonly name: "add" | "mul" | "sum" | "expand" | "matmul" | "reduce" | "gt" | "where" | "where-mask-gradient" | "argmax";
+  readonly name: "add" | "mul" | "sum" | "expand" | "matmul" | "reduce" | "gt" | "where" | "where-mask-gradient" | "argmax" | "index_select";
   readonly provenanceSource: "Tensor.add" | "Tensor.mul" | "Tensor.sum" | "Tensor.matmul" | "Tensor.gt" | "RuntimeSession.where"
-    | "DerivativeHistory.sum" | "DerivativeHistory.receive" | "DerivativeHistory.where" | "SGD.step" | "Tensor.argmax";
+    | "DerivativeHistory.sum" | "DerivativeHistory.receive" | "DerivativeHistory.where" | "SGD.step" | "Tensor.argmax" | "Tensor.indexSelect";
   readonly loweredKind: LoweredComputation["kind"];
   readonly pure: true;
 }
@@ -75,8 +75,9 @@ export class OperationRecord<Definition extends NumericalOperationDefinition = N
     readonly alphaBits?: number,
     readonly matrixFlags?: number,
     reduction?: AxisReduction,
+    readonly selectionAxis?: number,
   ) {
-    assertComputationParameters(requireComputationSignature(definition.loweredKind).family, alphaBits, matrixFlags, reduction);
+    assertComputationParameters(requireComputationSignature(definition.loweredKind).family, alphaBits, matrixFlags, reduction, selectionAxis);
     this.reduction = reduction === undefined ? undefined : Object.freeze({ ...reduction });
     this.definition = definition;
     this.inputs = Object.freeze([...inputs]);
