@@ -9,10 +9,11 @@ progress or a product roadmap.
 
 The tables summarize the finite set of PyTorch call forms Tabgrad supports.
 The linked references describe exact signatures, shapes and gradients.
-Python requires an explicit `torch.float32`, `torch.float16`, `torch.bfloat16`
-or `torch.bool` when creating a tensor. The [JavaScript API](javascript-api.md)
-accepts the corresponding names and defaults to `"float32"`. The table lists
-admitted operand and result types for each device.
+Python tensor creation requires an explicit dtype. Use `torch.float32`,
+`torch.float16`, `torch.bfloat16`, `torch.bool`, `torch.int32` or `torch.int64`.
+The [JavaScript API](javascript-api.md) accepts the corresponding names and
+defaults to `"float32"`. The table lists admitted operand and result types for
+each device.
 
 ### Tensor operations
 

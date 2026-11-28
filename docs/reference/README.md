@@ -70,6 +70,9 @@ recording, alias versions, derivative guards and deferred failure.
 Use [Gradient recording scopes](gradient-recording.md) for Python `no_grad`,
 JavaScript callbacks, shared mode restoration and special-view tracking.
 
+Use the [0.7.0 source and support record](release-0.7.0.md) for boolean
+masks, exact signed integers, argmax and index selection.
+
 Use the [0.6.0 source and support record](release-0.6.0.md) for float16
 and bfloat16 reductions and matrix products, and the compatibility matrix.
 
