@@ -296,6 +296,77 @@ with independent references and ordinary supported calls against the pinned
 native environment. Reconsider the design if representative kernel measurements
 show a material cost or if the compatibility contract changes.
 
+## Boolean masks and selection
+
+The [boolean mask decision](https://github.com/isaacperez/tabgrad/issues/527#issuecomment-7223499341)
+defines a first slice of comparison and selection. The operation references
+and versioned compatibility record identify the available implementations.
+
+Explicit `bool` construction accepts the supported dense, rectangular inputs.
+Both signs of numeric zero produce false. Nonzero numbers, NaN and infinities
+produce true. Python normalizes the original value before transport, so a
+binary64 subnormal or an integer outside machine range keeps its truth value.
+Shape-only views keep the ordinary storage lifetime. Bool tensors reject
+gradient requests. Python `tolist()` returns built-in booleans, including a
+single boolean for a rank-zero tensor. JavaScript `toArray()` returns a
+`Float32Array` of zeros and ones for bool. The explicit
+`toArray({ format: "typed" })` returns a `Uint8Array` of zeros and ones for
+bool and a `Float32Array` for the floating dtypes. Validate observation
+options before executing a deferred tensor.
+
+The operation contracts admit same-device contiguous tensors, including
+rank-zero tensors, empty dimensions and broadcasting:
+
+| Operation | Inputs → result | Behavior |
+| --- | --- | --- |
+| `torch.gt`, `Tensor.gt`, Python tensor `>` | `float32, float32 → bool` | False if either operand is NaN. Both zero signs compare equal. Order finite values, including subnormals, and infinities. Even tracked operands produce an untracked result with zero derivative edges. JavaScript exposes `Tensor.gt(other)`. |
+| `torch.where(condition, input, other)` | `bool, float32, float32 → float32` | Broadcast the three operands and select the stored value from the chosen branch. Preserve its signed zero, finite value, infinity or NaN classification. NaN payload identity is outside this contract. JavaScript exposes `RuntimeSession.where(condition, input, other)`. |
+
+The first slice covers out-of-place tensor forms. Scalar overloads, `out`,
+compact floats, bool comparison operands and selection branches, promotion,
+deprecated byte conditions, one-argument `where`, cross-device forms and
+mutation require separate contracts.
+
+For float32 branch gradients, capture the mask as a saved value with no
+derivative edge. It remains available after its public handle closes. Later
+changes to the comparison inputs or branches do not enter the saved mask.
+For each tracked branch, select the incoming seed or positive zero and then
+receive that contribution into the original branch shape. The selection
+preserves a selected negative zero and isolates an unselected NaN. Both
+contributions accumulate when the branches share an input. Apply the current
+first-order gradient lifetime and reservation rules to local contributions and
+receiving reductions. Exact-shape receiving performs no sum. Receiving that
+changes shape uses the existing
+[backend-specific group sum](broadcasting.md#numerical-meaning-of-each-receiving-group), including
+projections that remove a singleton axis. For example, for a true mask of
+shape `[4]` and a branch of shape `[1]`, the float32 seed
+`[1e20, 1, -1e20, 1]` produces a branch gradient of 1 in the pinned PyTorch
+reference, 0 on CPU and 2 on WebGPU under these receiving rules.
+
+One canonical descriptor owns the byte encoding, with 0 or 1 per element.
+CPU stores those bytes directly. WebGPU addresses four elements per
+`u32` word. A producer owns its whole output word and clears tail padding.
+Transfer the logical extent using the existing four-byte buffer alignment.
+Observe the logical bytes through the shared codec. The existing floating
+paths retain their copies and transport. A prototype demonstrated the packed
+format with roughly one quarter of the mask storage of a word per value.
+Its observed wall-clock timings overlap, so production performance requires
+separate qualification.
+
+Resolve operation signatures and arity before numerical execution. Reuse the
+immutable program validation, checked broadcasting and resource ownership.
+Keep the binary physical packet unchanged. The ternary binding uses a checked
+projection for each operand and the same shape rules. Select specialized
+CPU and WebGPU kernels before iterating. Compare stored float32 bits in
+portable WebGPU code to establish the exceptional and subnormal behavior.
+Selection and the gradient routing select stored bits directly, including
+when the other branch is nonfinite.
+
+The pinned PyTorch and physical GPU evidence, independent reasoning, and
+alternatives are recorded in
+[#527](https://github.com/isaacperez/tabgrad/issues/527). Qualification of the
+published runtime belongs to the implementation issues.
+
 ## Preserve derivative and protocol domains
 
 The float32 derivative domain retains its history, implicit seeds, zeros,
