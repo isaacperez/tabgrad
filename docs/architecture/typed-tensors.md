@@ -420,7 +420,7 @@ inventory identify which parts of this contract have qualified implementations.
   int32 and int64 inputs and returns a new same-device int64 tensor without derivative
   history, including for a float32 input that is tracked.
 - An explicit signed axis is normalized against rank. Python takes an int or int
-  subclass, with bool and generic __index__ objects rejected. Python checks overflow and
+  subclass, with bool and generic `__index__` objects rejected. Python checks overflow and
   rank before transport. Values outside signed int64 raise ValueError and values within
   that range but outside the rank raise IndexError. Keepdim takes a bool. Native PyTorch
   also admits a rank-zero integer tensor as dim. This slice explicitly excludes that
