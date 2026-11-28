@@ -26,7 +26,7 @@ import { resolveTensorType, GRADIENT_STATE_TYPES,
 import { WebGpuBackend, type WebGpuDiagnostics, type WebGpuExecutionBackend } from "../backends/webgpu/webgpu-backend.js";
 export type { TensorDevice } from "../execution/backend.js";
 import { DerivativeHistory, type DerivativeNode, type DerivativePlan, type DerivativeRecipe } from "./autograd/derivative-history.js";
-import { COPY_DERIVATIVE, COPY_SLICES_DERIVATIVE, REBASED_VIEW_DERIVATIVE, IDENTITY_DERIVATIVE, POINTWISE_PASS_DERIVATIVE, MUL_DERIVATIVE, MATMUL_DERIVATIVE, SUM_DERIVATIVE, hasCanonicalDerivativeControls } from "./autograd/derivative-recipes.js";
+import { COPY_DERIVATIVE, COPY_SLICES_DERIVATIVE, REBASED_VIEW_DERIVATIVE, IDENTITY_DERIVATIVE, POINTWISE_PASS_DERIVATIVE, MUL_DERIVATIVE, MATMUL_DERIVATIVE, SUM_DERIVATIVE, WHERE_DERIVATIVE, hasCanonicalDerivativeControls } from "./autograd/derivative-recipes.js";
 import { MatrixShapeError } from "../execution/matrix-geometry.js";
 import { BroadcastCapacityError, type BroadcastGeometry, type ReceivingGeometry } from "../execution/broadcast-geometry.js";
 import { pointwiseDerivative, hasCanonicalPointwiseControls } from "./autograd/pointwise-derivative.js";
@@ -786,6 +786,17 @@ const RECEIVE_OPERATION: NumericalOperationDefinition = Object.freeze({
   name: "reduce", provenanceSource: "DerivativeHistory.receive", loweredKind: "reduce-f32", pure: true,
 });
 
+const WHERE_OPERATION = Object.freeze({
+  name: "where", provenanceSource: "RuntimeSession.where", loweredKind: "where-f32", pure: true,
+} as const satisfies NumericalOperationDefinition);
+const WHERE_GRADIENT_OPERATIONS = Object.freeze({
+  then: Object.freeze({ name: "where-mask-gradient", provenanceSource: "DerivativeHistory.where",
+    loweredKind: "where-then-gradient-f32", pure: true } as const),
+  else: Object.freeze({ name: "where-mask-gradient", provenanceSource: "DerivativeHistory.where",
+    loweredKind: "where-else-gradient-f32", pure: true } as const),
+} satisfies Record<string, NumericalOperationDefinition>);
+type SelectionOperation = typeof WHERE_OPERATION | (typeof WHERE_GRADIENT_OPERATIONS)[keyof typeof WHERE_GRADIENT_OPERATIONS];
+
 /** Canonical metadata admission; a view introduces no numerical dependency. */
 class ViewOperationDefinition {
   readonly derivative = IDENTITY_DERIVATIVE;
@@ -1227,6 +1238,25 @@ export class RuntimeSession {
     return previous;
   }
 
+  /** Select from two float32 tensors with a broadcast-compatible boolean mask. */
+  where(condition: Tensor, input: Tensor, other: Tensor): Tensor {
+    this.#assertOpen();
+    if (arguments.length !== 3) throw new TypeError("RuntimeSession.where() requires exactly three tensor arguments.");
+    const mask = requireTensorState(condition);
+    const left = requireTensorState(input);
+    const right = requireTensorState(other);
+    const states = [mask, left, right];
+    for (const state of states) {
+      assertTensorOpen(state);
+      if (state.session !== this) throw new TabgradError("DIFFERENT_SESSION", "Selection inputs must belong to this session.");
+    }
+    const admitted = this.#admitSelection(WHERE_OPERATION, states.map(state => state.value));
+    const history = this.#recording && (left.requiresGrad || right.requiresGrad)
+      ? this.#history.record(admitted.outputMetadata.shape, pointwiseDerivative(WHERE_DERIVATIVE, admitted.broadcast),
+        [null, left.history, right.history], admitted.record.inputs) : null;
+    return this.#recordOperation(admitted, history);
+  }
+
   tensor(data: Iterable<number> | ArrayLike<number>, options?: TensorOptions): Tensor;
   tensor(data: TensorData, options: TensorOptions & { readonly dtype: "bool" }): Tensor;
   tensor(data: TensorData, options: TensorOptions = {}): Tensor {
@@ -1599,6 +1629,10 @@ export class RuntimeSession {
       rebase: (value: Tensor, shape: readonly number[]) => this.#rebaseDerivative(value, shape),
       add: (left: Tensor, right: Tensor) => this.#combineIncoming(left, right),
       mul: (left: Tensor, right: Tensor) => this.noGrad(() => left.mul(right)),
+      selectMask: (mask: Tensor, incoming: Tensor, whenTrue: boolean) => this.#recordOperation(this.#admitSelection(
+        whenTrue ? WHERE_GRADIENT_OPERATIONS.then : WHERE_GRADIENT_OPERATIONS.else,
+        [requireTensorState(mask).value, requireTensorState(incoming).value],
+      )),
       matmul: (left: Tensor, right: Tensor, transpose: "left" | "right") => this.noGrad(() => this.#binary(
         transpose === "left" ? MATMUL_LEFT_TRANSPOSED_OPERATION : MATMUL_RIGHT_TRANSPOSED_OPERATION,
         requireTensorState(left), right,
@@ -2103,21 +2137,45 @@ export class RuntimeSession {
     return result;
   }
 
+  #admitSelection(definition: SelectionOperation, inputs: readonly TensorValue[]): AdmittedOperation & { readonly broadcast: BroadcastGeometry } {
+    const { device, layout } = inputs[0]!;
+    for (const input of inputs) {
+      if (input.device !== device) throw new TabgradError("UNSUPPORTED_DEVICE", "Selection inputs must use the same device.");
+      if (input.layout !== "contiguous") throw new TabgradError("UNSUPPORTED_LAYOUT", "Selection inputs must be contiguous.");
+    }
+    const dtype = this.#requireComputation(inputs, definition);
+    const shapes = inputs.map(input => input.shape);
+    let broadcast: BroadcastGeometry;
+    try { broadcast = COMPUTATION_SIGNATURES[definition.loweredKind].family.plan(shapes); }
+    catch (error) {
+      throw new TabgradError(error instanceof BroadcastCapacityError ? "RESOURCE_EXHAUSTED" : "SHAPE_MISMATCH",
+        "Selection requires broadcast-compatible shapes and safe element arithmetic.", { operation: definition.name, shapes }, error);
+    }
+    const outputMetadata = { shape: broadcast.shape, dtype, device, layout };
+    this.#checkOutputCapacity(definition, outputMetadata);
+    this.#checkCapturedAdmission(inputs, broadcast.shape);
+    return { broadcast, record: new OperationRecord(definition, inputs), outputMetadata };
+  }
+
+  #checkOutputCapacity(definition: NumericalOperationDefinition, metadata: TensorMetadata): void {
+    const backend = this.#backendFor(metadata.device, definition.name);
+    const bytes = tensorElementCount(metadata.shape) * tensorDType(metadata.dtype).bytesPerElement;
+    if (!Number.isSafeInteger(bytes) || bytes > backend.capabilities.maximumTensorBytes) {
+      throw new TabgradError("RESOURCE_EXHAUSTED", "Operation output exceeds the selected device's tensor limit.", {
+        operation: definition.name, device: metadata.device, byteLength: bytes,
+        maximumTensorBytes: backend.capabilities.maximumTensorBytes,
+      });
+    }
+  }
+
   #binary(definition: BinaryOperationDefinition, left: TensorState, rightHandle: unknown): Tensor {
     this.#assertOpen();
     const admitted = definition.admit(this, left, rightHandle);
     definition = admitted.record.definition;
     this.#requireBackendComputation(admitted.record.inputs[0]!, definition);
     if (definition.matrixFlags !== undefined || admitted.broadcast !== undefined) {
-      const backend = this.#backendFor(admitted.outputMetadata.device, definition.name);
       // Capacity admission owns unrepresentable extents before a physical span exists.
-      const bytes = tensorElementCount(admitted.outputMetadata.shape) * tensorDType(admitted.outputMetadata.dtype).bytesPerElement;
-      if (!Number.isSafeInteger(bytes) || bytes > backend.capabilities.maximumTensorBytes) {
-        throw new TabgradError("RESOURCE_EXHAUSTED", "Operation output exceeds the selected device's tensor limit.", {
-          operation: definition.name, device: admitted.outputMetadata.device, byteLength: bytes,
-          maximumTensorBytes: backend.capabilities.maximumTensorBytes,
-        });
-      }
+      this.#checkOutputCapacity(definition, admitted.outputMetadata);
     }
     const right = requireTensorState(rightHandle);
     this.#checkCapturedAdmission(admitted.record.inputs, admitted.outputMetadata.shape);

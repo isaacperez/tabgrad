@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
-import { Tensor } from "../dist/index.js";
+import { RuntimeSession, Tensor } from "../dist/index.js";
 import { TENSOR_DTYPES } from "../dist/shared/tensor-dtype.js";
 import { COMPUTATION_SIGNATURES } from "../dist/execution/operation-contracts.js";
 import { cpuKernel } from "../dist/backends/cpu/kernel-catalogue.js";
@@ -81,7 +81,9 @@ function documentedArithmetic(markdown) {
 function isPublicArithmetic(signature) {
   // The optimizer's coefficient lowering shares the name "add" with Tensor.add.
   return signature.family.parameters !== "coefficient"
-    && typeof Object.getOwnPropertyDescriptor(Tensor.prototype, signature.operation)?.value === "function";
+    && [Tensor.prototype, RuntimeSession.prototype].some(
+      prototype => typeof Object.getOwnPropertyDescriptor(prototype, signature.operation)?.value === "function",
+    );
 }
 
 export function verifyDTypeRegistrations(markdown, options) {

@@ -61,6 +61,19 @@ export const MUL_DERIVATIVE: DerivativeRecipe = Object.freeze({
   },
 });
 
+export const WHERE_DERIVATIVE: DerivativeRecipe = Object.freeze({
+  resources: new DerivativeResources(3, 4, 1),
+  savedOperands: () => [0],
+  apply<Value, Gradient>(incoming: Gradient, saved: readonly Value[], _shape: readonly number[],
+    operations: DerivativeOperations<Value, Gradient>, position: number): Gradient {
+    if (saved.length !== 1) throw new TabgradError("CONSUMED_HISTORY", "Selection requires its saved mask.");
+    const selectMask = operations.selectMask;
+    if (selectMask === undefined) throw new TabgradError("UNSUPPORTED_GRADIENT", "Selection requires a mask derivative.");
+    return withBorrowedOperand(saved[0]!, operations, mask => selectMask(mask, incoming, position === 1),
+      "Selection derivative construction and cleanup failed.");
+  },
+});
+
 /** Ordinary VJPs use captured orientations, with no transposed payload owner. */
 export const MATMUL_DERIVATIVE: DerivativeRecipe = Object.freeze({
   resources: BINARY_VALUE_RESOURCES,
@@ -115,7 +128,7 @@ export const REBASED_VIEW_DERIVATIVE: DerivativeRecipe = Object.freeze({
 });
 
 const CANONICAL_CONTROL_RECIPES = Object.freeze([
-  IDENTITY_DERIVATIVE, POINTWISE_PASS_DERIVATIVE, MUL_DERIVATIVE, MATMUL_DERIVATIVE,
+  IDENTITY_DERIVATIVE, POINTWISE_PASS_DERIVATIVE, MUL_DERIVATIVE, WHERE_DERIVATIVE, MATMUL_DERIVATIVE,
   SUM_DERIVATIVE, COPY_DERIVATIVE, COPY_SLICES_DERIVATIVE, REBASED_VIEW_DERIVATIVE,
 ]);
 

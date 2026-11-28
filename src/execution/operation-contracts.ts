@@ -3,6 +3,7 @@ import { assertMatrixOrientation, matrixGeometry } from "./matrix-geometry.js";
 import { BINARY_FLOAT32, fixedTensorTypePolicy, UNARY_FLOAT32, type TensorTypePolicy } from "./operation-types.js";
 
 const POINTWISE = Object.freeze({ arity: 2, parameters: "none", geometry: "pointwise", plan: pointwiseGeometry } as const);
+const TERNARY_POINTWISE = Object.freeze({ ...POINTWISE, arity: 3 } as const);
 const MATRIX = Object.freeze({ arity: 2, parameters: "orientation", geometry: "matrix", plan: matrixGeometry } as const);
 const RECEIVING = Object.freeze({ arity: 1, parameters: "none", geometry: "receiving", plan: pointwiseGeometry } as const);
 const SCALAR = Object.freeze({ arity: 1, parameters: "none", geometry: "scalar", shape: Object.freeze([]) } as const);
@@ -10,7 +11,8 @@ const SCALAR = Object.freeze({ arity: 1, parameters: "none", geometry: "scalar",
 const UNARY_PRODUCED = Object.freeze({ arity: 1, parameters: "none", geometry: "produced" } as const);
 const COEFFICIENT_ADD = Object.freeze({ arity: 2, parameters: "coefficient", geometry: "produced" } as const);
 
-export type OperationFamily = typeof POINTWISE | typeof MATRIX | typeof RECEIVING | typeof SCALAR | typeof UNARY_PRODUCED | typeof COEFFICIENT_ADD;
+type PointwiseFamily = typeof POINTWISE | typeof TERNARY_POINTWISE;
+export type OperationFamily = PointwiseFamily | typeof MATRIX | typeof RECEIVING | typeof SCALAR | typeof UNARY_PRODUCED | typeof COEFFICIENT_ADD;
 
 function signature<Name extends string, Family extends OperationFamily>(operation: Name, family: Family, types: TensorTypePolicy) {
   if (types.inputs.length !== family.arity) throw new TypeError("Operation signature does not match its family arity.");
@@ -19,6 +21,7 @@ function signature<Name extends string, Family extends OperationFamily>(operatio
 
 const BINARY_FLOAT16 = fixedTensorTypePolicy(["float16", "float16"], "float16");
 const BINARY_BFLOAT16 = fixedTensorTypePolicy(["bfloat16", "bfloat16"], "bfloat16");
+const MASK_GRADIENT = fixedTensorTypePolicy(["bool", "float32"], "float32");
 
 /** Finite numerical identities. Their spelling carries no shape or parameter semantics. */
 export const COMPUTATION_SIGNATURES = Object.freeze({
@@ -35,6 +38,9 @@ export const COMPUTATION_SIGNATURES = Object.freeze({
   "add-bf16": signature("add", POINTWISE, BINARY_BFLOAT16),
   "mul-bf16": signature("mul", POINTWISE, BINARY_BFLOAT16),
   "gt-f32": signature("gt", POINTWISE, fixedTensorTypePolicy(["float32", "float32"], "bool")),
+  "where-f32": signature("where", TERNARY_POINTWISE, fixedTensorTypePolicy(["bool", "float32", "float32"], "float32")),
+  "where-then-gradient-f32": signature("where-mask-gradient", POINTWISE, MASK_GRADIENT),
+  "where-else-gradient-f32": signature("where-mask-gradient", POINTWISE, MASK_GRADIENT),
   "sum-bf16": signature("sum", SCALAR, fixedTensorTypePolicy(["bfloat16"], "bfloat16")),
   "matmul-bf16": signature("matmul", MATRIX, BINARY_BFLOAT16),
   "reduce-f32": signature("reduce", RECEIVING, UNARY_FLOAT32),
@@ -54,7 +60,7 @@ export function requireComputationSignature(kind: unknown): (typeof COMPUTATION_
 }
 
 /** Physical adapters that need broadcast geometry use the same family. */
-export function pointwiseFamily(kind: ComputationKind): typeof POINTWISE | undefined {
+export function pointwiseFamily(kind: ComputationKind): PointwiseFamily | undefined {
   const family = COMPUTATION_SIGNATURES[kind].family;
   return family.geometry === "pointwise" ? family : undefined;
 }

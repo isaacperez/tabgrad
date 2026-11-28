@@ -50,7 +50,7 @@ test("SIMD inspection distinguishes code prefixes from constants and custom-sect
 for (const variant of ["scalar", "simd128"]) {
   test(`the matched CPU import permits smaller session limits and rejects a larger maximum (${variant})`, async () => {
     const manifest = JSON.parse(await readFile(join(distributionRoot, "manifest.json"), "utf8"));
-    assert.equal(manifest.moduleVersion, 13);
+    assert.equal(manifest.moduleVersion, 14);
     assert.deepEqual(manifest.memory, { initialPages: 32, maximumPages: 4096, alignment: 16 });
     const module = await WebAssembly.compile(await readFile(join(distributionRoot, `wasm/kernels-${variant}.wasm`)));
     for (const maximum of [32, 2048, 4096]) {

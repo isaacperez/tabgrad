@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import { pointwiseGeometry, receivingGeometry } from "../../../dist/execution/broadcast-geometry.js";
-import { receivingPacket } from "../../../dist/backends/cpu/broadcast-packet.js";
+import { pointwisePacket, receivingPacket } from "../../../dist/backends/cpu/broadcast-packet.js";
 
 for (const variant of ["scalar", "simd128"]) {
   test(`raw ${variant} broadcast kernels validate independent spans and incremental geometry`, async () => {
@@ -50,6 +50,34 @@ for (const variant of ["scalar", "simd128"]) {
     assert.equal(api.tabgrad_broadcast_gt_f32(base, base + 64, output, packet, geometry.length), 0);
     assert.deepEqual(bytes.slice(output - 1), Uint8Array.of(255, 0, 0, 1, 1, 1));
     assert.equal(api.tabgrad_broadcast_gt_f32(base, base + 64, packet, packet, geometry.length), 3);
+  });
+
+  test(`raw ${variant} selection checks the third span and keeps the mask byte-sized`, async () => {
+    const memory = new WebAssembly.Memory({ initial: 32, maximum: 1024 });
+    const { instance } = await WebAssembly.instantiate(await readFile(new URL(`../../../dist/wasm/kernels-${variant}.wasm`, import.meta.url)), { env: { memory } });
+    const api = instance.exports, base = api.tabgrad_arena_base(), packet = base + 256;
+    const end = memory.buffer.byteLength, mask = end - 2;
+    const left = base, right = base + 16, output = base + 32;
+    const floats = new Float32Array(memory.buffer);
+    new Uint8Array(memory.buffer).set([0, 1], mask);
+    floats.set([10, 20], left / 4);
+    floats.set([-0, NaN], right / 4);
+    assert.equal(api.tabgrad_where_f32(mask, left, right, output, 2), 0);
+    assert.deepEqual(floats.slice(output / 4, output / 4 + 2), Float32Array.of(-0, 20));
+    assert.equal(api.tabgrad_where_f32(mask + 1, left, right, output, 2), 2);
+    assert.equal(api.tabgrad_where_f32(mask, left, right + 1, output, 2), 1);
+    assert.equal(api.tabgrad_where_f32(mask, left, right, right, 2), 3);
+
+    const geometry = pointwiseGeometry([[2, 1], [1, 2], [2, 1]]);
+    const parameters = pointwisePacket(geometry, end);
+    const words = new Uint32Array(memory.buffer);
+    words.set(parameters, packet / 4);
+    assert.equal(api.tabgrad_broadcast_where_f32(mask, left, right, output, packet, parameters.length), 0);
+    assert.deepEqual(floats.slice(output / 4, output / 4 + 4), Float32Array.of(-0, -0, 10, 20));
+    assert.equal(api.tabgrad_broadcast_where_f32(mask, left, end - 4, output, packet, parameters.length), 2);
+    assert.equal(api.tabgrad_broadcast_where_f32(mask, left, packet, output, packet, parameters.length), 3);
+    words[packet / 4 + 5] = 1;
+    assert.equal(api.tabgrad_broadcast_where_f32(mask, left, right, output, packet, parameters.length), 4);
   });
 
   test(`raw ${variant} receiving groups preserve the sum tree and reject malformed packets`, async () => {

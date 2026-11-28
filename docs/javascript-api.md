@@ -189,6 +189,12 @@ Observe boolean results as numeric zeros and ones with `toArray()`, or use
 Floating types use `Float32Array` with either form. See
 [boolean tensors and comparison](reference/python-tensors.md#greater-than-comparison).
 
+`session.where(condition, input, other)` takes a bool condition and two
+float32 alternatives from the same device and session. Its result broadcasts
+all three shapes, returning float32 values from `input` at true positions
+and `other` at false positions. See
+[selection and branch gradients](reference/python-tensors.md#select-with-a-boolean-mask).
+
 Local work with a ready backend may finish during `toArray()` itself, before
 the returned Promise's callbacks run. Those callbacks retain ordinary
 JavaScript scheduling. Failures of accepted execution still reject the Promise

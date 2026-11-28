@@ -62,7 +62,7 @@ test("the JavaScript package entry point exposes only the supported runtime surf
     {
       exports: ["RuntimeSession", "SGD", "TabgradError", "Tensor", "createRuntimeSession", "createWebGpuRuntimeSession"],
       runtimeSessionConstructor: ["length", "name", "prototype"],
-      runtimeSessionPrototype: ["close", "constructor", "diagnostics", "grad", "noGrad", "sgd", "tensor"],
+      runtimeSessionPrototype: ["close", "constructor", "diagnostics", "grad", "noGrad", "sgd", "tensor", "where"],
       tensorConstructor: ["length", "name", "prototype"],
       optimizerPrototype: ["close", "constructor", "step", "zeroGrad"],
       tensorPrototype: [

@@ -1,7 +1,6 @@
 import { invocationEntry, type LinearDispatchLayout } from "../linear-dispatch.js";
-import { packedBinaryIndices, WEBGPU_POINTWISE_WORKGROUP_SIZE } from "./broadcast.js";
-
-export const BOOL_VALUES_PER_WORD = 4;
+import { pointwiseElementIndices, WEBGPU_POINTWISE_WORKGROUP_SIZE } from "./broadcast.js";
+import { BOOL_VALUES_PER_WORD } from "./packed-words.js";
 
 export function createGreaterSource(broadcast: boolean, layout: LinearDispatchLayout): string {
   const entry = invocationEntry(layout, WEBGPU_POINTWISE_WORKGROUP_SIZE);
@@ -34,7 +33,7 @@ ${entry.signature}
   for (var lane = 0u; lane < ${BOOL_VALUES_PER_WORD}u; lane++) {
     let index = first + lane;
     if index < geometry[1] {
-      ${packedBinaryIndices(broadcast)}
+      ${pointwiseElementIndices(broadcast)}
       packed |= greater(left[indices.x], right[indices.y]) << (lane * 8u);
     }
   }

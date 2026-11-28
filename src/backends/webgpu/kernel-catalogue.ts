@@ -15,8 +15,9 @@ import { WEBGPU_POINTWISE_WORKGROUP_SIZE, pointwiseSource } from "./kernels/broa
 import { createReceivingSource, WEBGPU_RECEIVING_UNIFORM_BYTES } from "./kernels/receiving.js";
 import { BINARY16_ARITHMETIC } from "./kernels/half.js";
 import { PACKED16_WORKGROUP_SIZE, packed16PointwiseSource } from "./kernels/packed-pointwise.js";
-import { PACKED16_VALUES_PER_WORD } from "./kernels/packed-words.js";
-import { BOOL_VALUES_PER_WORD, createGreaterSource } from "./kernels/comparison.js";
+import { BOOL_VALUES_PER_WORD, PACKED16_VALUES_PER_WORD } from "./kernels/packed-words.js";
+import { createGreaterSource } from "./kernels/comparison.js";
+import { createMaskGradientSource, createSelectionSource } from "./kernels/selection.js";
 
 export type KernelKind = ComputationKind | `broadcast-${ComputationKind}`;
 type ShaderSource = (layout: LinearDispatchLayout) => string;
@@ -89,25 +90,25 @@ function vectorizedPointwise(workgroupSize: number, dense: ShaderSource, arithme
   });
 }
 
-function packedPointwiseSupported(limits: GPUSupportedLimits): boolean {
-  return limits.maxStorageBuffersPerShaderStage >= POINTWISE_STORAGE_BINDINGS
-    && limits.maxBufferSize >= DENSE_PACKED_PACKET_BYTES && limits.maxStorageBufferBindingSize >= DENSE_PACKED_PACKET_BYTES;
-}
-
-function packedPointwise(workgroupSize: number, lanes: number,
+function bufferedPointwise(workgroupSize: number, lanes: number,
   source: (broadcast: boolean, layout: LinearDispatchLayout) => string): (kind: PointwiseKind) => Registration {
-  return kind => Object.freeze({
-    strategy: "pointwise",
-    direct: invocation(kind, workgroupSize, lanes, layout => source(false, layout), POINTWISE_STORAGE_BINDINGS),
-    projected: invocation(`broadcast-${kind}`, workgroupSize, lanes, layout => source(true, layout), POINTWISE_STORAGE_BINDINGS),
-    densePacket: true,
-    geometry: pointwiseFamily(kind)!,
-    supported: packedPointwiseSupported,
-  });
+  return kind => {
+    const geometry = pointwiseFamily(kind)!;
+    const bindings = geometry.arity + 2;
+    return Object.freeze({
+      strategy: "pointwise",
+      direct: invocation(kind, workgroupSize, lanes, layout => source(false, layout), bindings),
+      projected: invocation(`broadcast-${kind}`, workgroupSize, lanes, layout => source(true, layout), bindings),
+      densePacket: true,
+      geometry,
+      supported: (limits: GPUSupportedLimits) => limits.maxStorageBuffersPerShaderStage >= bindings
+        && limits.maxBufferSize >= DENSE_PACKED_PACKET_BYTES && limits.maxStorageBufferBindingSize >= DENSE_PACKED_PACKET_BYTES,
+    });
+  };
 }
 
 function packed16Pointwise(arithmetic: string, calculate: string): (kind: PointwiseKind) => Registration {
-  return packedPointwise(PACKED16_WORKGROUP_SIZE, PACKED16_VALUES_PER_WORD,
+  return bufferedPointwise(PACKED16_WORKGROUP_SIZE, PACKED16_VALUES_PER_WORD,
     (broadcast, layout) => packed16PointwiseSource(arithmetic, calculate, broadcast, layout));
 }
 
@@ -171,7 +172,10 @@ const factories: KernelFactories = Object.freeze({
   "matmul-f16": matrixKernel(PACKED16_VALUES_PER_WORD, createHalfMatrixSource),
   "add-bf16": packed16Pointwise(BFLOAT16_ADDITION_SOURCE, "add_bfloat16"),
   "mul-bf16": packed16Pointwise(BFLOAT16_MULTIPLICATION_SOURCE, "multiply_bfloat16"),
-  "gt-f32": packedPointwise(WEBGPU_POINTWISE_WORKGROUP_SIZE, BOOL_VALUES_PER_WORD, createGreaterSource),
+  "gt-f32": bufferedPointwise(WEBGPU_POINTWISE_WORKGROUP_SIZE, BOOL_VALUES_PER_WORD, createGreaterSource),
+  "where-f32": bufferedPointwise(WEBGPU_POINTWISE_WORKGROUP_SIZE, 1, createSelectionSource),
+  "where-then-gradient-f32": bufferedPointwise(WEBGPU_POINTWISE_WORKGROUP_SIZE, 1, createMaskGradientSource(true)),
+  "where-else-gradient-f32": bufferedPointwise(WEBGPU_POINTWISE_WORKGROUP_SIZE, 1, createMaskGradientSource(false)),
   "sum-bf16": sumKernel(WEBGPU_SUM_WORKGROUP_SIZE, WEBGPU_SUM_GROUP_ELEMENTS, WEBGPU_SUM_PARTIAL_BYTES, createBfloatSumSource),
   "matmul-bf16": matrixKernel(PACKED16_VALUES_PER_WORD, createBfloatMatrixSource),
 } satisfies KernelFactories);

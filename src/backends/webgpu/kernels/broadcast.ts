@@ -2,17 +2,19 @@ import { invocationEntry, type LinearDispatchLayout } from "../linear-dispatch.j
 
 export const WEBGPU_POINTWISE_WORKGROUP_SIZE = 64;
 
-/** Packed writers may cross rows, so project each stored element separately. */
-export function packedBinaryIndices(broadcast: boolean): string {
+/** Project one element, including packed writers whose lanes may cross rows. */
+export function pointwiseElementIndices(broadcast: boolean, arity: 2 | 3 = 2): string {
+  const vector = `vec${arity}<u32>`;
+  const strides = Array.from({ length: arity }, (_, index) => `geometry[base + ${index + 1}u]`).join(", ");
   return broadcast ? `
       var remaining = index;
-      var indices = vec2<u32>(0u);
+      var indices = ${vector}(0u);
       for (var axis = geometry[0]; axis > 0u; axis--) {
-        let base = 3u + (axis - 1u) * 3u;
+        let base = 3u + (axis - 1u) * ${arity + 1}u;
         let coordinate = remaining % geometry[base];
         remaining /= geometry[base];
-        indices += coordinate * vec2<u32>(geometry[base + 1u], geometry[base + 2u]);
-      }` : "let indices = vec2<u32>(index);";
+        indices += coordinate * ${vector}(${strides});
+      }` : `let indices = ${vector}(index);`;
 }
 
 /** Arithmetic is specialized at pipeline creation, never interpreted per value. */

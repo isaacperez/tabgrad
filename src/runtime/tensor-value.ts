@@ -16,8 +16,9 @@ export interface TensorMetadata {
 }
 
 export interface NumericalOperationDefinition {
-  readonly name: "add" | "mul" | "sum" | "expand" | "matmul" | "reduce" | "gt";
-  readonly provenanceSource: "Tensor.add" | "Tensor.mul" | "Tensor.sum" | "Tensor.matmul" | "Tensor.gt" | "DerivativeHistory.sum" | "DerivativeHistory.receive" | "SGD.step";
+  readonly name: "add" | "mul" | "sum" | "expand" | "matmul" | "reduce" | "gt" | "where" | "where-mask-gradient";
+  readonly provenanceSource: "Tensor.add" | "Tensor.mul" | "Tensor.sum" | "Tensor.matmul" | "Tensor.gt" | "RuntimeSession.where"
+    | "DerivativeHistory.sum" | "DerivativeHistory.receive" | "DerivativeHistory.where" | "SGD.step";
   readonly loweredKind: LoweredComputation["kind"];
   readonly pure: true;
 }
