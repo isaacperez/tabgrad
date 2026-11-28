@@ -367,6 +367,177 @@ alternatives are recorded in
 [#527](https://github.com/isaacperez/tabgrad/issues/527). Qualification of the
 published runtime belongs to the implementation issues.
 
+## Signed integer tensors and indexing
+
+The [accepted decision](https://github.com/isaacperez/tabgrad/issues/530#issuecomment-7237658235) separates exact integer values
+from physical addressing. The operation references and versioned compatibility
+inventory identify which parts of this contract have qualified implementations.
+
+### Signed tensor types
+
+- `int32` stores 4 logical bytes per element and `int64` stores 8. Each dtype uses
+  signed two's complement and canonical little-endian bytes. A WebGPU int64 tensor uses
+  the low word followed by the high word, both `u32`. CPU kernels may interpret the same
+  bytes as native Wasm `i64`. There is one dtype descriptor and one checked transfer
+  path per representation.
+- Python construction takes the existing explicitly typed, rectangular built-in inputs.
+  Python integers stay exact through range validation and `array('i')` or `array('q')`.
+  Booleans convert to 0 and 1. For Python float inputs, check finiteness and the
+  interval `[-2^(bits-1), 2^(bits-1))` before truncating toward zero. A Python integer
+  outside signed int64 raises `ValueError`, including when targeting int32. Overflow of
+  an otherwise valid integer into int32 and invalid floating conversions raise
+  `RuntimeError`. The canonical Python constants are `torch.int32` and `torch.int64`.
+  Keep `torch.int` and `torch.long` as aliases of those same objects without shadowing
+  the built-in conversions the bridge uses. Dtype inference, new input container types
+  and general conversion or integer arithmetic have separate contracts.
+- JavaScript creation accepts safe integral Numbers or BigInts in signed range and
+  matching typed arrays. Reject unsafe Numbers, fractional Numbers and overflow before
+  packing. A preconstructed BigInt64Array contains already converted values and cannot
+  reveal an earlier overflow in caller code. Integer observation uses `toArray({ format:
+  "typed" })`. Int32 returns an owned Int32Array and int64 returns an owned
+  BigInt64Array. The no-argument Float32Array path rejects integer dtypes without
+  running an observation. Its existing return type stays intact and the typed overload's
+  union gains these two array types. Python `tolist()` returns built-in ints at every
+  rank, including a single int for rank zero. Keep integer tensors untracked and support
+  existing whole contiguous views and normal session, device, ownership and capacity
+  controls.
+- Use the prepared typed Pyodide buffer on compatible hosts and copy only the admitted
+  span into an owner. Copy retained host bytes at the existing worker handoff when
+  detachment would invalidate their owner. A resident tensor stays a device allocation
+  across operations. The portable byte representation is little-endian. A host with
+  another native typed-array order needs a checked conversion at the boundary, or a
+  clear capability failure until that conversion is qualified. No per-element BigInt
+  work is needed in GPU kernels.
+- Integer mutation, gradients on integer tensors, general promotion and casts are
+  excluded from this slice.
+
+### Argmax
+
+- Python exposes `torch.argmax(input, dim=None, keepdim=False, *, out=None)` and
+  `input.argmax(dim=None, keepdim=False)`. JavaScript exposes `input.argmax(dim?,
+  keepdim?)` with null or omission for reduction over all elements. `out` accepts only
+  None in the free Python function. The first slice admits dense contiguous float32,
+  int32 and int64 inputs and returns a new same-device int64 tensor without derivative
+  history, including for a float32 input that is tracked.
+- An explicit signed axis is normalized against rank. Python takes an int or int
+  subclass, with bool and generic `__index__` objects rejected. Python checks overflow and
+  rank before transport. Values outside signed int64 raise ValueError and values within
+  that range but outside the rank raise IndexError. Keepdim takes a bool. Native PyTorch
+  also admits a rank-zero integer tensor as dim. This slice explicitly excludes that
+  form because it makes output geometry depend on observing a device value. With no axis
+  the result is the first maximum's index in the logical row-major traversal. Keepdim on
+  a full reduction gives one singleton per original axis. An explicit axis removes that
+  axis or replaces it with length one. A rank-zero input allows None, 0 and -1 and
+  returns rank-zero int64 zero with either keepdim value.
+- Ties choose the lowest index. The first NaN wins in floating inputs; both signs of
+  zero compare equal, and infinities and subnormals keep their order. Integer
+  comparisons use all bits, including negative values and values above 2^53. Reducing
+  over all values of an empty input or over a selected axis of length zero raises
+  IndexError at admission. If the chosen axis is nonempty and all result positions
+  disappear through an unrelated empty axis, return the empty result with the calculated
+  shape and no physical reduction. Avoid computing irrelevant large strides for empty
+  domains.
+
+### Index selection
+
+- Python exposes `torch.index_select(input, dim, index, *, out=None)` and
+  `input.index_select(dim, index)`. JavaScript exposes `input.indexSelect(dim, index)`.
+  The free Python function admits `out=None`. Use contiguous rank-zero or rank-one int32
+  or int64 indices on the input's device and in its session. Data inputs are contiguous
+  float32, int32 or int64; preserve their dtype, selected bits and rank without aliasing
+  source storage. For an ordinary input, replace the selection axis length with the
+  number of indices. Keep order and duplicates. An input of rank zero accepts exactly
+  one index, whose value must be zero, and returns rank zero. The same eager dimension
+  rules and the exclusion of a tensor-valued dim apply. Negative axes normalize and
+  negative index values are invalid. No indexing broadcast, casts, mixed-device move,
+  non-None out or compact-float/boolean data support in this first slice.
+- Validate dimension, rank, dtype, session and known impossibilities at the call. An
+  empty index for a rank of at least one simply produces the corresponding empty output.
+  A nonempty index must be checked even if an unrelated empty axis makes the output
+  zero-sized. Compare full signed values to the full logical bound in that case. For
+  example, selecting index 4294967297 in axis 1 of a tensor with shape `[0, 4294967298]`
+  gives shape `[0, 1]`. The next index is invalid. The current safe-integer shape limit
+  still applies.
+- Preserve the pinned CPU exception categories in Python. Bad argument types use
+  TypeError; out-of-range axes use IndexError; unsupported index dtype and scalar count
+  use RuntimeError. For payload bounds, rank 0 or 1, or a nonempty input with normalized
+  axis other than 1, uses IndexError. Rank greater than one with empty input, or
+  normalized axis 1 in the admitted contiguous case, uses RuntimeError. An empty
+  selected axis with nonempty indices can be rejected immediately from metadata. Errors
+  should identify the operation, with the invalid index position available where
+  practical. Exact native wording is unnecessary. An int64 value exposed in a diagnostic
+  must be exact and can be serialized as decimal text.
+- Timing of bounds errors. PyTorch CPU validates payload values during the call. Tabgrad
+  validates them when a dependent observation or effect demands execution, on both
+  backends and in both frontends, regardless of where the indices currently reside.
+  Check before any potentially invalid address. Permit private results to be computed
+  while collecting status, but do not publish new allocations or commit a payload to a
+  mutation from a failed program. Preserve prior residents, drain temporary work and
+  route effect failure through the existing writer outcome owner. A previously admitted
+  deferred writer can still fail, including observable failure on affected aliases and
+  mandatory completion. The existing writer policy can advance a target's version when
+  copy_ is admitted and block later writes in that session when a deferred source fails.
+  The failed gather must never write its invalid result into the target. Cover affected
+  and independent observations and effect targets, including copy_ and normal managed
+  completion, against that failure model.
+- Gradient scope. The first forward selection rejects a tracked float32 source while
+  recording is active. A tracked source may be read under no_grad. Native PyTorch does
+  track selection, so this is an explicit limitation of the first delivery. The later
+  float32 VJP uses the captured indices with no gradient edge for them. It starts with
+  positive zeros and adds contributions to each source position in original index order,
+  with one binary32 rounding per addition. Duplicate positions are accumulated; it is
+  not a sum tree or an unordered atomic reduction. Native PyTorch gave 1 for `[1e20, 1,
+  -1e20, 1]` and positive zero for an isolated negative-zero seed. Group indices stably
+  so there is no search through the entire index vector for each source position. A
+  separate derivative slice should verify bounded scratch and repeated-index workloads,
+  including the skewed case where strict order limits parallelism, before promising
+  support on both devices.
+
+### Implementation boundaries and realistic alternatives
+
+1. **Exact storage with checked local addressing** defines the contract. Retain
+   canonical typed bytes throughout runtime and worker transport. Use unsigned 32-bit
+   addressing only when checked shape and physical capacity prove the domain fits and
+   when an index has passed bounds checking. Float32 and int32 data share a four-byte
+   movement kernel where practical, while int64 uses paired-word movement. Reduction
+   geometry for argmax and index geometry for selection are separate from dtype
+   specialization. Do not put a data-type decision in the per-element loop.
+2. **Compact 32-bit index tensors** would halve resident storage for values known to be
+   offsets. Applying it to public int64 would lose information for user-created tensors
+   or downstream consumers. A separate internal validated scratch vector can still be
+   useful for large slices. One fused guarded gather avoids this scratch and a pass, but
+   can repeat checks for a wide slice. A validation-only path is required in both
+   approaches for zero output with nonempty indices; it keeps a potentially wide logical
+   bound. Small physical probes verified correctness for both approaches. They did not
+   select a latency or throughput winner. Choose the production dispatch strategy with
+   targeted evidence in #532.
+3. **Synchronously validate every index at the Python call** would match native timing.
+   On resident GPU tensors it forces execution and a completion barrier even if the
+   output is never used. Fast-pathing only host-resident inputs creates timing
+   differences caused by internal residency. A deferred validated program lets an argmax
+   result feed selection directly. A checked internal proof may make a range status
+   unnecessary when the producer guarantees indices below a bound no greater than the
+   selected axis length. Without that proof, collect a small status at completion before
+   publishing output. No intermediate full index readback is admitted.
+4. **Deliver float32 gradients with the initial selection** would offer more immediate
+   PyTorch coverage. Native order, saved-index lifetime, duplicated indices, error
+   propagation and bounded GPU resources are additional independent risks. The forward
+   research prototype does not validate any GPU VJP cost or correctness. The proposal
+   keeps that result separately reviewable, with no claim of full gradient parity for
+   #532.
+
+The reviewed research used PyTorch 2.14.0 arm64 CPU, wheel revision
+`08187d9e0fba026dc8217405802ab5381dc88d90`, as its reference. A bounded Chrome
+and Pyodide probe on physical Apple Metal-3 preserved signed endpoint values
+and adjacent integers beyond 2^53. It exercised both fused bounds checking and
+a separate validated scratch vector. Both produced exact selections with no
+intermediate tensor readback. The staged approach adds four scratch bytes per
+index. These results do not rank the algorithms by performance or qualify the
+production kernels. The [research and independent findings](https://github.com/isaacperez/tabgrad/issues/530#issuecomment-7237045561)
+identify implementation checks, including the result and effect failure paths.
+Revisit the boundary if validation cannot preserve the existing publication and
+failure owners, or the implementation cannot maintain bounded resource costs.
+
 ## Preserve derivative and protocol domains
 
 The float32 derivative domain retains its history, implicit seeds, zeros,
