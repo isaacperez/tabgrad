@@ -190,7 +190,7 @@ remain CPU counters; adding this device does not change their meaning.
 | `peakOwnedBufferBytes` | High-water mark of that accounting for this backend lifetime |
 | `pendingSubmissions` | Completion checkpoints not yet confirmed, including queued uploads; not a hardware queue-depth measurement |
 | `unknownCompletionBytes` | Owned bytes conservatively recorded when completion becomes unconfirmable; not reset to suggest confirmed reclamation |
-| `uploadBytes`, `readbackBytes` | Cumulative bytes at the named host/device boundaries |
+| `uploadBytes`, `readbackBytes` | Cumulative tensor payload bytes transferred at the named host/device boundaries. Uniforms and internal validation status are excluded. |
 | `kernelCalls` | Encoded numerical dispatches, including an empty sum's scalar identity write; not a count of successfully completed kernels after failure |
 
 These counters are not browser RSS or physical VRAM. They do not include

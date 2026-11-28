@@ -40,8 +40,8 @@ export async function checkJavaScriptIndexSelection(session, device) {
   await requireBoundsError(invalidResult.toArray({ format: "typed" }));
   const bad = session.tensor([0n, 4294967297n], { ...options, dtype: "int64" });
   const neverValid = data.indexSelect(0, bad);
-  const small = data.view([1204]);
-  const anotherBad = small.indexSelect(0, bad).view([1, 2]);
+  const small = data.view([2, 602]);
+  const anotherBad = small.indexSelect(1, bad);
   const dependent = neverValid.add(anotherBad);
   const failure = await requireBoundsError(dependent.toArray());
   if (failure.details.reason !== "index") throw Error("The failed selection lost its original error category");
