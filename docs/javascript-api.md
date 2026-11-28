@@ -187,7 +187,7 @@ device residency and staging readback rather than WebAssembly storage.
 Observe boolean results as numeric zeros and ones with `toArray()`, or use
 `toArray({ format: "typed" })` for the compact `Uint8Array` result.
 Floating types use `Float32Array` with either form. See
-[boolean tensors and comparison](reference/tensor-masks.md).
+[boolean tensors and comparison](reference/python-tensors.md#greater-than-comparison).
 
 Local work with a ready backend may finish during `toArray()` itself, before
 the returned Promise's callbacks run. Those callbacks retain ordinary

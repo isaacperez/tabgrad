@@ -52,7 +52,7 @@ floating-point accumulation, empty inputs, numerical comparison and CPU limits.
 Use [Elementwise tensor multiplication](tensor-multiplication.md) for tensor
 product signatures, broadcast-compatible inputs, numerical behavior and device limits.
 
-Use [Boolean tensors and comparison](tensor-masks.md) for mask creation,
+Use [Boolean tensors and comparison](python-tensors.md#create-and-read-boolean-tensors) for mask creation,
 greater-than comparisons and compact observation.
 
 Use [Two-dimensional matrix products](tensor-matmul.md) for contraction geometry,

@@ -67,7 +67,7 @@ Pass the dtype explicitly.
   and [backward accumulation](backward-gradients.md).
 - Creation converts to the selected dtype and owns a copy. Later input mutations cannot
   change the tensor. Integer overflow during floating conversion raises `OverflowError`.
-  [Boolean creation](tensor-masks.md#create-and-read-boolean-tensors) keeps the
+  [Boolean creation](#create-and-read-boolean-tensors) keeps the
   original integer's truth value.
 - Ragged inputs, mixed numerical/container depth and cycles are rejected.
   Reusing an acyclic child container is allowed and copies its values at each
@@ -93,6 +93,45 @@ and [2D matrix products](tensor-matmul.md#numerical-and-resource-boundaries).
 Pointwise operations round to float32 before storing each bfloat16 result.
 Bfloat16 supports forward operations. Gradients, in-place mutation and
 optimizers require float32.
+
+## Create and read boolean tensors
+
+Python accepts explicit `dtype=torch.bool` in [tensor creation](#create-a-tensor).
+JavaScript accepts `{ dtype: "bool" }` with flat primitive booleans and
+numbers. Numeric zero becomes false. Nonzero values, infinities and NaN
+become true. Python `tolist()` returns Python booleans and preserves the
+ordinary scalar, empty and list shape rules. JavaScript `toArray()` returns
+numeric zeros and ones. Use `await mask.toArray({ format: "typed" })` for an
+independently owned `Uint8Array` containing zeros and ones.
+
+Masks support [shape-only views](tensor-view.md). Boolean gradient tracking
+and in-place updates are outside this interface. See the [operation table](../compatibility.md#tensor-dtypes-by-operation)
+for qualified signatures.
+
+## Greater-than comparison
+
+```python
+import torch
+
+scores = torch.tensor([[1.0], [4.0]], dtype=torch.float32)
+thresholds = torch.tensor([0.0, 2.0, 5.0], dtype=torch.float32)
+mask = torch.gt(scores, thresholds)
+print(mask.tolist())  # [[True, False, False], [True, True, False]]
+```
+
+`torch.gt(input, other)`, `input.gt(other)`, and `input > other` compare
+two same-device contiguous float32 tensors. Shape broadcasting
+follows the [shared rules](../architecture/broadcasting.md#operation-policies-and-a-common-engine)
+and includes scalar tensors and empty dimensions. The result is a new
+`torch.bool` tensor on the same device. Tracked float32 operands are allowed
+and the result has no gradient history. Both signs of zero compare equal,
+finite float32 values retain their ordering including subnormals, and a
+comparison with either NaN returns false. The tensor forms cover CPU and
+WebGPU. Python number operands, `out` and mixed dtypes are outside this scope.
+
+JavaScript exposes the same signature as `scores.gt(thresholds)`.
+Compare against another tensor, using shape `[]` for a scalar tensor if
+needed. The result keeps the usual asynchronous observation path.
 
 ## Read metadata
 

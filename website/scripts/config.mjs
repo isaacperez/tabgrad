@@ -30,7 +30,6 @@ export const referenceNavigation = [
   ["tensor-view", "Tensor views"],
   ["tensor-copy", "Tensor copy"], ["tensor-sum", "Sum"],
   ["tensor-multiplication", "Multiplication"], ["tensor-matmul", "Matrix products"],
-  ["tensor-masks", "Boolean masks"],
   ["functional-gradients", "Functional gradients"], ["backward-gradients", "Backward and .grad"],
   ["gradient-recording", "Gradient scopes"], ["sgd", "SGD"],
 ];

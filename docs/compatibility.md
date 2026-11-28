@@ -22,7 +22,7 @@ admitted operand and result types for each device.
 | [`mul`](reference/tensor-multiplication.md#call-forms-and-result) | `float32`, `float16`, `bfloat16` | `float32`, `float16`, `bfloat16` |
 | [`sum`](reference/tensor-sum.md#call-forms-and-result) | `float32`, `float16`, `bfloat16` | `float32`, `float16`, `bfloat16` |
 | [`matmul`](reference/tensor-matmul.md#calls-and-differentiation) | `float32`, `float16`, `bfloat16` | `float32`, `float16`, `bfloat16` |
-| [`gt`](reference/tensor-masks.md#greater-than-comparison) | `float32`, `bool` | `float32`, `bool` |
+| [`gt`](reference/python-tensors.md#greater-than-comparison) | `float32`, `bool` | `float32`, `bool` |
 
 ### Storage and state
 
@@ -129,7 +129,7 @@ qualified environments and release-specific claims.
       "module": "torch",
       "aliases": ["Tensor.gt", ">"],
       "arithmetic": true,
-      "source": "docs/reference/tensor-masks.md",
+      "source": "docs/reference/python-tensors.md",
       "fragment": "greater-than-comparison",
       "limits": "Compares float32 tensors elementwise with broadcasting. Returns a boolean mask without gradient history.",
       "variants": [

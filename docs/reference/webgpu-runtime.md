@@ -74,7 +74,7 @@ For float32, its precise rounding and exceptional-value contract is the
 including a separately rounded result for every logical addition. It does not
 promise native WGSL floating-point behavior or NaN payload preservation.
 
-GPU [`gt()`](tensor-masks.md#greater-than-comparison) produces a packed
+GPU [`gt()`](python-tensors.md#greater-than-comparison) produces a packed
 boolean tensor from two broadcast-compatible float32 tensors. Each invocation
 owns a full word with up to four masks. The independent typed observation
 exposes only the logical bytes.
