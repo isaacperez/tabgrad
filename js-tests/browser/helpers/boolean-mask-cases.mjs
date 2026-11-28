@@ -41,22 +41,25 @@ export async function checkJavaScriptBooleanMask(session, device, grid) {
 }
 
 async function checkJavaScriptSelection(session, device, grid) {
+  // Four broadcast rows force the projected shader into a grid on the bounded device.
+  const columns = grid ? 275 : 3;
   const score = session.tensor([1], { shape: [], device });
   const limits = session.tensor([0, 2], { shape: [1, 2, 1], device });
   const mask = score.gt(limits);
-  const yes = session.tensor([5, 6, 7], { shape: [1, 1, 3], device });
+  const choices = Float32Array.from({ length: columns }, (_, i) => 5 + i);
+  const yes = session.tensor(choices, { shape: [1, 1, columns], device });
   const no = session.tensor([-0, NaN], { shape: [2, 1, 1], device });
   const selected = session.where(mask, yes, no);
   try {
     const before = session.diagnostics();
     const observed = await selected.toArray();
     const after = session.diagnostics();
-    const expected = [5, 6, 7, -0, -0, -0, 5, 6, 7, NaN, NaN, NaN];
-    if (String(selected.shape) !== "2,2,3" || !expected.every((value, i) => Object.is(value, observed[i]))) {
+    const expected = [...choices, ...new Float32Array(columns).fill(-0), ...choices, ...new Float32Array(columns).fill(NaN)];
+    if (String(selected.shape) !== `2,2,${columns}` || !expected.every((value, i) => Object.is(value, observed[i]))) {
       throw Error("Three-way selection changed a selected value");
     }
-    if (device === "webgpu" && (after.webgpu.uploadBytes - before.webgpu.uploadBytes !== 32
-      || after.webgpu.readbackBytes - before.webgpu.readbackBytes !== 48
+    if (device === "webgpu" && (after.webgpu.uploadBytes - before.webgpu.uploadBytes !== 20 + choices.byteLength
+      || after.webgpu.readbackBytes - before.webgpu.readbackBytes !== 4 * choices.byteLength
       || after.webgpu.kernelCalls - before.webgpu.kernelCalls !== 2)) throw Error("Unexpected selection transfers or dispatch");
   } finally {
     for (const tensor of [selected, mask, score, limits, yes, no]) tensor.close();
@@ -114,7 +117,10 @@ def check_boolean_mask():
     assert scalar.tolist() is False
     scores = torch.tensor([[1.0], [4.0]], dtype=torch.float32, **options)
     thresholds = torch.tensor([0.0, 2.0, 5.0], dtype=torch.float32, **options)
-    assert torch.gt(scores, thresholds).tolist() == [[True, False, False], [True, True, False]]
+    comparison = torch.gt(scores, thresholds)
+    assert comparison.tolist() == [[True, False, False], [True, True, False]]
+    selected_scores = torch.where(comparison, scores, torch.tensor(0.0, dtype=torch.float32, **options))
+    assert selected_scores.tolist() == [[1.0, 0.0, 0.0], [4.0, 4.0, 0.0]]
     width = ${grid ? 4361 : 5}
     tiny = 2**-149
     x = torch.tensor([[nan, -0.0, tiny, -tiny, inf] + [0.0] * (width - 5)],
@@ -137,12 +143,13 @@ def check_boolean_mask():
     assert torch.where(torch.gt(rank_zero, zero), rank_zero, zero).tolist() == 3.0
     threshold = torch.tensor([[[0.0], [2.0]]], dtype=torch.float32, **options)
     one = torch.tensor(1.0, dtype=torch.float32, **options)
-    yes = torch.tensor([[[5.0, 6.0, 7.0]]], dtype=torch.float32, **options)
+    choices = list(range(5, ${grid ? 280 : 8}))
+    yes = torch.tensor([[choices]], dtype=torch.float32, **options)
     no = torch.tensor([[[-0.0]], [[nan]]], dtype=torch.float32, **options)
     selected = torch.where(one > threshold, yes, no)
-    assert selected.shape == (2, 2, 3)
+    assert selected.shape == (2, 2, len(choices))
     values = selected.tolist()
-    assert values[0][0] == values[1][0] == [5.0, 6.0, 7.0]
+    assert values[0][0] == values[1][0] == choices
     assert all(value == 0.0 and copysign(1.0, value) < 0 for value in values[0][1])
     assert all(isnan(value) for value in values[1][1])
     a = torch.tensor([[1.0], [3.0]], dtype=torch.float32, requires_grad=True, **options)

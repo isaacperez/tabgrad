@@ -138,10 +138,10 @@ needed. The result keeps the usual asynchronous observation path.
 ```python
 import torch
 
-scores = torch.tensor([[1.0], [4.0]])
-thresholds = torch.tensor([0.0, 2.0, 5.0])
+scores = torch.tensor([[1.0], [4.0]], dtype=torch.float32)
+thresholds = torch.tensor([0.0, 2.0, 5.0], dtype=torch.float32)
 mask = torch.gt(scores, thresholds)
-values = torch.where(mask, scores, torch.tensor(0.0))
+values = torch.where(mask, scores, torch.tensor(0.0, dtype=torch.float32))
 print(values.tolist())  # [[1.0, 0.0, 0.0], [4.0, 4.0, 0.0]]
 ```
 
