@@ -18,7 +18,7 @@ async function assetFixture(context, change = () => {}) {
   return { manifest, resources };
 }
 
-test("admission associates shuffled descriptors by path and emits protocol 7", async (context) => {
+test("admission associates shuffled descriptors by path and emits protocol 8", async (context) => {
   const { manifest, resources } = await assetFixture(context, (manifest) => manifest.files.reverse());
   assert.equal(manifest.bridgeVersion, 8);
   const sources = await loadPythonSources(manifestUrl);

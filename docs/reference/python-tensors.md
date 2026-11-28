@@ -55,8 +55,8 @@ Pass the dtype explicitly.
   structure of built-in lists/tuples containing those types. A numeric scalar
   produces shape `()`. Empty input produces shape `(0,)`; `[[], []]` produces
   `(2, 0)`. Nesting cannot imply dimensions after an empty sequence.
-- Select the canonical `torch.float32`, `torch.float16`, `torch.bfloat16` or `torch.bool`
-  object. The [dtype table](../compatibility.md#tensor-dtypes-by-operation)
+- Select the canonical `torch.float32`, `torch.float16`, `torch.bfloat16`, `torch.bool`,
+  `torch.int32` or `torch.int64` object. The [dtype table](../compatibility.md#tensor-dtypes-by-operation)
   lists the supported operations.
 - The device may be the string `'cpu'` or `'webgpu'`, or the corresponding
   `torch.device` descriptor. CPU is the default even with GPU attached.

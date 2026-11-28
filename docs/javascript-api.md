@@ -121,7 +121,7 @@ into owned encoded storage. Its default and supported metadata are:
 | Property | Supported value |
 | --- | --- |
 | Shape | Defaults to `[data.length]`; explicit scalar or multidimensional shape with the same element count |
-| Data type | `float32` by default. Also accepts explicit `float16`, `bfloat16` or `bool` within the [operation support table](compatibility.md#tensor-dtypes-by-operation). |
+| Data type | `float32` by default. Also accepts explicit `float16`, `bfloat16`, `bool`, `int32` or `int64` within the [operation support table](compatibility.md#tensor-dtypes-by-operation). |
 | Device | `cpu` by default; explicit `webgpu` in a GPU-enabled session |
 | Layout | `contiguous` |
 | Gradient tracking | `requiresGrad` defaults to `false`; `true` enables float32 gradients on the selected supported device |
