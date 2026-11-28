@@ -56,7 +56,8 @@ test("family bindings share actual type rules while coefficient and state domain
 function capturedProgram(kind) {
   const { family, types } = computationSignature(kind) ?? computationSignature("add-f32");
   const shapes = family.geometry === "scalar" ? [[3], []]
-    : kind === "expand-f32" ? [[], [3]]
+    : family.geometry === "axis-reduction" ? [[2, 2], [2]]
+      : kind === "expand-f32" ? [[], [3]]
       : kind === "reduce-f32" ? [[2, 3], [1, 3]]
         : Array.from({ length: family.arity + 1 }, () => [2, 2]);
   const output = shapes.length - 1;
@@ -66,10 +67,21 @@ function capturedProgram(kind) {
       source: slot === output ? "computed" : "binding", provenance })),
     computations: [{ kind, inputs: shapes.slice(0, -1).map((_, slot) => slot), output, provenance,
       ...(kind === "add-alpha-f32" ? { alphaBits: 0x3f800000 } : {}),
-      ...(family.geometry === "matrix" ? { matrixFlags: 0 } : {}) }],
+      ...(family.geometry === "matrix" ? { matrixFlags: 0 } : {}),
+      ...(family.geometry === "axis-reduction" ? { reduction: { axis: 1, keepDim: false } } : {}) }],
     result: output,
   };
 }
+
+test("axis reduction reconstructs and owns its parameters and rejects an inconsistent shape", () => {
+  const { values, computations, result } = capturedProgram("argmax-i64");
+  const program = new ExecutableProgram(values, computations, result);
+  computations[0].reduction.axis = 0;
+  assert.equal(program.computations[0].reduction.axis, 1);
+  assert.ok(Object.isFrozen(program.computations[0].reduction));
+  computations[0].reduction.keepDim = true;
+  assert.throws(() => new ExecutableProgram(values, computations, result), /Axis reduction output/);
+});
 
 for (const kind of Object.keys(COMPUTATION_SIGNATURES)) {
   test(`${kind} reconstruction rejects every invalid input/result type before publication`, () => {

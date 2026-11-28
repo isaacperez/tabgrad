@@ -28,7 +28,8 @@ from pyodide.ffi import JsException, JsNull, jsnull, to_js
 
 _runtime_session = _bridge.session
 
-TensorList: TypeAlias = float | _bool | list["TensorList"]
+TensorList: TypeAlias = float | int | _bool | list["TensorList"]
+_Typecode: TypeAlias = Literal["f", "d", "B", "i", "q"]
 _live_wrappers: WeakValueDictionary[int, Tensor] = WeakValueDictionary()
 
 
@@ -94,7 +95,7 @@ class Size(tuple[int, ...]):
 
 class _DTypeFacts(TypedDict):
     name: str
-    typecode: Literal["f", "d", "B"]
+    typecode: _Typecode
     is_floating_point: _bool
     is_complex: _bool
     is_signed: _bool
@@ -139,6 +140,8 @@ if TYPE_CHECKING:
     bool: dtype
     float16: dtype
     float32: dtype
+    int32: dtype
+    int64: dtype
 else:
     globals().update(_dtypes_by_name)
 _explicit_dtype_error = (
@@ -147,6 +150,16 @@ _explicit_dtype_error = (
     + "."
 )
 del _definitions
+
+
+def __getattr__(name: str) -> dtype:
+    # Resolving this alias on the module keeps Python's built-in int available
+    # to the conversion and validation code in this module.
+    if name == "int":
+        return _dtypes_by_name["int32"]
+    if name == "long":
+        return _dtypes_by_name["int64"]
+    raise AttributeError(f"module 'torch' has no attribute {name!r}")
 
 
 class device:
@@ -433,11 +446,27 @@ class Tensor:
                 ) from error
             raise
 
+    def argmax(self, dim: object = None, keepdim: _bool = False) -> Tensor:
+        """Find the first maximum along an axis or across the whole tensor."""
+        if type(keepdim) is not _bool:
+            raise TypeError("argmax keepdim must be bool.")
+        axis = None if dim is None else _require_axis(dim, len(self.shape))
+        try:
+            return Tensor._from_handle(self._handle.argmax(axis, keepdim))
+        except JsException as error:
+            failure = cast("_bridge.RuntimeException", error)
+            if failure.js_error.code == "INVALID_SHAPE":
+                raise IndexError(str(error)) from error
+            if failure.js_error.code == "UNSUPPORTED_DTYPE":
+                raise RuntimeError(str(error)) from error
+            raise
+
     def tolist(self) -> TensorList:
         """Observe owned tensor values within the binding's managed script."""
         with _bridge.observe(self._handle).to_py() as values:
+            selected = self.dtype
             return _nested_values(
-                values, self.shape, self.dtype is _dtypes_by_name["bool"]
+                values, self.shape, _dtype_facts[id(selected)]["typecode"]
             )
 
     @staticmethod
@@ -556,14 +585,51 @@ def _append_boolean_values(items: Iterable[object], buffer: array[float]) -> Non
         buffer.append(int(_bool(value)))
 
 
+def _append_integer_values(
+    items: Iterable[object], buffer: array[int], bits: int
+) -> None:
+    lower, upper = -(1 << (bits - 1)), 1 << (bits - 1)
+    for value in items:
+        if type(value) in (int, _bool):
+            integer = int(cast("int", value))
+            if not -(1 << 63) <= integer < 1 << 63:
+                raise ValueError("Overflow when unpacking long long")
+        elif type(value) is float:
+            if not lower <= value < upper:
+                raise RuntimeError(
+                    f"value cannot be converted to int{bits} without overflow"
+                )
+            integer = int(value)
+        else:
+            raise TypeError("Tabgrad tensor elements must be built-in real numbers.")
+        if not lower <= integer < upper:
+            raise RuntimeError(
+                f"value cannot be converted to int{bits} without overflow"
+            )
+        buffer.append(integer)
+
+
 def _input_buffer(
-    data: object, typecode: Literal["f", "d", "B"] = "f"
-) -> tuple[array[float], list[int]]:
+    data: object, typecode: _Typecode = "f"
+) -> tuple[array[float] | array[int], list[int]]:
     """Normalize rectangular built-in containers without recursive traversal."""
-    buffer: array[float] = array(typecode)
-    append = _append_boolean_values if typecode == "B" else _append_numeric_values
+    if typecode in ("i", "q"):
+        integers: array[int] = array(typecode)
+        buffer: array[float] | array[int] = integers
+        bits = 32 if typecode == "i" else 64
+
+        def append(items: Iterable[object]) -> None:
+            _append_integer_values(items, integers, bits)
+    else:
+        numbers: array[float] = array(typecode)
+        buffer = numbers
+        convert = _append_boolean_values if typecode == "B" else _append_numeric_values
+
+        def append(items: Iterable[object]) -> None:
+            convert(items, numbers)
+
     if type(data) not in (list, tuple):
-        append((data,), buffer)
+        append((data,))
         return buffer, []
     shape: list[int] = []
     frames: list[tuple[Iterator[object], int]] = []
@@ -588,7 +654,7 @@ def _input_buffer(
                 frames.append((children, id(items)))
                 value, depth = next(children), depth + 1
                 continue
-            append(items, buffer)
+            append(items)
             leaf_depth = depth + 1
         else:
             raise TypeError("Tensor input must have uniform nesting depth.")
@@ -614,12 +680,15 @@ def _observed_row(values: memoryview, boolean: _bool) -> list[TensorList]:
     return cast("list[TensorList]", values.tolist())
 
 
-def _nested_values(
-    values: memoryview, shape: Size, boolean: _bool = False
-) -> TensorList:
+def _nested_values(values: memoryview, shape: Size, typecode: _Typecode) -> TensorList:
     """Build owned Python containers; only the current ancestor path is retained."""
+    boolean = typecode == "B"
     if not shape:
-        return _bool(values[0]) if boolean else float(values[0])
+        if boolean:
+            return _bool(values[0])
+        if typecode in ("i", "q"):
+            return int(values[0])
+        return float(values[0])
     if len(shape) == 1:
         return _observed_row(values, boolean)
     result: list[TensorList] = []
@@ -658,7 +727,7 @@ def tensor(
         raise TypeError("requires_grad and pin_memory must be bool.")
     if pin_memory:
         raise RuntimeError("Pinned memory is unsupported.")
-    if requires_grad and facts["typecode"] == "B":
+    if requires_grad and not facts["is_floating_point"]:
         raise RuntimeError(
             "Only Tensors of floating point and complex dtype can require gradients"
         )
@@ -696,6 +765,29 @@ def gt(input: object, other: object) -> Tensor:
     if not isinstance(input, Tensor):
         raise TypeError("Tabgrad comparison requires two tensors.")
     return input.gt(other)
+
+
+def _require_axis(dim: object, rank: int) -> int:
+    if not isinstance(dim, int) or isinstance(dim, _bool):
+        raise TypeError("Dimension must be an int.")
+    value = int.__index__(dim)
+    if not -(1 << 63) <= value < 1 << 63:
+        raise ValueError("Overflow when unpacking long long")
+    extent = max(1, rank)
+    if not -extent <= value < extent:
+        raise IndexError("Dimension out of range.")
+    return value
+
+
+def argmax(
+    input: object, dim: object = None, keepdim: _bool = False, *, out: object = None
+) -> Tensor:
+    """Return same-device int64 indices of the first maximum."""
+    if not isinstance(input, Tensor):
+        raise TypeError("Tabgrad argmax requires a tensor.")
+    if out is not None:
+        raise RuntimeError("Tabgrad argmax requires out=None.")
+    return input.argmax(dim, keepdim)
 
 
 def where(condition: object, input: object, other: object) -> Tensor:
@@ -795,6 +887,7 @@ __all__ = [
     "Size",
     "Tensor",
     "add",
+    "argmax",
     "autograd",
     "device",
     "dtype",
@@ -808,6 +901,6 @@ __all__ = [
     "where",
 ]
 if TYPE_CHECKING:
-    __all__ += ["bfloat16", "bool", "float16", "float32"]
+    __all__ += ["bfloat16", "bool", "float16", "float32", "int32", "int64"]
 else:
-    __all__[:] = sorted([*__all__, *_dtypes_by_name])
+    __all__[:] = sorted([*__all__, *_dtypes_by_name, "int", "long"])

@@ -167,6 +167,39 @@ CPU and `2` on WebGPU. See the
 Use `session.where(mask, input, other)` in JavaScript. A mask made by
 `gt` can feed selection directly on either device before observation.
 
+## Find the index of a maximum
+
+```python
+import torch
+
+scores = torch.tensor([[2, 5, 5], [8, 7, 9]], dtype=torch.float32)
+print(torch.argmax(scores, dim=1).tolist())  # [1, 2]
+```
+
+`torch.argmax(input, dim=None, keepdim=False)` and `input.argmax(dim, keepdim)`
+accept contiguous float32, int32 and int64 on CPU and WebGPU. The result is
+a new int64 tensor on the input's device. It has no gradient history.
+Omit `dim` to search the whole tensor in row-major order. A negative axis
+counts from the end. `keepdim=True` retains singleton dimensions. A scalar
+returns a scalar zero, and a reduction over an empty axis raises `IndexError`.
+If another axis is empty and the reduced axis has values, the result is empty.
+
+Equal maxima use the first index, as do multiple NaN values. A NaN takes
+precedence over a numerical value. The free function also accepts `out=None`.
+Declare an integer axis as a Python `int`.
+
+## Create and read signed integer tensors
+
+Use `dtype=torch.int32` or `dtype=torch.int64` for exact signed integers.
+`torch.int` and `torch.long` are aliases. An int64 tensor holds values from
+`-2**63` through `2**63 - 1`, including consecutive integers above `2**53`.
+`tolist()` returns Python integers, including a single integer for a scalar.
+Integer tensors support whole contiguous views and reject `requires_grad=True`.
+For construction from finite floats, Tabgrad checks the signed range before
+truncating toward zero. See the
+[signed integer contract](../architecture/typed-tensors.md#signed-integer-tensors-and-indexing)
+for overflow categories and representation.
+
 ## Read metadata
 
 `tensor.shape`, `tensor.dtype`, `tensor.device` and `tensor.requires_grad` are read-only properties.

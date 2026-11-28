@@ -18,7 +18,8 @@ export function device() {
     adapterInfo: { vendor: "test", architecture: "test", description: "acquisition double", device: "", isFallbackAdapter: false },
     limits: { maxBufferSize: 268435456, maxStorageBufferBindingSize: 134217728,
       maxComputeWorkgroupsPerDimension: 65535, maxComputeWorkgroupSizeX: 256,
-      maxComputeInvocationsPerWorkgroup: 256, maxStorageBuffersPerShaderStage: 8, maxComputeWorkgroupStorageSize: 16384 },
+      maxComputeInvocationsPerWorkgroup: 256, maxStorageBuffersPerShaderStage: 8, maxComputeWorkgroupStorageSize: 16384,
+      maxUniformBufferBindingSize: 65536 },
     destroy() { this.destroyed += 1; loss.resolve({ reason: "destroyed", message: "" }); },
   };
 }

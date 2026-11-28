@@ -18,6 +18,7 @@ import { PACKED16_WORKGROUP_SIZE, packed16PointwiseSource } from "./kernels/pack
 import { BOOL_VALUES_PER_WORD, PACKED16_VALUES_PER_WORD } from "./kernels/packed-words.js";
 import { createGreaterSource } from "./kernels/comparison.js";
 import { createMaskGradientSource, createSelectionSource } from "./kernels/selection.js";
+import { ARGMAX_PARAMETERS_BYTES, ARGMAX_PARTIAL_BYTES, ARGMAX_WORKGROUP_SIZE, argmaxSource } from "./kernels/argmax.js";
 
 export type KernelKind = ComputationKind | `broadcast-${ComputationKind}`;
 type ShaderSource = (layout: LinearDispatchLayout) => string;
@@ -55,6 +56,7 @@ type Registration = (
   | PointwiseRegistration
   | { readonly strategy: "dense"; readonly direct: PhysicalKernel<InvocationIndexSpace>; readonly uniform?: UniformParameters }
   | { readonly strategy: "sum"; readonly direct: PhysicalKernel<CooperativeIndexSpace>; readonly partialBytes: number }
+  | { readonly strategy: "argmax"; readonly direct: PhysicalKernel<CooperativeIndexSpace> }
   | { readonly strategy: "receiving"; readonly direct: PhysicalKernel<{ readonly kind: "window" }> }
 ) & { readonly supported?: (limits: GPUSupportedLimits) => boolean };
 
@@ -138,6 +140,18 @@ function receivingSupported(limits: GPUSupportedLimits): boolean {
     && limits.maxStorageBuffersPerShaderStage >= 3;
 }
 
+function argmaxKernel(dtype: Parameters<typeof argmaxSource>[0]): (kind: ComputationKind) => Registration {
+  return kind => Object.freeze({
+    strategy: "argmax",
+    direct: physicalKernel(kind, { kind: "workgroup" as const, workgroupSize: ARGMAX_WORKGROUP_SIZE,
+      elementsPerWorkgroup: 1 }, layout => argmaxSource(dtype, layout), 2),
+    supported: (limits: GPUSupportedLimits) =>
+      sumSupported(limits, ARGMAX_WORKGROUP_SIZE, ARGMAX_WORKGROUP_SIZE * ARGMAX_PARTIAL_BYTES)
+      && limits.maxBufferSize >= ARGMAX_PARAMETERS_BYTES && limits.maxUniformBufferBindingSize >= ARGMAX_PARAMETERS_BYTES
+      && limits.maxStorageBuffersPerShaderStage >= 2,
+  });
+}
+
 function matrixKernel(elementsPerInvocation: number, source: ShaderSource): (kind: ComputationKind) => Registration {
   return kind => Object.freeze({
     strategy: "dense", direct: invocation(kind, WEBGPU_MATRIX_WORKGROUP_SIZE, elementsPerInvocation, source),
@@ -178,6 +192,9 @@ const factories: KernelFactories = Object.freeze({
   "where-else-gradient-f32": bufferedPointwise(WEBGPU_POINTWISE_WORKGROUP_SIZE, 1, createMaskGradientSource(false)),
   "sum-bf16": sumKernel(WEBGPU_SUM_WORKGROUP_SIZE, WEBGPU_SUM_GROUP_ELEMENTS, WEBGPU_SUM_PARTIAL_BYTES, createBfloatSumSource),
   "matmul-bf16": matrixKernel(PACKED16_VALUES_PER_WORD, createBfloatMatrixSource),
+  "argmax-f32": argmaxKernel("float32"),
+  "argmax-i32": argmaxKernel("int32"),
+  "argmax-i64": argmaxKernel("int64"),
 } satisfies KernelFactories);
 
 const kinds = Object.keys(factories) as ComputationKind[];

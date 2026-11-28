@@ -2,6 +2,7 @@ import type { TensorDevice } from "../execution/backend.js";
 import type { TensorDType } from "../shared/tensor-dtype.js";
 import type { LoweredComputation, ProgramProvenance } from "../execution/executable-program.js";
 import { assertComputationParameters, requireComputationSignature } from "../execution/operation-contracts.js";
+import type { AxisReduction } from "../execution/axis-geometry.js";
 import type { TensorFamily } from "./tensor-family.js";
 import type { WriterOutcome } from "./writer-outcome.js";
 
@@ -16,9 +17,9 @@ export interface TensorMetadata {
 }
 
 export interface NumericalOperationDefinition {
-  readonly name: "add" | "mul" | "sum" | "expand" | "matmul" | "reduce" | "gt" | "where" | "where-mask-gradient";
+  readonly name: "add" | "mul" | "sum" | "expand" | "matmul" | "reduce" | "gt" | "where" | "where-mask-gradient" | "argmax";
   readonly provenanceSource: "Tensor.add" | "Tensor.mul" | "Tensor.sum" | "Tensor.matmul" | "Tensor.gt" | "RuntimeSession.where"
-    | "DerivativeHistory.sum" | "DerivativeHistory.receive" | "DerivativeHistory.where" | "SGD.step";
+    | "DerivativeHistory.sum" | "DerivativeHistory.receive" | "DerivativeHistory.where" | "SGD.step" | "Tensor.argmax";
   readonly loweredKind: LoweredComputation["kind"];
   readonly pure: true;
 }
@@ -73,8 +74,10 @@ export class OperationRecord<Definition extends NumericalOperationDefinition = N
     inputs: readonly TensorValue[],
     readonly alphaBits?: number,
     readonly matrixFlags?: number,
+    reduction?: AxisReduction,
   ) {
-    assertComputationParameters(requireComputationSignature(definition.loweredKind).family, alphaBits, matrixFlags);
+    assertComputationParameters(requireComputationSignature(definition.loweredKind).family, alphaBits, matrixFlags, reduction);
+    this.reduction = reduction === undefined ? undefined : Object.freeze({ ...reduction });
     this.definition = definition;
     this.inputs = Object.freeze([...inputs]);
     this.provenance = Object.freeze({
@@ -83,4 +86,6 @@ export class OperationRecord<Definition extends NumericalOperationDefinition = N
     });
     Object.freeze(this);
   }
+
+  readonly reduction: AxisReduction | undefined;
 }

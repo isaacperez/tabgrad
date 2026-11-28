@@ -34,6 +34,26 @@ test("the build keeps SIMD instructions out of the scalar module", async () => {
   assert.equal(hasSimdInstructions(simd), true);
 });
 
+test("raw integer argmax checks the full mixed-width extent before writing any index", async () => {
+  const bytes = await readFile(join(distributionRoot, "wasm/kernels-scalar.wasm"));
+  const memory = new WebAssembly.Memory({ initial: 32, maximum: 1024 });
+  const { instance } = await WebAssembly.instantiate(bytes, { env: { memory } });
+  const api = instance.exports, input = api.tabgrad_arena_base(), output = input + 64;
+  const inputValues = new BigInt64Array(memory.buffer, input, 4);
+  const outputValues = new BigInt64Array(memory.buffer, output, 2);
+  inputValues.set([9007199254740992n, 9007199254740993n, -4294967296n, -4294967297n]);
+  outputValues.fill(-1n);
+  for (const [args, reason] of [
+    [[input, output + 4, 2, 2, 1], 1],
+    [[memory.buffer.byteLength - 8, output, 2, 2, 1], 2],
+    [[input, input + 8, 2, 2, 1], 3],
+    [[input, output, 2, 2, 3], 4],
+  ]) assert.equal(api.tabgrad_argmax_i64(...args), reason);
+  assert.deepEqual(outputValues, BigInt64Array.of(-1n, -1n));
+  assert.equal(api.tabgrad_argmax_i64(input, output, 2, 2, 1), 0);
+  assert.deepEqual(outputValues, BigInt64Array.of(1n, 0n));
+});
+
 test("SIMD inspection distinguishes code prefixes from constants and custom-section bytes", () => {
   const header = [0, 97, 115, 109, 1, 0, 0, 0];
   const declaration = [1, 4, 1, 96, 0, 0, 3, 2, 1, 0];
@@ -50,7 +70,7 @@ test("SIMD inspection distinguishes code prefixes from constants and custom-sect
 for (const variant of ["scalar", "simd128"]) {
   test(`the matched CPU import permits smaller session limits and rejects a larger maximum (${variant})`, async () => {
     const manifest = JSON.parse(await readFile(join(distributionRoot, "manifest.json"), "utf8"));
-    assert.equal(manifest.moduleVersion, 14);
+    assert.equal(manifest.moduleVersion, 15);
     assert.deepEqual(manifest.memory, { initialPages: 32, maximumPages: 4096, alignment: 16 });
     const module = await WebAssembly.compile(await readFile(join(distributionRoot, `wasm/kernels-${variant}.wasm`)));
     for (const maximum of [32, 2048, 4096]) {

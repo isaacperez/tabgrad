@@ -1,6 +1,7 @@
 import { attachPython } from '/python.js';
 import { checkResidentMatrixTransfers, compactPythonSource } from '/helpers/compact-float-cases.mjs';
 import { pythonBooleanMaskSource } from '/helpers/boolean-mask-cases.mjs';
+import { pythonArgmaxSource } from '/helpers/integer-argmax-cases.mjs';
 addEventListener('message', async ({ data }) => {
   let binding;
   try {
@@ -22,6 +23,7 @@ addEventListener('message', async ({ data }) => {
       checkResidentMatrixTransfers(data.device, before, binding.diagnostics());
     }
     if (data.booleanMask) await binding.runPythonAsync(pythonBooleanMaskSource(data.device, data.grid));
+    if (data.integerArgmax) await binding.runPythonAsync(pythonArgmaxSource(data.device));
     const beforeClose = binding.diagnostics();
     await binding.close();
     postMessage({ ok: true, pyodide: interpreter.version, worker: true, jspiAvailable: false,

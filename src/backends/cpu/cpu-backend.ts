@@ -12,6 +12,7 @@ import { CpuAllocation, LinearMemoryAllocator, MAXIMUM_ADDRESS } from "./linear-
 import { pointwiseGeometry, receivingGeometry } from "../../execution/broadcast-geometry.js";
 import { pointwiseFamily } from "../../execution/operation-contracts.js";
 import { cpuPointwiseNeedsPacket, pointwisePacket, receivingPacket } from "./broadcast-packet.js";
+import { axisReductionGeometry } from "../../execution/axis-geometry.js";
 import { DEFAULT_CPU_LINEAR_MEMORY_BYTES, WEBASSEMBLY_PAGE_BYTES, type CpuMemoryCapacity } from "./memory-capacity.js";
 
 export type { BackendDiagnostics, WasmVariant } from "./cpu-types.js";
@@ -183,7 +184,7 @@ export class WebAssemblyCpuBackend implements ExecutionBackend {
         }
         let status: number;
         try {
-          if (kernel.layout !== "matrix" || length !== 0) this.#kernelCalls += 1;
+          if (length !== 0 || (kernel.layout !== "matrix" && kernel.layout !== "axisReduction")) this.#kernelCalls += 1;
           switch (kernel.layout) {
             case "pointwise":
               status = packet === undefined
@@ -199,6 +200,15 @@ export class WebAssemblyCpuBackend implements ExecutionBackend {
             case "receiving":
               status = context.exports[kernel.symbol.name](inputs[0]!.offset, output.offset, packet!.offset, parameters!.length);
               break;
+            case "axisReduction": {
+              if (length === 0) {
+                status = 0;
+                break;
+              }
+              const { groups, terms, inner } = axisReductionGeometry(program.values[computation.inputs[0]!]!.shape, computation.reduction!);
+              status = context.exports[kernel.symbol.name](inputs[0]!.offset, output.offset, groups, terms, inner);
+              break;
+            }
             case "matrix": {
               const left = program.values[computation.inputs[0]!]!.shape;
               const right = program.values[computation.inputs[1]!]!.shape;

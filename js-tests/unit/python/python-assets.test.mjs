@@ -20,7 +20,7 @@ async function assetFixture(context, change = () => {}) {
 
 test("admission associates shuffled descriptors by path and emits protocol 7", async (context) => {
   const { manifest, resources } = await assetFixture(context, (manifest) => manifest.files.reverse());
-  assert.equal(manifest.bridgeVersion, 7);
+  assert.equal(manifest.bridgeVersion, 8);
   const sources = await loadPythonSources(manifestUrl);
   assert.equal(sources.bootstrap, resources.get("bootstrap.py").toString("utf8"));
   assert.deepEqual(sources.packageSources, new Map(
@@ -31,8 +31,8 @@ test("admission associates shuffled descriptors by path and emits protocol 7", a
 for (const failure of ["old-protocol", "future-protocol", "schema", "pyodide", "missing", "duplicate", "unexpected", "size", "hash", "utf8"]) {
   test(`admission rejects ${failure} before Python executes`, async (context) => {
     await assetFixture(context, (manifest, resources) => {
-      if (failure === "old-protocol") manifest.bridgeVersion = 6;
-      if (failure === "future-protocol") manifest.bridgeVersion = 8;
+      if (failure === "old-protocol") manifest.bridgeVersion = 7;
+      if (failure === "future-protocol") manifest.bridgeVersion = 9;
       if (failure === "schema") manifest.schemaVersion = 2;
       if (failure === "pyodide") manifest.pyodideVersion = "0.0.0";
       if (failure === "missing") manifest.files.pop();

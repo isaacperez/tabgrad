@@ -195,6 +195,13 @@ all three shapes, returning float32 values from `input` at true positions
 and `other` at false positions. See
 [selection and branch gradients](reference/python-tensors.md#select-with-a-boolean-mask).
 
+`tensor.argmax(dim?, keepDim?)` returns an untracked int64 tensor for float32,
+int32 and int64 inputs. Omit the axis or use `null` for a whole-input reduction.
+`session.tensor(values, { dtype: "int64" })` accepts in-range BigInts or safe
+integer Numbers. Int32 creation also accepts safe in-range integers. Pass
+`{ format: "typed" }` to observe signed values as `Int32Array` or `BigInt64Array`.
+See [argmax and signed tensors](reference/python-tensors.md#find-the-index-of-a-maximum).
+
 Local work with a ready backend may finish during `toArray()` itself, before
 the returned Promise's callbacks run. Those callbacks retain ordinary
 JavaScript scheduling. Failures of accepted execution still reject the Promise

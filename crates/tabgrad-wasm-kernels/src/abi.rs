@@ -19,6 +19,7 @@ const CAPABILITY_SUM_BF16: u32 = 4096;
 const CAPABILITY_MATMUL_BF16: u32 = 8192;
 const CAPABILITY_GT_F32: u32 = 16384;
 const CAPABILITY_WHERE_F32: u32 = 32768;
+const CAPABILITY_ARGMAX: u32 = 65536;
 pub(crate) const STATUS_INVALID_GEOMETRY: u32 = 4;
 pub(crate) const FLOAT_ALIGNMENT: u32 = align_of::<f32>() as u32;
 
@@ -77,6 +78,7 @@ pub extern "C" fn tabgrad_capabilities() -> u32 {
         | CAPABILITY_MATMUL_BF16
         | CAPABILITY_GT_F32
         | CAPABILITY_WHERE_F32
+        | CAPABILITY_ARGMAX
 }
 
 #[unsafe(no_mangle)]
